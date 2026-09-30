@@ -136,4 +136,77 @@ void CapsuleTriangles(float aRadius, float aHalfHeight, const PxTransform& aPose
 {
 	Rounded(aRadius, std::max(aHalfHeight, 0.0f), aPose, aOut);
 }
+
+PxVec3 ApplyMeshScale(const PxMeshScale& aScale, const PxVec3& aVertex)
+{
+	return aScale.transform(aVertex);
+}
+
+bool FlipsWinding(const PxMeshScale& aScale)
+{
+	return aScale.scale.x * aScale.scale.y * aScale.scale.z < 0.0f;
+}
+
+void MeshTriangles(const PxVec3* aVertices, uint32_t aVertexCount, const void* aIndices, bool aIndices16,
+                   uint32_t aTriangleCount, const PxMeshScale& aScale, const PxTransform& aPose,
+                   const PxBounds3& aRegion, std::vector<Tri>& aOut, uint32_t& aBadTriangles)
+{
+	const bool  flip = FlipsWinding(aScale);
+	const auto* indices16 = static_cast<const uint16_t*>(aIndices);
+	const auto* indices32 = static_cast<const uint32_t*>(aIndices);
+	for (uint32_t t = 0; t < aTriangleCount; ++t)
+	{
+		uint32_t index[3];
+		for (uint32_t k = 0; k < 3; ++k)
+		{
+			index[k] = aIndices16 ? indices16[t * 3 + k] : indices32[t * 3 + k];
+		}
+		if (index[0] >= aVertexCount || index[1] >= aVertexCount || index[2] >= aVertexCount)
+		{
+			++aBadTriangles;
+			continue;
+		}
+		Tri tri{};
+		for (uint32_t k = 0; k < 3; ++k)
+		{
+			tri.v[k] = aPose.transform(ApplyMeshScale(aScale, aVertices[index[k]]));
+		}
+		if (flip)
+		{
+			std::swap(tri.v[1], tri.v[2]);
+		}
+		if (KeepIfTouches(tri, aRegion))
+		{
+			aOut.push_back(tri);
+		}
+	}
+}
+
+void ConvexPolygonTriangles(const PxVec3* aVertices, uint32_t aVertexCount, const uint8_t* aIndexBuffer,
+                            const PxHullPolygon* aPolygons, uint32_t aPolygonCount, const PxMeshScale& aScale,
+                            const PxTransform& aPose, std::vector<Tri>& aOut)
+{
+	const bool flip = FlipsWinding(aScale);
+	for (uint32_t p = 0; p < aPolygonCount; ++p)
+	{
+		const PxHullPolygon& polygon = aPolygons[p];
+		const uint8_t*       index = aIndexBuffer + polygon.mIndexBase;
+		if (polygon.mNbVerts < 3 ||
+		    std::any_of(index, index + polygon.mNbVerts, [&](uint8_t aIndex) { return aIndex >= aVertexCount; }))
+		{
+			continue;
+		}
+		const PxVec3 first = aPose.transform(ApplyMeshScale(aScale, aVertices[index[0]]));
+		for (uint32_t k = 1; k + 1 < polygon.mNbVerts; ++k)
+		{
+			PxVec3 b = aPose.transform(ApplyMeshScale(aScale, aVertices[index[k]]));
+			PxVec3 c = aPose.transform(ApplyMeshScale(aScale, aVertices[index[k + 1]]));
+			if (flip)
+			{
+				std::swap(b, c);
+			}
+			Push(aOut, first, b, c);
+		}
+	}
+}
 }

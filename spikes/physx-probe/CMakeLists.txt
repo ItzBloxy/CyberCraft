@@ -31,6 +31,7 @@ add_executable(probe_tests
 	tests/TestCoords.cpp
 	tests/TestJson.cpp
 	tests/TestPrimitives.cpp
+	tests/TestMeshes.cpp
 )
 target_link_libraries(probe_tests PRIVATE probe_core)
 add_test(NAME probe_tests COMMAND probe_tests)
