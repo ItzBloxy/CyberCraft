@@ -30,6 +30,24 @@ add_library(probe_core STATIC
 )
 target_link_libraries(probe_core PUBLIC probe_settings version)
 
+# The RED4ext SDK, header-only. SYSTEM keeps its warnings out of ours.
+set(RED4EXT_HEADER_ONLY ON CACHE BOOL "" FORCE)
+add_subdirectory("${RED4EXT_SDK_DIR}" red4ext-sdk EXCLUDE_FROM_ALL SYSTEM)
+
+# The RED4ext plugin.
+add_library(PhysXProbe SHARED
+	src/Plugin.cpp
+	src/PlayerLocator.cpp
+)
+target_link_libraries(PhysXProbe PRIVATE probe_core RED4ext::SDK)
+
+if(CP2077_DIR)
+	add_custom_command(TARGET PhysXProbe POST_BUILD
+		COMMAND ${CMAKE_COMMAND} -E make_directory "${CP2077_DIR}/red4ext/plugins/PhysXProbe"
+		COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:PhysXProbe>" "$<TARGET_PDB_FILE:PhysXProbe>" "${CP2077_DIR}/red4ext/plugins/PhysXProbe/"
+		VERBATIM)
+endif()
+
 # Unit tests: no game needed.
 enable_testing()
 add_executable(probe_tests
