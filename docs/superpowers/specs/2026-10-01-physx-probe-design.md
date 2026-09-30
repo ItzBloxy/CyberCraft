@@ -52,15 +52,25 @@ D:\Cyberpunk-Minecraft\
   spikes/physx-probe/
     CMakeLists.txt
     CMakePresets.json
-    src/Plugin.cpp
+    src/Plugin.cpp           RED4ext entry points and triggers
     src/PlayerLocator.h, .cpp
+    src/Probe.h, .cpp        one dump, start to finish
     src/Coords.h
-    src/DumpWriter.h, .cpp
+    src/Report.h             the report's plain data
+    src/Json.h, .cpp         the small JSON writer
+    src/ReportJson.h, .cpp   report.json
+    src/ObjWriter.h, .cpp    collision.obj and .mtl
+    src/DumpWriter.h, .cpp   the background writer
+    src/physx/PxHeaders.h    the PhysX headers in use
+    src/physx/Checks.h, .cpp the pure parts of the compatibility check
     src/physx/PhysxSession.h, .cpp
     src/physx/ShapeTriangles.h, .cpp
     tests/                   unit tests (a small test program run by ctest)
-    tools/render_dump.py
+    tools/render_dump.py, test_render_dump.py
 ```
+
+The pieces the component list below describes as part of `DumpWriter` and `PhysxSession` live in their own
+small files, each with one job.
 
 `extern/` sits at the repo root so the real plugin can reuse it later.
 
@@ -212,9 +222,9 @@ reaches the game. All scene reads during a dump happen between `lockRead` and `u
   a point 1.7 m above V's feet, looking along V's forward.
   - The reported field of view is treated as vertical; `--fov-axis h` treats it as horizontal instead, and `--fov`
     overrides the value.
-  - Triangles are clipped against a near plane 0.05 m from the camera. Triangles with edges longer than 2 m are
-    subdivided. Everything is then sorted far to near and drawn with Pillow, using flat shading from the face
-    normal.
+  - Triangles are clipped against a near plane 0.05 m from the camera, then drawn with a z-buffer and flat shading
+    from the face normal. Both views use the z-buffer: a first version that sorted triangles far to near drew floors
+    over the bases of walls.
 - It skips `trigger` and `queryonly` by default, and `--all` includes them.
 
 ## One dump, step by step
@@ -359,7 +369,11 @@ After that, the census re-checks every object it visits (see `Census`). Any mism
 - fan triangulation of an n-gon into n − 2 triangles;
 - `KeepIfTouches` region culling;
 - the OBJ writer's exact output for a small input, including shared vertices;
-- string escaping in the JSON writer.
+- string escaping in the JSON writer;
+- the crash guard, which must survive an access violation and a thrown exception.
+
+**Renderer tests** (`pytest`): OBJ loading, hidden groups, near-plane clipping, and a wall correctly hiding the floor
+behind it.
 
 **In-game pass criteria:**
 1. All seven compatibility steps pass, and the census finds no mismatches.
