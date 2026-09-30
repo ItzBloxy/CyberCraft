@@ -25,6 +25,7 @@ add_library(probe_core STATIC
 	src/ObjWriter.cpp
 	src/ReportJson.cpp
 	src/DumpWriter.cpp
+	src/physx/PhysxSession.cpp
 )
 target_link_libraries(probe_core PUBLIC probe_settings version)
 
@@ -41,6 +42,7 @@ add_executable(probe_tests
 	tests/TestObjWriter.cpp
 	tests/TestReportJson.cpp
 	tests/TestDumpWriter.cpp
+	tests/TestGuard.cpp
 )
 target_link_libraries(probe_tests PRIVATE probe_core)
 add_test(NAME probe_tests COMMAND probe_tests)

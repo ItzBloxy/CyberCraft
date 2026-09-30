@@ -282,4 +282,103 @@ void HeightfieldTriangles(const HeightfieldView& aField, const CellRange& aCells
 		}
 	}
 }
+
+void AppendTriangles(const PxShape& aShape, const PxTransform& aActorPose, const PxBounds3& aRegion,
+                     std::vector<Tri>& aOut, AppendStats& aStats)
+{
+	const PxTransform pose = aActorPose * aShape.getLocalPose();
+	std::vector<Tri>  small;
+	switch (aShape.getGeometryType())
+	{
+	case PxGeometryType::eBOX:
+	{
+		PxBoxGeometry geometry;
+		if (aShape.getBoxGeometry(geometry))
+		{
+			BoxTriangles(geometry.halfExtents, pose, small);
+		}
+		break;
+	}
+	case PxGeometryType::eSPHERE:
+	{
+		PxSphereGeometry geometry;
+		if (aShape.getSphereGeometry(geometry))
+		{
+			SphereTriangles(geometry.radius, pose, small);
+		}
+		break;
+	}
+	case PxGeometryType::eCAPSULE:
+	{
+		PxCapsuleGeometry geometry;
+		if (aShape.getCapsuleGeometry(geometry))
+		{
+			CapsuleTriangles(geometry.radius, geometry.halfHeight, pose, small);
+		}
+		break;
+	}
+	case PxGeometryType::ePLANE:
+		++aStats.planes;
+		break;
+	case PxGeometryType::eCONVEXMESH:
+	{
+		PxConvexMeshGeometry geometry;
+		if (aShape.getConvexMeshGeometry(geometry) && geometry.convexMesh)
+		{
+			const PxConvexMesh&        mesh = *geometry.convexMesh;
+			std::vector<PxHullPolygon> polygons(mesh.getNbPolygons());
+			for (PxU32 i = 0; i < PxU32(polygons.size()); ++i)
+			{
+				mesh.getPolygonData(i, polygons[i]);
+			}
+			ConvexPolygonTriangles(mesh.getVertices(), mesh.getNbVertices(), mesh.getIndexBuffer(), polygons.data(),
+			                       PxU32(polygons.size()), geometry.scale, pose, small);
+		}
+		break;
+	}
+	case PxGeometryType::eTRIANGLEMESH:
+	{
+		PxTriangleMeshGeometry geometry;
+		if (aShape.getTriangleMeshGeometry(geometry) && geometry.triangleMesh)
+		{
+			const PxTriangleMesh& mesh = *geometry.triangleMesh;
+			MeshTriangles(mesh.getVertices(), mesh.getNbVertices(), mesh.getTriangles(),
+			              mesh.getTriangleMeshFlags().isSet(PxTriangleMeshFlag::e16_BIT_INDICES), mesh.getNbTriangles(),
+			              geometry.scale, pose, aRegion, aOut, aStats.badTriangles);
+		}
+		break;
+	}
+	case PxGeometryType::eHEIGHTFIELD:
+	{
+		PxHeightFieldGeometry geometry;
+		if (aShape.getHeightFieldGeometry(geometry) && geometry.heightField)
+		{
+			const PxHeightField& field = *geometry.heightField;
+			HeightfieldView      view;
+			view.rows = field.getNbRows();
+			view.columns = field.getNbColumns();
+			view.heightScale = geometry.heightScale;
+			view.rowScale = geometry.rowScale;
+			view.columnScale = geometry.columnScale;
+			view.sample = [&field](uint32_t aRow, uint32_t aColumn) { return field.getSample(aRow, aColumn); };
+			const CellRange cells = HeightfieldCellsUnder(view, pose, aRegion);
+			if (!cells.Empty())
+			{
+				HeightfieldTriangles(view, cells, pose, aRegion, aOut);
+			}
+		}
+		break;
+	}
+	default:
+		++aStats.unknownGeometry;
+		break;
+	}
+	for (const Tri& tri : small)
+	{
+		if (KeepIfTouches(tri, aRegion))
+		{
+			aOut.push_back(tri);
+		}
+	}
+}
 }

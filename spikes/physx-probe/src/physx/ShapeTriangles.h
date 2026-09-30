@@ -70,4 +70,16 @@ CellRange HeightfieldCellsUnder(const HeightfieldView& aField, const physx::PxTr
 // triangle uses materialIndex0 and its second materialIndex1; material 127 (a hole) leaves the triangle out.
 void HeightfieldTriangles(const HeightfieldView& aField, const CellRange& aCells, const physx::PxTransform& aPose,
                           const physx::PxBounds3& aRegion, std::vector<Tri>& aOut);
+
+struct AppendStats
+{
+	uint32_t planes = 0;
+	uint32_t unknownGeometry = 0;
+	uint32_t badTriangles = 0;
+};
+
+// World-space triangles of a live shape that touch aRegion. This calls into the game's PhysX, so run it under
+// a crash guard (see RunGuarded in PhysxSession.h).
+void AppendTriangles(const physx::PxShape& aShape, const physx::PxTransform& aActorPose, const physx::PxBounds3& aRegion,
+                     std::vector<Tri>& aOut, AppendStats& aStats);
 }
