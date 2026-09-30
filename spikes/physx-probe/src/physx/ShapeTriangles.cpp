@@ -209,4 +209,77 @@ void ConvexPolygonTriangles(const PxVec3* aVertices, uint32_t aVertexCount, cons
 		}
 	}
 }
+
+namespace
+{
+constexpr PxU8 kHoleMaterial = PxHeightFieldMaterial::eHOLE;
+}
+
+CellRange HeightfieldCellsUnder(const HeightfieldView& aField, const PxTransform& aPose, const PxBounds3& aBox)
+{
+	CellRange cells;
+	if (aField.rows < 2 || aField.columns < 2 || aField.rowScale <= 0.0f || aField.columnScale <= 0.0f)
+	{
+		return cells;
+	}
+	PxBounds3 local = PxBounds3::empty();
+	for (uint32_t i = 0; i < 8; ++i)
+	{
+		const PxVec3 corner((i & 1) ? aBox.maximum.x : aBox.minimum.x, (i & 2) ? aBox.maximum.y : aBox.minimum.y,
+		                    (i & 4) ? aBox.maximum.z : aBox.minimum.z);
+		local.include(aPose.transformInv(corner));
+	}
+	const auto clampTo = [](double aValue, uint32_t aMax) { return uint32_t(std::clamp(aValue, 0.0, double(aMax))); };
+	const uint32_t rowEnd = aField.rows - 1;  // cells exist for rows 0 .. rows-2
+	const uint32_t columnEnd = aField.columns - 1;
+	cells.r0 = clampTo(std::floor(double(local.minimum.x) / aField.rowScale), rowEnd);
+	cells.r1 = clampTo(std::floor(double(local.maximum.x) / aField.rowScale) + 1.0, rowEnd);
+	cells.c0 = clampTo(std::floor(double(local.minimum.z) / aField.columnScale), columnEnd);
+	cells.c1 = clampTo(std::floor(double(local.maximum.z) / aField.columnScale) + 1.0, columnEnd);
+	return cells;
+}
+
+void HeightfieldTriangles(const HeightfieldView& aField, const CellRange& aCells, const PxTransform& aPose,
+                          const PxBounds3& aRegion, std::vector<Tri>& aOut)
+{
+	const auto vertex = [&](uint32_t aRow, uint32_t aColumn) {
+		const PxHeightFieldSample sample = aField.sample(aRow, aColumn);
+		const PxVec3 local(float(aRow) * aField.rowScale, float(sample.height) * aField.heightScale,
+		                   float(aColumn) * aField.columnScale);
+		return aPose.transform(local);
+	};
+	for (uint32_t r = aCells.r0; r < aCells.r1; ++r)
+	{
+		for (uint32_t c = aCells.c0; c < aCells.c1; ++c)
+		{
+			const PxHeightFieldSample cell = aField.sample(r, c);
+			const PxU8   material0 = cell.materialIndex0;  // the conversion drops the tess bit
+			const PxU8   material1 = cell.materialIndex1;
+			const PxVec3 v00 = vertex(r, c);
+			const PxVec3 v01 = vertex(r, c + 1);
+			const PxVec3 v10 = vertex(r + 1, c);
+			const PxVec3 v11 = vertex(r + 1, c + 1);
+			Tri first{};
+			Tri second{};
+			if (cell.tessFlag())
+			{
+				first = { { v10, v00, v11 } };  // diagonal (r, c) - (r+1, c+1)
+				second = { { v01, v11, v00 } };
+			}
+			else
+			{
+				first = { { v00, v01, v10 } };  // diagonal (r, c+1) - (r+1, c)
+				second = { { v11, v10, v01 } };
+			}
+			if (material0 != kHoleMaterial && KeepIfTouches(first, aRegion))
+			{
+				aOut.push_back(first);
+			}
+			if (material1 != kHoleMaterial && KeepIfTouches(second, aRegion))
+			{
+				aOut.push_back(second);
+			}
+		}
+	}
+}
 }

@@ -39,4 +39,35 @@ void MeshTriangles(const physx::PxVec3* aVertices, uint32_t aVertexCount, const 
 void ConvexPolygonTriangles(const physx::PxVec3* aVertices, uint32_t aVertexCount, const uint8_t* aIndexBuffer,
                             const physx::PxHullPolygon* aPolygons, uint32_t aPolygonCount,
                             const physx::PxMeshScale& aScale, const physx::PxTransform& aPose, std::vector<Tri>& aOut);
+
+// A heightfield's samples and scales. Sample (r, c) sits at local (r * rowScale, height * heightScale,
+// c * columnScale): rows along local X, height along local Y, columns along local Z.
+struct HeightfieldView
+{
+	uint32_t rows = 0;
+	uint32_t columns = 0;
+	float heightScale = 1.0f;
+	float rowScale = 1.0f;
+	float columnScale = 1.0f;
+	std::function<physx::PxHeightFieldSample(uint32_t aRow, uint32_t aColumn)> sample;
+};
+
+// Cells [r0, r1) x [c0, c1). Cell (r, c) spans samples r..r+1 and c..c+1.
+struct CellRange
+{
+	uint32_t r0 = 0;
+	uint32_t r1 = 0;
+	uint32_t c0 = 0;
+	uint32_t c1 = 0;
+
+	bool Empty() const { return r0 >= r1 || c0 >= c1; }
+};
+
+// The cells of a heightfield placed at aPose that lie under a world-space box.
+CellRange HeightfieldCellsUnder(const HeightfieldView& aField, const physx::PxTransform& aPose, const physx::PxBounds3& aBox);
+
+// The cells' triangles in PhysX's own vertex order (Gu::HeightField::getTriangleVertexIndices). A cell's first
+// triangle uses materialIndex0 and its second materialIndex1; material 127 (a hole) leaves the triangle out.
+void HeightfieldTriangles(const HeightfieldView& aField, const CellRange& aCells, const physx::PxTransform& aPose,
+                          const physx::PxBounds3& aRegion, std::vector<Tri>& aOut);
 }
