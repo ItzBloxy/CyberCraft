@@ -22,6 +22,7 @@ add_library(probe_core STATIC
 	src/Json.cpp
 	src/physx/ShapeTriangles.cpp
 	src/physx/Checks.cpp
+	src/ObjWriter.cpp
 )
 target_link_libraries(probe_core PUBLIC probe_settings version)
 
@@ -35,6 +36,7 @@ add_executable(probe_tests
 	tests/TestMeshes.cpp
 	tests/TestHeightfield.cpp
 	tests/TestChecks.cpp
+	tests/TestObjWriter.cpp
 )
 target_link_libraries(probe_tests PRIVATE probe_core)
 add_test(NAME probe_tests COMMAND probe_tests)
