@@ -26,6 +26,7 @@ add_library(probe_core STATIC
 	src/ReportJson.cpp
 	src/DumpWriter.cpp
 	src/physx/PhysxSession.cpp
+	src/Probe.cpp
 )
 target_link_libraries(probe_core PUBLIC probe_settings version)
 
