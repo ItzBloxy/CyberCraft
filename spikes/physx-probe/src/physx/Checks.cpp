@@ -57,6 +57,11 @@ int ConcreteTypeForName(const char* aName)
 	return -1;
 }
 
+bool IsPhysX342(const std::string& aFileVersionString)
+{
+	return aFileVersionString.starts_with("3.4.2.");
+}
+
 bool TolerancesPlausible(float aLength, float aSpeed)
 {
 	return aLength >= 0.01f && aLength <= 100.0f && aSpeed >= 0.1f && aSpeed <= 1000.0f;

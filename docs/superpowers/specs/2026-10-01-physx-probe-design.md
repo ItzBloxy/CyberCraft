@@ -31,7 +31,9 @@ game's script API, as in SkyCraft's own first stage.
 ## Environment (checked on 2026-09-30 and 2026-10-01)
 
 - Cyberpunk 2077 2.31 (Epic) at `E:\Cyberpunk2077`, with RED4ext 1.30.0. Mods are managed by Vortex.
-- `bin\x64\PhysX3_x64.dll` has file version 3.4.2.0. It exports `PxGetPhysics`, `PxRegisterCloth` and
+- `bin\x64\PhysX3_x64.dll` has the "FileVersion" string 3.4.2.0. Its binary FILEVERSION field says 3.4.1.0, and so
+  do those of the other three `PhysX3*` DLLs. NVIDIA's own 3.4.2 release has the same pair (see its `PhysX3.rc`),
+  so only the string tells 3.4.1 and 3.4.2 apart. It exports `PxGetPhysics`, `PxRegisterCloth` and
   `PxRegisterParticles`. The last two show that `PX_USE_CLOTH_API` and `PX_USE_PARTICLE_SYSTEM_API` are 1. Those
   are also the header defaults, and they matter because they change `PxScene`'s virtual function table.
 - The game's scripts include every function the probe calls:
@@ -134,7 +136,7 @@ reaches the game. All scene reads during a dump happen between `lockRead` and `u
 
 - `Open()`:
   1. Calls `GetModuleHandleW(L"PhysX3_x64.dll")`.
-  2. Reads the module's version resource.
+  2. Reads the module's version resource: both the binary FILEVERSION field and the "FileVersion" string.
   3. Calls `GetProcAddress("PxGetPhysics")`.
   4. Runs the compatibility check below.
 
@@ -248,7 +250,8 @@ The census, region selection, overlap query, triangle extraction and the whole m
 
 The steps run in order and stop at the first failure, which the report names.
 
-1. `PhysX3_x64.dll` is loaded, and its version resource is 3.4.2.x.
+1. `PhysX3_x64.dll` is loaded, and the "FileVersion" string of its version resource is 3.4.2.x. The binary field
+   can't decide this (see Environment), so the step reports it but doesn't check it.
 2. The `PxGetPhysics` export exists. It returns a non-null pointer to committed, readable memory, checked with
    `VirtualQuery`.
 3. `PxPhysics::getTolerancesScale()` returns a length between 0.01 and 100 and a speed between 0.1 and 1000.

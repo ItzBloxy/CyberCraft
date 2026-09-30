@@ -19,6 +19,15 @@ TEST(ConcreteTypeNamesMapToTheirIds)
 	CHECK_EQ(ConcreteTypeForName(nullptr), -1);
 }
 
+TEST(PhysXVersionComesFromTheFileVersionString)
+{
+	// NVIDIA's 3.4.2 release says 3.4.2.0 in the FileVersion string but 3.4.1.0 in the binary field.
+	CHECK(IsPhysX342("3.4.2.0"));
+	CHECK(!IsPhysX342("3.4.1.0"));
+	CHECK(!IsPhysX342("13.4.2.0"));
+	CHECK(!IsPhysX342(""));
+}
+
 TEST(PlausibilityRanges)
 {
 	CHECK(TolerancesPlausible(1.0f, 10.0f));

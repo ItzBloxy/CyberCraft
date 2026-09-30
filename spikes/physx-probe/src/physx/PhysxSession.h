@@ -38,6 +38,17 @@ bool Guarded(Context& aContext, Fn aFn)
 	return RunGuarded(&Thunk::Call, &pack);
 }
 
+// A module's version resource: the binary FILEVERSION field and the "FileVersion" string. They can disagree:
+// NVIDIA's PhysX 3.4.2 release says 3.4.1.0 in the binary field and 3.4.2.0 in the string. Empty if unreadable.
+struct FileVersions
+{
+	std::string binary;
+	std::string text;
+};
+
+// aModule is an HMODULE.
+FileVersions ReadFileVersions(void* aModule);
+
 struct OpenResult
 {
 	bool                    pass = false;

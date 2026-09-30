@@ -26,6 +26,57 @@ bool RunGuarded(GuardedFn aFn, void* aContext) noexcept
 	}
 }
 
+FileVersions ReadFileVersions(void* aModule)
+{
+	FileVersions versions;
+	wchar_t      path[MAX_PATH]{};
+	if (!GetModuleFileNameW(static_cast<HMODULE>(aModule), path, MAX_PATH))
+	{
+		return versions;
+	}
+	DWORD       handle = 0;
+	const DWORD size = GetFileVersionInfoSizeW(path, &handle);
+	if (size == 0)
+	{
+		return versions;
+	}
+	std::vector<uint8_t> data(size);
+	if (!GetFileVersionInfoW(path, 0, size, data.data()))
+	{
+		return versions;
+	}
+	VS_FIXEDFILEINFO* info = nullptr;
+	UINT              length = 0;
+	if (VerQueryValueW(data.data(), L"\\", reinterpret_cast<void**>(&info), &length) && info)
+	{
+		versions.binary = std::format("{}.{}.{}.{}", HIWORD(info->dwFileVersionMS), LOWORD(info->dwFileVersionMS),
+		                              HIWORD(info->dwFileVersionLS), LOWORD(info->dwFileVersionLS));
+	}
+	// The string table is keyed by the resource's first language and code page.
+	struct Translation
+	{
+		WORD language;
+		WORD codePage;
+	};
+	Translation* translations = nullptr;
+	if (VerQueryValueW(data.data(), L"\\VarFileInfo\\Translation", reinterpret_cast<void**>(&translations), &length) &&
+	    translations && length >= sizeof(Translation))
+	{
+		const std::wstring key =
+		    std::format(L"\\StringFileInfo\\{:04x}{:04x}\\FileVersion", translations[0].language, translations[0].codePage);
+		wchar_t* text = nullptr;
+		UINT     textLength = 0;
+		if (VerQueryValueW(data.data(), key.c_str(), reinterpret_cast<void**>(&text), &textLength) && text)
+		{
+			for (size_t i = 0; i < textLength && text[i] != L'\0'; ++i)
+			{
+				versions.text.push_back(text[i] < 0x80 ? char(text[i]) : '?');  // version strings are ASCII
+			}
+		}
+	}
+	return versions;
+}
+
 namespace
 {
 constexpr uint32_t kMaxScenes = 16;
@@ -47,31 +98,6 @@ double NowMs()
 	QueryPerformanceCounter(&counter);
 	QueryPerformanceFrequency(&frequency);
 	return double(counter.QuadPart) * 1000.0 / double(frequency.QuadPart);
-}
-
-std::string FileVersionOf(HMODULE aModule)
-{
-	wchar_t path[MAX_PATH]{};
-	if (!GetModuleFileNameW(aModule, path, MAX_PATH))
-	{
-		return {};
-	}
-	DWORD       handle = 0;
-	const DWORD size = GetFileVersionInfoSizeW(path, &handle);
-	if (size == 0)
-	{
-		return {};
-	}
-	std::vector<uint8_t> data(size);
-	VS_FIXEDFILEINFO*    info = nullptr;
-	UINT                 length = 0;
-	if (!GetFileVersionInfoW(path, 0, size, data.data()) ||
-	    !VerQueryValueW(data.data(), L"\\", reinterpret_cast<void**>(&info), &length) || !info)
-	{
-		return {};
-	}
-	return std::format("{}.{}.{}.{}", HIWORD(info->dwFileVersionMS), LOWORD(info->dwFileVersionMS),
-	                   HIWORD(info->dwFileVersionLS), LOWORD(info->dwFileVersionLS));
 }
 
 bool IsReadable(const void* aAddress)
@@ -348,11 +374,13 @@ const OpenResult& PhysxSession::Open()
 		return *open_;
 	};
 
-	// 1. The module and its version.
-	const HMODULE module = GetModuleHandleW(L"PhysX3_x64.dll");
-	result.physxFileVersion = module ? FileVersionOf(module) : std::string();
-	if (!step(1, "module", module && result.physxFileVersion.starts_with("3.4.2."),
-	          module ? "PhysX3_x64.dll " + result.physxFileVersion : std::string("PhysX3_x64.dll is not loaded")))
+	// 1. The module and its version (by the FileVersion string; see IsPhysX342).
+	const HMODULE      module = GetModuleHandleW(L"PhysX3_x64.dll");
+	const FileVersions versions = module ? ReadFileVersions(module) : FileVersions{};
+	result.physxFileVersion = versions.text;
+	if (!step(1, "module", module && IsPhysX342(versions.text),
+	          module ? std::format("PhysX3_x64.dll FileVersion \"{}\" (binary field {})", versions.text, versions.binary)
+	                 : std::string("PhysX3_x64.dll is not loaded")))
 	{
 		return finish();
 	}
