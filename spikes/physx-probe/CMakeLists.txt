@@ -20,6 +20,7 @@ target_include_directories(probe_settings SYSTEM INTERFACE "${PHYSX_DIR}/PhysX_3
 # Everything that doesn't need RED4ext: geometry, checks, writers, the PhysX session and one dump.
 add_library(probe_core STATIC
 	src/Json.cpp
+	src/physx/ShapeTriangles.cpp
 )
 target_link_libraries(probe_core PUBLIC probe_settings version)
 
@@ -29,6 +30,7 @@ add_executable(probe_tests
 	tests/TestMain.cpp
 	tests/TestCoords.cpp
 	tests/TestJson.cpp
+	tests/TestPrimitives.cpp
 )
 target_link_libraries(probe_tests PRIVATE probe_core)
 add_test(NAME probe_tests COMMAND probe_tests)
