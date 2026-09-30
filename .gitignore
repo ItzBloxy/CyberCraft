@@ -1,0 +1,9 @@
+# CMake build folders
+build/
+
+# Python
+__pycache__/
+.pytest_cache/
+
+# Renderer smoke-test output
+spikes/physx-probe/smoke/

@@ -1,0 +1,3 @@
+[submodule "extern/RED4ext.SDK"]
+	path = extern/RED4ext.SDK
+	url = https://github.com/WopsS/RED4ext.SDK.git
