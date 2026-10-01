@@ -43,6 +43,17 @@ add_library(render_core STATIC
 )
 target_link_libraries(render_core PUBLIC render_settings d3dcompiler dxguid)
 
+# The RED4ext SDK, header-only. SYSTEM keeps its warnings out of ours.
+set(RED4EXT_HEADER_ONLY ON CACHE BOOL "" FORCE)
+add_subdirectory("${RED4EXT_SDK_DIR}" red4ext-sdk EXCLUDE_FROM_ALL SYSTEM)
+
+# What runs inside the game: the hooks and the features they feed. Only the running game can test it.
+add_library(render_runtime STATIC
+	src/hooks/D3D12Hooks.cpp
+	src/hooks/StreamlineHooks.cpp
+)
+target_link_libraries(render_runtime PUBLIC render_core RED4ext::SDK d3d12)
+
 # Unit tests: no game needed. They run in this folder, so tests can find shaders/.
 enable_testing()
 add_executable(render_tests

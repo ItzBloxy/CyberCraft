@@ -7838,7 +7838,7 @@ and 29.
   `src/hooks/D3D12Hooks.h`, `src/hooks/D3D12Hooks.cpp`
 - Modify: `CMakeLists.txt`
 
-- [ ] **Step 1: Write `src/hooks/HookEvents.h`**
+- [x] **Step 1: Write `src/hooks/HookEvents.h`**
 
 ```cpp
 #pragma once
@@ -7891,7 +7891,7 @@ public:
 }
 ```
 
-- [ ] **Step 2: Write `src/hooks/StreamlineHooks.h`**
+- [x] **Step 2: Write `src/hooks/StreamlineHooks.h`**
 
 ```cpp
 #pragma once
@@ -7932,7 +7932,7 @@ std::string Summary();
 }
 ```
 
-- [ ] **Step 3: Write `src/hooks/StreamlineHooks.cpp`**
+- [x] **Step 3: Write `src/hooks/StreamlineHooks.cpp`**
 
 ```cpp
 #include "hooks/StreamlineHooks.h"
@@ -8241,7 +8241,7 @@ std::string Summary()
 }
 ```
 
-- [ ] **Step 4: Write `src/hooks/D3D12Hooks.h`**
+- [x] **Step 4: Write `src/hooks/D3D12Hooks.h`**
 
 ```cpp
 #pragma once
@@ -8361,7 +8361,7 @@ void RemovePatches();
 }
 ```
 
-- [ ] **Step 5: Write `src/hooks/D3D12Hooks.cpp`**
+- [x] **Step 5: Write `src/hooks/D3D12Hooks.cpp`**
 
 ```cpp
 #include "hooks/D3D12Hooks.h"
@@ -9314,7 +9314,7 @@ void RemovePatches()
 }
 ```
 
-- [ ] **Step 6: Edit `CMakeLists.txt` to add the RED4ext SDK and the runtime library**
+- [x] **Step 6: Edit `CMakeLists.txt` to add the RED4ext SDK and the runtime library**
 
 ```cmake
 target_link_libraries(render_core PUBLIC render_settings d3dcompiler dxguid)
@@ -9338,7 +9338,7 @@ target_link_libraries(render_runtime PUBLIC render_core RED4ext::SDK d3d12)
 # Unit tests: no game needed. They run in this folder, so tests can find shaders/.
 ```
 
-- [ ] **Step 7: Build; it must compile without warnings, and the tests still pass**
+- [x] **Step 7: Build; it must compile without warnings, and the tests still pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -9348,7 +9348,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, the library, then `83 test(s), 0 failure(s)`.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
