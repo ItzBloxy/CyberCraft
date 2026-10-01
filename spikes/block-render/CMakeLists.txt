@@ -34,6 +34,7 @@ add_library(render_core STATIC
 	src/render/Atlas.cpp
 	src/world/BlockWorld.cpp
 	src/world/Mesher.cpp
+	src/world/Structures.cpp
 )
 target_link_libraries(render_core PUBLIC render_settings d3dcompiler dxguid)
 
@@ -56,6 +57,7 @@ add_executable(render_tests
 	tests/TestAtlas.cpp
 	tests/TestBlockWorld.cpp
 	tests/TestMesher.cpp
+	tests/TestStructures.cpp
 )
 target_link_libraries(render_tests PRIVATE render_core)
 add_test(NAME render_tests COMMAND render_tests WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
