@@ -19214,27 +19214,27 @@ commands are Task 44's.
 **Files:**
 - Modify: `docs/spikes/2026-10-01-block-render-results.md`
 
-- [ ] **Step 1: Deploy (the game must not be running)**
+- [x] **Step 1: Deploy (the game must not be running)**
 
 Run Task 44 Step 1's two commands. Expected: `0`, then the plugin's folder with `BlockRender.dll`, `BlockRender.pdb`,
 `shaders`, `atlas.bin` and `atlas.json`, the overlay's folder with `init.lua`, and `installed`.
 
-- [ ] **Step 2: Load, at the corner**
+- [x] **Step 2: Load, at the corner**
 
 Ask the user to launch the game, load the free-roam save, go to the corner, face south-west, and stand still. Then
 read the log's first lines and the status. Expected: `BlockRender 0.5.0 loaded`, `mode=off`, and `all hooks on`.
 
-- [ ] **Step 3: Idle**
+- [x] **Step 3: Idle**
 
 Read the status's `frame=` line and `frames.txt` five times each, a second apart. Expected: about 13.6 ms, the game's
 time without BlockRender.
 
-- [ ] **Step 4: Tracking on**
+- [x] **Step 4: Tracking on**
 
 Send `set tracking 1`, read five times, then `set tracking 0`. Expected: within about half a millisecond of Step 3, as
 run 5 found with the Streamline hooks off.
 
-- [ ] **Step 5: Drawing before DLSS**
+- [x] **Step 5: Drawing before DLSS**
 
 Ask the user to face open ground. Send `mode predlss` and `place cube`, wait three seconds, and read the status. Expected:
 - `2 lists watched` and `tracking off`;
@@ -19243,15 +19243,15 @@ Ask the user to face open ground. Send `mode predlss` and `place cube`, wait thr
 Read five times. Then ask the user to check the cube is steady standing still and leaves no trails strafing, at the
 default `exposure` of 2.5, with a screenshot.
 
-- [ ] **Step 6: 10,000 and 100,000 blocks**
+- [x] **Step 6: 10,000 and 100,000 blocks**
 
 Send `clear`, `place field 10000`, and read five times. Then `clear`, `place field 100000`, and read five times again.
 
-- [ ] **Step 7: Clean up**
+- [x] **Step 7: Clean up**
 
 Send `clear`, then `mode off`, two seconds apart. Expected: `mode=off`, and `0 lists watched`.
 
-- [ ] **Step 8: Record the results, and commit**
+- [x] **Step 8: Record the results, and commit**
 
 In `docs/spikes/2026-10-01-block-render-results.md`, add what run 6 found: BlockRender's cost idle, with tracking on,
 drawing before DLSS, and at 10,000 and 100,000 blocks. Then commit:

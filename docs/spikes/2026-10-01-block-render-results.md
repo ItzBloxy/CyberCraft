@@ -27,10 +27,11 @@ logs and the dumps. Plan: [2026-10-01-block-render.md](../superpowers/plans/2026
   - drawing costs about 0.01 ms of GPU time.
 - **Step 3, blocks before DLSS: pass.** They sit under the HUD and the menus, tone mapped with the scene. They're
   steady standing still and leave no trails moving, and 100,000 of them cost 0.03 ms of GPU time.
-- **But BlockRender's hooks double the frame time, even with drawing off:** 26.5 ms with the plugin against 13.6 ms
-  without it, at run 3's corner (run 4). Run 3's finding that tracking costs nothing compared two states that both
-  paid this. Run 5 found the cause: the Streamline hooks' readability checks, where `VirtualQuery` walks gigabytes of
-  the game's heaps. Tracking itself costs about 0.3 ms.
+- **BlockRender costs nothing measurable, after a fix.**
+  - **Run 4:** the hooks doubled the frame time with drawing off: 26.5 ms against 13.6 ms without BlockRender.
+  - **Run 5 found the cause:** the Streamline hooks' readability checks, whose `VirtualQuery` walked gigabytes of the
+    game's heaps.
+  - **Run 6, after the fix:** 13.5 ms idle. Tracking every list and drawing before DLSS add about 0.1 to 0.2 ms.
 
 ## Runs
 
@@ -369,6 +370,43 @@ So tracking every list costs about 0.3 ms, within the noise.
 
 Run 5 skipped its measurements of drawing before DLSS and of 10,000 blocks, since the Streamline hooks' cost would
 have swamped them. The next task fixes the checks, and run 6 measures again.
+
+### Run 6: after the fix
+
+BlockRender 0.5.0 (Task 48: `QueryWorkingSetEx` for pages in the working set), at the same corner, with the same save.
+
+| State | Frame time (CET's) |
+|---|---|
+| idle, all hooks on | **13.5 ms (74 fps)**, against 13.6 ms without BlockRender and 26.5 ms before the fix |
+| tracking every list | 13.6 ms |
+| drawing the cube before DLSS | 13.5 to 13.6 ms, 74 frames drawn a second |
+
+**A flicker, from the watched lists.**
+- **What the user saw:** standing still, the cube was steady. When spinning or moving fast, it vanished for single
+  frames.
+- **What the status showed:** sampled several times a second, 0 to 2 frames a second were skipped, as "the DLSS list
+  wasn't tracked from its Reset", with the watch full at 4 lists.
+- **Why:** the game rotates through more DLSS command lists than the 4 watched. A list that drops out of the watch is
+  recorded untracked the next time round, so that frame has no starting states and is skipped.
+- **Tried live:** with `set tracking 1`, every list tracked, 15 seconds of fast spinning skipped none, and the cube
+  didn't flicker.
+
+So drawing before DLSS goes back to tracking every list (the next task). In the same conditions, back to back, the
+game's own time had by then drifted up to 14.6 ms:
+
+| State | Frame time (CET's) |
+|---|---|
+| drawing off, tracking off | 14.6 ms |
+| drawing off, tracking on | 14.6 ms |
+| the cube before DLSS, tracking on | 14.7 ms |
+| the cube before DLSS, the watch only | 15.1 ms |
+| the cube before DLSS, tracking on again | 14.8 ms |
+
+Drawing before DLSS with every list tracked costs about 0.1 to 0.2 ms in all.
+
+**Blocks before DLSS,** with every list tracked: the GPU time is 0.009 ms for the cube, 0.028 ms for 10,003 blocks,
+and 0.030 ms for 100,001 blocks (81 sections, 267,432 vertices). The frame time stays at 14.5 to 15.0 ms throughout.
+Every frame was drawn, and none skipped.
 
 ### For step 4
 
