@@ -31,8 +31,8 @@ Minecraft blocks on the finished frame. Then run spike 3's first two steps in th
 
 **Spec:** [docs/superpowers/specs/2026-10-01-block-render-design.md](../specs/2026-10-01-block-render-design.md)
 
-**Parts 2 and 3:** Part 2 is step 3 (blocks before DLSS): Tasks 35 to 50, which Task 34 planned from step 1's
-findings. Part 3 is step 4 (blocks in the G-buffer), which Task 50 plans once step 3 has run in the game.
+**Parts 2 and 3:** Part 2 is step 3 (blocks before DLSS): Tasks 35 to 52, which Task 34 planned from step 1's
+findings. Part 3 is step 4 (blocks in the G-buffer), which Task 52 plans once step 3 has run in the game.
 
 ---
 
@@ -14305,8 +14305,9 @@ this plan. As in Part 1, compile and test their code in a scratch clone first, a
 
 ## Part 2: step 3, blocks before DLSS
 
-Tasks 35 to 50, planned after Part 1 closed (see "How Part 1 went"). Run 4 found that the hooks cost a lot even
-with drawing off, so Tasks 45 to 49 were added to find and fix that before Part 2 closes.
+Tasks 35 to 52, planned after Part 1 closed (see "How Part 1 went"). Run 4 found that the hooks cost a lot even
+with drawing off, so Tasks 45 to 49 were added to find and fix that before Part 2 closes. Run 6 found that
+tracking only the DLSS lists missed some, so Tasks 50 and 51 track every list again.
 
 **Goal:** draw the blocks into the frame before DLSS. DLSS then upscales them, and the game tone maps, blooms and
 grades them with the scene, under the HUD and the menus. Then run step 3 in the game with the user.
@@ -14316,8 +14317,9 @@ grades them with the scene, under the HUD and the menus. Then run step 3 in the 
   after everything the scene draws before DLSS, and nothing is recorded into the game's lists. The spec's
   `StateTracker::Restore` isn't needed.
 - **Its barriers start where the game left each tagged buffer:** at the state before the DLSS list's first
-  transition of it, which the tracker now keeps (Tasks 35 and 37). The frame log records the same states, so the game
-  run shows them before anything is drawn (Task 41).
+  transition of it, which the tracker now keeps (Tasks 35 and 37). So every list is tracked while drawing is on
+  (Tasks 42 and 50). The frame log records the same states, so the game run shows them before anything is drawn
+  (Task 41).
 - **It draws into the tagged colour, motion vectors and depth** (Tasks 38, 39 and 42):
   - the colour is the atlas's, made linear, times `exposure`;
   - the vertices move with the frame's jitter;
@@ -14328,15 +14330,16 @@ grades them with the scene, under the HUD and the menus. Then run step 3 in the 
   should test first.
 
 **Already verified:** as in Part 1, all the code was compiled and tested in the scratch clone first. Tasks 35 to 43
-were then replayed in a fresh clone from the end of Part 1, Tasks 45 and 46 from the end of Task 44, and Task 48
-from the end of Task 47, applying every step as written and checking every expected result:
+were then replayed in a fresh clone from the end of Part 1, Tasks 45 and 46 from the end of Task 44, Task 48 from
+the end of Task 47, and Task 50 from the end of Task 49, applying every step as written and checking every expected
+result:
 - zero compiler warnings;
-- 105 C++ tests and 22 Python tests passing;
+- 104 C++ tests and 22 Python tests passing;
 - the DLL exporting exactly `Main`, `Query` and `Supports`;
 - the replayed files identical to the scratch clone's.
 
 **Test counts:** the C++ count goes 86, 88, 93, 96, 97, 100, 101 from Task 41, 103 from Task 45, 104 from Task 46,
-then 105 from Task 48 on. The Python count is 22 from Task 41 on.
+105 from Task 48, then 104 from Task 50 on, which removes the watch's test. The Python count is 22 from Task 41 on.
 
 **The commands and rules** in "Before you start" apply here too: the game and the user, deploying, and no faults.
 
@@ -19263,15 +19266,374 @@ cd /d/Cyberpunk-Minecraft && git add docs/spikes \
 
 ---
 
-### Task 50: Close Part 2, and plan Part 3
+### Task 50: Drawing before DLSS tracks every list again
+
+Run 6 found the watch too small. The game rotates through more DLSS command lists than the four `ListWatch` keeps. A
+list that dropped out was recorded untracked the next time round, so that frame had no starting states and was
+skipped: 0 to 2 frames a second while turning fast, a cube that flickered. With every list tracked, 15 seconds of fast
+turns skipped none, and the frame time didn't move. So drawing before DLSS asks for tracking again, as Task 42 had it,
+and the watch goes. Task 46's other change stays: while no list is tracked, a hooked call costs one atomic read.
+
+A list is now tracked whole: from a `Reset` while tracking is on, to its `Close`, even if tracking ends in between.
+
+No unit test covers this: the renderer and the hooks run only inside the game, and Task 51 is this task's test. The
+watch's own test goes with it, so there's one test fewer. The version goes to 0.6.0.
+
+**Files:**
+- Delete: `src/track/ListWatch.h`, `src/track/ListWatch.cpp`, `tests/TestListWatch.cpp`
+- Modify: `src/render/Renderer.h`, `src/render/Renderer.cpp`, `src/hooks/D3D12Hooks.h`, `src/hooks/D3D12Hooks.cpp`,
+  `CMakeLists.txt`, `src/Plugin.cpp`
+
+- [ ] **Step 1: Edit `src/render/Renderer.h` to ask for tracking again**
+
+```cpp
+//   own. Its barriers start from the state the DLSS list found each buffer in (its first transitions), so the DLSS
+//   lists are watched: tracked from their Reset, while every other list goes untracked.
+```
+```cpp
+//   own. Its barriers start from the state the DLSS list found each buffer in (its first transitions), so every
+//   command list is tracked while this mode is on: the game rotates through too many DLSS lists to watch only those.
+```
+```cpp
+	void               Fail(const std::string& aWhy);  // logs, and switches drawing off
+```
+```cpp
+	void               Fail(const std::string& aWhy);  // logs, and switches drawing off
+	void               ReleaseTracking();               // if predlss asked for it
+```
+```cpp
+	std::atomic<Mode>     mode_{ Mode::Off };
+```
+```cpp
+	std::atomic<Mode>     mode_{ Mode::Off };
+	bool                  trackingRequested_ = false;
+```
+
+- [ ] **Step 2: Edit `src/render/Renderer.cpp` to ask for tracking in predlss, and stop watching lists**
+
+```cpp
+	const Mode mode = aMode == "present" ? Mode::Present : aMode == "predlss" ? Mode::Predlss : Mode::Off;
+	if (mode != Mode::Predlss)
+	{
+		d3d::UnwatchLists();  // predlss watches the DLSS lists as their evaluates come
+	}
+	mode_ = mode;
+```
+```cpp
+	const Mode mode = aMode == "present" ? Mode::Present : aMode == "predlss" ? Mode::Predlss : Mode::Off;
+	if (mode == Mode::Predlss && !trackingRequested_)
+	{
+		d3d::RequestTracking();  // our barriers start from the DLSS list's first transitions
+		trackingRequested_ = true;
+	}
+	else if (mode != Mode::Predlss)
+	{
+		ReleaseTracking();
+	}
+	mode_ = mode;
+```
+```cpp
+	mode_ = Mode::Off;
+	d3d::UnwatchLists();
+}
+```
+```cpp
+	mode_ = Mode::Off;
+	ReleaseTracking();
+}
+
+void Renderer::ReleaseTracking()
+{
+	if (trackingRequested_)
+	{
+		d3d::ReleaseTracking();
+		trackingRequested_ = false;
+	}
+}
+```
+```cpp
+		predlssList_ = aCall.list;
+		d3d::WatchList(aCall.list);  // tracked from its next Reset: its first transitions are where our barriers start
+		return;
+```
+```cpp
+		predlssList_ = aCall.list;
+		return;
+```
+```cpp
+	std::lock_guard lock(mutex_);
+	d3d::UnwatchLists();
+```
+```cpp
+	std::lock_guard lock(mutex_);
+	ReleaseTracking();
+```
+
+- [ ] **Step 3: Edit `src/hooks/D3D12Hooks.h` to drop the watch**
+
+```cpp
+// Command lists are tracked from their next Reset while any feature asks for it: a frame log or a dump. Tracking costs
+// frame time, so each feature releases its request when it's done.
+void RequestTracking();
+void ReleaseTracking();
+bool Tracking();
+
+// A list to track from its next Reset even while tracking is off: drawing before DLSS names each evaluate's list, the
+// only lists it needs. The last few named stay watched until UnwatchLists.
+void WatchList(const void* aList);
+void UnwatchLists();
+```
+```cpp
+// Command lists are tracked from their next Reset while any feature asks for it: a frame log, a dump, or drawing before
+// DLSS. Each feature releases its request when it's done. A list is tracked whole: from a Reset while tracking is on,
+// to its Close.
+void RequestTracking();
+void ReleaseTracking();
+bool Tracking();
+```
+
+- [ ] **Step 4: Edit `src/hooks/D3D12Hooks.cpp` to drop the watch**
+
+```cpp
+#include "log/EventNames.h"
+#include "track/ListWatch.h"
+```
+```cpp
+#include "log/EventNames.h"
+```
+```cpp
+StateTracker                 g_tracker;
+ListWatch                    g_watch;                // lists tracked even while tracking is off
+std::atomic<int>             g_listsRecording{ 0 };  // tracked lists between their Reset and their Close
+```
+```cpp
+StateTracker                 g_tracker;
+std::atomic<int>             g_listsRecording{ 0 };  // tracked lists between their Reset and their Close
+```
+```cpp
+// The list's state, if the list hooks are on and the list is tracked: every list while tracking is on, and the
+// watched ones while it's off.
+ListState* Recording(void* aList)
+{
+	if (!HookGroupOn(HookGroup::Lists) || (!g_tracking.load(std::memory_order_relaxed) && !g_watch.Contains(aList)))
+	{
+		return nullptr;
+	}
+	return Tracked(aList);
+}
+```
+```cpp
+// The list's state, if the list hooks are on and the list is tracked: lists Reset while tracking is on, until their
+// Close.
+ListState* Recording(void* aList)
+{
+	if (!HookGroupOn(HookGroup::Lists))
+	{
+		return nullptr;
+	}
+	return Tracked(aList);
+}
+```
+```cpp
+	if (SUCCEEDED(result) && HookGroupOn(HookGroup::Lists) && (g_tracking.load(std::memory_order_relaxed) || g_watch.Contains(aList)))
+```
+```cpp
+	if (SUCCEEDED(result) && HookGroupOn(HookGroup::Lists) && g_tracking.load(std::memory_order_relaxed))
+```
+```cpp
+	// Every tracked list ends here, even one that tracking or the list hooks have let go of since its Reset, so the
+	// count of lists recording stays right.
+	if (ListState* state = Tracked(aList))
+	{
+		if (Recording(aList))
+		{
+```
+```cpp
+	// Every tracked list ends here, even one the list hooks have let go of since its Reset, so the count of lists
+	// recording stays right.
+	if (ListState* state = Tracked(aList))
+	{
+		if (HookGroupOn(HookGroup::Lists))
+		{
+```
+```cpp
+void SetLogging(bool aLogging)
+{
+	g_logging = aLogging;
+}
+
+void WatchList(const void* aList)
+{
+	g_watch.Add(aList);
+}
+
+void UnwatchLists()
+{
+	g_watch.Clear();
+}
+```
+```cpp
+void SetLogging(bool aLogging)
+{
+	g_logging = aLogging;
+}
+```
+```cpp
+	return std::format("device {}, {} vtable entries, present {}, main queue {}, tracking {}, {} lists watched",
+	                   g_device.load() ? (g_seenAtCreation.load() ? "seen at creation" : "patched late") : "not seen",
+	                   g_patcher.Count(), g_original.present ? "patched" : "not patched", g_mainQueue.load() ? "known" : "unknown",
+	                   g_tracking.load() ? "on" : "off", g_watch.Count());
+```
+```cpp
+	return std::format("device {}, {} vtable entries, present {}, main queue {}, tracking {}",
+	                   g_device.load() ? (g_seenAtCreation.load() ? "seen at creation" : "patched late") : "not seen",
+	                   g_patcher.Count(), g_original.present ? "patched" : "not patched", g_mainQueue.load() ? "known" : "unknown",
+	                   g_tracking.load() ? "on" : "off");
+```
+
+- [ ] **Step 5: Delete `src/track/ListWatch.h`**
+
+- [ ] **Step 6: Delete `src/track/ListWatch.cpp`**
+
+- [ ] **Step 7: Delete `tests/TestListWatch.cpp`**
+
+- [ ] **Step 8: Edit `CMakeLists.txt` to drop the watch, and for the version**
+
+```cmake
+project(BlockRender VERSION 0.5.0 LANGUAGES C CXX)
+```
+```cmake
+project(BlockRender VERSION 0.6.0 LANGUAGES C CXX)
+```
+```cmake
+	src/hooks/HookGroups.cpp
+	src/track/ListWatch.cpp
+)
+```
+```cmake
+	src/hooks/HookGroups.cpp
+)
+```
+```cmake
+	tests/TestHookGroups.cpp
+	tests/TestListWatch.cpp
+)
+```
+```cmake
+	tests/TestHookGroups.cpp
+)
+```
+
+- [ ] **Step 9: Edit `src/Plugin.cpp` for the version**
+
+```cpp
+constexpr const char* kVersion = "0.5.0";
+```
+```cpp
+constexpr const char* kVersion = "0.6.0";
+```
+```cpp
+	aInfo->version = RED4EXT_V1_SEMVER(0, 5, 0);
+```
+```cpp
+	aInfo->version = RED4EXT_V1_SEMVER(0, 6, 0);
+```
+
+- [ ] **Step 10: Build; it must compile without warnings, and the tests still pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `104 test(s), 0 failure(s)`: the watch's test is gone.
+
+- [ ] **Step 11: Check the DLL's exports and imports**
+
+```bash
+DUMPBIN="/c/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/dumpbin.exe"
+B=/d/Cyberpunk-Minecraft/spikes/block-render/build/RelWithDebInfo/BlockRender.dll
+"$DUMPBIN" -nologo -exports "$B" | grep -E " (Main|Query|Supports) = "; \
+  "$DUMPBIN" -nologo -dependents "$B" | grep -iE "d3d|dxgi|sl\."
+```
+Expected: exactly `Main`, `Query` and `Supports`, then `D3DCOMPILER_47.dll` and `d3d12.dll`.
+
+- [ ] **Step 12: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "block-render: drawing before DLSS tracks every list again (0.6.0)" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 51: In the game: drawing before DLSS with every list tracked
+
+Run 7, at run 3's corner, with the same save. Run 6 measured 13.5 ms there, idle, and found the flicker that Task 50
+fixes: while turning fast, 0 to 2 frames a second were skipped. The commands are Task 44's.
+
+**Files:**
+- Modify: `docs/spikes/2026-10-01-block-render-results.md`
+
+- [ ] **Step 1: Deploy (the game must not be running)**
+
+Run Task 44 Step 1's two commands. Expected: `0`, then the plugin's folder with `BlockRender.dll`, `BlockRender.pdb`,
+`shaders`, `atlas.bin` and `atlas.json`, the overlay's folder with `init.lua`, and `installed`.
+
+- [ ] **Step 2: Load, at the corner**
+
+Ask the user to launch the game, load the free-roam save, go to the corner, face south-west, and stand still. Then
+read the log's first lines and the status. Expected:
+- `BlockRender 0.6.0 loaded`;
+- in the status, `mode=off`, `tracking off` and `all hooks on`.
+
+- [ ] **Step 3: Idle**
+
+Read the status's `frame=` line and `frames.txt` five times each, a second apart. Expected: about 13.5 ms, as run 6
+found.
+
+- [ ] **Step 4: Drawing before DLSS**
+
+Ask the user to face open ground. Send `mode predlss` and `place cube`, wait three seconds, and read the status.
+Expected:
+- `tracking on`;
+- frames drawn at the frame rate, and none skipped after the first second.
+
+Read five times.
+
+- [ ] **Step 5: Turning fast**
+
+Ask the user to turn fast, and to move, for about 15 seconds, while the status is read every half second. Expected:
+the skipped count doesn't move. Then ask the user whether the cube flickered, and to check it's steady standing still
+and leaves no trails strafing, with a screenshot.
+
+- [ ] **Step 6: Clean up**
+
+Send `clear`, then `mode off`, two seconds apart. Expected: `mode=off` and `tracking off`.
+
+- [ ] **Step 7: Record the results, and commit**
+
+In `docs/spikes/2026-10-01-block-render-results.md`, add what run 7 found: the frame time idle and drawing before DLSS,
+the skips while turning fast, and what the user saw. Then commit:
+```bash
+cd /d/Cyberpunk-Minecraft && git add docs/spikes \
+  && git commit -q -m "block-render: drawing before DLSS with every list tracked, in the game" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 52: Close Part 2, and plan Part 3
 
 **Files:**
 - Modify: `docs/superpowers/plans/2026-10-01-block-render.md` (this plan)
 
 - [ ] **Step 1: Add "How Part 2 went" to this plan**
 
-Add a section after Task 50, as Part 1's closed it. Cover:
-- what Tasks 44, 47 and 49 found, and Tasks 45, 46 and 48's fixes;
+Add a section after Task 52, as Part 1's closed it. Cover:
+- what Tasks 44, 47, 49 and 51 found, and Tasks 45, 46, 48 and 50's fixes;
 - any amendments made along the way;
 - what step 3's run decides for step 4:
   - where blocks can go into the G-buffer: the G-buffer lists' last submission, and the states they leave their
@@ -19290,6 +19652,6 @@ cd /d/Cyberpunk-Minecraft && git add docs/superpowers/plans \
 
 - [ ] **Step 3: Plan Part 3**
 
-Use superpowers:writing-plans to write Part 3's tasks (spec step 4) from what steps 1 to 3 found, as Tasks 51 on in
+Use superpowers:writing-plans to write Part 3's tasks (spec step 4) from what steps 1 to 3 found, as Tasks 53 on in
 this plan. As in Parts 1 and 2, compile and test their code in a scratch clone first, and replay the tasks before
 committing.
