@@ -122,14 +122,14 @@ in all, under the MIT licence.
 - Create: `extern/streamline-2.7.2/include/` (eight headers) and `extern/streamline-2.7.2/license.txt`
 - Create: `extern/streamline-2.7.2/README.md`
 
-- [ ] **Step 1: Check the branch**
+- [x] **Step 1: Check the branch**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git switch spike/block-rendering && git status --short && git log --oneline -1
 ```
 Expected: no changed files, and this plan's own commit at the top.
 
-- [ ] **Step 2: Download the headers and the licence**
+- [x] **Step 2: Download the headers and the licence**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && mkdir -p extern/streamline-2.7.2/include \
@@ -153,7 +153,7 @@ dc9bf43ae1003d4d94a18e901043724a25dce73ff64ebc5b1d015dd84ef0e4a2 *include/sl_ver
 ```
 The files keep NVIDIA's CRLF line endings, which is what the hashes are of.
 
-- [ ] **Step 3: Write `extern/streamline-2.7.2/README.md`**
+- [x] **Step 3: Write `extern/streamline-2.7.2/README.md`**
 
 ```markdown
 # NVIDIA Streamline 2.7.2 public headers
@@ -166,7 +166,7 @@ BlockRender uses only their types and links nothing from Streamline. `spikes/blo
 offset of every field the plugin reads, and the plugin checks each struct's type GUID and version before reading it.
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add extern/streamline-2.7.2 \
