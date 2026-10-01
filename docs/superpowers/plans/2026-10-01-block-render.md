@@ -32,7 +32,7 @@ Minecraft blocks on the finished frame. Then run spike 3's first two steps in th
 **Spec:** [docs/superpowers/specs/2026-10-01-block-render-design.md](../specs/2026-10-01-block-render-design.md)
 
 **Part 2:** steps 3 and 4 (blocks before DLSS, and blocks in the G-buffer) get their own tasks once step 1's frame log
-has shown where they can draw. Task 31 ends Part 1 by planning them.
+has shown where they can draw. Task 33 ends Part 1 by planning them.
 
 ---
 
@@ -48,19 +48,20 @@ has shown where they can draw. Task 31 ends Part 1 by planning them.
     ```
   - Pass MSBuild switches as `-m`, never `/m`: Git Bash rewrites `/m` into a file path.
 - **Already verified:** all the C++, HLSL, Lua and Python in this plan has been compiled and tested once already, in a
-  scratch clone. Tasks 1 to 28 were then replayed in a fresh clone by a script that applied every file step exactly
-  as written, and checked every build and test step's expected result. The results:
+  scratch clone. Tasks 1 to 28 and 31 were then replayed in a fresh clone by a script that applied every file step
+  exactly as written, and checked every build and test step's expected result. The results:
   - zero compiler warnings at `/W4`;
-  - 84 C++ tests and 20 Python tests passing;
+  - 85 C++ tests and 20 Python tests passing;
   - the plugin DLL exporting exactly `Main`, `Query` and `Supports`;
   - the replayed files identical to the scratch clone's.
 
   So a failure while following the plan most likely means a transcription slip: compare against the plan's code first.
 - **Test counts:** the C++ test count grows with each task: 7, 11, 16, 19, 25, 28, 31, 36, 41, 48, 51, 56, 64, 69, 72, 75,
-  79, 80, then 83 from Task 20 on, and 84 from Task 28 on.
+  79, 80, then 83 from Task 20 on, 84 from Task 28 on, and 85 from Task 31 on.
 - **What only the game can test:** the code that runs inside the game, which is the hooks, GpuApi, the frame log, the
   dumps, the renderer and the plugin (Tasks 23 to 27). Tasks 3 to 20 test, offline, the pieces it relies on. Tasks 29
-  and 30 test the rest in the game, with the user. Task 28 fixes what the first run in the game found.
+  and 30 test the rest in the game, with the user, and Task 32 finishes. Tasks 28 and 31 fix what the runs in the
+  game found.
 - **The game and the user:**
   - **The user does everything in the game:** launching it, loading saves, moving, pressing keys and taking
     screenshots. Never drive their mouse or keyboard: ask, then wait for them to say they're done.
@@ -2674,23 +2675,31 @@ TEST(ListStateFollowsTransitionsAndSplitBarriers)
 	CHECK(!state.StateOf(&resource));  // a new recording forgets
 }
 
-TEST(GbufferCandidatesNeedTheTaggedDepthAndMatchingTargets)
+TEST(GbufferCandidatesNeedThreeTargetsAndADepthAtRenderSize)
 {
-	CHECK(cpmc::IsGbufferCandidate(Gbuffer(9), reinterpret_cast<void*>(9)));
-	CHECK(!cpmc::IsGbufferCandidate(Gbuffer(9), reinterpret_cast<void*>(8)));  // another depth buffer (a mirror)
-	CHECK(!cpmc::IsGbufferCandidate(Gbuffer(9), nullptr));
+	CHECK(cpmc::IsGbufferCandidate(Gbuffer(9), 1707, 960));
+	CHECK(!cpmc::IsGbufferCandidate(Gbuffer(9), 2560, 1440));  // not the render size
+	CHECK(!cpmc::IsGbufferCandidate(Gbuffer(9), 0, 0));        // no depth tag yet
 
 	Targets two = Gbuffer(9);
 	two.rtvs.pop_back();
-	CHECK(!cpmc::IsGbufferCandidate(two, reinterpret_cast<void*>(9)));
+	CHECK(!cpmc::IsGbufferCandidate(two, 1707, 960));
 
 	Targets small = Gbuffer(9);
 	small.rtvs[1] = Target(2, 853, 480);
-	CHECK(!cpmc::IsGbufferCandidate(small, reinterpret_cast<void*>(9)));
+	CHECK(!cpmc::IsGbufferCandidate(small, 1707, 960));
 
 	Targets unknown = Gbuffer(9);
 	unknown.rtvs[2].view.reset();
-	CHECK(!cpmc::IsGbufferCandidate(unknown, reinterpret_cast<void*>(9)));
+	CHECK(!cpmc::IsGbufferCandidate(unknown, 1707, 960));
+
+	Targets noDepth = Gbuffer(9);
+	noDepth.dsv.reset();
+	CHECK(!cpmc::IsGbufferCandidate(noDepth, 1707, 960));
+
+	Targets nullTarget = Gbuffer(9);  // the game's forward passes bind a null target, which has no size
+	nullTarget.rtvs[1] = Target(0, 0, 0);
+	CHECK(!cpmc::IsGbufferCandidate(nullTarget, 1707, 960));
 }
 ```
 
@@ -2824,9 +2833,10 @@ private:
 	std::unordered_map<void*, std::unique_ptr<ListState>> lists_;
 };
 
-// True when aTargets look like a G-buffer: three or more known render targets the size of the tagged depth, with
-// the tagged depth bound as the depth buffer.
-bool IsGbufferCandidate(const Targets& aTargets, const void* aTaggedDepth);
+// True when aTargets look like a G-buffer: three or more known render targets and a known depth buffer, all
+// aWidth x aHeight, the render size (the tagged depth's). The depth buffer isn't the tagged depth: the game tags a
+// copy of its own.
+bool IsGbufferCandidate(const Targets& aTargets, uint64_t aWidth, uint32_t aHeight);
 }
 ```
 
@@ -2974,17 +2984,18 @@ ListState* StateTracker::Find(void* aList)
 	return found->second.get();
 }
 
-bool IsGbufferCandidate(const Targets& aTargets, const void* aTaggedDepth)
+bool IsGbufferCandidate(const Targets& aTargets, uint64_t aWidth, uint32_t aHeight)
 {
-	if (!aTaggedDepth || !aTargets.dsv || !aTargets.dsv->view || aTargets.dsv->view->resource != aTaggedDepth ||
-	    aTargets.rtvs.size() < 3)
+	const auto renderSized = [&](const std::optional<ViewInfo>& aView) {
+		return aView && aView->width == aWidth && aView->height == aHeight;
+	};
+	if (aWidth == 0 || aHeight == 0 || !aTargets.dsv || !renderSized(aTargets.dsv->view) || aTargets.rtvs.size() < 3)
 	{
 		return false;
 	}
-	const ViewInfo& depth = *aTargets.dsv->view;
 	for (const BoundTarget& target : aTargets.rtvs)
 	{
-		if (!target.view || target.view->width != depth.width || target.view->height != depth.height)
+		if (!renderSized(target.view))
 		{
 			return false;
 		}
@@ -5998,10 +6009,13 @@ TEST(ShadersReportCompileErrors)
 
 #include "AtlasFixture.h"
 #include "render/Camera.h"
+#include "render/Pipeline.h"
 #include "world/Mesher.h"
 
-// The mesher's faces, through the camera, must wind counter-clockwise in clip space (x right, y up) when they face
-// the camera. On screen, with y down, that's clockwise: Direct3D's default front face, so back-face culling keeps them.
+// The mesher's faces, through the camera, wind counter-clockwise in clip space (x right, y up) when they face the
+// camera, as Minecraft's do. Flipping y for the render target doesn't change how a triangle winds on screen, so
+// Direct3D takes such a triangle as a front face only when the rasterizer says FrontCounterClockwise. Its default is
+// the opposite: the first run in the game showed a cube seen from the inside.
 namespace
 {
 double SignedArea(const std::array<double, 3>& aA, const std::array<double, 3>& aB, const std::array<double, 3>& aC)
@@ -6042,13 +6056,17 @@ void CheckWinding(const std::array<float, 16>& aViewToClip)
 		}
 		const auto face = cpmc::Face(((vertices[first].flags >> 4) & 15) - 1);
 		const double area = SignedArea(ndc[0], ndc[1], ndc[2]);
+		// Direct3D's rule: a front face winds clockwise on screen, or counter-clockwise with FrontCounterClockwise.
+		const bool front = cpmc::BlockRasterizer(1).FrontCounterClockwise ? area > 0.0 : area < 0.0;
 		if (face == cpmc::Face::South)  // world -y: towards the camera
 		{
 			CHECK(area > 0.0);
+			CHECK(front);
 		}
 		if (face == cpmc::Face::North)  // away from the camera
 		{
 			CHECK(area < 0.0);
+			CHECK(!front);
 		}
 	}
 }
@@ -6062,6 +6080,15 @@ TEST(WindingFacesTheCameraWithALeftHandedProjection)
 TEST(WindingFacesTheCameraWithARightHandedColumnProjection)
 {
 	CheckWinding({ 0.8f, 0, 0, 0, 0, 1.4f, 0, 0, 0, 0, 0, 0.1f, 0, 0, -1, 0 });
+}
+
+TEST(WindingCullSettingsPickTheirFaces)
+{
+	CHECK(cpmc::BlockRasterizer(0).CullMode == D3D12_CULL_MODE_NONE);
+	CHECK(cpmc::BlockRasterizer(1).CullMode == D3D12_CULL_MODE_BACK);
+	CHECK(cpmc::BlockRasterizer(2).CullMode == D3D12_CULL_MODE_FRONT);
+	CHECK(cpmc::BlockRasterizer(1).FrontCounterClockwise == TRUE);
+	CHECK(cpmc::BlockRasterizer(1).DepthClipEnable == TRUE);
 }
 ```
 
@@ -8371,8 +8398,10 @@ bool InstallDetours(const RED4ext::v1::Sdk* aSdk, RED4ext::v1::PluginHandle aHan
 // Listeners, in the order they're called. At most 4; add them all at load.
 void AddListener(HookEvents* aListener);
 
-// From now on, command lists are tracked from their next Reset. Off until a feature first needs it.
-void EnableTracking();
+// Command lists are tracked from their next Reset while any feature asks for it: a frame log or a dump. Tracking costs
+// frame time, so each feature releases its request when it's done.
+void RequestTracking();
+void ReleaseTracking();
 bool Tracking();
 
 // Lists reset while this is on record their passes for the frame log.
@@ -8456,6 +8485,7 @@ StateTracker                 g_tracker;
 std::array<HookEvents*, 4>   g_listeners{};
 size_t                       g_listenerCount = 0;
 std::atomic<bool>            g_tracking{ false };
+std::atomic<int>             g_trackingRequests{ 0 };
 std::atomic<bool>            g_logging{ false };
 std::atomic<uint32_t>        g_frame{ 0 };
 std::atomic<ID3D12Device*>   g_device{ nullptr };      // the latest device the detour or a late patch saw
@@ -9179,9 +9209,14 @@ void AddListener(HookEvents* aListener)
 	}
 }
 
-void EnableTracking()
+void RequestTracking()
 {
-	g_tracking = true;
+	g_tracking = ++g_trackingRequests > 0;
+}
+
+void ReleaseTracking()
+{
+	g_tracking = --g_trackingRequests > 0;
 }
 
 bool Tracking()
@@ -10080,7 +10115,7 @@ bool FrameLog::Arm()
 	tokens_ = 0;
 	names_ = std::make_unique<gpuapi::ListNames>();
 	phase_ = Phase::Armed;
-	d3d::EnableTracking();
+	d3d::RequestTracking();
 	return true;
 }
 
@@ -10264,6 +10299,7 @@ std::optional<FrameLogData> FrameLog::TakeFinished(const std::string& aVersion, 
 	data_ = {};
 	names_.reset();
 	phase_ = Phase::Idle;
+	d3d::ReleaseTracking();
 
 	data.pluginVersion = aVersion;
 	data.time = aTime;
@@ -10281,13 +10317,15 @@ std::optional<FrameLogData> FrameLog::TakeFinished(const std::string& aVersion, 
 	device.vtableEntries = d3d::PatchedEntries();
 	device.imports = 4;
 
-	// The G-buffer candidates, against the log's latest depth tag.
-	const void* depth = nullptr;
+	// The G-buffer candidates, at the render size: the log's latest depth tag's.
+	uint64_t width = 0;
+	uint32_t height = 0;
 	for (const LogTag& tag : data.tags)
 	{
-		if (tag.tag.type == sl::kBufferTypeDepth && tag.tag.resource)
+		if (tag.tag.type == sl::kBufferTypeDepth && tag.resource.known)
 		{
-			depth = tag.tag.resource;
+			width = tag.resource.width;
+			height = tag.resource.height;
 		}
 	}
 	for (const LogList& list : data.lists)
@@ -10300,7 +10338,7 @@ std::optional<FrameLogData> FrameLog::TakeFinished(const std::string& aVersion, 
 				device.unknownHandles += target.view ? 0 : 1;
 			}
 			device.unknownHandles += targets.dsv && !targets.dsv->view ? 1 : 0;
-			if (IsGbufferCandidate(targets, depth))
+			if (IsGbufferCandidate(targets, width, height))
 			{
 				data.gbufferCandidates.push_back({ list.list, pass });
 			}
@@ -10331,9 +10369,11 @@ std::optional<FrameLogData> FrameLog::TakeFinished(const std::string& aVersion, 
 namespace cpmc
 {
 // Dumps (the spec's "FrameLog and dumps"). `dump <what>` arms one frame: from the next frame token, the tagged
-// buffers are copied at the DLSS evaluate (depth, mvec, color) and the G-buffer candidates when their pass ends
-// (gbuffer, at most 4 passes). The copies go into readback buffers inside the game's own lists; once a fence says the
-// GPU has run them, the main thread writes each as a .dds file, with dump.json saying what each one is.
+// buffers are copied at the DLSS evaluate (depth, mvec, color), and the G-buffer candidates as their passes end
+// (gbuffer). The game records its G-buffer pass over many lists, so each set of candidate targets keeps one copy,
+// which every pass with those targets records again: the last in submission order wins, which is the whole G-buffer.
+// The copies go into readback buffers inside the game's own lists. Once a fence says the GPU has run them, the main
+// thread writes each as a .dds file, with dump.json saying what each one is.
 class Dumps : public HookEvents
 {
 public:
@@ -10366,31 +10406,45 @@ private:
 		std::string                  note;  // what it is, for dump.json
 		gpu::ComPtr<ID3D12Resource>  readback;
 		gpu::Footprint               footprint;
+		uint32_t                     subresource = 0;
 		uint32_t                     format = 0;  // the format it's saved as
 		uint32_t                     width = 0;
 		uint32_t                     height = 0;
-		ID3D12GraphicsCommandList*   list = nullptr;  // the game list it was recorded into
-		ID3D12CommandQueue*          queue = nullptr;
-		uint64_t                     fence = 0;  // 0 until the list is submitted and signalled
+		int                          recordings = 0;
+		std::set<ID3D12CommandList*> unsubmitted;  // game lists holding a recording of it, not yet submitted
+		ID3D12CommandQueue*          queue = nullptr;  // where its latest recording was submitted
+		bool                         signalDue = false;  // submitted since the fence was last signalled for it
+		uint64_t                     fence = 0;  // signalled after its latest submission
 	};
 
-	// Records copies of every plane of aResource (or of plane aOnlyPlane) into aList. Mutex held.
-	void CopyResource(ID3D12GraphicsCommandList* aList, ID3D12Resource* aResource, uint32_t aState, const std::string& aName,
-	                  const std::string& aNote, int aOnlyPlane = -1);
+	// One set of G-buffer candidate targets and depth, by resource, and the copies of each resource.
+	struct Group
+	{
+		std::vector<void*>               resources;  // the render targets, then the depth buffer
+		std::vector<std::vector<size_t>> copies;     // per resource, its planes' copies (indices into copies_)
+		int                              passes = 0;
+	};
 
-	LogQueue&                         log_;
-	std::filesystem::path             folder_;
-	mutable std::mutex                mutex_;
-	Phase                             phase_ = Phase::Idle;
-	std::set<std::string>             what_;
-	uint32_t                          frame_ = 0;
-	void*                             taggedDepth_ = nullptr;
-	int                               candidates_ = 0;
-	std::vector<Copy>                 copies_;
-	std::set<ID3D12CommandList*>      lists_;  // game lists holding copies, not yet submitted
-	gpu::ComPtr<ID3D12Fence>          fence_;
-	uint64_t                          fenceValue_ = 0;
-	std::vector<std::string>          errors_;
+	// Records copies of every plane of aResource (or of plane aOnlyPlane) into aList, into new readback buffers named
+	// aName, and returns their indices in copies_. Mutex held.
+	std::vector<size_t> CopyResource(ID3D12GraphicsCommandList* aList, ID3D12Resource* aResource, uint32_t aState,
+	                                 const std::string& aName, const std::string& aNote, int aOnlyPlane = -1);
+	// Records aCopy's copy of aResource again, into aList. Mutex held.
+	void CopyAgain(ID3D12GraphicsCommandList* aList, ID3D12Resource* aResource, uint32_t aState, Copy& aCopy);
+
+	LogQueue&                             log_;
+	std::filesystem::path                 folder_;
+	mutable std::mutex                    mutex_;
+	Phase                                 phase_ = Phase::Idle;
+	std::set<std::string>                 what_;
+	uint32_t                              frame_ = 0;
+	uint64_t                              renderWidth_ = 0;  // the tagged depth's size
+	uint32_t                              renderHeight_ = 0;
+	std::vector<Group>                    groups_;
+	std::vector<Copy>                     copies_;
+	gpu::ComPtr<ID3D12Fence>              fence_;
+	uint64_t                              fenceValue_ = 0;
+	std::vector<std::string>              errors_;
 	std::chrono::steady_clock::time_point waitingSince_{};
 };
 }
@@ -10406,6 +10460,7 @@ private:
 #include "log/DdsWriter.h"
 #include "log/FrameLogData.h"
 
+#include <algorithm>
 #include <format>
 #include <fstream>
 
@@ -10413,7 +10468,7 @@ namespace cpmc
 {
 namespace
 {
-constexpr int kMaxCandidates = 4;
+constexpr size_t kMaxGroups = 4;
 
 bool WriteFile(const std::filesystem::path& aPath, const void* aData, size_t aSize)
 {
@@ -10446,12 +10501,11 @@ bool Dumps::Arm(std::string_view aWhat, std::string& aError)
 	{
 		what_.insert(std::string(aWhat));
 	}
+	groups_.clear();
 	copies_.clear();
-	lists_.clear();
 	errors_.clear();
-	candidates_ = 0;
 	phase_ = Phase::Armed;
-	d3d::EnableTracking();
+	d3d::RequestTracking();
 	return true;
 }
 
@@ -10485,30 +10539,34 @@ void Dumps::OnFrameToken(uint32_t aFrame)
 
 void Dumps::OnTags(uint32_t, uint32_t, const std::vector<SlTag>& aTags, void*)
 {
-	std::lock_guard lock(mutex_);
 	for (const SlTag& tag : aTags)
 	{
 		if (tag.type == sl::kBufferTypeDepth && tag.resource)
 		{
-			taggedDepth_ = tag.resource;
+			// Kept from every frame: a frame's tags come after the G-buffer passes they give the size of.
+			const D3D12_RESOURCE_DESC desc = static_cast<ID3D12Resource*>(tag.resource)->GetDesc();
+			std::lock_guard lock(mutex_);
+			renderWidth_ = desc.Width;
+			renderHeight_ = desc.Height;
 		}
 	}
 }
 
-void Dumps::CopyResource(ID3D12GraphicsCommandList* aList, ID3D12Resource* aResource, uint32_t aState, const std::string& aName,
-                         const std::string& aNote, int aOnlyPlane)
+std::vector<size_t> Dumps::CopyResource(ID3D12GraphicsCommandList* aList, ID3D12Resource* aResource, uint32_t aState,
+                                        const std::string& aName, const std::string& aNote, int aOnlyPlane)
 {
+	std::vector<size_t>       made;
 	gpu::ComPtr<ID3D12Device> owner;
 	if (!aResource || FAILED(aResource->GetDevice(IID_PPV_ARGS(&owner))))
 	{
-		return;
+		return made;
 	}
 	ID3D12Device* const       device = owner.Get();
 	const D3D12_RESOURCE_DESC desc = aResource->GetDesc();
 	if (desc.Dimension != D3D12_RESOURCE_DIMENSION_TEXTURE2D)
 	{
 		errors_.push_back(aName + ": not a 2D texture");
-		return;
+		return made;
 	}
 	const uint32_t planes = gpu::PlaneCount(device, desc.Format);
 	for (uint32_t plane = 0; plane < planes; ++plane)
@@ -10526,7 +10584,8 @@ void Dumps::CopyResource(ID3D12GraphicsCommandList* aList, ID3D12Resource* aReso
 		Copy copy;
 		copy.name = planes > 1 ? std::format("{}-plane{}", aName, plane) : aName;
 		copy.note = aNote;
-		copy.footprint = gpu::FootprintOf(device, desc, gpu::PlaneSubresource(desc, plane));
+		copy.subresource = gpu::PlaneSubresource(desc, plane);
+		copy.footprint = gpu::FootprintOf(device, desc, copy.subresource);
 		copy.readback = gpu::MakeBuffer(device, copy.footprint.totalBytes, D3D12_HEAP_TYPE_READBACK, D3D12_RESOURCE_STATE_COPY_DEST);
 		if (!copy.readback)
 		{
@@ -10536,15 +10595,22 @@ void Dumps::CopyResource(ID3D12GraphicsCommandList* aList, ID3D12Resource* aReso
 		copy.format = format;
 		copy.width = copy.footprint.layout.Footprint.Width;
 		copy.height = copy.footprint.layout.Footprint.Height;
-		copy.list = aList;
-		if (!gpu::RecordCopy(aList, aResource, gpu::PlaneSubresource(desc, plane), aState, copy.readback.Get(), copy.footprint))
-		{
-			errors_.push_back(std::format("{}: its list isn't a direct list, which can't move it out of state 0x{:x}", copy.name, aState));
-			continue;
-		}
 		copies_.push_back(std::move(copy));
+		made.push_back(copies_.size() - 1);
+		CopyAgain(aList, aResource, aState, copies_.back());
 	}
-	lists_.insert(aList);
+	return made;
+}
+
+void Dumps::CopyAgain(ID3D12GraphicsCommandList* aList, ID3D12Resource* aResource, uint32_t aState, Copy& aCopy)
+{
+	if (!gpu::RecordCopy(aList, aResource, aCopy.subresource, aState, aCopy.readback.Get(), aCopy.footprint))
+	{
+		errors_.push_back(std::format("{}: its list isn't a direct list, which can't move it out of state 0x{:x}", aCopy.name, aState));
+		return;
+	}
+	++aCopy.recordings;
+	aCopy.unsubmitted.insert(aList);
 }
 
 void Dumps::OnEvaluate(const EvaluateCall& aCall)
@@ -10585,53 +10651,73 @@ void Dumps::OnEvaluate(const EvaluateCall& aCall)
 void Dumps::OnPassEnd(ID3D12GraphicsCommandList* aList, ListState& aState, bool)
 {
 	std::lock_guard lock(mutex_);
-	if (phase_ != Phase::Copying || !what_.contains("gbuffer") || candidates_ >= kMaxCandidates ||
-	    !IsGbufferCandidate(aState.CurrentTargets(), taggedDepth_))
-	{
-		return;
-	}
-	const int      index = candidates_++;
 	const Targets& targets = aState.CurrentTargets();
-	for (size_t i = 0; i < targets.rtvs.size(); ++i)
+	if (phase_ != Phase::Copying || !what_.contains("gbuffer") || !IsGbufferCandidate(targets, renderWidth_, renderHeight_))
 	{
-		const ViewInfo& view = *targets.rtvs[i].view;
-		auto*           resource = static_cast<ID3D12Resource*>(view.resource);
-		const uint32_t  state = aState.StateOf(resource).value_or(D3D12_RESOURCE_STATE_RENDER_TARGET);
-		const std::string note = std::format("G-buffer candidate {}, target {} ({}), list 0x{:x}, frame {}, state 0x{:x}", index, i,
-		                                     DxgiFormatName(view.viewFormat), reinterpret_cast<uintptr_t>(aList), frame_, state);
-		CopyResource(aList, resource, state, std::format("gbuffer{}-target{}", index, i), note, int(view.plane));
-	}
-	const ViewInfo& depth = *targets.dsv->view;
-	const auto      known = aState.StateOf(depth.resource);
-	if (!known && depth.readOnlyDepth)
-	{
-		errors_.push_back(std::format("gbuffer{}-depth: read-only and its state is unknown, so it isn't copied", index));
 		return;
 	}
-	const uint32_t    state = known.value_or(D3D12_RESOURCE_STATE_DEPTH_WRITE);
-	const std::string note = std::format("G-buffer candidate {}, depth ({}), list 0x{:x}, frame {}, state 0x{:x}", index,
-	                                     DxgiFormatName(depth.viewFormat), reinterpret_cast<uintptr_t>(aList), frame_, state);
-	CopyResource(aList, static_cast<ID3D12Resource*>(depth.resource), state, std::format("gbuffer{}-depth", index), note);
+	std::vector<void*> resources;
+	for (const BoundTarget& target : targets.rtvs)
+	{
+		resources.push_back(target.view->resource);
+	}
+	resources.push_back(targets.dsv->view->resource);
+	auto group = std::find_if(groups_.begin(), groups_.end(), [&](const Group& aGroup) { return aGroup.resources == resources; });
+	if (group == groups_.end())
+	{
+		if (groups_.size() >= kMaxGroups)
+		{
+			return;
+		}
+		groups_.push_back({ resources, std::vector<std::vector<size_t>>(resources.size()), 0 });
+		group = groups_.end() - 1;
+	}
+	const size_t index = size_t(group - groups_.begin());
+	++group->passes;
+	for (size_t i = 0; i < resources.size(); ++i)
+	{
+		const bool      isDepth = i == targets.rtvs.size();
+		const ViewInfo& view = isDepth ? *targets.dsv->view : *targets.rtvs[i].view;
+		auto*           resource = static_cast<ID3D12Resource*>(view.resource);
+		const auto      known = aState.StateOf(resource);
+		if (isDepth && !known && view.readOnlyDepth)
+		{
+			continue;  // a read-only depth in an unknown state: its earlier copy stands
+		}
+		const uint32_t state = known.value_or(isDepth ? D3D12_RESOURCE_STATE_DEPTH_WRITE : D3D12_RESOURCE_STATE_RENDER_TARGET);
+		if (group->copies[i].empty())
+		{
+			const std::string name = isDepth ? std::format("gbuffer{}-depth", index) : std::format("gbuffer{}-target{}", index, i);
+			const std::string note = std::format("G-buffer candidate {}, {} ({}), first copied in list 0x{:x}, frame {}, state 0x{:x}",
+			                                     index, isDepth ? std::string("depth") : std::format("target {}", i),
+			                                     DxgiFormatName(view.viewFormat), reinterpret_cast<uintptr_t>(aList), frame_, state);
+			group->copies[i] = CopyResource(aList, resource, state, name, note, isDepth ? -1 : int(view.plane));
+		}
+		else
+		{
+			for (const size_t copy : group->copies[i])
+			{
+				CopyAgain(aList, resource, state, copies_[copy]);
+			}
+		}
+	}
 }
 
 void Dumps::OnSubmit(ID3D12CommandQueue* aQueue, UINT aCount, ID3D12CommandList* const* aLists)
 {
 	std::lock_guard lock(mutex_);
-	if (lists_.empty())
+	if (phase_ != Phase::Copying && phase_ != Phase::Waiting)
 	{
 		return;
 	}
-	for (UINT i = 0; i < aCount; ++i)
+	for (Copy& copy : copies_)
 	{
-		if (lists_.erase(aLists[i]) == 0)
+		for (UINT i = 0; i < aCount; ++i)
 		{
-			continue;
-		}
-		for (Copy& copy : copies_)
-		{
-			if (copy.list == aLists[i])
+			if (copy.unsubmitted.erase(aLists[i]) > 0)
 			{
 				copy.queue = aQueue;
+				copy.signalDue = true;
 			}
 		}
 	}
@@ -10640,12 +10726,12 @@ void Dumps::OnSubmit(ID3D12CommandQueue* aQueue, UINT aCount, ID3D12CommandList*
 void Dumps::OnSubmitted(ID3D12CommandQueue* aQueue, UINT, ID3D12CommandList* const*)
 {
 	std::lock_guard lock(mutex_);
-	bool            signal = false;
+	bool            due = false;
 	for (const Copy& copy : copies_)
 	{
-		signal = signal || (copy.queue == aQueue && copy.fence == 0);
+		due = due || (copy.signalDue && copy.queue == aQueue);
 	}
-	if (!signal)
+	if (!due)
 	{
 		return;
 	}
@@ -10659,9 +10745,10 @@ void Dumps::OnSubmitted(ID3D12CommandQueue* aQueue, UINT, ID3D12CommandList* con
 	aQueue->Signal(fence_.Get(), ++fenceValue_);
 	for (Copy& copy : copies_)
 	{
-		if (copy.queue == aQueue && copy.fence == 0)
+		if (copy.signalDue && copy.queue == aQueue)
 		{
 			copy.fence = fenceValue_;
+			copy.signalDue = false;
 		}
 	}
 }
@@ -10676,9 +10763,10 @@ void Dumps::Update(const std::string& aFolderName)
 	// Wait until the GPU has run every copy, or 10 seconds: a list the game never submitted won't finish.
 	const uint64_t completed = fence_ ? fence_->GetCompletedValue() : 0;
 	const bool     timedOut = std::chrono::steady_clock::now() - waitingSince_ > std::chrono::seconds(10);
+	const auto     done = [&](const Copy& aCopy) { return aCopy.unsubmitted.empty() && aCopy.fence != 0 && completed >= aCopy.fence; };
 	for (const Copy& copy : copies_)
 	{
-		if ((copy.fence == 0 || completed < copy.fence) && !timedOut)
+		if (copy.recordings > 0 && !done(copy) && !timedOut)
 		{
 			return;
 		}
@@ -10691,7 +10779,11 @@ void Dumps::Update(const std::string& aFolderName)
 	size_t written = 0;
 	for (Copy& copy : copies_)
 	{
-		if (copy.fence == 0 || completed < copy.fence)
+		if (copy.recordings == 0)
+		{
+			continue;  // errors_ says why
+		}
+		if (!done(copy))
 		{
 			errors_.push_back(copy.name + ": the GPU never ran its copy");
 			continue;
@@ -10718,6 +10810,7 @@ void Dumps::Update(const std::string& aFolderName)
 		json.Key("format").String(DxgiFormatName(copy.format));
 		json.Key("size").BeginArray().UInt(copy.width).UInt(copy.height).EndArray();
 		json.Key("note").String(copy.note);
+		json.Key("recordings").UInt(uint64_t(copy.recordings));
 		json.EndObject();
 	}
 	json.EndArray().Key("errors").BeginArray();
@@ -10730,9 +10823,11 @@ void Dumps::Update(const std::string& aFolderName)
 	WriteFile(folder / "dump.json", text.data(), text.size());
 	log_.Push(std::format("dump: {} files written to {}{}", written, folder.string(),
 	                      errors_.empty() ? "" : std::format(", {} problems (see dump.json)", errors_.size())));
+	groups_.clear();
 	copies_.clear();
 	errors_.clear();
 	phase_ = Phase::Idle;
+	d3d::ReleaseTracking();
 }
 }
 ```
@@ -10970,6 +11065,7 @@ private:
 #include "log/DdsWriter.h"
 #include "log/FrameLogData.h"
 #include "render/FrameConstants.h"
+#include "render/Pipeline.h"
 
 #include <dxgi1_4.h>
 
@@ -11268,9 +11364,7 @@ bool Renderer::EnsurePipeline(DXGI_FORMAT aFormat, bool aReversed)
 	desc.PS = { shaders_->present.data(), shaders_->present.size() };
 	desc.BlendState.RenderTarget[0].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
 	desc.SampleMask = UINT_MAX;
-	desc.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
-	desc.RasterizerState.CullMode = cull_ == 0 ? D3D12_CULL_MODE_NONE : cull_ == 1 ? D3D12_CULL_MODE_BACK : D3D12_CULL_MODE_FRONT;
-	desc.RasterizerState.DepthClipEnable = TRUE;
+	desc.RasterizerState = BlockRasterizer(cull_);
 	desc.DepthStencilState.DepthEnable = TRUE;
 	desc.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL;
 	desc.DepthStencilState.DepthFunc = aReversed ? D3D12_COMPARISON_FUNC_GREATER : D3D12_COMPARISON_FUNC_LESS;
@@ -11924,7 +12018,7 @@ namespace
 using Clock = std::chrono::steady_clock;
 using namespace std::chrono_literals;
 
-constexpr const char* kVersion = "0.1.0";
+constexpr const char* kVersion = "0.2.0";
 
 RED4ext::v1::PluginHandle g_handle = nullptr;
 const RED4ext::v1::Sdk*   g_sdk = nullptr;
@@ -11946,6 +12040,7 @@ Clock::time_point                          g_lastSecond{};
 uint64_t                                   g_lastFrameTokens = 0;
 bool                                       g_removalReported = false;
 bool                                       g_hudMissingReported = false;
+bool                                       g_trackingHeld = false;  // set tracking 1: to measure what tracking costs
 
 template<class... Args>
 void Log(std::format_string<Args...> aFormat, Args&&... aArgs)
@@ -12041,6 +12136,16 @@ void Set(const cpmc::Request& aRequest)
 		g_meshOptions.ambientOcclusion = aRequest.number != 0.0;
 		g_world.MarkAllDirty();
 		return Report(std::format("set ao {}", g_meshOptions.ambientOcclusion ? 1 : 0));
+	}
+	if (aRequest.what == "tracking")
+	{
+		const bool hold = aRequest.number != 0.0;
+		if (hold != g_trackingHeld)
+		{
+			hold ? cpmc::d3d::RequestTracking() : cpmc::d3d::ReleaseTracking();
+			g_trackingHeld = hold;
+		}
+		return Report(std::format("set tracking {}: command lists are {}tracked", hold ? 1 : 0, cpmc::d3d::Tracking() ? "" : "not "));
 	}
 	std::string error;
 	Report(g_renderer->Set(aRequest.what, aRequest.number, error) ? std::format("set {} {}", aRequest.what, aRequest.number)
@@ -12303,7 +12408,7 @@ RED4EXT_C_EXPORT void RED4EXT_CALL Query(RED4ext::v1::PluginInfo* aInfo)
 {
 	aInfo->name = L"BlockRender";
 	aInfo->author = L"Cyberpunk-Minecraft";
-	aInfo->version = RED4EXT_V1_SEMVER(0, 1, 0);
+	aInfo->version = RED4EXT_V1_SEMVER(0, 2, 0);
 	aInfo->runtime = RED4EXT_V1_RUNTIME_VERSION_LATEST;
 	aInfo->sdk = RED4EXT_V1_SDK_VERSION_CURRENT;
 }
@@ -13217,15 +13322,1033 @@ cd /d/Cyberpunk-Minecraft && git add docs/spikes \
 
 ---
 
-### Task 31: Close Part 1, and plan Part 2
+### Task 31: Fixes from the second run in the game: front faces, the G-buffer dump, and tracking
+
+Tasks 29 and 30 ran on 2026-10-01. `docs/spikes/2026-10-01-block-render-results.md` has their results. Three things
+need fixing before Part 1 can close:
+- **Front faces.**
+  - **What happened:** the cube showed its inside. The mesher winds faces counter-clockwise seen from outside, as
+    Minecraft does, and Direct3D's default takes clockwise triangles as the front faces.
+  - **The mistake:** `TestWinding` assumed that flipping y for the render target turns one into the other, but
+    flipping a coordinate axis doesn't change how a triangle winds on screen.
+  - **The proof:** `set cull 2` showed the solid cube in the game.
+
+  Now `BlockRasterizer` gives the pipeline `FrontCounterClockwise`, and `TestWinding` checks Direct3D's actual rule
+  against it. With Direct3D's default put back, 9 checks fail.
+- **The G-buffer dump.**
+  - **The rule:** the tagged depth is a copy of the game's own, not the G-buffer's depth (`D32_FLOAT_S8X24_UINT`), so
+    the candidate rule found nothing. A candidate is now three or more targets and a depth buffer, all at the tagged
+    depth's size.
+  - **The parallel lists:** the game records the G-buffer pass as 12 lists. Each set of candidate targets now keeps one
+    copy, which every pass with those targets records again, so the last in submission order wins: the whole G-buffer.
+- **Tracking.** Command list tracking stayed on after the first log, and free roam ran at 30 to 38 fps. Now the frame
+  log and the dumps request tracking only while they run. `set tracking 1` holds it on, so its cost can be measured.
+
+The version goes to 0.2.0.
+
+**Files:**
+- Create: `src/render/Pipeline.h`, `src/render/Pipeline.cpp`
+- Modify: `tests/TestWinding.cpp`, `tests/TestStateTracker.cpp`, `CMakeLists.txt`, `src/render/Renderer.cpp`
+- Modify: `src/track/StateTracker.h`, `src/track/StateTracker.cpp`, `src/hooks/D3D12Hooks.h`, `src/hooks/D3D12Hooks.cpp`
+- Modify: `src/log/FrameLog.cpp`, `src/Plugin.cpp`
+- Rewrite: `src/log/Dumps.h`, `src/log/Dumps.cpp`
+
+- [ ] **Step 1: Edit `tests/TestWinding.cpp` to check Direct3D's front-face rule**
+
+```cpp
+#include "render/Camera.h"
+#include "world/Mesher.h"
+
+// The mesher's faces, through the camera, must wind counter-clockwise in clip space (x right, y up) when they face
+// the camera. On screen, with y down, that's clockwise: Direct3D's default front face, so back-face culling keeps them.
+```
+```cpp
+#include "render/Camera.h"
+#include "render/Pipeline.h"
+#include "world/Mesher.h"
+
+// The mesher's faces, through the camera, wind counter-clockwise in clip space (x right, y up) when they face the
+// camera, as Minecraft's do. Flipping y for the render target doesn't change how a triangle winds on screen, so
+// Direct3D takes such a triangle as a front face only when the rasterizer says FrontCounterClockwise. Its default is
+// the opposite: the first run in the game showed a cube seen from the inside.
+```
+```cpp
+		const double area = SignedArea(ndc[0], ndc[1], ndc[2]);
+		if (face == cpmc::Face::South)  // world -y: towards the camera
+		{
+			CHECK(area > 0.0);
+		}
+		if (face == cpmc::Face::North)  // away from the camera
+		{
+			CHECK(area < 0.0);
+		}
+```
+```cpp
+		const double area = SignedArea(ndc[0], ndc[1], ndc[2]);
+		// Direct3D's rule: a front face winds clockwise on screen, or counter-clockwise with FrontCounterClockwise.
+		const bool front = cpmc::BlockRasterizer(1).FrontCounterClockwise ? area > 0.0 : area < 0.0;
+		if (face == cpmc::Face::South)  // world -y: towards the camera
+		{
+			CHECK(area > 0.0);
+			CHECK(front);
+		}
+		if (face == cpmc::Face::North)  // away from the camera
+		{
+			CHECK(area < 0.0);
+			CHECK(!front);
+		}
+```
+```cpp
+TEST(WindingFacesTheCameraWithARightHandedColumnProjection)
+{
+	CheckWinding({ 0.8f, 0, 0, 0, 0, 1.4f, 0, 0, 0, 0, 0, 0.1f, 0, 0, -1, 0 });
+}
+```
+```cpp
+TEST(WindingFacesTheCameraWithARightHandedColumnProjection)
+{
+	CheckWinding({ 0.8f, 0, 0, 0, 0, 1.4f, 0, 0, 0, 0, 0, 0.1f, 0, 0, -1, 0 });
+}
+
+TEST(WindingCullSettingsPickTheirFaces)
+{
+	CHECK(cpmc::BlockRasterizer(0).CullMode == D3D12_CULL_MODE_NONE);
+	CHECK(cpmc::BlockRasterizer(1).CullMode == D3D12_CULL_MODE_BACK);
+	CHECK(cpmc::BlockRasterizer(2).CullMode == D3D12_CULL_MODE_FRONT);
+	CHECK(cpmc::BlockRasterizer(1).FrontCounterClockwise == TRUE);
+	CHECK(cpmc::BlockRasterizer(1).DepthClipEnable == TRUE);
+}
+```
+
+- [ ] **Step 2: Build; it must fail**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C" | sort -u | head -3
+```
+Expected: `Cannot open include file: 'render/Pipeline.h'`.
+
+- [ ] **Step 3: Write `src/render/Pipeline.h`**
+
+```cpp
+#pragma once
+
+#include <d3d12.h>
+
+namespace cpmc
+{
+// The rasterizer state the blocks draw with. The mesher winds faces counter-clockwise seen from the front, as
+// Minecraft does, so counter-clockwise triangles are the front faces: Direct3D's default is the opposite. aCull: 0
+// culls nothing, 1 back faces, 2 front faces.
+D3D12_RASTERIZER_DESC BlockRasterizer(int aCull);
+}
+```
+
+- [ ] **Step 4: Write `src/render/Pipeline.cpp`**
+
+```cpp
+#include "render/Pipeline.h"
+
+namespace cpmc
+{
+D3D12_RASTERIZER_DESC BlockRasterizer(int aCull)
+{
+	D3D12_RASTERIZER_DESC desc{};
+	desc.FillMode = D3D12_FILL_MODE_SOLID;
+	desc.CullMode = aCull == 0 ? D3D12_CULL_MODE_NONE : aCull == 1 ? D3D12_CULL_MODE_BACK : D3D12_CULL_MODE_FRONT;
+	desc.FrontCounterClockwise = TRUE;
+	desc.DepthClipEnable = TRUE;
+	return desc;
+}
+}
+```
+
+- [ ] **Step 5: Edit `CMakeLists.txt` to add the source, and the version**
+
+```cmake
+project(BlockRender VERSION 0.1.0 LANGUAGES C CXX)
+```
+```cmake
+project(BlockRender VERSION 0.2.0 LANGUAGES C CXX)
+```
+```cmake
+	src/log/EventNames.cpp
+)
+```
+```cmake
+	src/log/EventNames.cpp
+	src/render/Pipeline.cpp
+)
+```
+
+- [ ] **Step 6: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `85 test(s), 0 failure(s)`.
+
+- [ ] **Step 7: Edit `src/render/Renderer.cpp` to draw with it**
+
+```cpp
+#include "render/FrameConstants.h"
+
+#include <dxgi1_4.h>
+```
+```cpp
+#include "render/FrameConstants.h"
+#include "render/Pipeline.h"
+
+#include <dxgi1_4.h>
+```
+```cpp
+	desc.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
+	desc.RasterizerState.CullMode = cull_ == 0 ? D3D12_CULL_MODE_NONE : cull_ == 1 ? D3D12_CULL_MODE_BACK : D3D12_CULL_MODE_FRONT;
+	desc.RasterizerState.DepthClipEnable = TRUE;
+```
+```cpp
+	desc.RasterizerState = BlockRasterizer(cull_);
+```
+
+- [ ] **Step 8: Edit `tests/TestStateTracker.cpp` for the new candidate rule**
+
+```cpp
+TEST(GbufferCandidatesNeedTheTaggedDepthAndMatchingTargets)
+{
+	CHECK(cpmc::IsGbufferCandidate(Gbuffer(9), reinterpret_cast<void*>(9)));
+	CHECK(!cpmc::IsGbufferCandidate(Gbuffer(9), reinterpret_cast<void*>(8)));  // another depth buffer (a mirror)
+	CHECK(!cpmc::IsGbufferCandidate(Gbuffer(9), nullptr));
+
+	Targets two = Gbuffer(9);
+	two.rtvs.pop_back();
+	CHECK(!cpmc::IsGbufferCandidate(two, reinterpret_cast<void*>(9)));
+
+	Targets small = Gbuffer(9);
+	small.rtvs[1] = Target(2, 853, 480);
+	CHECK(!cpmc::IsGbufferCandidate(small, reinterpret_cast<void*>(9)));
+
+	Targets unknown = Gbuffer(9);
+	unknown.rtvs[2].view.reset();
+	CHECK(!cpmc::IsGbufferCandidate(unknown, reinterpret_cast<void*>(9)));
+}
+```
+```cpp
+TEST(GbufferCandidatesNeedThreeTargetsAndADepthAtRenderSize)
+{
+	CHECK(cpmc::IsGbufferCandidate(Gbuffer(9), 1707, 960));
+	CHECK(!cpmc::IsGbufferCandidate(Gbuffer(9), 2560, 1440));  // not the render size
+	CHECK(!cpmc::IsGbufferCandidate(Gbuffer(9), 0, 0));        // no depth tag yet
+
+	Targets two = Gbuffer(9);
+	two.rtvs.pop_back();
+	CHECK(!cpmc::IsGbufferCandidate(two, 1707, 960));
+
+	Targets small = Gbuffer(9);
+	small.rtvs[1] = Target(2, 853, 480);
+	CHECK(!cpmc::IsGbufferCandidate(small, 1707, 960));
+
+	Targets unknown = Gbuffer(9);
+	unknown.rtvs[2].view.reset();
+	CHECK(!cpmc::IsGbufferCandidate(unknown, 1707, 960));
+
+	Targets noDepth = Gbuffer(9);
+	noDepth.dsv.reset();
+	CHECK(!cpmc::IsGbufferCandidate(noDepth, 1707, 960));
+
+	Targets nullTarget = Gbuffer(9);  // the game's forward passes bind a null target, which has no size
+	nullTarget.rtvs[1] = Target(0, 0, 0);
+	CHECK(!cpmc::IsGbufferCandidate(nullTarget, 1707, 960));
+}
+```
+
+- [ ] **Step 9: Build; it must fail**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C" | sort -u | head -3
+```
+Expected: `'cpmc::IsGbufferCandidate': function does not take 3 arguments`.
+
+- [ ] **Step 10: Edit `src/track/StateTracker.h` for the new rule**
+
+```cpp
+// True when aTargets look like a G-buffer: three or more known render targets the size of the tagged depth, with
+// the tagged depth bound as the depth buffer.
+bool IsGbufferCandidate(const Targets& aTargets, const void* aTaggedDepth);
+```
+```cpp
+// True when aTargets look like a G-buffer: three or more known render targets and a known depth buffer, all
+// aWidth x aHeight, the render size (the tagged depth's). The depth buffer isn't the tagged depth: the game tags a
+// copy of its own.
+bool IsGbufferCandidate(const Targets& aTargets, uint64_t aWidth, uint32_t aHeight);
+```
+
+- [ ] **Step 11: Edit `src/track/StateTracker.cpp` for the new rule**
+
+```cpp
+bool IsGbufferCandidate(const Targets& aTargets, const void* aTaggedDepth)
+{
+	if (!aTaggedDepth || !aTargets.dsv || !aTargets.dsv->view || aTargets.dsv->view->resource != aTaggedDepth ||
+	    aTargets.rtvs.size() < 3)
+	{
+		return false;
+	}
+	const ViewInfo& depth = *aTargets.dsv->view;
+	for (const BoundTarget& target : aTargets.rtvs)
+	{
+		if (!target.view || target.view->width != depth.width || target.view->height != depth.height)
+		{
+			return false;
+		}
+	}
+	return true;
+}
+```
+```cpp
+bool IsGbufferCandidate(const Targets& aTargets, uint64_t aWidth, uint32_t aHeight)
+{
+	const auto renderSized = [&](const std::optional<ViewInfo>& aView) {
+		return aView && aView->width == aWidth && aView->height == aHeight;
+	};
+	if (aWidth == 0 || aHeight == 0 || !aTargets.dsv || !renderSized(aTargets.dsv->view) || aTargets.rtvs.size() < 3)
+	{
+		return false;
+	}
+	for (const BoundTarget& target : aTargets.rtvs)
+	{
+		if (!renderSized(target.view))
+		{
+			return false;
+		}
+	}
+	return true;
+}
+```
+
+- [ ] **Step 12: Edit `src/hooks/D3D12Hooks.h` to track only on request**
+
+```cpp
+// From now on, command lists are tracked from their next Reset. Off until a feature first needs it.
+void EnableTracking();
+```
+```cpp
+// Command lists are tracked from their next Reset while any feature asks for it: a frame log or a dump. Tracking costs
+// frame time, so each feature releases its request when it's done.
+void RequestTracking();
+void ReleaseTracking();
+```
+
+- [ ] **Step 13: Edit `src/hooks/D3D12Hooks.cpp` to count the requests**
+
+```cpp
+std::atomic<bool>            g_tracking{ false };
+```
+```cpp
+std::atomic<bool>            g_tracking{ false };
+std::atomic<int>             g_trackingRequests{ 0 };
+```
+```cpp
+void EnableTracking()
+{
+	g_tracking = true;
+}
+```
+```cpp
+void RequestTracking()
+{
+	g_tracking = ++g_trackingRequests > 0;
+}
+
+void ReleaseTracking()
+{
+	g_tracking = --g_trackingRequests > 0;
+}
+```
+
+- [ ] **Step 14: Edit `src/log/FrameLog.cpp` for tracking and the new rule**
+
+```cpp
+	d3d::EnableTracking();
+```
+```cpp
+	d3d::RequestTracking();
+```
+```cpp
+	names_.reset();
+	phase_ = Phase::Idle;
+```
+```cpp
+	names_.reset();
+	phase_ = Phase::Idle;
+	d3d::ReleaseTracking();
+```
+```cpp
+	// The G-buffer candidates, against the log's latest depth tag.
+	const void* depth = nullptr;
+	for (const LogTag& tag : data.tags)
+	{
+		if (tag.tag.type == sl::kBufferTypeDepth && tag.tag.resource)
+		{
+			depth = tag.tag.resource;
+		}
+	}
+```
+```cpp
+	// The G-buffer candidates, at the render size: the log's latest depth tag's.
+	uint64_t width = 0;
+	uint32_t height = 0;
+	for (const LogTag& tag : data.tags)
+	{
+		if (tag.tag.type == sl::kBufferTypeDepth && tag.resource.known)
+		{
+			width = tag.resource.width;
+			height = tag.resource.height;
+		}
+	}
+```
+```cpp
+			if (IsGbufferCandidate(targets, depth))
+```
+```cpp
+			if (IsGbufferCandidate(targets, width, height))
+```
+
+- [ ] **Step 15: Write `src/log/Dumps.h`**
+
+```cpp
+#pragma once
+
+#include "LogQueue.h"
+#include "hooks/HookEvents.h"
+#include "render/Gpu.h"
+
+#include <chrono>
+#include <filesystem>
+#include <mutex>
+#include <set>
+#include <string>
+#include <string_view>
+#include <vector>
+
+namespace cpmc
+{
+// Dumps (the spec's "FrameLog and dumps"). `dump <what>` arms one frame: from the next frame token, the tagged
+// buffers are copied at the DLSS evaluate (depth, mvec, color), and the G-buffer candidates as their passes end
+// (gbuffer). The game records its G-buffer pass over many lists, so each set of candidate targets keeps one copy,
+// which every pass with those targets records again: the last in submission order wins, which is the whole G-buffer.
+// The copies go into readback buffers inside the game's own lists. Once a fence says the GPU has run them, the main
+// thread writes each as a .dds file, with dump.json saying what each one is.
+class Dumps : public HookEvents
+{
+public:
+	Dumps(LogQueue& aLog, std::filesystem::path aFolder);
+
+	// Main thread.
+	bool        Arm(std::string_view aWhat, std::string& aError);
+	std::string State() const;
+	void        Update(const std::string& aFolderName);  // writes the copies the GPU has finished
+
+	void OnFrameToken(uint32_t aFrame) override;
+	void OnTags(uint32_t aFrame, uint32_t aViewport, const std::vector<SlTag>& aTags, void* aList) override;
+	void OnEvaluate(const EvaluateCall& aCall) override;
+	void OnPassEnd(ID3D12GraphicsCommandList* aList, ListState& aState, bool aClosing) override;
+	void OnSubmit(ID3D12CommandQueue* aQueue, UINT aCount, ID3D12CommandList* const* aLists) override;
+	void OnSubmitted(ID3D12CommandQueue* aQueue, UINT aCount, ID3D12CommandList* const* aLists) override;
+
+private:
+	enum class Phase
+	{
+		Idle,
+		Armed,     // waiting for the next frame token
+		Copying,   // one frame
+		Waiting,   // for the GPU
+	};
+
+	struct Copy
+	{
+		std::string                  name;
+		std::string                  note;  // what it is, for dump.json
+		gpu::ComPtr<ID3D12Resource>  readback;
+		gpu::Footprint               footprint;
+		uint32_t                     subresource = 0;
+		uint32_t                     format = 0;  // the format it's saved as
+		uint32_t                     width = 0;
+		uint32_t                     height = 0;
+		int                          recordings = 0;
+		std::set<ID3D12CommandList*> unsubmitted;  // game lists holding a recording of it, not yet submitted
+		ID3D12CommandQueue*          queue = nullptr;  // where its latest recording was submitted
+		bool                         signalDue = false;  // submitted since the fence was last signalled for it
+		uint64_t                     fence = 0;  // signalled after its latest submission
+	};
+
+	// One set of G-buffer candidate targets and depth, by resource, and the copies of each resource.
+	struct Group
+	{
+		std::vector<void*>               resources;  // the render targets, then the depth buffer
+		std::vector<std::vector<size_t>> copies;     // per resource, its planes' copies (indices into copies_)
+		int                              passes = 0;
+	};
+
+	// Records copies of every plane of aResource (or of plane aOnlyPlane) into aList, into new readback buffers named
+	// aName, and returns their indices in copies_. Mutex held.
+	std::vector<size_t> CopyResource(ID3D12GraphicsCommandList* aList, ID3D12Resource* aResource, uint32_t aState,
+	                                 const std::string& aName, const std::string& aNote, int aOnlyPlane = -1);
+	// Records aCopy's copy of aResource again, into aList. Mutex held.
+	void CopyAgain(ID3D12GraphicsCommandList* aList, ID3D12Resource* aResource, uint32_t aState, Copy& aCopy);
+
+	LogQueue&                             log_;
+	std::filesystem::path                 folder_;
+	mutable std::mutex                    mutex_;
+	Phase                                 phase_ = Phase::Idle;
+	std::set<std::string>                 what_;
+	uint32_t                              frame_ = 0;
+	uint64_t                              renderWidth_ = 0;  // the tagged depth's size
+	uint32_t                              renderHeight_ = 0;
+	std::vector<Group>                    groups_;
+	std::vector<Copy>                     copies_;
+	gpu::ComPtr<ID3D12Fence>              fence_;
+	uint64_t                              fenceValue_ = 0;
+	std::vector<std::string>              errors_;
+	std::chrono::steady_clock::time_point waitingSince_{};
+};
+}
+```
+
+- [ ] **Step 16: Write `src/log/Dumps.cpp`**
+
+```cpp
+#include "log/Dumps.h"
+
+#include "Json.h"
+#include "hooks/D3D12Hooks.h"
+#include "log/DdsWriter.h"
+#include "log/FrameLogData.h"
+
+#include <algorithm>
+#include <format>
+#include <fstream>
+
+namespace cpmc
+{
+namespace
+{
+constexpr size_t kMaxGroups = 4;
+
+bool WriteFile(const std::filesystem::path& aPath, const void* aData, size_t aSize)
+{
+	std::ofstream out(aPath, std::ios::binary);
+	out.write(static_cast<const char*>(aData), std::streamsize(aSize));
+	return bool(out);
+}
+}
+
+Dumps::Dumps(LogQueue& aLog, std::filesystem::path aFolder)
+	: log_(aLog)
+	, folder_(std::move(aFolder))
+{
+}
+
+bool Dumps::Arm(std::string_view aWhat, std::string& aError)
+{
+	std::lock_guard lock(mutex_);
+	if (phase_ != Phase::Idle)
+	{
+		aError = "a dump is already under way";
+		return false;
+	}
+	what_.clear();
+	if (aWhat == "all")
+	{
+		what_ = { "depth", "mvec", "color", "gbuffer" };
+	}
+	else
+	{
+		what_.insert(std::string(aWhat));
+	}
+	groups_.clear();
+	copies_.clear();
+	errors_.clear();
+	phase_ = Phase::Armed;
+	d3d::RequestTracking();
+	return true;
+}
+
+std::string Dumps::State() const
+{
+	std::lock_guard lock(mutex_);
+	switch (phase_)
+	{
+	case Phase::Idle: return "idle";
+	case Phase::Armed: return "armed";
+	case Phase::Copying: return "copying";
+	case Phase::Waiting: return std::format("waiting for the GPU ({} copies)", copies_.size());
+	}
+	return "";
+}
+
+void Dumps::OnFrameToken(uint32_t aFrame)
+{
+	std::lock_guard lock(mutex_);
+	if (phase_ == Phase::Armed)
+	{
+		phase_ = Phase::Copying;
+		frame_ = aFrame;
+	}
+	else if (phase_ == Phase::Copying)
+	{
+		phase_ = Phase::Waiting;
+		waitingSince_ = std::chrono::steady_clock::now();
+	}
+}
+
+void Dumps::OnTags(uint32_t, uint32_t, const std::vector<SlTag>& aTags, void*)
+{
+	for (const SlTag& tag : aTags)
+	{
+		if (tag.type == sl::kBufferTypeDepth && tag.resource)
+		{
+			// Kept from every frame: a frame's tags come after the G-buffer passes they give the size of.
+			const D3D12_RESOURCE_DESC desc = static_cast<ID3D12Resource*>(tag.resource)->GetDesc();
+			std::lock_guard lock(mutex_);
+			renderWidth_ = desc.Width;
+			renderHeight_ = desc.Height;
+		}
+	}
+}
+
+std::vector<size_t> Dumps::CopyResource(ID3D12GraphicsCommandList* aList, ID3D12Resource* aResource, uint32_t aState,
+                                        const std::string& aName, const std::string& aNote, int aOnlyPlane)
+{
+	std::vector<size_t>       made;
+	gpu::ComPtr<ID3D12Device> owner;
+	if (!aResource || FAILED(aResource->GetDevice(IID_PPV_ARGS(&owner))))
+	{
+		return made;
+	}
+	ID3D12Device* const       device = owner.Get();
+	const D3D12_RESOURCE_DESC desc = aResource->GetDesc();
+	if (desc.Dimension != D3D12_RESOURCE_DIMENSION_TEXTURE2D)
+	{
+		errors_.push_back(aName + ": not a 2D texture");
+		return made;
+	}
+	const uint32_t planes = gpu::PlaneCount(device, desc.Format);
+	for (uint32_t plane = 0; plane < planes; ++plane)
+	{
+		if (aOnlyPlane >= 0 && plane != uint32_t(aOnlyPlane))
+		{
+			continue;
+		}
+		const uint32_t format = DumpFormat(desc.Format, plane);
+		if (BytesPerTexel(format) == 0)
+		{
+			errors_.push_back(std::format("{}: format {} can't be saved", aName, DxgiFormatName(desc.Format)));
+			continue;
+		}
+		Copy copy;
+		copy.name = planes > 1 ? std::format("{}-plane{}", aName, plane) : aName;
+		copy.note = aNote;
+		copy.subresource = gpu::PlaneSubresource(desc, plane);
+		copy.footprint = gpu::FootprintOf(device, desc, copy.subresource);
+		copy.readback = gpu::MakeBuffer(device, copy.footprint.totalBytes, D3D12_HEAP_TYPE_READBACK, D3D12_RESOURCE_STATE_COPY_DEST);
+		if (!copy.readback)
+		{
+			errors_.push_back(aName + ": couldn't create a readback buffer");
+			continue;
+		}
+		copy.format = format;
+		copy.width = copy.footprint.layout.Footprint.Width;
+		copy.height = copy.footprint.layout.Footprint.Height;
+		copies_.push_back(std::move(copy));
+		made.push_back(copies_.size() - 1);
+		CopyAgain(aList, aResource, aState, copies_.back());
+	}
+	return made;
+}
+
+void Dumps::CopyAgain(ID3D12GraphicsCommandList* aList, ID3D12Resource* aResource, uint32_t aState, Copy& aCopy)
+{
+	if (!gpu::RecordCopy(aList, aResource, aCopy.subresource, aState, aCopy.readback.Get(), aCopy.footprint))
+	{
+		errors_.push_back(std::format("{}: its list isn't a direct list, which can't move it out of state 0x{:x}", aCopy.name, aState));
+		return;
+	}
+	++aCopy.recordings;
+	aCopy.unsubmitted.insert(aList);
+}
+
+void Dumps::OnEvaluate(const EvaluateCall& aCall)
+{
+	std::lock_guard lock(mutex_);
+	if (phase_ != Phase::Copying || !aCall.list)
+	{
+		return;
+	}
+	const std::pair<uint32_t, const char*> wanted[] = { { sl::kBufferTypeDepth, "depth" },
+		                                                { sl::kBufferTypeMotionVectors, "mvec" },
+		                                                { sl::kBufferTypeScalingInputColor, "color" } };
+	for (const auto& [type, what] : wanted)
+	{
+		if (!what_.contains(what))
+		{
+			continue;
+		}
+		for (const SlTag& tag : aCall.tags)
+		{
+			if (tag.type != type || !tag.resource)
+			{
+				continue;
+			}
+			if (tag.state == 0xFFFFFFFF)
+			{
+				errors_.push_back(BufferTypeName(type) + ": the tag gives no state");
+				continue;
+			}
+			const std::string note = std::format("tag {} at the DLSS evaluate, frame {}, state 0x{:x}, extent {} {} {} {}",
+			                                     BufferTypeName(type), aCall.frame, tag.state, tag.extent.top, tag.extent.left,
+			                                     tag.extent.width, tag.extent.height);
+			CopyResource(aCall.list, static_cast<ID3D12Resource*>(tag.resource), tag.state, "tag-" + BufferTypeName(type), note);
+		}
+	}
+}
+
+void Dumps::OnPassEnd(ID3D12GraphicsCommandList* aList, ListState& aState, bool)
+{
+	std::lock_guard lock(mutex_);
+	const Targets& targets = aState.CurrentTargets();
+	if (phase_ != Phase::Copying || !what_.contains("gbuffer") || !IsGbufferCandidate(targets, renderWidth_, renderHeight_))
+	{
+		return;
+	}
+	std::vector<void*> resources;
+	for (const BoundTarget& target : targets.rtvs)
+	{
+		resources.push_back(target.view->resource);
+	}
+	resources.push_back(targets.dsv->view->resource);
+	auto group = std::find_if(groups_.begin(), groups_.end(), [&](const Group& aGroup) { return aGroup.resources == resources; });
+	if (group == groups_.end())
+	{
+		if (groups_.size() >= kMaxGroups)
+		{
+			return;
+		}
+		groups_.push_back({ resources, std::vector<std::vector<size_t>>(resources.size()), 0 });
+		group = groups_.end() - 1;
+	}
+	const size_t index = size_t(group - groups_.begin());
+	++group->passes;
+	for (size_t i = 0; i < resources.size(); ++i)
+	{
+		const bool      isDepth = i == targets.rtvs.size();
+		const ViewInfo& view = isDepth ? *targets.dsv->view : *targets.rtvs[i].view;
+		auto*           resource = static_cast<ID3D12Resource*>(view.resource);
+		const auto      known = aState.StateOf(resource);
+		if (isDepth && !known && view.readOnlyDepth)
+		{
+			continue;  // a read-only depth in an unknown state: its earlier copy stands
+		}
+		const uint32_t state = known.value_or(isDepth ? D3D12_RESOURCE_STATE_DEPTH_WRITE : D3D12_RESOURCE_STATE_RENDER_TARGET);
+		if (group->copies[i].empty())
+		{
+			const std::string name = isDepth ? std::format("gbuffer{}-depth", index) : std::format("gbuffer{}-target{}", index, i);
+			const std::string note = std::format("G-buffer candidate {}, {} ({}), first copied in list 0x{:x}, frame {}, state 0x{:x}",
+			                                     index, isDepth ? std::string("depth") : std::format("target {}", i),
+			                                     DxgiFormatName(view.viewFormat), reinterpret_cast<uintptr_t>(aList), frame_, state);
+			group->copies[i] = CopyResource(aList, resource, state, name, note, isDepth ? -1 : int(view.plane));
+		}
+		else
+		{
+			for (const size_t copy : group->copies[i])
+			{
+				CopyAgain(aList, resource, state, copies_[copy]);
+			}
+		}
+	}
+}
+
+void Dumps::OnSubmit(ID3D12CommandQueue* aQueue, UINT aCount, ID3D12CommandList* const* aLists)
+{
+	std::lock_guard lock(mutex_);
+	if (phase_ != Phase::Copying && phase_ != Phase::Waiting)
+	{
+		return;
+	}
+	for (Copy& copy : copies_)
+	{
+		for (UINT i = 0; i < aCount; ++i)
+		{
+			if (copy.unsubmitted.erase(aLists[i]) > 0)
+			{
+				copy.queue = aQueue;
+				copy.signalDue = true;
+			}
+		}
+	}
+}
+
+void Dumps::OnSubmitted(ID3D12CommandQueue* aQueue, UINT, ID3D12CommandList* const*)
+{
+	std::lock_guard lock(mutex_);
+	bool            due = false;
+	for (const Copy& copy : copies_)
+	{
+		due = due || (copy.signalDue && copy.queue == aQueue);
+	}
+	if (!due)
+	{
+		return;
+	}
+	gpu::ComPtr<ID3D12Device> device;
+	if (!fence_ && (FAILED(aQueue->GetDevice(IID_PPV_ARGS(&device))) ||
+	                FAILED(device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence_)))))
+	{
+		errors_.push_back("couldn't create a fence");
+		return;
+	}
+	aQueue->Signal(fence_.Get(), ++fenceValue_);
+	for (Copy& copy : copies_)
+	{
+		if (copy.signalDue && copy.queue == aQueue)
+		{
+			copy.fence = fenceValue_;
+			copy.signalDue = false;
+		}
+	}
+}
+
+void Dumps::Update(const std::string& aFolderName)
+{
+	std::lock_guard lock(mutex_);
+	if (phase_ != Phase::Waiting)
+	{
+		return;
+	}
+	// Wait until the GPU has run every copy, or 10 seconds: a list the game never submitted won't finish.
+	const uint64_t completed = fence_ ? fence_->GetCompletedValue() : 0;
+	const bool     timedOut = std::chrono::steady_clock::now() - waitingSince_ > std::chrono::seconds(10);
+	const auto     done = [&](const Copy& aCopy) { return aCopy.unsubmitted.empty() && aCopy.fence != 0 && completed >= aCopy.fence; };
+	for (const Copy& copy : copies_)
+	{
+		if (copy.recordings > 0 && !done(copy) && !timedOut)
+		{
+			return;
+		}
+	}
+	const std::filesystem::path folder = folder_ / "dumps" / aFolderName;
+	std::error_code             error;
+	std::filesystem::create_directories(folder, error);
+	JsonWriter json;
+	json.BeginObject().Key("frame").UInt(frame_).Key("files").BeginArray();
+	size_t written = 0;
+	for (Copy& copy : copies_)
+	{
+		if (copy.recordings == 0)
+		{
+			continue;  // errors_ says why
+		}
+		if (!done(copy))
+		{
+			errors_.push_back(copy.name + ": the GPU never ran its copy");
+			continue;
+		}
+		void*             mapped = nullptr;
+		const D3D12_RANGE range{ 0, size_t(copy.footprint.totalBytes) };
+		if (FAILED(copy.readback->Map(0, &range, &mapped)))
+		{
+			errors_.push_back(copy.name + ": couldn't map its readback buffer");
+			continue;
+		}
+		const auto* base = static_cast<const uint8_t*>(mapped) + copy.footprint.layout.Offset;
+		const auto  dds = MakeDds(copy.format, copy.width, copy.height, base, copy.footprint.layout.Footprint.RowPitch);
+		const D3D12_RANGE nothing{ 0, 0 };
+		copy.readback->Unmap(0, &nothing);
+		if (!WriteFile(folder / (copy.name + ".dds"), dds.data(), dds.size()))
+		{
+			errors_.push_back(copy.name + ": couldn't write the file");
+			continue;
+		}
+		++written;
+		json.BeginObject();
+		json.Key("file").String(copy.name + ".dds");
+		json.Key("format").String(DxgiFormatName(copy.format));
+		json.Key("size").BeginArray().UInt(copy.width).UInt(copy.height).EndArray();
+		json.Key("note").String(copy.note);
+		json.Key("recordings").UInt(uint64_t(copy.recordings));
+		json.EndObject();
+	}
+	json.EndArray().Key("errors").BeginArray();
+	for (const std::string& line : errors_)
+	{
+		json.String(line);
+	}
+	json.EndArray().EndObject();
+	const std::string text = json.Str() + "\n";
+	WriteFile(folder / "dump.json", text.data(), text.size());
+	log_.Push(std::format("dump: {} files written to {}{}", written, folder.string(),
+	                      errors_.empty() ? "" : std::format(", {} problems (see dump.json)", errors_.size())));
+	groups_.clear();
+	copies_.clear();
+	errors_.clear();
+	phase_ = Phase::Idle;
+	d3d::ReleaseTracking();
+}
+}
+```
+
+- [ ] **Step 17: Edit `src/Plugin.cpp` for `set tracking`, and the version**
+
+```cpp
+constexpr const char* kVersion = "0.1.0";
+```
+```cpp
+constexpr const char* kVersion = "0.2.0";
+```
+```cpp
+bool                                       g_hudMissingReported = false;
+```
+```cpp
+bool                                       g_hudMissingReported = false;
+bool                                       g_trackingHeld = false;  // set tracking 1: to measure what tracking costs
+```
+```cpp
+		g_world.MarkAllDirty();
+		return Report(std::format("set ao {}", g_meshOptions.ambientOcclusion ? 1 : 0));
+	}
+```
+```cpp
+		g_world.MarkAllDirty();
+		return Report(std::format("set ao {}", g_meshOptions.ambientOcclusion ? 1 : 0));
+	}
+	if (aRequest.what == "tracking")
+	{
+		const bool hold = aRequest.number != 0.0;
+		if (hold != g_trackingHeld)
+		{
+			hold ? cpmc::d3d::RequestTracking() : cpmc::d3d::ReleaseTracking();
+			g_trackingHeld = hold;
+		}
+		return Report(std::format("set tracking {}: command lists are {}tracked", hold ? 1 : 0, cpmc::d3d::Tracking() ? "" : "not "));
+	}
+```
+```cpp
+	aInfo->version = RED4EXT_V1_SEMVER(0, 1, 0);
+```
+```cpp
+	aInfo->version = RED4EXT_V1_SEMVER(0, 2, 0);
+```
+
+- [ ] **Step 18: Build; it must compile without warnings, and the tests still pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C|error LNK" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `85 test(s), 0 failure(s)`.
+
+- [ ] **Step 19: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "block-render: front faces wind counter-clockwise, G-buffer dumps by render size, tracking on request (0.2.0)" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 32: In the game: the culling fix, what tracking costs, and the G-buffer dump
+
+A short session. The commands are Task 29's. Stand at the same spot as in Task 29, so the numbers compare.
+
+**Files:**
+- Modify: `docs/spikes/2026-10-01-block-render-results.md`
+
+- [ ] **Step 1: Deploy (the game must not be running)**
+
+Run Task 29 Step 1's two commands. Expected: `0`, then the plugin's folder with `BlockRender.dll`, `BlockRender.pdb`,
+`shaders`, `atlas.bin` and `atlas.json`, the overlay's folder with `init.lua`, and `installed`.
+
+- [ ] **Step 2: Load, at the same spot**
+
+Ask the user to launch the game, load the free-roam save, stand where Task 29's logs were taken, and stand still.
+Then read the log's first lines and the status. Expected:
+- `BlockRender 0.2.0 loaded`;
+- in the status, `tracking off`.
+
+- [ ] **Step 3: What tracking costs**
+
+With the user standing still and the mouse left alone, read the status's `frame=` line five times, a second apart.
+Then send `set tracking 1` and read it five times more. Then send `set tracking 0` and read it five times more:
+```bash
+ST=/e/Cyberpunk2077/bin/x64/plugins/cyber_engine_tweaks/mods/blockrender_hud/status.txt; for i in 1 2 3 4 5; do sed -n '5p' $ST; sleep 1.1; done
+```
+Note the three averages. Their difference is what tracking every command list costs. Step 3 of the spec weighs that
+when deciding how much to track.
+
+- [ ] **Step 4: A frame log**
+
+Send `log`, wait 3 seconds, and run the summary. Expected:
+- the G-buffer candidates now list the G-buffer pass's lists (12 in Task 29's log), the passes that also write
+  motion, and the decals;
+- the status says `tracking off` again once the log is written.
+
+- [ ] **Step 5: The G-buffer dump**
+
+With the user still standing still, send `dump gbuffer`. Wait 5 seconds, then read `dump.json` and view the dump, as
+in Task 29 Step 6. Expected:
+- `gbuffer0-target0` to `gbuffer0-target2` and `gbuffer0-depth-plane0` and `-plane1`, each with `recordings` about
+  the number of G-buffer lists;
+- the sets with motion and the decals as `gbuffer1` and `gbuffer2`;
+- no errors.
+
+Look at each PNG, and note:
+- what each target holds: albedo, normals, material values, motion;
+- each channel's range;
+- the stencil values.
+
+If a target looks only partly drawn, note which parts: that would mean the copies of different lists overlapped.
+
+- [ ] **Step 6: The cube, with the default culling**
+
+Ask the user to face open ground and stand still. Send `mode present`, then `place cube`. With `cull` at its default
+(1), the cube must look solid. Ask for a screenshot.
+
+- [ ] **Step 7: Clean up**
+
+Send `clear`, then `mode off`, two seconds apart.
+
+- [ ] **Step 8: Record the results, and commit**
+
+In `docs/spikes/2026-10-01-block-render-results.md`, add what this run found:
+- the culling fix confirmed;
+- the tracking costs;
+- the G-buffer's encoding, from the dumps.
+
+Then commit:
+```bash
+cd /d/Cyberpunk-Minecraft && git add docs/spikes \
+  && git commit -q -m "block-render: the G-buffer dump, and what tracking costs" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 33: Close Part 1, and plan Part 2
 
 **Files:**
 - Modify: `docs/superpowers/plans/2026-10-01-block-render.md` (this plan)
 
 - [ ] **Step 1: Add "How Part 1 went" to this plan**
 
-Add a section after Task 31, as spike 1's plan did after its in-game task. Cover:
-- what Tasks 29 and 30 found, and Task 28's fixes;
+Add a section after Task 33, as spike 1's plan did after its in-game task. Cover:
+- what Tasks 29, 30 and 32 found, and Tasks 28 and 31's fixes;
 - any amendments made along the way;
 - what step 1's findings decide for steps 3 and 4:
   - where blocks can be drawn before DLSS;
@@ -13243,5 +14366,5 @@ cd /d/Cyberpunk-Minecraft && git add docs/superpowers/plans \
 
 - [ ] **Step 3: Plan Part 2**
 
-Use superpowers:writing-plans to write Part 2's tasks (spec steps 3 and 4) from what step 1 found, as Tasks 32 on in
+Use superpowers:writing-plans to write Part 2's tasks (spec steps 3 and 4) from what step 1 found, as Tasks 34 on in
 this plan. As in Part 1, compile and test their code in a scratch clone first, and replay the tasks before committing.

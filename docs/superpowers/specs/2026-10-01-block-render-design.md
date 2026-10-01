@@ -356,6 +356,7 @@ spikes/block-render/
 
 - **Which lists:** it follows each command list from `Reset` to `Close`. A list whose `Reset` came before tracking
   started is marked untracked, and nothing is ever drawn into it.
+- **When:** tracking costs frame time, so it runs only while a log or a dump needs it, or `set tracking 1` holds it.
 - **What it keeps:**
   - everything our drawing may change: the bound render targets and depth (with their resources), the pipeline
     state, the graphics root signature and every root argument set since it, the viewports, scissors, topology and
@@ -387,7 +388,8 @@ Every read is range-checked with `Readable`.
   at the time. It writes `logs\<time>\frame.json` (see "The frame log").
 - **`dump <what>`** copies buffers into readback memory at the moment each is complete:
   - the tagged buffers at the DLSS evaluate;
-  - the G-buffer candidates when their pass ends.
+  - the G-buffer candidates when their pass ends. The game records a pass over many lists, so each set of targets
+    keeps one copy, which every pass with those targets records again: the last in submission order wins.
 
   Barriers move each buffer into the copy state and back. Each buffer is written as a `.dds` file (with a DX10 header
   and the resource's own format), and the depth buffer's stencil plane as a file of its own.
@@ -429,8 +431,8 @@ Every read is range-checked with `Readable`.
   - **`gbuffer` (step 4):** draws into the G-buffer targets and depth that the frame log found. It writes albedo,
     normal, material values, motion vectors and the stencil value, in the encoding the dumps show. The stencil value
     is the one the game's own static surfaces carry.
-    - **Recognising the pass:** every frame, by its targets' formats and sizes, and by its depth being the main depth
-      buffer that Streamline's latest tags name. The frame log shows whether the game alternates two depth buffers.
+    - **Recognising the pass:** every frame, by its targets' formats at the render size, and by its depth buffer: the
+      G-buffer's own `D32_FLOAT_S8X24_UINT`, not the tagged depth, which is a copy (step 1's results).
     - **Drawing once per frame:** our draws go in when the list leaves the pass, at its next change of render targets
       or at `Close`, and only once per frame. If the G-buffer pass is spread over several lists, one of them is enough,
       because depth testing sorts out which is in front.
@@ -554,9 +556,9 @@ dumps.
 - Depth, motion vectors and the scaling input colour are tagged, with extents (or sizes, without an extent) of the
   render resolution. The scaling output colour is 2560×1440.
 - The G-buffer pass is found among the candidates: the passes that draw into three or more targets the size of the
-  tagged depth, with the tagged depth bound. Where several share those targets, such as decals after the G-buffer,
-  their order and draw counts tell them apart. The dumps show what each target holds. If the pass isn't found, the log
-  shows why.
+  tagged depth, with a depth buffer of that size bound. Where several share those targets, such as decals after the
+  G-buffer, their order and draw counts tell them apart. The dumps show what each target holds. If the pass isn't
+  found, the log shows why.
 - CET's overlay still works.
 
 **Also recorded:**
@@ -637,7 +639,7 @@ checked once a second. Each file holds one command. Unknown commands are logged 
 | `place field <n>` | Adds rolling terrain of about n blocks (with step 3) |
 | `clear` | Removes all blocks |
 | `reload` | Recompiles the shaders |
-| `set <name> <value>` | Changes a tuning value. Step 2 has `ao`, `brightness`, `tolerance` (the depth test's), `cull`, and `origin.x`, `origin.y` and `origin.z` (the render origin). Step 3 adds `exposure`, `jittersign` and `mvsign`, and step 4 the G-buffer encoding values step 1 finds |
+| `set <name> <value>` | Changes a tuning value. Step 2 has `ao`, `brightness`, `tolerance` (the depth test's), `cull`, `origin.x`, `origin.y` and `origin.z` (the render origin), and `tracking` (1 holds command list tracking on, to measure it). Step 3 adds `exposure`, `jittersign` and `mvsign`, and step 4 the G-buffer encoding values step 1 finds |
 
 ## The frame log
 
@@ -663,8 +665,8 @@ checked once a second. Each file holds one command. Unknown commands are logged 
   - its render targets and depth, as resource, format and size, with whether the depth is the tagged one;
   - its counts of draws, indirect draws, dispatches and clears;
   - its event names.
-- **`gbufferCandidates`:** each pass that draws into three or more targets the size of the tagged depth, with the
-  tagged depth bound.
+- **`gbufferCandidates`:** each pass that draws into three or more targets the size of the tagged depth, with a depth
+  buffer of that size bound.
 
 ## Safety
 
@@ -831,13 +833,23 @@ Writing and verifying the plan's code corrected these details. The sections abov
   - the tracker's `Restore`, and the state hooks it needs;
   - the `exposure`, `jittersign` and `mvsign` settings.
 
-## Changes from the first run in the game
+## Changes from the runs in the game
 
-The first run (2026-10-01, at the main menu) changed two details, which the sections above include. The plan's
-Task 28 made both changes:
+The runs on 2026-10-01 changed these details, which the sections above include.
+
+The first run, at the main menu, led to the plan's Task 28:
 - **When a frame starts:** the game asks for frame tokens about 8 times a frame, from three threads. A frame now starts
   only with a newer frame index.
 - **The present queue:** the swap chain doesn't say which queue it presents on, so the hooks note it when the swap
   chain is made.
 
-What else the run found goes in the results, `docs/spikes/2026-10-01-block-render-results.md`.
+The second run, steps 1 and 2, led to Task 31:
+- **Front faces:** the pipeline takes counter-clockwise triangles as front faces, as Minecraft's meshes wind them.
+  Direct3D's default is the opposite.
+- **The G-buffer candidates:** the tagged depth is a copy, not the G-buffer's depth, so a candidate is three or more
+  targets and a depth buffer, all at the tagged depth's size.
+- **The G-buffer dump:** the game records the pass over many lists, so each set of targets keeps one copy, which every
+  pass records again.
+- **Tracking:** it runs only while a log or a dump needs it.
+
+What else the runs found goes in the results, `docs/spikes/2026-10-01-block-render-results.md`.
