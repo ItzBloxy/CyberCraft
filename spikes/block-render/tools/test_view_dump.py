@@ -95,6 +95,13 @@ def test_convert_writes_pngs(tmp_path):
     assert np.asarray(Image.open(tmp_path / "depth.png"))[0, :, 0].tolist() == [0, 255]
 
 
+def test_one_channel_colour_is_grey(tmp_path):
+    # The second decal set's R8_UNORM targets: the third run in the game found them crashing the viewer.
+    path = dds(tmp_path / "mask.dds", vd.R8_UNORM, 2, 1, [0, 255])
+    assert "R8_UNORM" in vd.convert(path)
+    assert np.asarray(Image.open(tmp_path / "mask.png")).tolist() == [[[0, 0, 0], [255, 255, 255]]]
+
+
 def test_unknown_formats_are_named(tmp_path):
     with pytest.raises(ValueError, match="71"):
         decoded(dds(tmp_path / "x.dds", 71, 4, 1, bytes(8)))  # BC1

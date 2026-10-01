@@ -4,7 +4,7 @@
 
 For each name.dds it writes name.png, plus name.alpha.png when the format has an alpha channel, and prints the
 format, the size and each channel's range:
-- colour targets as they are (8-bit and 10-bit), HDR ones tone mapped;
+- colour targets as they are (8-bit and 10-bit, one channel as grey), HDR ones tone mapped;
 - depth stretched between its smallest and largest values, the largest white (the nearest, with reversed depth);
 - motion vectors as a flow image: red right, green down, both scaled to the largest motion;
 - stencil as a palette, with a count of each value.
@@ -113,9 +113,13 @@ def decode(dxgi_format, width, height, rows):
 def to_rgb(values, kind):
     """8-bit RGB for an image of each kind."""
     if kind == "colour":
-        rgb = values[:, :, :3] if values.shape[2] >= 3 else np.concatenate([values, np.zeros_like(values[:, :, :1])], axis=-1)
-        if rgb.shape[2] == 1:
-            rgb = np.repeat(rgb, 3, axis=-1)
+        channels = values.shape[2]
+        if channels >= 3:
+            rgb = values[:, :, :3]
+        elif channels == 2:
+            rgb = np.concatenate([values, np.zeros_like(values[:, :, :1])], axis=-1)
+        else:
+            rgb = np.repeat(values, 3, axis=-1)  # one channel: grey
         return np.clip(rgb * 255.0 + 0.5, 0, 255).astype(np.uint8)
     if kind == "hdr":
         rgb = np.nan_to_num(values[:, :, :3], nan=0.0, posinf=1e4)

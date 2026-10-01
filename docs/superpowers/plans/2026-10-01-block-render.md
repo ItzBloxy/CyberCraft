@@ -14139,7 +14139,7 @@ data`. One channel now shows as grey. Task 32 converted its dump with this fix a
 **Files:**
 - Modify: `tools/test_view_dump.py`, `tools/view_dump.py`
 
-- [ ] **Step 1: Edit `tools/test_view_dump.py` to add a one-channel test**
+- [x] **Step 1: Edit `tools/test_view_dump.py` to add a one-channel test**
 
 ```python
     vd.convert(depth)
@@ -14157,14 +14157,14 @@ def test_one_channel_colour_is_grey(tmp_path):
     assert np.asarray(Image.open(tmp_path / "mask.png")).tolist() == [[[0, 0, 0], [255, 255, 255]]]
 ```
 
-- [ ] **Step 2: Run it; the new test must fail**
+- [x] **Step 2: Run it; the new test must fail**
 
 ```bash
 cd /d/Cyberpunk-Minecraft/spikes/block-render/tools && uv run --no-project -q --with numpy --with pillow --with pytest pytest -q test_view_dump.py 2>&1 | grep -E "^E |passed|failed"
 ```
 Expected: `ValueError: not enough image data`, then `1 failed, 8 passed`.
 
-- [ ] **Step 3: Edit `tools/view_dump.py` to show one channel as grey**
+- [x] **Step 3: Edit `tools/view_dump.py` to show one channel as grey**
 
 ```python
 - colour targets as they are (8-bit and 10-bit), HDR ones tone mapped;
@@ -14191,14 +14191,14 @@ Expected: `ValueError: not enough image data`, then `1 failed, 8 passed`.
         return np.clip(rgb * 255.0 + 0.5, 0, 255).astype(np.uint8)
 ```
 
-- [ ] **Step 4: Run all the tools' tests; they must pass**
+- [x] **Step 4: Run all the tools' tests; they must pass**
 
 ```bash
 cd /d/Cyberpunk-Minecraft/spikes/block-render/tools && uv run --no-project -q --with numpy --with pillow --with pytest pytest -q 2>&1 | tail -1
 ```
 Expected: `21 passed`.
 
-- [ ] **Step 5: Convert Task 32's dump**
+- [x] **Step 5: Convert Task 32's dump**
 
 ```bash
 cd /d/Cyberpunk-Minecraft/spikes/block-render && uv run --no-project -q --with numpy --with pillow python tools/view_dump.py /e/Cyberpunk2077/red4ext/plugins/BlockRender/dumps/2026-10-01_21-37-20 | grep -c "dds: "
@@ -14206,7 +14206,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && uv run --no-project -q --with n
 Expected: `14`. Every file converts, `gbuffer1-target1.dds` and `gbuffer1-target2.dds` (`R8_UNORM`, all zero in that
 view) included.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render/tools \
