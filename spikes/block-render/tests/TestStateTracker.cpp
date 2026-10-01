@@ -88,18 +88,46 @@ TEST(ListStateRecordsPassesOnlyWhileLogging)
 
 TEST(ListStateFollowsTransitionsAndSplitBarriers)
 {
+	constexpr uint32_t all = ListState::kAllSubresources;
 	ListState state;
 	state.Begin(1, false);
 	int resource = 0;
 	CHECK(!state.StateOf(&resource));
-	state.Transition(&resource, 0x4, false);  // render target
+	state.Transition(&resource, 0x0, 0x4, all, 0);  // common to render target
 	CHECK_EQ(*state.StateOf(&resource), 0x4u);
-	state.Transition(&resource, 0x800, true);  // begun, not ended
+	state.Transition(&resource, 0x4, 0x800, all, ListState::kBeginOnly);  // begun, not ended
 	CHECK(!state.StateOf(&resource));
-	state.Transition(&resource, 0x800, false);  // ended
+	state.Transition(&resource, 0x4, 0x800, all, ListState::kEndOnly);  // ended
 	CHECK_EQ(*state.StateOf(&resource), 0x800u);
+	state.Transition(&resource, 0x800, 0x8, 0, 0);  // one subresource: the whole resource's state is unknown
+	CHECK(!state.StateOf(&resource));
 	state.Begin(2, false);
 	CHECK(!state.StateOf(&resource));  // a new recording forgets
+}
+
+TEST(ListStateKeepsEachResourcesFirstTransition)
+{
+	constexpr uint32_t all = ListState::kAllSubresources;
+	ListState state;
+	state.Begin(1, false);
+	int colour = 0, depth = 0, untouched = 0;
+	state.Transition(&colour, 0x4, 0x8, all, 0);   // render target to unordered access
+	state.Transition(&colour, 0x8, 0xC0, all, 0);  // a later transition doesn't change the first
+	state.Transition(&depth, 0x10, 0xC0, 0, ListState::kBeginOnly);
+	const auto colourFirst = state.FirstTransitionOf(&colour);
+	CHECK(colourFirst.has_value());
+	CHECK_EQ(colourFirst->before, 0x4u);
+	CHECK_EQ(colourFirst->subresource, all);
+	CHECK_EQ(colourFirst->flags, 0u);
+	const auto depthFirst = state.FirstTransitionOf(&depth);
+	CHECK(depthFirst.has_value());
+	CHECK_EQ(depthFirst->before, 0x10u);
+	CHECK_EQ(depthFirst->subresource, 0u);
+	CHECK_EQ(depthFirst->flags, ListState::kBeginOnly);
+	CHECK(!state.FirstTransitionOf(&untouched));
+	CHECK_EQ(state.FirstTransitions().size(), size_t(2));
+	state.Begin(2, false);
+	CHECK(!state.FirstTransitionOf(&colour));  // a new recording forgets
 }
 
 TEST(GbufferCandidatesNeedThreeTargetsAndADepthAtRenderSize)

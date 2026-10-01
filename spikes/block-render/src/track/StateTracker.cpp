@@ -29,6 +29,7 @@ void ListState::Begin(uint32_t aFrame, bool aLogging)
 	frame_ = aFrame;
 	targets_ = {};
 	states_.clear();
+	firsts_.clear();
 	passes_.clear();
 }
 
@@ -91,15 +92,27 @@ void ListState::Event(std::string aName)
 	}
 }
 
-void ListState::Transition(void* aResource, uint32_t aAfter, bool aBeginOnly)
+void ListState::Transition(void* aResource, uint32_t aBefore, uint32_t aAfter, uint32_t aSubresource, uint32_t aFlags)
 {
-	states_[aResource] = aBeginOnly ? kUnknownState : aAfter;
+	firsts_.try_emplace(aResource, FirstTransition{ aBefore, aSubresource, aFlags });
+	const bool known = aSubresource == kAllSubresources && (aFlags & kBeginOnly) == 0;
+	states_[aResource] = known ? aAfter : kUnknownState;
 }
 
 std::optional<uint32_t> ListState::StateOf(void* aResource) const
 {
 	const auto found = states_.find(aResource);
 	if (found == states_.end() || found->second == kUnknownState)
+	{
+		return std::nullopt;
+	}
+	return found->second;
+}
+
+std::optional<ListState::FirstTransition> ListState::FirstTransitionOf(void* aResource) const
+{
+	const auto found = firsts_.find(aResource);
+	if (found == firsts_.end())
 	{
 		return std::nullopt;
 	}

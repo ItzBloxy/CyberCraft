@@ -287,10 +287,8 @@ void STDMETHODCALLTYPE ResourceBarrier(ID3D12GraphicsCommandList* aList, UINT aC
 			{
 				continue;
 			}
-			// Only whole-resource transitions say what state the whole resource is in.
-			const bool whole = barrier.Transition.Subresource == D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-			const bool beginOnly = (barrier.Flags & D3D12_RESOURCE_BARRIER_FLAG_BEGIN_ONLY) != 0;
-			state->Transition(barrier.Transition.pResource, barrier.Transition.StateAfter, beginOnly || !whole);
+			state->Transition(barrier.Transition.pResource, barrier.Transition.StateBefore, barrier.Transition.StateAfter,
+			                  barrier.Transition.Subresource, barrier.Flags);
 		}
 	}
 	g_original.resourceBarrier(aList, aCount, aBarriers);

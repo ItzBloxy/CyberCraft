@@ -71,21 +71,38 @@ public:
 	void Count(Counter aCounter);
 	void Event(std::string aName);
 
-	// A transition barrier. A begin-only half leaves the state unknown until its end-only half.
-	void Transition(void* aResource, uint32_t aAfter, bool aBeginOnly);
+	// D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, and the two D3D12_RESOURCE_BARRIER_FLAGS.
+	static constexpr uint32_t kAllSubresources = 0xFFFFFFFF;
+	static constexpr uint32_t kBeginOnly = 0x1;
+	static constexpr uint32_t kEndOnly = 0x2;
+
+	// A resource's first transition in the list. Its state before is the state the list found the resource in.
+	struct FirstTransition
+	{
+		uint32_t before = 0;
+		uint32_t subresource = kAllSubresources;
+		uint32_t flags = 0;
+	};
+
+	// A transition barrier. Afterwards the resource's state is known, unless the barrier is a begin-only half (until
+	// its end-only half) or covers a single subresource.
+	void Transition(void* aResource, uint32_t aBefore, uint32_t aAfter, uint32_t aSubresource, uint32_t aFlags);
 	std::optional<uint32_t> StateOf(void* aResource) const;
+	std::optional<FirstTransition> FirstTransitionOf(void* aResource) const;
+	const std::unordered_map<void*, FirstTransition>& FirstTransitions() const { return firsts_; }
 
 	const std::vector<PassRecord>& Passes() const { return passes_; }
 
 private:
 	PassRecord* CurrentPass();
 
-	bool                                   recording_ = false;
-	bool                                   logging_ = false;
-	uint32_t                               frame_ = 0;
-	Targets                                targets_;
-	std::unordered_map<void*, uint32_t>    states_;
-	std::vector<PassRecord>                passes_;
+	bool                                       recording_ = false;
+	bool                                       logging_ = false;
+	uint32_t                                   frame_ = 0;
+	Targets                                    targets_;
+	std::unordered_map<void*, uint32_t>        states_;
+	std::unordered_map<void*, FirstTransition> firsts_;
+	std::vector<PassRecord>                    passes_;
 };
 
 // Every command list's state, found by the list's address. A list's state lives as long as the tracker, so a pointer

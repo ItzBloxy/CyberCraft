@@ -14351,7 +14351,7 @@ resource's first transition, with its state before, its subresource and its flag
 - Modify: `tests/TestStateTracker.cpp`, `src/track/StateTracker.h`, `src/track/StateTracker.cpp`,
   `src/hooks/D3D12Hooks.cpp`
 
-- [ ] **Step 1: Edit `tests/TestStateTracker.cpp` to test first transitions**
+- [x] **Step 1: Edit `tests/TestStateTracker.cpp` to test first transitions**
 
 ```cpp
 TEST(ListStateFollowsTransitionsAndSplitBarriers)
@@ -14416,7 +14416,7 @@ TEST(ListStateKeepsEachResourcesFirstTransition)
 }
 ```
 
-- [ ] **Step 2: Build; it must fail**
+- [x] **Step 2: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -14425,7 +14425,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `'kAllSubresources': is not a member of 'cpmc::ListState'`.
 
-- [ ] **Step 3: Edit `src/track/StateTracker.h` for first transitions**
+- [x] **Step 3: Edit `src/track/StateTracker.h` for first transitions**
 
 ```cpp
 	// A transition barrier. A begin-only half leaves the state unknown until its end-only half.
@@ -14471,7 +14471,7 @@ Expected: `'kAllSubresources': is not a member of 'cpmc::ListState'`.
 	std::vector<PassRecord>                    passes_;
 ```
 
-- [ ] **Step 4: Edit `src/track/StateTracker.cpp` for first transitions**
+- [x] **Step 4: Edit `src/track/StateTracker.cpp` for first transitions**
 
 ```cpp
 	states_.clear();
@@ -14521,7 +14521,7 @@ std::optional<ListState::FirstTransition> ListState::FirstTransitionOf(void* aRe
 StateTracker::StateTracker()
 ```
 
-- [ ] **Step 5: Edit `src/hooks/D3D12Hooks.cpp` to pass the whole barrier**
+- [x] **Step 5: Edit `src/hooks/D3D12Hooks.cpp` to pass the whole barrier**
 
 ```cpp
 			// Only whole-resource transitions say what state the whole resource is in.
@@ -14534,7 +14534,7 @@ StateTracker::StateTracker()
 			                  barrier.Transition.Subresource, barrier.Flags);
 ```
 
-- [ ] **Step 6: Build and run the tests; they must pass**
+- [x] **Step 6: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -14544,7 +14544,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `86 test(s), 0 failure(s)`.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
