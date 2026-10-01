@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.25)
 
-project(BlockRender VERSION 0.3.0 LANGUAGES C CXX)
+project(BlockRender VERSION 0.4.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -44,6 +44,7 @@ add_library(render_core STATIC
 	src/hooks/Submission.cpp
 	src/render/Predlss.cpp
 	src/hooks/HookGroups.cpp
+	src/track/ListWatch.cpp
 )
 target_link_libraries(render_core PUBLIC render_settings d3dcompiler dxguid)
 
@@ -110,6 +111,7 @@ add_executable(render_tests
 	tests/TestSubmission.cpp
 	tests/TestPredlss.cpp
 	tests/TestHookGroups.cpp
+	tests/TestListWatch.cpp
 )
 target_link_libraries(render_tests PRIVATE render_core)
 add_test(NAME render_tests COMMAND render_tests WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")

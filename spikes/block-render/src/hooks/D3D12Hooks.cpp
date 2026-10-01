@@ -6,6 +6,7 @@
 #include "hooks/Submission.h"
 #include "hooks/VtablePatch.h"
 #include "log/EventNames.h"
+#include "track/ListWatch.h"
 
 #include <d3d12sdklayers.h>
 #include <wrl/client.h>
@@ -34,6 +35,8 @@ Originals                    g_original;
 VtablePatcher                g_patcher;
 ViewRegistry                 g_views;
 StateTracker                 g_tracker;
+ListWatch                    g_watch;                // lists tracked even while tracking is off
+std::atomic<int>             g_listsRecording{ 0 };  // tracked lists between their Reset and their Close
 std::array<HookEvents*, 4>   g_listeners{};
 size_t                       g_listenerCount = 0;
 std::atomic<bool>            g_tracking{ false };
@@ -74,15 +77,27 @@ void Each(Fn&& aFn)
 	}
 }
 
-// The list's state, if it's being tracked and is recording, and the list hooks are on.
-ListState* Recording(void* aList)
+// The list's state, if it's tracked and recording. While no list is, this costs one atomic read, not a lookup under
+// the tracker's lock: the likeliest cause of the hooks' cost that run 4 measured.
+ListState* Tracked(void* aList)
 {
-	if (!HookGroupOn(HookGroup::Lists))
+	if (g_listsRecording.load(std::memory_order_relaxed) == 0)
 	{
 		return nullptr;
 	}
 	ListState* state = g_tracker.Find(aList);
 	return state && state->Recording() ? state : nullptr;
+}
+
+// The list's state, if the list hooks are on and the list is tracked: every list while tracking is on, and the
+// watched ones while it's off.
+ListState* Recording(void* aList)
+{
+	if (!HookGroupOn(HookGroup::Lists) || (!g_tracking.load(std::memory_order_relaxed) && !g_watch.Contains(aList)))
+	{
+		return nullptr;
+	}
+	return Tracked(aList);
 }
 
 ViewInfo MakeView(ViewInfo::Kind aKind, ID3D12Resource* aResource, uint32_t aViewFormat, uint32_t aMip, uint32_t aPlane,
@@ -264,20 +279,31 @@ void STDMETHODCALLTYPE ExecuteCommandLists(ID3D12CommandQueue* aQueue, UINT aCou
 HRESULT STDMETHODCALLTYPE Reset(ID3D12GraphicsCommandList* aList, ID3D12CommandAllocator* aAllocator, ID3D12PipelineState* aState)
 {
 	const HRESULT result = g_original.reset(aList, aAllocator, aState);
-	if (SUCCEEDED(result) && g_tracking.load(std::memory_order_relaxed) && HookGroupOn(HookGroup::Lists))
+	if (SUCCEEDED(result) && HookGroupOn(HookGroup::Lists) && (g_tracking.load(std::memory_order_relaxed) || g_watch.Contains(aList)))
 	{
-		g_tracker.ForReset(aList).Begin(g_frame.load(std::memory_order_relaxed), g_logging.load(std::memory_order_relaxed));
+		ListState& state = g_tracker.ForReset(aList);
+		if (!state.Recording())
+		{
+			g_listsRecording.fetch_add(1, std::memory_order_relaxed);
+		}
+		state.Begin(g_frame.load(std::memory_order_relaxed), g_logging.load(std::memory_order_relaxed));
 	}
 	return result;
 }
 
 HRESULT STDMETHODCALLTYPE Close(ID3D12GraphicsCommandList* aList)
 {
-	if (ListState* state = Recording(aList))
+	// Every tracked list ends here, even one that tracking or the list hooks have let go of since its Reset, so the
+	// count of lists recording stays right.
+	if (ListState* state = Tracked(aList))
 	{
-		Each([&](HookEvents& aListener) { aListener.OnPassEnd(aList, *state, true); });
-		Each([&](HookEvents& aListener) { aListener.OnClose(aList, *state); });
+		if (Recording(aList))
+		{
+			Each([&](HookEvents& aListener) { aListener.OnPassEnd(aList, *state, true); });
+			Each([&](HookEvents& aListener) { aListener.OnClose(aList, *state); });
+		}
 		state->End();
+		g_listsRecording.fetch_sub(1, std::memory_order_relaxed);
 	}
 	return g_original.close(aList);
 }
@@ -812,6 +838,16 @@ void SetLogging(bool aLogging)
 	g_logging = aLogging;
 }
 
+void WatchList(const void* aList)
+{
+	g_watch.Add(aList);
+}
+
+void UnwatchLists()
+{
+	g_watch.Clear();
+}
+
 void PatchLateDevice(ID3D12Device* aDevice)
 {
 	if (aDevice && !g_device.load())
@@ -1004,10 +1040,10 @@ std::vector<std::string> DebugMessages()
 
 std::string Summary()
 {
-	return std::format("device {}, {} vtable entries, present {}, main queue {}, tracking {}",
+	return std::format("device {}, {} vtable entries, present {}, main queue {}, tracking {}, {} lists watched",
 	                   g_device.load() ? (g_seenAtCreation.load() ? "seen at creation" : "patched late") : "not seen",
 	                   g_patcher.Count(), g_original.present ? "patched" : "not patched", g_mainQueue.load() ? "known" : "unknown",
-	                   g_tracking.load() ? "on" : "off");
+	                   g_tracking.load() ? "on" : "off", g_watch.Count());
 }
 
 size_t PatchedEntries()

@@ -123,14 +123,9 @@ bool Renderer::SetMode(std::string_view aMode, std::string& aError)
 	lastDrawnFrame_.reset();
 	consecutiveSkips_ = 0;
 	const Mode mode = aMode == "present" ? Mode::Present : aMode == "predlss" ? Mode::Predlss : Mode::Off;
-	if (mode == Mode::Predlss && !trackingRequested_)
+	if (mode != Mode::Predlss)
 	{
-		d3d::RequestTracking();  // our barriers start from the DLSS list's first transitions
-		trackingRequested_ = true;
-	}
-	else if (mode != Mode::Predlss)
-	{
-		ReleaseTracking();
+		d3d::UnwatchLists();  // predlss watches the DLSS lists as their evaluates come
 	}
 	mode_ = mode;
 	return true;
@@ -458,16 +453,7 @@ void Renderer::Fail(const std::string& aWhy)
 	log_.Push("renderer: " + aWhy + ", so drawing is off");
 	stats_.lastSkip = aWhy;
 	mode_ = Mode::Off;
-	ReleaseTracking();
-}
-
-void Renderer::ReleaseTracking()
-{
-	if (trackingRequested_)
-	{
-		d3d::ReleaseTracking();
-		trackingRequested_ = false;
-	}
+	d3d::UnwatchLists();
 }
 
 uint64_t Renderer::Signal()
@@ -672,6 +658,7 @@ void Renderer::OnEvaluate(const EvaluateCall& aCall)
 			}
 		}
 		predlssList_ = aCall.list;
+		d3d::WatchList(aCall.list);  // tracked from its next Reset: its first transitions are where our barriers start
 		return;
 	}
 	if (mode != Mode::Present)
@@ -1087,7 +1074,7 @@ void Renderer::Shutdown()
 {
 	mode_ = Mode::Off;
 	std::lock_guard lock(mutex_);
-	ReleaseTracking();
+	d3d::UnwatchLists();
 	if (fence_ && fence_->GetCompletedValue() < fenceValue_)
 	{
 		const HANDLE event = CreateEventW(nullptr, FALSE, FALSE, nullptr);

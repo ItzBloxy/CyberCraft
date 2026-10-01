@@ -30,8 +30,8 @@ namespace cpmc
 //   on the same queue, hidden where the copied depth says the game drew something nearer;
 // - predlss (step 3): a list of ours goes into the submission holding the DLSS evaluate's list, just before it. It draws
 //   into the tagged colour, motion vectors and depth, with the frame's jitter, so DLSS takes the blocks for the game's
-//   own. Its barriers start from the state the DLSS list found each buffer in (its first transitions), so command lists
-//   are tracked while this mode is on.
+//   own. Its barriers start from the state the DLSS list found each buffer in (its first transitions), so the DLSS
+//   lists are watched: tracked from their Reset, while every other list goes untracked.
 class Renderer : public HookEvents
 {
 public:
@@ -117,7 +117,6 @@ private:
 	void               DrawSections(ID3D12GraphicsCommandList* aList, const CameraFrame& aCamera, uint64_t aCompleted);
 	void               Skip(const std::string& aWhy);
 	void               Fail(const std::string& aWhy);  // logs, and switches drawing off
-	void               ReleaseTracking();               // if predlss asked for it
 	uint64_t           Signal();
 	void               Retire(gpu::ComPtr<ID3D12Resource> aResource);
 	void               ReadTimings(uint32_t aSlot);
@@ -126,13 +125,12 @@ private:
 	std::filesystem::path folder_;
 	mutable std::mutex    mutex_;
 	std::atomic<Mode>     mode_{ Mode::Off };
-	bool                  trackingRequested_ = false;
 
 	float brightness_ = 1.0f;
 	float tolerance_ = 0.0001f;
 	int   cull_ = 1;  // 0 none, 1 back faces, 2 front faces
 	Vec3d renderOrigin_;
-	float exposure_ = 3.0f;    // predlss: what the linear colour is multiplied by; run 2 put sunlit ground at 0.6 to 1
+	float exposure_ = 2.5f;    // predlss: what the linear colour is multiplied by; run 4 settled on 2.5 by eye
 	float jitterSign_ = 1.0f;  // predlss: 1 or -1 as the jitter's sign, 0 for none
 	float mvSign_ = 1.0f;      // predlss: 1 or -1 as the motion vectors' sign, 0 for none
 

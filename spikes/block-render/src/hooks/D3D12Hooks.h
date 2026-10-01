@@ -77,6 +77,11 @@ void RequestTracking();
 void ReleaseTracking();
 bool Tracking();
 
+// A list to track from its next Reset even while tracking is off: drawing before DLSS names each evaluate's list, the
+// only lists it needs. The last few named stay watched until UnwatchLists.
+void WatchList(const void* aList);
+void UnwatchLists();
+
 // Lists reset while this is on record their passes for the frame log.
 void SetLogging(bool aLogging);
 

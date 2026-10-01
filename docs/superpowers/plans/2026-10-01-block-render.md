@@ -18400,7 +18400,7 @@ Run 4 settled `exposure` at 2.5, which becomes the default. The version goes to 
 - Modify: `CMakeLists.txt`, `src/hooks/D3D12Hooks.h`, `src/hooks/D3D12Hooks.cpp`, `src/render/Renderer.h`,
   `src/render/Renderer.cpp`, `src/Plugin.cpp`
 
-- [ ] **Step 1: Write the failing test, `tests/TestListWatch.cpp`**
+- [x] **Step 1: Write the failing test, `tests/TestListWatch.cpp`**
 
 ```cpp
 #include "Harness.h"
@@ -18441,7 +18441,7 @@ TEST(ListWatchKeepsTheLastFewListsNamed)
 }
 ```
 
-- [ ] **Step 2: Edit `CMakeLists.txt` to add the test**
+- [x] **Step 2: Edit `CMakeLists.txt` to add the test**
 
 ```cmake
 	tests/TestHookGroups.cpp
@@ -18453,7 +18453,7 @@ TEST(ListWatchKeepsTheLastFewListsNamed)
 )
 ```
 
-- [ ] **Step 3: Build; it must fail**
+- [x] **Step 3: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -18462,7 +18462,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `error C1083: Cannot open include file: 'track/ListWatch.h'`.
 
-- [ ] **Step 4: Write `src/track/ListWatch.h`**
+- [x] **Step 4: Write `src/track/ListWatch.h`**
 
 ```cpp
 #pragma once
@@ -18493,7 +18493,7 @@ private:
 }
 ```
 
-- [ ] **Step 5: Write `src/track/ListWatch.cpp`**
+- [x] **Step 5: Write `src/track/ListWatch.cpp`**
 
 ```cpp
 #include "track/ListWatch.h"
@@ -18541,7 +18541,7 @@ size_t ListWatch::Count() const
 }
 ```
 
-- [ ] **Step 6: Edit `CMakeLists.txt` to add the source, and the version**
+- [x] **Step 6: Edit `CMakeLists.txt` to add the source, and the version**
 
 ```cmake
 project(BlockRender VERSION 0.3.0 LANGUAGES C CXX)
@@ -18559,7 +18559,7 @@ project(BlockRender VERSION 0.4.0 LANGUAGES C CXX)
 )
 ```
 
-- [ ] **Step 7: Build and run the tests; they must pass**
+- [x] **Step 7: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -18569,7 +18569,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `104 test(s), 0 failure(s)`.
 
-- [ ] **Step 8: Edit `src/hooks/D3D12Hooks.h` to watch lists**
+- [x] **Step 8: Edit `src/hooks/D3D12Hooks.h` to watch lists**
 
 ```cpp
 void RequestTracking();
@@ -18587,7 +18587,7 @@ void WatchList(const void* aList);
 void UnwatchLists();
 ```
 
-- [ ] **Step 9: Edit `src/hooks/D3D12Hooks.cpp` to count the lists recording, and watch lists**
+- [x] **Step 9: Edit `src/hooks/D3D12Hooks.cpp` to count the lists recording, and watch lists**
 
 ```cpp
 #include "log/EventNames.h"
@@ -18716,7 +18716,7 @@ void UnwatchLists()
 	                   g_tracking.load() ? "on" : "off", g_watch.Count());
 ```
 
-- [ ] **Step 10: Edit `src/render/Renderer.h` for watched lists, and the exposure**
+- [x] **Step 10: Edit `src/render/Renderer.h` for watched lists, and the exposure**
 
 ```cpp
 //   own. Its barriers start from the state the DLSS list found each buffer in (its first transitions), so command lists
@@ -18747,7 +18747,7 @@ void UnwatchLists()
 	float exposure_ = 2.5f;    // predlss: what the linear colour is multiplied by; run 4 settled on 2.5 by eye
 ```
 
-- [ ] **Step 11: Edit `src/render/Renderer.cpp` to watch the DLSS lists**
+- [x] **Step 11: Edit `src/render/Renderer.cpp` to watch the DLSS lists**
 
 ```cpp
 	const Mode mode = aMode == "present" ? Mode::Present : aMode == "predlss" ? Mode::Predlss : Mode::Off;
@@ -18807,7 +18807,7 @@ void Renderer::ReleaseTracking()
 	d3d::UnwatchLists();
 ```
 
-- [ ] **Step 12: Edit `src/Plugin.cpp` for the version**
+- [x] **Step 12: Edit `src/Plugin.cpp` for the version**
 
 ```cpp
 constexpr const char* kVersion = "0.3.0";
@@ -18822,7 +18822,7 @@ constexpr const char* kVersion = "0.4.0";
 	aInfo->version = RED4EXT_V1_SEMVER(0, 4, 0);
 ```
 
-- [ ] **Step 13: Build; it must compile without warnings, and the tests still pass**
+- [x] **Step 13: Build; it must compile without warnings, and the tests still pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -18832,7 +18832,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `104 test(s), 0 failure(s)`.
 
-- [ ] **Step 14: Check the DLL's exports and imports**
+- [x] **Step 14: Check the DLL's exports and imports**
 
 ```bash
 DUMPBIN="/c/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/dumpbin.exe"
@@ -18842,7 +18842,7 @@ B=/d/Cyberpunk-Minecraft/spikes/block-render/build/RelWithDebInfo/BlockRender.dl
 ```
 Expected: exactly `Main`, `Query` and `Supports`, then `D3DCOMPILER_47.dll` and `d3d12.dll`.
 
-- [ ] **Step 15: Commit**
+- [x] **Step 15: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
