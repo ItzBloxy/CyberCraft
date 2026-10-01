@@ -6736,7 +6736,7 @@ plugin folder and never into the repo. The tests build small jars of their own.
 **Files:**
 - Create: `tools/build_atlas.py`, `tools/test_build_atlas.py`
 
-- [ ] **Step 1: Write the failing test, `tools/test_build_atlas.py`**
+- [x] **Step 1: Write the failing test, `tools/test_build_atlas.py`**
 
 ```python
 """Tests for build_atlas.py, against a small fake jar.
@@ -6886,14 +6886,14 @@ def test_a_missing_texture_is_named(tmp_path):
     assert "glass.png" in str(failure.value)
 ```
 
-- [ ] **Step 2: Run it; it must fail**
+- [x] **Step 2: Run it; it must fail**
 
 ```bash
 cd /d/Cyberpunk-Minecraft/spikes/block-render/tools && uv run --no-project -q --with numpy --with pillow --with pytest pytest -q test_build_atlas.py 2>&1 | grep -E "^E |error in"
 ```
 Expected: `E   ModuleNotFoundError: No module named 'build_atlas'`, then `1 error in ...`.
 
-- [ ] **Step 3: Write `tools/build_atlas.py`**
+- [x] **Step 3: Write `tools/build_atlas.py`**
 
 ```python
 """Builds BlockRender's block atlas from your own Minecraft jar.
@@ -7080,14 +7080,14 @@ if __name__ == "__main__":
     main()
 ```
 
-- [ ] **Step 4: Run the tests; they must pass**
+- [x] **Step 4: Run the tests; they must pass**
 
 ```bash
 cd /d/Cyberpunk-Minecraft/spikes/block-render/tools && uv run --no-project -q --with numpy --with pillow --with pytest pytest -q test_build_atlas.py 2>&1 | tail -1
 ```
 Expected: `6 passed`.
 
-- [ ] **Step 5: Try it on the user's jar, into a scratch folder**
+- [x] **Step 5: Try it on the user's jar, into a scratch folder**
 
 ```bash
 OUT=$(mktemp -d) && cd /d/Cyberpunk-Minecraft/spikes/block-render \
@@ -7096,7 +7096,7 @@ OUT=$(mktemp -d) && cd /d/Cyberpunk-Minecraft/spikes/block-render \
 ```
 Expected: `atlas: 256 x 64, 62 sprites, 50 blocks, written to ...`, then `atlas.bin` (91,520 bytes) and `atlas.json`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render/tools \
