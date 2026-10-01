@@ -10699,7 +10699,7 @@ The renderer never waits on the GPU. It skips a frame, and counts it, when anyth
 - Create: `src/render/Renderer.h`, `src/render/Renderer.cpp`
 - Modify: `CMakeLists.txt`
 
-- [ ] **Step 1: Write `src/render/Renderer.h`**
+- [x] **Step 1: Write `src/render/Renderer.h`**
 
 ```cpp
 #pragma once
@@ -10870,7 +10870,7 @@ private:
 }
 ```
 
-- [ ] **Step 2: Write `src/render/Renderer.cpp`**
+- [x] **Step 2: Write `src/render/Renderer.cpp`**
 
 ```cpp
 #include "render/Renderer.h"
@@ -11693,7 +11693,7 @@ void Renderer::Shutdown()
 }
 ```
 
-- [ ] **Step 3: Edit `CMakeLists.txt` to add the source**
+- [x] **Step 3: Edit `CMakeLists.txt` to add the source**
 
 ```cmake
 	src/log/Dumps.cpp
@@ -11705,7 +11705,7 @@ void Renderer::Shutdown()
 )
 ```
 
-- [ ] **Step 4: Build; it must compile without warnings, and the tests still pass**
+- [x] **Step 4: Build; it must compile without warnings, and the tests still pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -11715,7 +11715,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `83 test(s), 0 failure(s)`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \

@@ -55,6 +55,7 @@ add_library(render_runtime STATIC
 	src/render/Gpu.cpp
 	src/log/FrameLog.cpp
 	src/log/Dumps.cpp
+	src/render/Renderer.cpp
 )
 target_link_libraries(render_runtime PUBLIC render_core RED4ext::SDK d3d12)
 
