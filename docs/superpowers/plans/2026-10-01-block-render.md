@@ -1023,7 +1023,7 @@ headers, and check that local tags replace global tags of the same type for one 
 - Create: `src/sl/Sl.h`, `src/sl/Sl.cpp`, `tests/TestSl.cpp`
 - Modify: `CMakeLists.txt`
 
-- [ ] **Step 1: Write the failing test, `tests/TestSl.cpp`**
+- [x] **Step 1: Write the failing test, `tests/TestSl.cpp`**
 
 ```cpp
 #include "Harness.h"
@@ -1165,7 +1165,7 @@ TEST(SlNamesBufferTypes)
 }
 ```
 
-- [ ] **Step 2: Edit `CMakeLists.txt` to add the test**
+- [x] **Step 2: Edit `CMakeLists.txt` to add the test**
 
 ```cmake
 	tests/TestLogQueue.cpp
@@ -1177,7 +1177,7 @@ TEST(SlNamesBufferTypes)
 )
 ```
 
-- [ ] **Step 3: Build; it must fail**
+- [x] **Step 3: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -1186,7 +1186,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `fatal error C1083: Cannot open include file: 'sl/Sl.h'`.
 
-- [ ] **Step 4: Write `src/sl/Sl.h`**
+- [x] **Step 4: Write `src/sl/Sl.h`**
 
 ```cpp
 #pragma once
@@ -1271,7 +1271,7 @@ std::vector<SlTag> TagsForEvaluate(const std::vector<SlTag>& aGlobal, const std:
 }
 ```
 
-- [ ] **Step 5: Write `src/sl/Sl.cpp`**
+- [x] **Step 5: Write `src/sl/Sl.cpp`**
 
 ```cpp
 #include "sl/Sl.h"
@@ -1472,7 +1472,7 @@ std::vector<SlTag> TagsForEvaluate(const std::vector<SlTag>& aGlobal, const std:
 }
 ```
 
-- [ ] **Step 6: Edit `CMakeLists.txt` to add the source**
+- [x] **Step 6: Edit `CMakeLists.txt` to add the source**
 
 ```cmake
 	src/LogQueue.cpp
@@ -1484,7 +1484,7 @@ std::vector<SlTag> TagsForEvaluate(const std::vector<SlTag>& aGlobal, const std:
 )
 ```
 
-- [ ] **Step 7: Build and run the tests; they must pass**
+- [x] **Step 7: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -1494,7 +1494,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `25 test(s), 0 failure(s)`.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
