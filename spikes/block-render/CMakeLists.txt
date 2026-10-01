@@ -31,6 +31,7 @@ add_library(render_core STATIC
 	src/track/ViewRegistry.cpp
 	src/track/StateTracker.cpp
 	src/render/Camera.cpp
+	src/render/Atlas.cpp
 )
 target_link_libraries(render_core PUBLIC render_settings d3dcompiler dxguid)
 
@@ -50,6 +51,7 @@ add_executable(render_tests
 	tests/TestViewRegistry.cpp
 	tests/TestStateTracker.cpp
 	tests/TestCamera.cpp
+	tests/TestAtlas.cpp
 )
 target_link_libraries(render_tests PRIVATE render_core)
 add_test(NAME render_tests COMMAND render_tests WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")

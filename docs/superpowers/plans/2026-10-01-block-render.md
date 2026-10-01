@@ -3462,7 +3462,7 @@ the mesher's.
 - Create: `src/render/Atlas.h`, `src/render/Atlas.cpp`, `tests/AtlasFixture.h`, `tests/TestAtlas.cpp`
 - Modify: `CMakeLists.txt`
 
-- [ ] **Step 1: Write `tests/AtlasFixture.h`**
+- [x] **Step 1: Write `tests/AtlasFixture.h`**
 
 ```cpp
 #pragma once
@@ -3547,7 +3547,7 @@ inline cpmc::Atlas Atlas()
 }
 ```
 
-- [ ] **Step 2: Write the failing test, `tests/TestAtlas.cpp`**
+- [x] **Step 2: Write the failing test, `tests/TestAtlas.cpp`**
 
 ```cpp
 #include "Harness.h"
@@ -3610,7 +3610,7 @@ TEST(AtlasRefusesBrokenFiles)
 }
 ```
 
-- [ ] **Step 3: Edit `CMakeLists.txt` to add the test**
+- [x] **Step 3: Edit `CMakeLists.txt` to add the test**
 
 ```cmake
 	tests/TestCamera.cpp
@@ -3622,7 +3622,7 @@ TEST(AtlasRefusesBrokenFiles)
 )
 ```
 
-- [ ] **Step 4: Build; it must fail**
+- [x] **Step 4: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -3631,7 +3631,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `fatal error C1083: Cannot open include file: 'render/Atlas.h'`.
 
-- [ ] **Step 5: Write `src/render/Atlas.h`**
+- [x] **Step 5: Write `src/render/Atlas.h`**
 
 ```cpp
 #pragma once
@@ -3685,7 +3685,7 @@ std::optional<Atlas> ParseAtlas(std::span<const uint8_t> aBytes, std::string& aE
 }
 ```
 
-- [ ] **Step 6: Write `src/render/Atlas.cpp`**
+- [x] **Step 6: Write `src/render/Atlas.cpp`**
 
 ```cpp
 #include "render/Atlas.h"
@@ -3805,7 +3805,7 @@ std::optional<Atlas> ParseAtlas(std::span<const uint8_t> aBytes, std::string& aE
 }
 ```
 
-- [ ] **Step 7: Edit `CMakeLists.txt` to add the source**
+- [x] **Step 7: Edit `CMakeLists.txt` to add the source**
 
 ```cmake
 	src/render/Camera.cpp
@@ -3817,7 +3817,7 @@ std::optional<Atlas> ParseAtlas(std::span<const uint8_t> aBytes, std::string& aE
 )
 ```
 
-- [ ] **Step 8: Build and run the tests; they must pass**
+- [x] **Step 8: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -3827,7 +3827,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `51 test(s), 0 failure(s)`.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
