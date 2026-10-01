@@ -51,6 +51,8 @@ add_subdirectory("${RED4EXT_SDK_DIR}" red4ext-sdk EXCLUDE_FROM_ALL SYSTEM)
 add_library(render_runtime STATIC
 	src/hooks/D3D12Hooks.cpp
 	src/hooks/StreamlineHooks.cpp
+	src/track/GpuApi.cpp
+	src/render/Gpu.cpp
 )
 target_link_libraries(render_runtime PUBLIC render_core RED4ext::SDK d3d12)
 

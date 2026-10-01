@@ -9375,7 +9375,7 @@ cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
 - Create: `src/track/GpuApi.h`, `src/track/GpuApi.cpp`, `src/render/Gpu.h`, `src/render/Gpu.cpp`
 - Modify: `CMakeLists.txt`
 
-- [ ] **Step 1: Write `src/track/GpuApi.h`**
+- [x] **Step 1: Write `src/track/GpuApi.h`**
 
 ```cpp
 #pragma once
@@ -9425,7 +9425,7 @@ private:
 }
 ```
 
-- [ ] **Step 2: Write `src/track/GpuApi.cpp`**
+- [x] **Step 2: Write `src/track/GpuApi.cpp`**
 
 ```cpp
 #include "track/GpuApi.h"
@@ -9639,7 +9639,7 @@ std::string ListNames::Find(ID3D12GraphicsCommandList* aNativeList)
 }
 ```
 
-- [ ] **Step 3: Write `src/render/Gpu.h`**
+- [x] **Step 3: Write `src/render/Gpu.h`**
 
 ```cpp
 #pragma once
@@ -9683,7 +9683,7 @@ bool RecordCopy(ID3D12GraphicsCommandList* aList, ID3D12Resource* aSource, uint3
 }
 ```
 
-- [ ] **Step 4: Write `src/render/Gpu.cpp`**
+- [x] **Step 4: Write `src/render/Gpu.cpp`**
 
 ```cpp
 #include "render/Gpu.h"
@@ -9783,7 +9783,7 @@ bool RecordCopy(ID3D12GraphicsCommandList* aList, ID3D12Resource* aSource, uint3
 }
 ```
 
-- [ ] **Step 5: Edit `CMakeLists.txt` to add the sources**
+- [x] **Step 5: Edit `CMakeLists.txt` to add the sources**
 
 ```cmake
 	src/hooks/StreamlineHooks.cpp
@@ -9796,7 +9796,7 @@ bool RecordCopy(ID3D12GraphicsCommandList* aList, ID3D12Resource* aSource, uint3
 )
 ```
 
-- [ ] **Step 6: Build; it must compile without warnings, and the tests still pass**
+- [x] **Step 6: Build; it must compile without warnings, and the tests still pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -9806,7 +9806,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `83 test(s), 0 failure(s)`.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
