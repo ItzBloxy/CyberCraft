@@ -38,6 +38,7 @@ add_library(render_core STATIC
 	src/log/DdsWriter.cpp
 	src/log/FrameLogJson.cpp
 	src/render/Shaders.cpp
+	src/Status.cpp
 )
 target_link_libraries(render_core PUBLIC render_settings d3dcompiler dxguid)
 
@@ -65,6 +66,7 @@ add_executable(render_tests
 	tests/TestFrameLogJson.cpp
 	tests/TestShaders.cpp
 	tests/TestWinding.cpp
+	tests/TestStatus.cpp
 )
 target_link_libraries(render_tests PRIVATE render_core)
 add_test(NAME render_tests COMMAND render_tests WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
