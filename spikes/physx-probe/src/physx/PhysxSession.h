@@ -1,43 +1,23 @@
 #pragma once
 
 #include "Report.h"
+#include "physx/GameAbi.h"
 #include "physx/PxHeaders.h"
+#include "physx/Readable.h"
 #include "physx/ShapeTriangles.h"
 
 #include <cstdint>
 #include <map>
 #include <optional>
 #include <string>
-#include <type_traits>
-#include <utility>
 #include <vector>
 
-// The only code that calls the game's PhysX. Every call runs under a crash guard, so a bad read ends that
-// operation (and counts a fault) instead of crashing the game.
+// The only code that calls the game's PhysX. It catches no faults: the game's crash handler sees a fault before any
+// handler of ours could, and freezes the game if we carry on. So it checks before it touches anything. It calls only
+// the methods the audit verified, only on objects whose vtables are audited tables of the audited build, and it
+// checks every raw array before reading it.
 namespace cpmc::px
 {
-using GuardedFn = void (*)(void* aContext);
-
-// Runs aFn(aContext) under a structured-exception guard. False if it faulted (or threw).
-bool RunGuarded(GuardedFn aFn, void* aContext) noexcept;
-
-// Runs a captureless lambda taking a Context& under the guard.
-template<class Context, class Fn>
-bool Guarded(Context& aContext, Fn aFn)
-{
-	static_assert(std::is_convertible_v<Fn, void (*)(Context&)>, "use a captureless lambda");
-	struct Thunk
-	{
-		static void Call(void* aRaw)
-		{
-			auto& pack = *static_cast<std::pair<Context*, void (*)(Context&)>*>(aRaw);
-			pack.second(*pack.first);
-		}
-	};
-	std::pair<Context*, void (*)(Context&)> pack{ &aContext, static_cast<void (*)(Context&)>(aFn) };
-	return RunGuarded(&Thunk::Call, &pack);
-}
-
 // A module's version resource: the binary FILEVERSION field and the "FileVersion" string. They can disagree:
 // NVIDIA's PhysX 3.4.2 release says 3.4.1.0 in the binary field and 3.4.2.0 in the string. Empty if unreadable.
 struct FileVersions
@@ -49,11 +29,14 @@ struct FileVersions
 // aModule is an HMODULE.
 FileVersions ReadFileVersions(void* aModule);
 
-struct OpenResult
+// The compatibility check's result for one dump.
+struct CheckResult
 {
-	bool                    pass = false;
-	std::vector<CompatStep> steps;
-	std::string             physxFileVersion;
+	bool                         pass = false;
+	std::vector<CompatStep>      steps;
+	std::string                  physxFileVersion;
+	std::vector<ModuleReport>    modules;
+	std::vector<physx::PxScene*> scenes;  // checked, once step 4 has passed
 };
 
 // Census and region results for one scene.
@@ -75,23 +58,34 @@ struct SceneDump
 class PhysxSession
 {
 public:
-	// The first call finds PhysX and runs the compatibility check; later calls return the cached result.
-	const OpenResult& Open();
+	// Starts a dump: forgets remembered memory regions, then runs the compatibility check. Steps 1-3 describe the
+	// build and run once per session; steps 4-7 describe the world and run every time.
+	CheckResult Check();
 
-	// The current scenes, fetched fresh. Empty unless Open() passed.
-	std::vector<physx::PxScene*> FetchScenes(uint32_t& aFaults) const;
-
-	// Census, then region selection, overlap query and triangle extraction, all under the scene's read lock.
-	// aFeet is V's feet (world), used for the nearest capsule. At most aTriangleBudget triangles are kept.
+	// Census, region selection, overlap query and triangle extraction, all under the scene's read lock. aScene must
+	// come from this dump's Check(). aFeet is V's feet (world), used for the nearest capsule. At most aTriangleBudget
+	// triangles are kept. After 100 skipped objects the census stops and the region work is left out.
 	SceneDump DumpScene(physx::PxScene* aScene, int aIndex, const physx::PxBounds3& aRegion, const physx::PxVec3& aFeet,
-	                    uint64_t aTriangleBudget, uint32_t& aFaults) const;
+	                    uint64_t aTriangleBudget);
 
 	// A ray straight down against static geometry. The distance to the nearest hit, if any.
-	std::optional<float> RaycastDown(physx::PxScene* aScene, const physx::PxVec3& aFrom, float aMaxDistance,
-	                                 uint32_t& aFaults) const;
+	std::optional<float> RaycastDown(physx::PxScene* aScene, const physx::PxVec3& aFrom, float aMaxDistance);
 
 private:
-	physx::PxPhysics*         physics_ = nullptr;
-	std::optional<OpenResult> open_;
+	struct Build
+	{
+		bool                      pass = false;
+		std::vector<CompatStep>   steps;
+		std::string               physxFileVersion;
+		std::vector<ModuleReport> modules;
+		ModuleBases               bases;
+		physx::PxPhysics*         physics = nullptr;
+	};
+
+	// Steps 1-3.
+	Build CheckBuild();
+
+	std::optional<Build> build_;
+	ReadableMemory       memory_;
 };
 }

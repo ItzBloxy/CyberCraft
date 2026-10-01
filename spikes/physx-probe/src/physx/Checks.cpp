@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <cmath>
-#include <cstring>
 #include <format>
 #include <utility>
 #include <vector>
@@ -11,57 +10,6 @@ using namespace physx;
 
 namespace cpmc::px
 {
-namespace
-{
-struct NamedType
-{
-	const char* name;
-	int         type;
-};
-
-// Every concrete type name PhysX 3.4.2 returns from getConcreteTypeName(), with its PxConcreteType.
-constexpr NamedType kTypes[] = {
-	{ "PxHeightField", PxConcreteType::eHEIGHTFIELD },
-	{ "PxConvexMesh", PxConcreteType::eCONVEX_MESH },
-	{ "PxBVH33TriangleMesh", PxConcreteType::eTRIANGLE_MESH_BVH33 },
-	{ "PxBVH34TriangleMesh", PxConcreteType::eTRIANGLE_MESH_BVH34 },
-	{ "PxClothFabric", PxConcreteType::eCLOTH_FABRIC },
-	{ "PxRigidDynamic", PxConcreteType::eRIGID_DYNAMIC },
-	{ "PxRigidStatic", PxConcreteType::eRIGID_STATIC },
-	{ "PxShape", PxConcreteType::eSHAPE },
-	{ "PxMaterial", PxConcreteType::eMATERIAL },
-	{ "PxConstraint", PxConcreteType::eCONSTRAINT },
-	{ "PxCloth", PxConcreteType::eCLOTH },
-	{ "PxParticleSystem", PxConcreteType::ePARTICLE_SYSTEM },
-	{ "PxParticleFluid", PxConcreteType::ePARTICLE_FLUID },
-	{ "PxAggregate", PxConcreteType::eAGGREGATE },
-	{ "PxArticulation", PxConcreteType::eARTICULATION },
-	{ "PxArticulationLink", PxConcreteType::eARTICULATION_LINK },
-	{ "PxPruningStructure", PxConcreteType::ePRUNING_STRUCTURE },
-};
-}
-
-int ConcreteTypeForName(const char* aName)
-{
-	if (!aName)
-	{
-		return -1;
-	}
-	for (const auto& entry : kTypes)
-	{
-		if (std::strcmp(entry.name, aName) == 0)
-		{
-			return entry.type;
-		}
-	}
-	return -1;
-}
-
-bool IsPhysX342(const std::string& aFileVersionString)
-{
-	return aFileVersionString.starts_with("3.4.2.");
-}
-
 bool TolerancesPlausible(float aLength, float aSpeed)
 {
 	return aLength >= 0.01f && aLength <= 100.0f && aSpeed >= 0.1f && aSpeed <= 1000.0f;

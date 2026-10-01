@@ -6,26 +6,15 @@
 
 #include <algorithm>
 #include <format>
+#include <initializer_list>
 #include <set>
 #include <string_view>
+#include <utility>
 
 using namespace physx;
 
 namespace cpmc::px
 {
-bool RunGuarded(GuardedFn aFn, void* aContext) noexcept
-{
-	__try
-	{
-		aFn(aContext);
-		return true;
-	}
-	__except (EXCEPTION_EXECUTE_HANDLER)
-	{
-		return false;
-	}
-}
-
 FileVersions ReadFileVersions(void* aModule)
 {
 	FileVersions versions;
@@ -84,10 +73,12 @@ constexpr uint32_t kMaxActorsPerScene = 10'000'000;
 constexpr size_t   kSampleActors = 64;
 constexpr uint32_t kMaxSampledActors = 10'000;
 constexpr size_t   kMaxNameSamples = 32;
+constexpr size_t   kMaxNameLength = 128;
 constexpr size_t   kOverlapBuffer = 8192;
 constexpr size_t   kOverlapCap = 1'000'000;
-constexpr uint32_t kMaxFaultsPerScene = 100;
+constexpr uint64_t kMaxSkipsPerScene = 100;
 constexpr float    kCapsuleSearch = 1.5f;
+constexpr size_t   kActorBytes = 24;  // the vtable pointer, the type ID and base flags, and userData
 
 const PxActorTypeFlags kRigidActors = PxActorTypeFlag::eRIGID_STATIC | PxActorTypeFlag::eRIGID_DYNAMIC;
 
@@ -100,45 +91,110 @@ double NowMs()
 	return double(counter.QuadPart) * 1000.0 / double(frequency.QuadPart);
 }
 
-bool IsReadable(const void* aAddress)
+std::string Narrow(const wchar_t* aText)
 {
-	MEMORY_BASIC_INFORMATION info{};
-	if (!VirtualQuery(aAddress, &info, sizeof(info)) || info.State != MEM_COMMIT)
+	std::string out;
+	for (; *aText; ++aText)
 	{
-		return false;
+		out.push_back(char(*aText));  // module names are ASCII
 	}
-	constexpr DWORD kReadable = PAGE_READONLY | PAGE_READWRITE | PAGE_WRITECOPY | PAGE_EXECUTE_READ |
-	                            PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY;
-	return (info.Protect & kReadable) != 0 && (info.Protect & (PAGE_GUARD | PAGE_NOACCESS)) == 0;
+	return out;
 }
 
-bool LockRead(PxScene* aScene)
+std::string Describe(const ObjectCheck& aCheck)
 {
-	return Guarded(*aScene, [](PxScene& aSceneRef) { aSceneRef.lockRead(); });
+	switch (aCheck.verdict)
+	{
+	case ObjectVerdict::Ok:
+		return std::format("a {} vtable", InterfaceName(aCheck.cls));
+	case ObjectVerdict::Unreadable:
+		return "not readable";
+	case ObjectVerdict::Unaudited:
+		return "a vtable the audit doesn't cover";
+	case ObjectVerdict::WrongType:
+		return std::format("a {} vtable but a different type ID", InterfaceName(aCheck.cls));
+	}
+	return {};
 }
 
-void UnlockRead(PxScene* aScene)
+// What checking objects found, in a census or in the compatibility check's sample.
+struct Findings
 {
-	Guarded(*aScene, [](PxScene& aSceneRef) { aSceneRef.unlockRead(); });
-}
+	uint64_t    objectsChecked = 0;
+	uint64_t    unreadable = 0;
+	uint64_t    unaudited = 0;
+	uint64_t    typeMismatches = 0;      // a type ID that disagrees with the vtable, or the wrong class for the place
+	uint64_t    geometryMismatches = 0;  // a shape whose mesh doesn't fit its geometry type
+	std::string firstProblem;
+	std::string firstGeometryMismatch;
+	bool        seenTriangleMesh = false;
+	bool        seenHeightField = false;
+	bool        seenConvex = false;
 
-// The object's concrete type name, read from the game's PhysX.
-std::string TypeName(const PxBase& aObject)
-{
-	return SanitizeName(aObject.getConcreteTypeName(), 64);
-}
+	uint64_t Skipped() const { return unreadable + unaudited; }
+	uint64_t Mismatches() const { return typeMismatches + geometryMismatches; }
+};
 
-// The name agrees with the object's type ID, which is a plain data member (not a virtual call).
-bool TypeAgrees(const PxBase& aObject, const std::string& aName)
+// Checks game objects and memory for one dump.
+struct Checker
 {
-	const int expected = ConcreteTypeForName(aName.c_str());
-	return expected >= 0 && expected == int(aObject.getConcreteType());
+	ReadableMemory&    memory;
+	const ModuleBases& bases;
+
+	// The object's audited class, if it passes CheckObject and is one of aAccepted. Counts what it finds either way.
+	std::optional<AuditedClass> Accept(const void* aObject, std::initializer_list<AuditedClass> aAccepted, const char* aWhat,
+	                                   Findings& aFindings, size_t aBytes = 16) const
+	{
+		++aFindings.objectsChecked;
+		const ObjectCheck check = CheckObject(memory, bases, aObject, aBytes);
+		const bool accepted = check.verdict == ObjectVerdict::Ok &&
+		                      std::find(aAccepted.begin(), aAccepted.end(), check.cls) != aAccepted.end();
+		if (accepted)
+		{
+			return check.cls;
+		}
+		switch (check.verdict)
+		{
+		case ObjectVerdict::Unreadable:
+			++aFindings.unreadable;
+			break;
+		case ObjectVerdict::Unaudited:
+			++aFindings.unaudited;
+			break;
+		default:
+			++aFindings.typeMismatches;
+			break;
+		}
+		if (aFindings.firstProblem.empty())
+		{
+			aFindings.firstProblem = std::format("{} at {} is {}", aWhat, aObject, Describe(check));
+		}
+		return std::nullopt;
+	}
+
+	// How many bytes from aText on can be read, up to aMax.
+	size_t ReadableLength(const char* aText, size_t aMax) const
+	{
+		size_t length = 0;
+		while (length < aMax && memory.Range(aText + length, 1))
+		{
+			++length;
+		}
+		return length;
+	}
+};
+
+std::vector<PxShape*> ShapesOf(const PxRigidActor& aActor)
+{
+	std::vector<PxShape*> shapes(aActor.getNbShapes());
+	shapes.resize(aActor.getShapes(shapes.data(), PxU32(shapes.size())));
+	return shapes;
 }
 
 // The mesh object a mesh-based shape references; nullptr for primitives.
-const PxBase* MeshOf(const PxShape& aShape)
+const PxBase* MeshOf(const PxShape& aShape, PxGeometryType::Enum aGeometry)
 {
-	switch (aShape.getGeometryType())
+	switch (aGeometry)
 	{
 	case PxGeometryType::eTRIANGLEMESH:
 	{
@@ -160,90 +216,50 @@ const PxBase* MeshOf(const PxShape& aShape)
 	}
 }
 
-const char* ActorKind(const PxActor& aActor)
+// "static", "kinematic" or "dynamic". The audited class tells a static actor from a dynamic one.
+const char* ActorKind(const PxActor& aActor, AuditedClass aClass)
 {
-	switch (aActor.getType())
+	if (aClass == AuditedClass::RigidStatic)
 	{
-	case PxActorType::eRIGID_STATIC:
 		return "static";
-	case PxActorType::eRIGID_DYNAMIC:
-		return static_cast<const PxRigidBody&>(aActor).getRigidBodyFlags().isSet(PxRigidBodyFlag::eKINEMATIC)
-		           ? "kinematic"
-		           : "dynamic";
-	default:
-		return "other";
 	}
+	return static_cast<const PxRigidBody&>(aActor).getRigidBodyFlags().isSet(PxRigidBodyFlag::eKINEMATIC) ? "kinematic"
+	                                                                                                       : "dynamic";
 }
 
-std::vector<PxShape*> ShapesOf(const PxRigidActor& aActor)
+// Checks one actor, its shapes and their meshes; with aCensus set, it also fills the census tallies. Returns the
+// actor's class if the actor itself passed its check.
+std::optional<AuditedClass> VisitActor(const Checker& aChecker, const PxActor* aActor, Findings& aFindings,
+                                       SceneCensus* aCensus, std::set<std::string>* aNames)
 {
-	std::vector<PxShape*> shapes(aActor.getNbShapes());
-	shapes.resize(aActor.getShapes(shapes.data(), PxU32(shapes.size())));
-	return shapes;
-}
-
-// What checking objects found: type-name mismatches (step 6) and geometry/mesh disagreements (step 7).
-struct Findings
-{
-	uint64_t    objectsChecked = 0;
-	uint64_t    typeMismatches = 0;
-	std::string firstTypeMismatch;
-	uint64_t    geometryMismatches = 0;
-	std::string firstGeometryMismatch;
-	bool        seenTriangleMesh = false;
-	bool        seenHeightField = false;
-	bool        seenConvex = false;
-};
-
-void CheckType(const PxBase& aObject, const char* aWhat, Findings& aFindings, std::string& aNameOut)
-{
-	aNameOut = TypeName(aObject);
-	++aFindings.objectsChecked;
-	if (!TypeAgrees(aObject, aNameOut))
+	const std::optional<AuditedClass> actorClass =
+	    aChecker.Accept(aActor, { AuditedClass::RigidStatic, AuditedClass::RigidDynamic }, "an actor", aFindings, kActorBytes);
+	if (!actorClass)
 	{
-		++aFindings.typeMismatches;
-		if (aFindings.firstTypeMismatch.empty())
-		{
-			aFindings.firstTypeMismatch =
-			    std::format("{} reports type name \"{}\" with type ID {}", aWhat, aNameOut, int(aObject.getConcreteType()));
-		}
+		return std::nullopt;
 	}
-}
-
-// Checks one actor, its shapes and their meshes. With aCensus set, it also fills the census tallies.
-void VisitActor(const PxActor& aActor, Findings& aFindings, SceneCensus* aCensus, std::set<std::string>* aNames)
-{
-	std::string actorName;
-	CheckType(aActor, "an actor", aFindings, actorName);
 	if (aCensus)
 	{
-		++aCensus->byConcreteType[actorName];
-		if (const char* name = aActor.getName())
+		++aCensus->byConcreteType[InterfaceName(*actorClass)];
+		if (const char* name = aActor->getName())
 		{
 			++aCensus->namedActors;
 			if (aNames && aNames->size() < kMaxNameSamples)
 			{
-				aNames->insert(SanitizeName(name));
+				aNames->insert(SanitizeName(name, aChecker.ReadableLength(name, kMaxNameLength)));
 			}
 		}
-		if (aActor.userData)
+		if (aActor->userData)
 		{
 			++aCensus->actorsWithUserData;
 		}
 	}
-	const PxActorType::Enum type = aActor.getType();
-	if (type != PxActorType::eRIGID_STATIC && type != PxActorType::eRIGID_DYNAMIC)
+	for (const PxShape* shape : ShapesOf(static_cast<const PxRigidActor&>(*aActor)))
 	{
-		return;
-	}
-	for (const PxShape* shape : ShapesOf(static_cast<const PxRigidActor&>(aActor)))
-	{
-		if (!shape)
+		if (!aChecker.Accept(shape, { AuditedClass::Shape }, "a shape", aFindings))
 		{
 			continue;
 		}
-		std::string shapeName;
-		CheckType(*shape, "a shape", aFindings, shapeName);
 		const PxGeometryType::Enum geometry = shape->getGeometryType();
 		if (aCensus)
 		{
@@ -264,26 +280,34 @@ void VisitActor(const PxActor& aActor, Findings& aFindings, SceneCensus* aCensus
 			++aCensus->queryFilter[FilterKey(shape->getQueryFilterData())];
 			++aCensus->simulationFilter[FilterKey(shape->getSimulationFilterData())];
 		}
-		const PxBase* mesh = MeshOf(*shape);
+		const PxBase* mesh = MeshOf(*shape, geometry);
 		if (!mesh)
 		{
 			continue;
 		}
-		std::string meshName;
-		CheckType(*mesh, "a mesh", aFindings, meshName);
-		if (!GeometryMatchesMesh(geometry, ConcreteTypeForName(meshName.c_str())))
+		const std::optional<AuditedClass> meshClass =
+		    aChecker.Accept(mesh,
+		                    { AuditedClass::ConvexMesh, AuditedClass::TriangleMeshBv33, AuditedClass::TriangleMeshBv34,
+		                      AuditedClass::HeightField },
+		                    "a mesh", aFindings);
+		if (!meshClass)
+		{
+			continue;
+		}
+		if (!GeometryMatchesMesh(geometry, ConcreteTypeOf(*meshClass)))
 		{
 			++aFindings.geometryMismatches;
 			if (aFindings.firstGeometryMismatch.empty())
 			{
 				aFindings.firstGeometryMismatch =
-				    std::format("a {} shape references a \"{}\"", GeometryName(geometry), meshName);
+				    std::format("a {} shape references a {}", GeometryName(geometry), InterfaceName(*meshClass));
 			}
 		}
 		aFindings.seenTriangleMesh |= geometry == PxGeometryType::eTRIANGLEMESH;
 		aFindings.seenHeightField |= geometry == PxGeometryType::eHEIGHTFIELD;
 		aFindings.seenConvex |= geometry == PxGeometryType::eCONVEXMESH;
 	}
+	return actorClass;
 }
 
 // Collects every overlap hit: PhysX hands over each full buffer, and the last partial one, via processTouches.
@@ -356,305 +380,243 @@ void TrimToBudget(std::map<std::string, std::vector<Tri>>& aTriangles, uint64_t 
 }
 }
 
-const OpenResult& PhysxSession::Open()
+PhysxSession::Build PhysxSession::CheckBuild()
 {
-	if (open_)
+	Build      build;
+	const auto step = [&](int aNumber, const char* aName, bool aPass, std::string aDetail) {
+		build.steps.push_back({ aNumber, aName, aPass, std::move(aDetail) });
+		return aPass;
+	};
+
+	// 1. The build: both DLLs loaded, with the audited timestamps and image sizes.
+	HMODULE     modules[2] = {};
+	bool        audited = true;
+	std::string detail;
+	for (size_t i = 0; i < 2; ++i)
 	{
-		return *open_;
+		const AuditedModule& expected = kAuditedModules[i];
+		modules[i] = GetModuleHandleW(expected.name);
+		ModuleReport report;
+		report.name = Narrow(expected.name);
+		const std::optional<ModuleId> id = modules[i] ? ModuleIdentity(modules[i]) : std::nullopt;
+		if (id)
+		{
+			report.timestamp = id->timestamp;
+			report.imageSize = id->imageSize;
+			report.audited = *id == expected.id;
+		}
+		audited &= report.audited;
+		detail += std::format("{}{} ", detail.empty() ? "" : "; ", report.name);
+		detail += !modules[i] ? std::string("is not loaded")
+		          : !id       ? std::string("has no readable PE header")
+		                      : std::format("timestamp 0x{:x}, image size 0x{:x}{}", report.timestamp, report.imageSize,
+		                                    report.audited ? "" : ": not the audited build");
+		build.modules.push_back(std::move(report));
 	}
-	OpenResult result;
+	const FileVersions versions = modules[0] ? ReadFileVersions(modules[0]) : FileVersions{};
+	build.physxFileVersion = versions.text;
+	if (modules[0])
+	{
+		detail += std::format("; PhysX3_x64.dll FileVersion \"{}\" (binary field {})", versions.text, versions.binary);
+	}
+	if (!step(1, "build", audited, detail))
+	{
+		return build;
+	}
+	build.bases = { reinterpret_cast<uintptr_t>(modules[0]), reinterpret_cast<uintptr_t>(modules[1]) };
+
+	// 2. The physics object. PxGetPhysics is the only function called before this check.
+	using GetPhysicsFn = PxPhysics& (*)();
+	const auto        getPhysics = reinterpret_cast<GetPhysicsFn>(GetProcAddress(modules[0], "PxGetPhysics"));
+	PxPhysics*        physics = getPhysics ? &getPhysics() : nullptr;
+	const ObjectCheck check = CheckObject(memory_, build.bases, physics);
+	if (!step(2, "physics", check.verdict == ObjectVerdict::Ok && check.cls == AuditedClass::Physics,
+	          getPhysics ? std::format("PxPhysics at {}: {}", static_cast<const void*>(physics), Describe(check))
+	                     : std::string("PxGetPhysics isn't exported")))
+	{
+		return build;
+	}
+
+	// 3. Tolerances.
+	const PxTolerancesScale& scale = physics->getTolerancesScale();
+	const bool               readable = memory_.Range(&scale, sizeof(scale));
+	if (!step(3, "tolerances", readable && TolerancesPlausible(scale.length, scale.speed),
+	          readable ? std::format("length {}, speed {}", scale.length, scale.speed)
+	                   : std::string("the tolerances aren't readable")))
+	{
+		return build;
+	}
+	build.physics = physics;
+	build.pass = true;
+	return build;
+}
+
+CheckResult PhysxSession::Check()
+{
+	memory_.Clear();
+	if (!build_)
+	{
+		build_ = CheckBuild();
+	}
+	CheckResult result;
+	result.steps = build_->steps;
+	result.physxFileVersion = build_->physxFileVersion;
+	result.modules = build_->modules;
+	if (!build_->pass)
+	{
+		return result;
+	}
 	const auto step = [&](int aNumber, const char* aName, bool aPass, std::string aDetail) {
 		result.steps.push_back({ aNumber, aName, aPass, std::move(aDetail) });
 		return aPass;
 	};
-	const auto finish = [&]() -> const OpenResult& {
-		result.pass = result.steps.size() == 7 &&
-		              std::all_of(result.steps.begin(), result.steps.end(), [](const CompatStep& aStep) { return aStep.pass; });
-		open_ = std::move(result);
-		return *open_;
-	};
-
-	// 1. The module and its version (by the FileVersion string; see IsPhysX342).
-	const HMODULE      module = GetModuleHandleW(L"PhysX3_x64.dll");
-	const FileVersions versions = module ? ReadFileVersions(module) : FileVersions{};
-	result.physxFileVersion = versions.text;
-	if (!step(1, "module", module && IsPhysX342(versions.text),
-	          module ? std::format("PhysX3_x64.dll FileVersion \"{}\" (binary field {})", versions.text, versions.binary)
-	                 : std::string("PhysX3_x64.dll is not loaded")))
-	{
-		return finish();
-	}
-
-	// 2. PxGetPhysics.
-	using GetPhysicsFn = PxPhysics& (*)();
-	struct GetPhysicsCall
-	{
-		GetPhysicsFn fn;
-		PxPhysics*   physics;
-	};
-	GetPhysicsCall getPhysics{ reinterpret_cast<GetPhysicsFn>(GetProcAddress(module, "PxGetPhysics")), nullptr };
-	const bool     called = getPhysics.fn && Guarded(getPhysics, [](GetPhysicsCall& aCall) { aCall.physics = &aCall.fn(); });
-	PxPhysics*     physics = called ? getPhysics.physics : nullptr;
-	const bool     readable = physics && IsReadable(physics) && IsReadable(*reinterpret_cast<void* const*>(physics));
-	if (!step(2, "PxGetPhysics", readable,
-	          !getPhysics.fn ? std::string("PxGetPhysics isn't exported")
-	          : readable     ? std::format("PxPhysics at {}", static_cast<const void*>(physics))
-	                         : std::string("PxGetPhysics faulted or returned unreadable memory")))
-	{
-		return finish();
-	}
-
-	// 3. Tolerances.
-	struct TolerancesCall
-	{
-		PxPhysics* physics;
-		float      length;
-		float      speed;
-	};
-	TolerancesCall tolerances{ physics, 0.0f, 0.0f };
-	const bool     gotTolerances = Guarded(tolerances, [](TolerancesCall& aCall) {
-        const PxTolerancesScale& scale = aCall.physics->getTolerancesScale();
-        aCall.length = scale.length;
-        aCall.speed = scale.speed;
-    });
-	if (!step(3, "tolerances", gotTolerances && TolerancesPlausible(tolerances.length, tolerances.speed),
-	          gotTolerances ? std::format("length {}, speed {}", tolerances.length, tolerances.speed)
-	                        : std::string("getTolerancesScale faulted")))
-	{
-		return finish();
-	}
+	PxPhysics&    physics = *build_->physics;
+	const Checker checker{ memory_, build_->bases };
 
 	// 4. Scenes.
-	struct ScenesCall
+	const PxU32           count = physics.getNbScenes();
+	std::vector<PxScene*> scenes;
+	if (count >= 1 && count <= kMaxScenes)
 	{
-		PxPhysics*            physics;
-		uint32_t              count;
-		std::vector<PxScene*> scenes;
-	};
-	ScenesCall scenes{ physics, 0, {} };
-	const bool gotScenes = Guarded(scenes, [](ScenesCall& aCall) {
-		aCall.count = aCall.physics->getNbScenes();
-		if (aCall.count >= 1 && aCall.count <= kMaxScenes)
+		scenes.resize(count);
+		scenes.resize(physics.getScenes(scenes.data(), count));
+	}
+	std::string sceneProblem;
+	for (PxScene* scene : scenes)
+	{
+		const ObjectCheck check = CheckObject(memory_, build_->bases, scene);
+		if (sceneProblem.empty() && (check.verdict != ObjectVerdict::Ok || check.cls != AuditedClass::Scene))
 		{
-			aCall.scenes.resize(aCall.count);
-			aCall.scenes.resize(aCall.physics->getScenes(aCall.scenes.data(), aCall.count));
+			sceneProblem = std::format("; the scene at {} is {}", static_cast<const void*>(scene), Describe(check));
 		}
-	});
-	const bool scenesOk = gotScenes && scenes.count >= 1 && scenes.count <= kMaxScenes &&
-	                      scenes.scenes.size() == scenes.count &&
-	                      std::none_of(scenes.scenes.begin(), scenes.scenes.end(), [](PxScene* aScene) { return !aScene; });
-	if (!step(4, "scenes", scenesOk,
-	          gotScenes ? std::format("{} scene(s)", scenes.count) : std::string("getNbScenes/getScenes faulted")))
-	{
-		return finish();
 	}
+	const bool scenesOk = count >= 1 && count <= kMaxScenes && scenes.size() == count && sceneProblem.empty();
+	if (!step(4, "scenes", scenesOk, std::format("{} scene(s){}", count, sceneProblem)))
+	{
+		return result;
+	}
+	result.scenes = scenes;
 
-	// 5. Gravity and actor counts.
-	struct SceneFacts
-	{
-		PxScene* scene;
-		PxVec3   gravity;
-		uint32_t actors;
-	};
-	std::vector<SceneFacts> facts;
-	bool                    factsOk = true;
-	for (PxScene* scene : scenes.scenes)
-	{
-		SceneFacts sceneFacts{ scene, PxVec3(0.0f), 0 };
-		factsOk &= Guarded(sceneFacts, [](SceneFacts& aFacts) {
-			aFacts.gravity = aFacts.scene->getGravity();
-			aFacts.actors = aFacts.scene->getNbActors(kRigidActors);
-		});
-		facts.push_back(sceneFacts);
-	}
-	const bool allSane = factsOk && std::all_of(facts.begin(), facts.end(), [](const SceneFacts& aFacts) {
-		return GravityFinite(aFacts.gravity) && aFacts.actors <= kMaxActorsPerScene;
-	});
-	const bool anyEarthLike =
-	    std::any_of(facts.begin(), facts.end(), [](const SceneFacts& aFacts) { return GravityEarthLike(aFacts.gravity); });
+	// 5. Gravity and counts.
+	bool        allSane = true;
+	bool        anyEarthLike = false;
 	std::string factsDetail;
-	for (const SceneFacts& sceneFacts : facts)
+	for (PxScene* scene : scenes)
 	{
-		factsDetail += std::format("{}gravity ({:.2f}, {:.2f}, {:.2f}), {} actors", factsDetail.empty() ? "" : "; ",
-		                           sceneFacts.gravity.x, sceneFacts.gravity.y, sceneFacts.gravity.z, sceneFacts.actors);
+		const PxVec3 gravity = scene->getGravity();
+		const PxU32  actors = scene->getNbActors(kRigidActors);
+		allSane &= GravityFinite(gravity) && actors <= kMaxActorsPerScene;
+		anyEarthLike |= GravityEarthLike(gravity);
+		factsDetail += std::format("{}gravity ({:.2f}, {:.2f}, {:.2f}), {} actors", factsDetail.empty() ? "" : "; ", gravity.x,
+		                           gravity.y, gravity.z, actors);
 	}
-	if (!step(5, "gravity and counts", allSane && anyEarthLike,
-	          factsOk ? factsDetail : std::string("getGravity/getNbActors faulted")))
+	if (!step(5, "gravity and counts", allSane && anyEarthLike, factsDetail))
 	{
-		return finish();
+		return result;
 	}
 
-	// 6 and 7. Type names and IDs of sampled actors, shapes and meshes; geometry types against mesh types.
+	// 6 and 7. Sampled actors, their shapes and their meshes; then each shape's geometry against its mesh.
 	Findings findings;
-	bool     sampleFaulted = false;
-	for (PxScene* scene : scenes.scenes)
+	for (PxScene* scene : scenes)
 	{
-		if (!LockRead(scene))
+		scene->lockRead();
+		std::vector<PxActor*> actors(std::min<PxU32>(scene->getNbActors(kRigidActors), kMaxSampledActors));
+		actors.resize(scene->getActors(kRigidActors, actors.data(), PxU32(actors.size())));
+		for (size_t i = 0; i < actors.size(); ++i)
 		{
-			sampleFaulted = true;
-			continue;
-		}
-		struct SampleCall
-		{
-			PxScene*  scene;
-			Findings* findings;
-		};
-		SampleCall sample{ scene, &findings };
-		sampleFaulted |= !Guarded(sample, [](SampleCall& aCall) {
-			std::vector<PxActor*> actors(std::min<PxU32>(aCall.scene->getNbActors(kRigidActors), kMaxSampledActors));
-			actors.resize(aCall.scene->getActors(kRigidActors, actors.data(), PxU32(actors.size())));
-			for (size_t i = 0; i < actors.size() && aCall.findings->typeMismatches == 0; ++i)
-			{
-				const Findings& seen = *aCall.findings;
-				if (i >= kSampleActors && seen.seenTriangleMesh && seen.seenHeightField && seen.seenConvex)
-				{
-					break;
-				}
-				if (actors[i])
-				{
-					VisitActor(*actors[i], *aCall.findings, nullptr, nullptr);
-				}
-			}
-		});
-		UnlockRead(scene);
-	}
-	const std::string seenDetail =
-	    std::format("checked {} objects; saw a triangle mesh: {}, a heightfield: {}, a convex mesh: {}", findings.objectsChecked,
-	                findings.seenTriangleMesh, findings.seenHeightField, findings.seenConvex);
-	if (!step(6, "type names", !sampleFaulted && findings.typeMismatches == 0 && findings.objectsChecked > 0,
-	          sampleFaulted            ? "faulted while sampling; " + seenDetail
-	          : findings.typeMismatches ? findings.firstTypeMismatch
-	                                    : seenDetail))
-	{
-		return finish();
-	}
-	step(7, "geometry and mesh types", findings.geometryMismatches == 0,
-	     findings.geometryMismatches ? findings.firstGeometryMismatch : std::string("every checked mesh matches its shape"));
-	if (result.steps.back().pass)
-	{
-		physics_ = physics;
-	}
-	return finish();
-}
-
-std::vector<PxScene*> PhysxSession::FetchScenes(uint32_t& aFaults) const
-{
-	if (!physics_)
-	{
-		return {};
-	}
-	struct Call
-	{
-		PxPhysics*            physics;
-		std::vector<PxScene*> scenes;
-	};
-	Call call{ physics_, {} };
-	if (!Guarded(call, [](Call& aCall) {
-		    aCall.scenes.resize(std::min<PxU32>(aCall.physics->getNbScenes(), kMaxScenes));
-		    aCall.scenes.resize(aCall.physics->getScenes(aCall.scenes.data(), PxU32(aCall.scenes.size())));
-	    }))
-	{
-		++aFaults;
-		return {};
-	}
-	std::erase(call.scenes, nullptr);
-	return call.scenes;
-}
-
-SceneDump PhysxSession::DumpScene(PxScene* aScene, int aIndex, const PxBounds3& aRegion, const PxVec3& aFeet,
-                                  uint64_t aTriangleBudget, uint32_t& aFaults) const
-{
-	SceneDump dump;
-	dump.census.index = aIndex;
-	if (!LockRead(aScene))
-	{
-		++aFaults;
-		return dump;
-	}
-
-	// Scene facts and the actor list.
-	double t0 = NowMs();
-	struct ListCall
-	{
-		PxScene*              scene;
-		SceneCensus*          census;
-		std::vector<PxActor*> actors;
-	};
-	ListCall list{ aScene, &dump.census, {} };
-	if (!Guarded(list, [](ListCall& aCall) {
-		    SceneCensus& census = *aCall.census;
-		    const PxVec3 gravity = aCall.scene->getGravity();
-		    census.gravity = { gravity.x, gravity.y, gravity.z };
-		    const PxSceneFlags flags = aCall.scene->getFlags();
-		    census.flags = static_cast<uint32_t>(flags);
-		    census.requiresRwLock = flags.isSet(PxSceneFlag::eREQUIRE_RW_LOCK);
-		    census.staticActors = aCall.scene->getNbActors(PxActorTypeFlag::eRIGID_STATIC);
-		    census.dynamicActors = aCall.scene->getNbActors(PxActorTypeFlag::eRIGID_DYNAMIC);
-		    aCall.actors.resize(std::min<PxU32>(aCall.scene->getNbActors(kRigidActors), kMaxActorsPerScene));
-		    aCall.actors.resize(aCall.scene->getActors(kRigidActors, aCall.actors.data(), PxU32(aCall.actors.size())));
-		    std::vector<PxAggregate*> aggregates(aCall.scene->getNbAggregates());
-		    aggregates.resize(aCall.scene->getAggregates(aggregates.data(), PxU32(aggregates.size())));
-		    census.aggregates = uint32_t(aggregates.size());
-		    for (const PxAggregate* aggregate : aggregates)
-		    {
-			    census.actorsInAggregates += aggregate ? aggregate->getNbActors() : 0;
-		    }
-		    census.articulations = aCall.scene->getNbArticulations();
-	    }))
-	{
-		++aFaults;
-	}
-
-	// The census: every actor, shape and mesh, re-checking each one's type.
-	Findings              findings;
-	std::set<std::string> names;
-	uint32_t              censusFaults = 0;
-	for (PxActor* actor : list.actors)
-	{
-		struct VisitCall
-		{
-			PxActor*               actor;
-			Findings*              findings;
-			SceneCensus*           census;
-			std::set<std::string>* names;
-		};
-		VisitCall visit{ actor, &findings, &dump.census, &names };
-		if (actor && !Guarded(visit, [](VisitCall& aCall) { VisitActor(*aCall.actor, *aCall.findings, aCall.census, aCall.names); }))
-		{
-			++aFaults;
-			if (++censusFaults >= kMaxFaultsPerScene)
+			const bool seenAll = findings.seenTriangleMesh && findings.seenHeightField && findings.seenConvex;
+			if ((i >= kSampleActors && seenAll) || findings.Skipped() + findings.typeMismatches > 0)
 			{
 				break;
 			}
+			VisitActor(checker, actors[i], findings, nullptr, nullptr);
+		}
+		scene->unlockRead();
+	}
+	const bool objectsOk = findings.objectsChecked > 0 && findings.Skipped() + findings.typeMismatches == 0;
+	if (!step(6, "objects", objectsOk,
+	          objectsOk ? std::format("checked {} objects; saw a triangle mesh: {}, a heightfield: {}, a convex mesh: {}",
+	                                  findings.objectsChecked, findings.seenTriangleMesh, findings.seenHeightField,
+	                                  findings.seenConvex)
+	                    : findings.firstProblem))
+	{
+		return result;
+	}
+	step(7, "geometry and meshes", findings.geometryMismatches == 0,
+	     findings.geometryMismatches ? findings.firstGeometryMismatch : std::string("every checked mesh matches its shape"));
+	result.pass = result.steps.size() == 7 &&
+	              std::all_of(result.steps.begin(), result.steps.end(), [](const CompatStep& aStep) { return aStep.pass; });
+	return result;
+}
+
+SceneDump PhysxSession::DumpScene(PxScene* aScene, int aIndex, const PxBounds3& aRegion, const PxVec3& aFeet,
+                                  uint64_t aTriangleBudget)
+{
+	SceneDump     dump;
+	SceneCensus&  census = dump.census;
+	const Checker checker{ memory_, build_->bases };
+	census.index = aIndex;
+	aScene->lockRead();
+
+	// Scene facts and the actor list.
+	double       t0 = NowMs();
+	const PxVec3 gravity = aScene->getGravity();
+	census.gravity = { gravity.x, gravity.y, gravity.z };
+	const PxSceneFlags flags = aScene->getFlags();
+	census.flags = static_cast<uint32_t>(flags);
+	census.requiresRwLock = flags.isSet(PxSceneFlag::eREQUIRE_RW_LOCK);
+	census.staticActors = aScene->getNbActors(PxActorTypeFlag::eRIGID_STATIC);
+	census.dynamicActors = aScene->getNbActors(PxActorTypeFlag::eRIGID_DYNAMIC);
+	census.articulations = aScene->getNbArticulations();
+	std::vector<PxActor*> actors(std::min<PxU32>(aScene->getNbActors(kRigidActors), kMaxActorsPerScene));
+	actors.resize(aScene->getActors(kRigidActors, actors.data(), PxU32(actors.size())));
+	std::vector<PxAggregate*> aggregates(aScene->getNbAggregates());
+	aggregates.resize(aScene->getAggregates(aggregates.data(), PxU32(aggregates.size())));
+	census.aggregates = uint32_t(aggregates.size());
+
+	// The census: every aggregate, actor, shape and mesh, each checked before anything is called on it.
+	Findings findings;
+	for (const PxAggregate* aggregate : aggregates)
+	{
+		if (checker.Accept(aggregate, { AuditedClass::Aggregate }, "an aggregate", findings))
+		{
+			census.actorsInAggregates += aggregate->getNbActors();
 		}
 	}
-	dump.census.mismatches = findings.typeMismatches + findings.geometryMismatches;
-	dump.census.actorNameSamples.assign(names.begin(), names.end());
-	dump.census.censusMs = NowMs() - t0;
+	std::set<std::string>                                names;
+	std::vector<std::pair<const PxActor*, AuditedClass>> usable;
+	bool                                                 abandoned = false;
+	for (const PxActor* actor : actors)
+	{
+		if (findings.Skipped() >= kMaxSkipsPerScene)
+		{
+			abandoned = true;
+			break;
+		}
+		if (const std::optional<AuditedClass> cls = VisitActor(checker, actor, findings, &census, &names))
+		{
+			usable.emplace_back(actor, *cls);
+		}
+	}
+	census.skippedUnreadable = findings.unreadable;
+	census.skippedUnaudited = findings.unaudited;
+	census.mismatches = findings.Mismatches();
+	census.actorNameSamples.assign(names.begin(), names.end());
+	census.censusMs = NowMs() - t0;
+	if (abandoned)
+	{
+		aScene->unlockRead();
+		return dump;
+	}
 
 	// Region selection by actor bounds.
 	t0 = NowMs();
-	std::vector<PxActor*> selected;
-	for (PxActor* actor : list.actors)
+	std::vector<std::pair<const PxActor*, AuditedClass>> selected;
+	for (const auto& [actor, cls] : usable)
 	{
-		struct BoundsCall
+		if (actor->getWorldBounds(1.0f).intersects(aRegion))
 		{
-			PxActor*  actor;
-			PxBounds3 region;
-			bool      touches;
-		};
-		BoundsCall bounds{ actor, aRegion, false };
-		if (!actor)
-		{
-			continue;
-		}
-		if (!Guarded(bounds, [](BoundsCall& aCall) { aCall.touches = aCall.actor->getWorldBounds(1.0f).intersects(aCall.region); }))
-		{
-			++aFaults;
-		}
-		else if (bounds.touches)
-		{
-			selected.push_back(actor);
+			selected.emplace_back(actor, cls);
 		}
 	}
 	dump.boundsSelected = uint32_t(selected.size());
@@ -662,66 +624,42 @@ SceneDump PhysxSession::DumpScene(PxScene* aScene, int aIndex, const PxBounds3& 
 
 	// The same region through PhysX's own overlap query (scene-query shapes only), for comparison.
 	t0 = NowMs();
-	struct OverlapCall
-	{
-		PxScene*                  scene;
-		PxBounds3                 region;
-		std::vector<PxOverlapHit> hits;
-		bool                      capped;
-	};
-	OverlapCall overlap{ aScene, aRegion, {}, false };
-	if (!Guarded(overlap, [](OverlapCall& aCall) {
-		    std::vector<PxOverlapHit> buffer(kOverlapBuffer);
-		    CollectOverlaps           collect(buffer.data(), PxU32(buffer.size()), aCall.hits);
-		    aCall.scene->overlap(PxBoxGeometry(aCall.region.getExtents()), PxTransform(aCall.region.getCenter()), collect,
-		                         PxQueryFilterData(PxQueryFlag::eSTATIC | PxQueryFlag::eDYNAMIC | PxQueryFlag::eNO_BLOCK));
-		    aCall.capped = collect.capped;
-	    }))
-	{
-		++aFaults;
-	}
-	dump.overlapHits = uint32_t(overlap.hits.size());
-	dump.overlapCapped = overlap.capped;
+	std::vector<PxOverlapHit> buffer(kOverlapBuffer);
+	std::vector<PxOverlapHit> hits;
+	CollectOverlaps           collect(buffer.data(), PxU32(buffer.size()), hits);
+	aScene->overlap(PxBoxGeometry(aRegion.getExtents()), PxTransform(aRegion.getCenter()), collect,
+	                PxQueryFilterData(PxQueryFlag::eSTATIC | PxQueryFlag::eDYNAMIC | PxQueryFlag::eNO_BLOCK));
+	dump.overlapHits = uint32_t(hits.size());
+	dump.overlapCapped = collect.capped;
 	dump.overlapMs = NowMs() - t0;
 
 	// Triangles of every shape of the selected actors.
 	t0 = NowMs();
-	for (PxActor* actor : selected)
+	for (const auto& [actor, cls] : selected)
 	{
 		if (CountTriangles(dump.triangles) >= aTriangleBudget)
 		{
 			dump.triangleCapHit = true;
 			break;
 		}
-		struct ExtractCall
+		const char*        kind = ActorKind(*actor, cls);
+		const auto&        rigid = static_cast<const PxRigidActor&>(*actor);
+		const PxTransform  pose = rigid.getGlobalPose();
+		for (const PxShape* shape : ShapesOf(rigid))
 		{
-			PxActor*   actor;
-			PxBounds3  region;
-			PxVec3     feet;
-			SceneDump* dump;
-		};
-		ExtractCall extract{ actor, aRegion, aFeet, &dump };
-		if (!Guarded(extract, [](ExtractCall& aCall) {
-			    const char*        kind = ActorKind(*aCall.actor);
-			    const auto&        rigid = static_cast<const PxRigidActor&>(*aCall.actor);
-			    const PxTransform  pose = rigid.getGlobalPose();
-			    for (const PxShape* shape : ShapesOf(rigid))
-			    {
-				    if (!shape)
-				    {
-					    continue;
-				    }
-				    const PxGeometryType::Enum geometry = shape->getGeometryType();
-				    AppendTriangles(*shape, pose, aCall.region,
-				                    aCall.dump->triangles[Category(kind, shape->getFlags(), geometry)], aCall.dump->stats);
-				    if (geometry == PxGeometryType::eCAPSULE && std::string_view(kind) != "static")
-				    {
-					    NoteCapsule(*shape, pose, aCall.feet, kind, aCall.dump->nearestCapsule);
-				    }
-			    }
-		    }))
-		{
-			++aFaults;
+			const ObjectCheck check = CheckObject(memory_, build_->bases, shape);
+			if (check.verdict != ObjectVerdict::Ok || check.cls != AuditedClass::Shape)
+			{
+				++dump.stats.unreadable;
+				continue;
+			}
+			const PxGeometryType::Enum geometry = shape->getGeometryType();
+			AppendTriangles(*shape, pose, aRegion, memory_, build_->bases,
+			                dump.triangles[Category(kind, shape->getFlags(), geometry)], dump.stats);
+			if (geometry == PxGeometryType::eCAPSULE && std::string_view(kind) != "static")
+			{
+				NoteCapsule(*shape, pose, aFeet, kind, dump.nearestCapsule);
+			}
 		}
 	}
 	if (CountTriangles(dump.triangles) > aTriangleBudget)
@@ -732,39 +670,17 @@ SceneDump PhysxSession::DumpScene(PxScene* aScene, int aIndex, const PxBounds3& 
 	std::erase_if(dump.triangles, [](const auto& aEntry) { return aEntry.second.empty(); });
 	dump.extractMs = NowMs() - t0;
 
-	UnlockRead(aScene);
+	aScene->unlockRead();
 	return dump;
 }
 
-std::optional<float> PhysxSession::RaycastDown(PxScene* aScene, const PxVec3& aFrom, float aMaxDistance, uint32_t& aFaults) const
+std::optional<float> PhysxSession::RaycastDown(PxScene* aScene, const PxVec3& aFrom, float aMaxDistance)
 {
-	if (!LockRead(aScene))
-	{
-		++aFaults;
-		return std::nullopt;
-	}
-	struct RayCall
-	{
-		PxScene* scene;
-		PxVec3   from;
-		float    maxDistance;
-		bool     hit;
-		float    distance;
-	};
-	RayCall    ray{ aScene, aFrom, aMaxDistance, false, 0.0f };
-	const bool ok = Guarded(ray, [](RayCall& aCall) {
-		PxRaycastBuffer buffer;
-		aCall.scene->raycast(aCall.from, PxVec3(0.0f, 0.0f, -1.0f), aCall.maxDistance, buffer, PxHitFlag::eDEFAULT,
-		                     PxQueryFilterData(PxQueryFlag::eSTATIC));
-		aCall.hit = buffer.hasBlock;
-		aCall.distance = buffer.hasBlock ? buffer.block.distance : 0.0f;
-	});
-	UnlockRead(aScene);
-	if (!ok)
-	{
-		++aFaults;
-		return std::nullopt;
-	}
-	return ray.hit ? std::optional<float>(ray.distance) : std::nullopt;
+	aScene->lockRead();
+	PxRaycastBuffer buffer;
+	aScene->raycast(aFrom, PxVec3(0.0f, 0.0f, -1.0f), aMaxDistance, buffer, PxHitFlag::eDEFAULT,
+	                PxQueryFilterData(PxQueryFlag::eSTATIC));
+	aScene->unlockRead();
+	return buffer.hasBlock ? std::optional<float>(buffer.block.distance) : std::nullopt;
 }
 }

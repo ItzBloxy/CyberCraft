@@ -5,29 +5,6 @@
 using namespace physx;
 using namespace cpmc::px;
 
-TEST(ConcreteTypeNamesMapToTheirIds)
-{
-	CHECK_EQ(ConcreteTypeForName("PxRigidStatic"), int(PxConcreteType::eRIGID_STATIC));
-	CHECK_EQ(ConcreteTypeForName("PxRigidDynamic"), int(PxConcreteType::eRIGID_DYNAMIC));
-	CHECK_EQ(ConcreteTypeForName("PxShape"), int(PxConcreteType::eSHAPE));
-	CHECK_EQ(ConcreteTypeForName("PxBVH33TriangleMesh"), int(PxConcreteType::eTRIANGLE_MESH_BVH33));
-	CHECK_EQ(ConcreteTypeForName("PxBVH34TriangleMesh"), int(PxConcreteType::eTRIANGLE_MESH_BVH34));
-	CHECK_EQ(ConcreteTypeForName("PxHeightField"), int(PxConcreteType::eHEIGHTFIELD));
-	CHECK_EQ(ConcreteTypeForName("PxConvexMesh"), int(PxConcreteType::eCONVEX_MESH));
-	CHECK_EQ(ConcreteTypeForName("PxTriangleMesh"), -1);  // an interface name, never a concrete type
-	CHECK_EQ(ConcreteTypeForName("garbage"), -1);
-	CHECK_EQ(ConcreteTypeForName(nullptr), -1);
-}
-
-TEST(PhysXVersionComesFromTheFileVersionString)
-{
-	// NVIDIA's 3.4.2 release says 3.4.2.0 in the FileVersion string but 3.4.1.0 in the binary field.
-	CHECK(IsPhysX342("3.4.2.0"));
-	CHECK(!IsPhysX342("3.4.1.0"));
-	CHECK(!IsPhysX342("13.4.2.0"));
-	CHECK(!IsPhysX342(""));
-}
-
 TEST(PlausibilityRanges)
 {
 	CHECK(TolerancesPlausible(1.0f, 10.0f));

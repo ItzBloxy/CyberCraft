@@ -20,22 +20,22 @@ DumpData RunDump(px::PhysxSession& aSession, const PlayerPose& aPose, const std:
 	report.runtime = aRuntime;
 	report.player = aPose;
 
-	const px::OpenResult& open = aSession.Open();
-	report.physxFileVersion = open.physxFileVersion;
-	report.steps = open.steps;
-	report.compatibilityPass = open.pass;
-	if (!open.pass)
+	const px::CheckResult compat = aSession.Check();
+	report.physxFileVersion = compat.physxFileVersion;
+	report.modules = compat.modules;
+	report.steps = compat.steps;
+	report.compatibilityPass = compat.pass;
+	if (!compat.pass)
 	{
 		return data;  // no geometry without a passing compatibility check
 	}
 
-	uint32_t                     faults = 0;
-	const std::vector<PxScene*>  scenes = aSession.FetchScenes(faults);
-	const PxVec3                 feet(float(aPose.feet.x), float(aPose.feet.y), float(aPose.feet.z));
-	const PxVec3                 center = feet + PxVec3(0.0f, 0.0f, 8.0f);
-	const PxVec3                 halfExtents(32.0f, 32.0f, 24.0f);
-	const PxBounds3              regionBox = PxBounds3::centerExtents(center, halfExtents);
-	RegionResult                 region;
+	const std::vector<PxScene*>&                scenes = compat.scenes;
+	const PxVec3                                feet(float(aPose.feet.x), float(aPose.feet.y), float(aPose.feet.z));
+	const PxVec3                                center = feet + PxVec3(0.0f, 0.0f, 8.0f);
+	const PxVec3                                halfExtents(32.0f, 32.0f, 24.0f);
+	const PxBounds3                             regionBox = PxBounds3::centerExtents(center, halfExtents);
+	RegionResult                                region;
 	region.center = { center.x, center.y, center.z };
 	region.halfExtents = { halfExtents.x, halfExtents.y, halfExtents.z };
 	std::map<std::string, std::vector<px::Tri>> byCategory;
@@ -44,7 +44,8 @@ DumpData RunDump(px::PhysxSession& aSession, const PlayerPose& aPose, const std:
 
 	for (size_t i = 0; i < scenes.size(); ++i)
 	{
-		px::SceneDump scene = aSession.DumpScene(scenes[i], int(i), regionBox, feet, kTriangleCap - kept, faults);
+		px::SceneDump scene = aSession.DumpScene(scenes[i], int(i), regionBox, feet, kTriangleCap - kept);
+		report.censusSkipped += scene.census.skippedUnreadable + scene.census.skippedUnaudited;
 		report.censusMismatches += scene.census.mismatches;
 		region.boundsSelectedActors += scene.boundsSelected;
 		region.overlapHits += scene.overlapHits;
@@ -55,6 +56,7 @@ DumpData RunDump(px::PhysxSession& aSession, const PlayerPose& aPose, const std:
 		region.skippedPlanes += scene.stats.planes;
 		region.unknownGeometry += scene.stats.unknownGeometry;
 		region.badTriangles += scene.stats.badTriangles;
+		region.unreadable += scene.stats.unreadable;
 		region.triangleCapHit |= scene.triangleCapHit;
 		for (auto& [category, triangles] : scene.triangles)
 		{
@@ -80,7 +82,7 @@ DumpData RunDump(px::PhysxSession& aSession, const PlayerPose& aPose, const std:
 	const PxVec3 from = feet + PxVec3(0.0f, 0.0f, 1.8f);
 	for (size_t i = 0; i < scenes.size(); ++i)
 	{
-		const std::optional<float> distance = aSession.RaycastDown(scenes[i], from, 3.0f, faults);
+		const std::optional<float> distance = aSession.RaycastDown(scenes[i], from, 3.0f);
 		if (distance && (!check.rayHit || *distance < check.hitDistance))
 		{
 			check.rayHit = true;
@@ -92,7 +94,7 @@ DumpData RunDump(px::PhysxSession& aSession, const PlayerPose& aPose, const std:
 
 	report.region = region;
 	report.coordinateCheck = check;
-	report.compatibilityPass = open.pass && report.censusMismatches == 0;
+	report.compatibilityPass = compat.pass && report.censusMismatches == 0 && report.censusSkipped == 0;
 	for (auto& [name, triangles] : byCategory)
 	{
 		data.groups.push_back({ name, CategoryColor(name), std::move(triangles) });

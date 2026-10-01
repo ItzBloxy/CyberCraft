@@ -284,8 +284,13 @@ void HeightfieldTriangles(const HeightfieldView& aField, const CellRange& aCells
 }
 
 void AppendTriangles(const PxShape& aShape, const PxTransform& aActorPose, const PxBounds3& aRegion,
-                     std::vector<Tri>& aOut, AppendStats& aStats)
+                     ReadableMemory& aMemory, const ModuleBases& aBases, std::vector<Tri>& aOut, AppendStats& aStats)
 {
+	// A mesh object passes when it is readable and its vtable is the audited table of aClass or aOther.
+	const auto meshOk = [&](const void* aMesh, AuditedClass aClass, AuditedClass aOther) {
+		const ObjectCheck check = CheckObject(aMemory, aBases, aMesh);
+		return check.verdict == ObjectVerdict::Ok && (check.cls == aClass || check.cls == aOther);
+	};
 	const PxTransform pose = aActorPose * aShape.getLocalPose();
 	std::vector<Tri>  small;
 	switch (aShape.getGeometryType())
@@ -323,49 +328,104 @@ void AppendTriangles(const PxShape& aShape, const PxTransform& aActorPose, const
 	case PxGeometryType::eCONVEXMESH:
 	{
 		PxConvexMeshGeometry geometry;
-		if (aShape.getConvexMeshGeometry(geometry) && geometry.convexMesh)
+		if (!aShape.getConvexMeshGeometry(geometry) || !geometry.convexMesh)
 		{
-			const PxConvexMesh&        mesh = *geometry.convexMesh;
-			std::vector<PxHullPolygon> polygons(mesh.getNbPolygons());
-			for (PxU32 i = 0; i < PxU32(polygons.size()); ++i)
-			{
-				mesh.getPolygonData(i, polygons[i]);
-			}
-			ConvexPolygonTriangles(mesh.getVertices(), mesh.getNbVertices(), mesh.getIndexBuffer(), polygons.data(),
-			                       PxU32(polygons.size()), geometry.scale, pose, small);
+			break;
 		}
+		if (!meshOk(geometry.convexMesh, AuditedClass::ConvexMesh, AuditedClass::ConvexMesh))
+		{
+			++aStats.unreadable;
+			break;
+		}
+		const PxConvexMesh&        mesh = *geometry.convexMesh;
+		std::vector<PxHullPolygon> polygons(mesh.getNbPolygons());
+		uint32_t                   indexCount = 0;
+		for (PxU32 i = 0; i < PxU32(polygons.size()); ++i)
+		{
+			mesh.getPolygonData(i, polygons[i]);
+			indexCount = std::max<uint32_t>(indexCount, uint32_t(polygons[i].mIndexBase) + polygons[i].mNbVerts);
+		}
+		const PxVec3*  vertices = mesh.getVertices();
+		const uint32_t vertexCount = mesh.getNbVertices();
+		const PxU8*    indices = mesh.getIndexBuffer();
+		if (vertexCount == 0 || indexCount == 0)
+		{
+			break;
+		}
+		if (!aMemory.Range(vertices, size_t(vertexCount) * sizeof(PxVec3)) || !aMemory.Range(indices, indexCount))
+		{
+			++aStats.unreadable;
+			break;
+		}
+		ConvexPolygonTriangles(vertices, vertexCount, indices, polygons.data(), PxU32(polygons.size()), geometry.scale, pose, small);
 		break;
 	}
 	case PxGeometryType::eTRIANGLEMESH:
 	{
 		PxTriangleMeshGeometry geometry;
-		if (aShape.getTriangleMeshGeometry(geometry) && geometry.triangleMesh)
+		if (!aShape.getTriangleMeshGeometry(geometry) || !geometry.triangleMesh)
 		{
-			const PxTriangleMesh& mesh = *geometry.triangleMesh;
-			MeshTriangles(mesh.getVertices(), mesh.getNbVertices(), mesh.getTriangles(),
-			              mesh.getTriangleMeshFlags().isSet(PxTriangleMeshFlag::e16_BIT_INDICES), mesh.getNbTriangles(),
-			              geometry.scale, pose, aRegion, aOut, aStats.badTriangles);
+			break;
 		}
+		if (!meshOk(geometry.triangleMesh, AuditedClass::TriangleMeshBv33, AuditedClass::TriangleMeshBv34))
+		{
+			++aStats.unreadable;
+			break;
+		}
+		const PxTriangleMesh& mesh = *geometry.triangleMesh;
+		const PxVec3*         vertices = mesh.getVertices();
+		const uint32_t        vertexCount = mesh.getNbVertices();
+		const void*           triangles = mesh.getTriangles();
+		const bool            indices16 = mesh.getTriangleMeshFlags().isSet(PxTriangleMeshFlag::e16_BIT_INDICES);
+		const uint32_t        triangleCount = mesh.getNbTriangles();
+		if (vertexCount == 0 || triangleCount == 0)
+		{
+			break;
+		}
+		if (!aMemory.Range(vertices, size_t(vertexCount) * sizeof(PxVec3)) ||
+		    !aMemory.Range(triangles, size_t(triangleCount) * 3 * (indices16 ? 2 : 4)))
+		{
+			++aStats.unreadable;
+			break;
+		}
+		MeshTriangles(vertices, vertexCount, triangles, indices16, triangleCount, geometry.scale, pose, aRegion, aOut,
+		              aStats.badTriangles);
 		break;
 	}
 	case PxGeometryType::eHEIGHTFIELD:
 	{
 		PxHeightFieldGeometry geometry;
-		if (aShape.getHeightFieldGeometry(geometry) && geometry.heightField)
+		if (!aShape.getHeightFieldGeometry(geometry) || !geometry.heightField)
 		{
-			const PxHeightField& field = *geometry.heightField;
-			HeightfieldView      view;
-			view.rows = field.getNbRows();
-			view.columns = field.getNbColumns();
-			view.heightScale = geometry.heightScale;
-			view.rowScale = geometry.rowScale;
-			view.columnScale = geometry.columnScale;
-			view.sample = [&field](uint32_t aRow, uint32_t aColumn) { return field.getSample(aRow, aColumn); };
-			const CellRange cells = HeightfieldCellsUnder(view, pose, aRegion);
-			if (!cells.Empty())
-			{
-				HeightfieldTriangles(view, cells, pose, aRegion, aOut);
-			}
+			break;
+		}
+		if (!meshOk(geometry.heightField, AuditedClass::HeightField, AuditedClass::HeightField))
+		{
+			++aStats.unreadable;
+			break;
+		}
+		const PxHeightField& field = *geometry.heightField;
+		HeightfieldView      view;
+		view.rows = field.getNbRows();
+		view.columns = field.getNbColumns();
+		if (view.rows == 0 || view.columns == 0)
+		{
+			break;
+		}
+		// The samples are one array of rows x columns; getSample returns a reference into it.
+		if (!aMemory.Range(&field.getSample(0, 0), size_t(view.rows) * view.columns * sizeof(PxHeightFieldSample)))
+		{
+			++aStats.unreadable;
+			break;
+		}
+		view.heightScale = geometry.heightScale;
+		view.rowScale = geometry.rowScale;
+		view.columnScale = geometry.columnScale;
+		view.sample = [&field](uint32_t aRow, uint32_t aColumn) { return field.getSample(aRow, aColumn); };
+		const CellRange cells = HeightfieldCellsUnder(view, pose, aRegion);
+		if (!cells.Empty())
+		{
+			HeightfieldTriangles(view, cells, pose, aRegion, aOut);
 		}
 		break;
 	}

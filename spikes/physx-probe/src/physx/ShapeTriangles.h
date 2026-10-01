@@ -1,6 +1,8 @@
 #pragma once
 
+#include "physx/GameAbi.h"
 #include "physx/PxHeaders.h"
+#include "physx/Readable.h"
 
 #include <cstdint>
 #include <functional>
@@ -76,10 +78,12 @@ struct AppendStats
 	uint32_t planes = 0;
 	uint32_t unknownGeometry = 0;
 	uint32_t badTriangles = 0;
+	uint32_t unreadable = 0;  // meshes that failed their checks
 };
 
-// World-space triangles of a live shape that touch aRegion. This calls into the game's PhysX, so run it under
-// a crash guard (see RunGuarded in PhysxSession.h).
+// World-space triangles of a live shape that touch aRegion. The caller has checked the shape (see CheckObject);
+// this checks the shape's mesh the same way, and checks every array it reads for readability first. A mesh that fails
+// is skipped and counted in aStats.unreadable.
 void AppendTriangles(const physx::PxShape& aShape, const physx::PxTransform& aActorPose, const physx::PxBounds3& aRegion,
-                     std::vector<Tri>& aOut, AppendStats& aStats);
+                     ReadableMemory& aMemory, const ModuleBases& aBases, std::vector<Tri>& aOut, AppendStats& aStats);
 }
