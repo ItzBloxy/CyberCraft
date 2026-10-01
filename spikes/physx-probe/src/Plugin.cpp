@@ -3,15 +3,19 @@
 // dump; there is no automatic one. See docs/superpowers/specs/2026-10-01-physx-probe-design.md.
 #include <RED4ext/RED4ext.hpp>
 
+#include "DumpRequest.h"
 #include "DumpWriter.h"
 #include "PlayerLocator.h"
 #include "Probe.h"
+#include "physx/Checks.h"
 
 #include <Windows.h>
 
 #include <chrono>
 #include <filesystem>
 #include <format>
+#include <fstream>
+#include <optional>
 #include <string>
 
 namespace
@@ -65,7 +69,17 @@ std::pair<std::string, std::string> Timestamps()
 	         std::format("{:04}-{:02}-{:02}_{:02}-{:02}-{:02}", now.wYear, now.wMonth, now.wDay, now.wHour, now.wMinute, now.wSecond) };
 }
 
-void RunOne(const std::string& aTrigger)
+// At most the first 4 KB of a small text file; empty if it can't be read.
+std::string ReadSmallFile(const std::filesystem::path& aPath)
+{
+	std::ifstream in(aPath, std::ios::binary);
+	std::string   text(4096, '\0');
+	in.read(text.data(), std::streamsize(text.size()));
+	text.resize(size_t(in.gcount()));
+	return text;
+}
+
+void RunOne(const std::string& aTrigger, const std::optional<cpmc::Vec3d>& aPhysxOrigin)
 {
 	const auto pose = cpmc::LocatePlayer();
 	if (!pose)
@@ -73,12 +87,17 @@ void RunOne(const std::string& aTrigger)
 		Log("{} trigger: no player", aTrigger);
 		return;
 	}
+	if (aPhysxOrigin)
+	{
+		Log("{} trigger: reading PhysX at world - ({:.3f}, {:.3f}, {:.3f})", aTrigger, aPhysxOrigin->x, aPhysxOrigin->y,
+		    aPhysxOrigin->z);
+	}
 	const auto [time, folderName] = Timestamps();
 	LARGE_INTEGER start;
 	LARGE_INTEGER end;
 	LARGE_INTEGER frequency;
 	QueryPerformanceCounter(&start);
-	cpmc::DumpData data = cpmc::RunDump(g_session, *pose, aTrigger, g_runtime, time);
+	cpmc::DumpData data = cpmc::RunDump(g_session, *pose, aTrigger, g_runtime, time, aPhysxOrigin);
 	QueryPerformanceCounter(&end);
 	QueryPerformanceFrequency(&frequency);
 	data.report.mainThreadPauseMs = double(end.QuadPart - start.QuadPart) * 1000.0 / double(frequency.QuadPart);
@@ -125,8 +144,9 @@ bool OnUpdate(RED4ext::CGameApplication*)
 		}
 	}
 
-	const auto  now = Clock::now();
-	std::string trigger;
+	const auto                 now = Clock::now();
+	std::string                trigger;
+	std::optional<cpmc::Vec3d> physxOrigin;
 
 	const bool f10Down = (GetAsyncKeyState(VK_F10) & 0x8000) != 0 && GameInForeground();
 	if (f10Down && !g_f10WasDown)
@@ -142,8 +162,18 @@ bool OnUpdate(RED4ext::CGameApplication*)
 		std::error_code error;
 		if (trigger.empty() && std::filesystem::exists(request, error))
 		{
+			const std::string text = ReadSmallFile(request);
 			std::filesystem::remove(request, error);
-			trigger = "request";
+			if (const std::optional<cpmc::DumpRequest> parsed = cpmc::ParseDumpRequest(text))
+			{
+				trigger = "request";
+				physxOrigin = parsed->physxOrigin;
+			}
+			else
+			{
+				Log("dump.request ignored: expected nothing or \"origin <x> <y> <z>\", got \"{}\"",
+				    cpmc::px::SanitizeName(text.c_str(), 200));
+			}
 		}
 	}
 
@@ -157,7 +187,7 @@ bool OnUpdate(RED4ext::CGameApplication*)
 		return false;
 	}
 	g_lastDump = now;
-	RunOne(trigger);
+	RunOne(trigger, physxOrigin);
 	return false;
 }
 }
@@ -175,7 +205,7 @@ RED4EXT_C_EXPORT bool RED4EXT_CALL Main(RED4ext::v1::PluginHandle aHandle, RED4e
 		g_runtime = std::format("{}.{}.{}", unsigned(aSdk->runtime->major), aSdk->runtime->minor, aSdk->runtime->patch);
 		static RED4ext::v1::GameState running{ &OnEnter, &OnUpdate, &OnExit };
 		aSdk->gameStates->Add(aHandle, RED4ext::EGameStateType::Running, &running);
-		Log("PhysXProbe 0.2.0 loaded (game {}); F10 or {} triggers a dump", g_runtime, (g_pluginDir / "dump.request").string());
+		Log("PhysXProbe 0.3.0 loaded (game {}); F10 or {} triggers a dump", g_runtime, (g_pluginDir / "dump.request").string());
 		break;
 	}
 	case RED4ext::v1::EMainReason::Unload:
@@ -189,7 +219,7 @@ RED4EXT_C_EXPORT void RED4EXT_CALL Query(RED4ext::v1::PluginInfo* aInfo)
 {
 	aInfo->name = L"PhysXProbe";
 	aInfo->author = L"Cyberpunk-Minecraft";
-	aInfo->version = RED4EXT_V1_SEMVER(0, 2, 0);
+	aInfo->version = RED4EXT_V1_SEMVER(0, 3, 0);
 	aInfo->runtime = RED4EXT_V1_RUNTIME_VERSION_LATEST;
 	aInfo->sdk = RED4EXT_V1_SDK_VERSION_CURRENT;
 }

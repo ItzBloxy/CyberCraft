@@ -21,7 +21,8 @@ TEST(ReportWithoutGeometryHasNulls)
 	report.modules.push_back({ "PhysX3Common_x64.dll", 0, 0, false });
 	report.steps.push_back({ 1, "build", false, "PhysX3Common_x64.dll is not loaded" });
 	const std::string json = cpmc::ReportToJson(report);
-	CHECK(Contains(json, "\"probeVersion\": \"0.2.0\""));
+	CHECK(Contains(json, "\"probeVersion\": \"0.3.0\""));
+	CHECK(Contains(json, "\"physxOrigin\": null"));
 	CHECK(Contains(json, "\"trigger\": \"request\""));
 	CHECK(Contains(json, "\"runtime\": \"2.3.1\""));
 	CHECK(Contains(json, "\"name\": \"PhysX3_x64.dll\""));
@@ -57,7 +58,10 @@ TEST(ReportWithGeometryHasItsSections)
 	scene.skippedUnreadable = 2;
 	scene.skippedUnaudited = 3;
 	scene.mismatches = 1;
+	scene.staticCenters = { 2, { -10.0, 5.0, 0.0 }, { 1.0, 6.0, 2.0 }, { 12.0, 7.0, 4.0 } };
+	scene.capsules.push_back({ "0x1234", { 1.0, 2.0, 3.0 }, { 0.0f, 0.0f, 1.0f }, 0.5f, 0.75f, "kinematic", "1:0:0:0", "0:0:0:0" });
 	report.scenes.push_back(scene);
+	report.physxOrigin = cpmc::Vec3d{ 100.0, -200.0, 0.5 };
 	cpmc::RegionResult region;
 	region.triangles = 42;
 	region.trianglesByCategory["static_trimesh"] = 42;
@@ -85,4 +89,13 @@ TEST(ReportWithGeometryHasItsSections)
 	CHECK(Contains(json, "\"hitDistance\": 1.75"));
 	CHECK(Contains(json, "\"nearestCapsule\": null"));
 	CHECK(Contains(json, "\"obj\": \"collision.obj\""));
+	CHECK(Contains(json, "\"physxOrigin\": [\n    100,\n    -200,\n    0.5\n  ]"));
+	CHECK(Contains(json, "\"staticCenters\": {\n        \"count\": 2,\n        \"min\": [\n          -10,"));
+	CHECK(Contains(json, "\"dynamicCenters\": {\n        \"count\": 0,\n        \"min\": null,\n        \"median\": null,"));
+	CHECK(Contains(json, "\"actor\": \"0x1234\""));
+	CHECK(Contains(json, "\"radius\": 0.5"));
+	CHECK(Contains(json, "\"halfHeight\": 0.75"));
+	CHECK(Contains(json, "\"kind\": \"kinematic\""));
+	CHECK(Contains(json, "\"queryFilter\": \"1:0:0:0\""));
+	CHECK(Contains(json, "\"simulationFilter\": \"0:0:0:0\""));
 }

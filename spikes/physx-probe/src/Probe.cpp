@@ -10,8 +10,25 @@ using namespace physx;
 
 namespace cpmc
 {
+PxVec3 PhysxFromWorld(const Vec3d& aWorld, const std::optional<Vec3d>& aPhysxOrigin)
+{
+	const Vec3d origin = aPhysxOrigin.value_or(Vec3d{});
+	return PxVec3(float(aWorld.x - origin.x), float(aWorld.y - origin.y), float(aWorld.z - origin.z));
+}
+
+void MoveToWorld(std::vector<px::Tri>& aTriangles, const Vec3d& aPhysxOrigin)
+{
+	for (px::Tri& tri : aTriangles)
+	{
+		for (PxVec3& v : tri.v)
+		{
+			v = PxVec3(float(v.x + aPhysxOrigin.x), float(v.y + aPhysxOrigin.y), float(v.z + aPhysxOrigin.z));
+		}
+	}
+}
+
 DumpData RunDump(px::PhysxSession& aSession, const PlayerPose& aPose, const std::string& aTrigger,
-                 const std::string& aRuntime, const std::string& aTime)
+                 const std::string& aRuntime, const std::string& aTime, const std::optional<Vec3d>& aPhysxOrigin)
 {
 	DumpData    data;
 	DumpReport& report = data.report;
@@ -19,6 +36,7 @@ DumpData RunDump(px::PhysxSession& aSession, const PlayerPose& aPose, const std:
 	report.trigger = aTrigger;
 	report.runtime = aRuntime;
 	report.player = aPose;
+	report.physxOrigin = aPhysxOrigin;
 
 	const px::CheckResult compat = aSession.Check();
 	report.physxFileVersion = compat.physxFileVersion;
@@ -30,13 +48,14 @@ DumpData RunDump(px::PhysxSession& aSession, const PlayerPose& aPose, const std:
 		return data;  // no geometry without a passing compatibility check
 	}
 
+	// The region, the ray and the nearest capsule work in PhysX coordinates; the report and the OBJ stay in world ones.
 	const std::vector<PxScene*>&                scenes = compat.scenes;
-	const PxVec3                                feet(float(aPose.feet.x), float(aPose.feet.y), float(aPose.feet.z));
+	const PxVec3                                feet = PhysxFromWorld(aPose.feet, aPhysxOrigin);
 	const PxVec3                                center = feet + PxVec3(0.0f, 0.0f, 8.0f);
 	const PxVec3                                halfExtents(32.0f, 32.0f, 24.0f);
 	const PxBounds3                             regionBox = PxBounds3::centerExtents(center, halfExtents);
 	RegionResult                                region;
-	region.center = { center.x, center.y, center.z };
+	region.center = { aPose.feet.x, aPose.feet.y, aPose.feet.z + 8.0 };
 	region.halfExtents = { halfExtents.x, halfExtents.y, halfExtents.z };
 	std::map<std::string, std::vector<px::Tri>> byCategory;
 	std::optional<NearestCapsule>               nearest;
@@ -97,6 +116,10 @@ DumpData RunDump(px::PhysxSession& aSession, const PlayerPose& aPose, const std:
 	report.compatibilityPass = compat.pass && report.censusMismatches == 0 && report.censusSkipped == 0;
 	for (auto& [name, triangles] : byCategory)
 	{
+		if (aPhysxOrigin)
+		{
+			MoveToWorld(triangles, *aPhysxOrigin);
+		}
 		data.groups.push_back({ name, CategoryColor(name), std::move(triangles) });
 	}
 	report.objWritten = !data.groups.empty();

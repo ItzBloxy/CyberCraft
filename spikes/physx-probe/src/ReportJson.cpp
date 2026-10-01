@@ -3,6 +3,7 @@
 #include "Json.h"
 
 #include <format>
+#include <utility>
 
 namespace cpmc
 {
@@ -25,6 +26,36 @@ void Counts(JsonWriter& aJson, const Tally& aTally)
 	{
 		aJson.Key(name).UInt(count);
 	}
+	aJson.EndObject();
+}
+
+// The minimum, median and maximum are null when there are no points.
+void Points(JsonWriter& aJson, const Spread& aSpread)
+{
+	aJson.BeginObject();
+	aJson.Key("count").UInt(aSpread.count);
+	for (const auto& [key, value] : { std::pair{ "min", &aSpread.min }, std::pair{ "median", &aSpread.median },
+	                                  std::pair{ "max", &aSpread.max } })
+	{
+		aJson.Key(key);
+		aSpread.count ? Vec(aJson, *value) : void(aJson.Null());
+	}
+	aJson.EndObject();
+}
+
+void Capsule(JsonWriter& aJson, const CapsuleSample& aCapsule)
+{
+	aJson.BeginObject();
+	aJson.Key("actor").String(aCapsule.actor);
+	aJson.Key("center");
+	Vec(aJson, aCapsule.center);
+	aJson.Key("axis");
+	Vec(aJson, aCapsule.axis);
+	aJson.Key("radius").Number(aCapsule.radius);
+	aJson.Key("halfHeight").Number(aCapsule.halfHeight);
+	aJson.Key("kind").String(aCapsule.kind);
+	aJson.Key("queryFilter").String(aCapsule.queryFilter);
+	aJson.Key("simulationFilter").String(aCapsule.simulationFilter);
 	aJson.EndObject();
 }
 
@@ -88,6 +119,16 @@ void Scene(JsonWriter& aJson, const SceneCensus& aScene)
 	aJson.Key("unauditedVtable").UInt(aScene.skippedUnaudited).EndObject();
 	aJson.Key("mismatches").UInt(aScene.mismatches);
 	aJson.Key("censusMs").Number(aScene.censusMs);
+	aJson.Key("staticCenters");
+	Points(aJson, aScene.staticCenters);
+	aJson.Key("dynamicCenters");
+	Points(aJson, aScene.dynamicCenters);
+	aJson.Key("capsules").BeginArray();
+	for (const CapsuleSample& capsule : aScene.capsules)
+	{
+		Capsule(aJson, capsule);
+	}
+	aJson.EndArray();
 	aJson.EndObject();
 }
 
@@ -165,6 +206,8 @@ std::string ReportToJson(const DumpReport& aReport)
 	json.EndObject();
 	json.Key("player");
 	aReport.player ? Player(json, *aReport.player) : void(json.Null());
+	json.Key("physxOrigin");
+	aReport.physxOrigin ? Vec(json, *aReport.physxOrigin) : void(json.Null());
 	json.Key("compatibility").BeginObject();
 	json.Key("pass").Bool(aReport.compatibilityPass);
 	json.Key("steps").BeginArray();

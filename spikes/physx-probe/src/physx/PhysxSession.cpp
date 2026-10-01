@@ -77,6 +77,7 @@ constexpr size_t   kMaxNameLength = 128;
 constexpr size_t   kOverlapBuffer = 8192;
 constexpr size_t   kOverlapCap = 1'000'000;
 constexpr uint64_t kMaxSkipsPerScene = 100;
+constexpr size_t   kMaxCapsules = 4096;
 constexpr float    kCapsuleSearch = 1.5f;
 constexpr size_t   kActorBytes = 24;  // the vtable pointer, the type ID and base flags, and userData
 
@@ -609,16 +610,26 @@ SceneDump PhysxSession::DumpScene(PxScene* aScene, int aIndex, const PxBounds3& 
 		return dump;
 	}
 
-	// Region selection by actor bounds.
+	// Region selection by actor bounds, noting where every actor is.
 	t0 = NowMs();
 	std::vector<std::pair<const PxActor*, AuditedClass>> selected;
+	std::vector<Vec3d>                                   staticCenters;
+	std::vector<Vec3d>                                   dynamicCenters;
 	for (const auto& [actor, cls] : usable)
 	{
-		if (actor->getWorldBounds(1.0f).intersects(aRegion))
+		const PxBounds3 bounds = actor->getWorldBounds(1.0f);
+		if (bounds.intersects(aRegion))
 		{
 			selected.emplace_back(actor, cls);
 		}
+		if (FiniteBounds(bounds))
+		{
+			const PxVec3 center = bounds.getCenter();
+			(cls == AuditedClass::RigidStatic ? staticCenters : dynamicCenters).push_back({ center.x, center.y, center.z });
+		}
 	}
+	census.staticCenters = SpreadOf(staticCenters);
+	census.dynamicCenters = SpreadOf(dynamicCenters);
 	dump.boundsSelected = uint32_t(selected.size());
 	dump.selectMs = NowMs() - t0;
 
@@ -669,6 +680,38 @@ SceneDump PhysxSession::DumpScene(PxScene* aScene, int aIndex, const PxBounds3& 
 	}
 	std::erase_if(dump.triangles, [](const auto& aEntry) { return aEntry.second.empty(); });
 	dump.extractMs = NowMs() - t0;
+
+	// Every capsule on a dynamic actor: character controllers are among them.
+	for (const auto& [actor, cls] : usable)
+	{
+		if (cls != AuditedClass::RigidDynamic || census.capsules.size() >= kMaxCapsules)
+		{
+			continue;
+		}
+		const auto&       rigid = static_cast<const PxRigidActor&>(*actor);
+		const PxTransform pose = rigid.getGlobalPose();
+		const char*       kind = ActorKind(*actor, cls);
+		for (const PxShape* shape : ShapesOf(rigid))
+		{
+			const ObjectCheck check = CheckObject(memory_, build_->bases, shape);
+			PxCapsuleGeometry geometry;
+			if (check.verdict != ObjectVerdict::Ok || check.cls != AuditedClass::Shape ||
+			    shape->getGeometryType() != PxGeometryType::eCAPSULE || !shape->getCapsuleGeometry(geometry))
+			{
+				continue;
+			}
+			const PxTransform world = pose * shape->getLocalPose();
+			const PxVec3      axis = world.q.rotate(PxVec3(1.0f, 0.0f, 0.0f));
+			census.capsules.push_back({ std::format("{}", static_cast<const void*>(actor)),
+			                            { world.p.x, world.p.y, world.p.z },
+			                            { axis.x, axis.y, axis.z },
+			                            geometry.radius,
+			                            geometry.halfHeight,
+			                            kind,
+			                            FilterKey(shape->getQueryFilterData()),
+			                            FilterKey(shape->getSimulationFilterData()) });
+		}
+	}
 
 	aScene->unlockRead();
 	return dump;

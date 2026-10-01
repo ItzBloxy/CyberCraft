@@ -13,6 +13,29 @@ namespace cpmc
 {
 using Tally = std::map<std::string, uint64_t>;
 
+// Where a set of points lies: the minimum, median and maximum of each axis. The median of an even count is the
+// lower of the two middle values.
+struct Spread
+{
+	uint64_t count = 0;
+	Vec3d min;
+	Vec3d median;
+	Vec3d max;
+};
+
+// A capsule on a dynamic or kinematic actor, in PhysX coordinates. Character controllers are capsules like this.
+struct CapsuleSample
+{
+	std::string actor;  // the actor's address, which identifies it across dumps
+	Vec3d center;
+	Vec3f axis;  // the capsule's axis (its local X)
+	float radius = 0.0f;
+	float halfHeight = 0.0f;
+	std::string kind;  // "kinematic" or "dynamic"
+	std::string queryFilter;
+	std::string simulationFilter;
+};
+
 struct CameraPose
 {
 	Vec3d position;
@@ -67,6 +90,9 @@ struct SceneCensus
 	uint64_t skippedUnaudited = 0;   // objects whose vtable isn't an audited table
 	uint64_t mismatches = 0;         // type IDs that disagree with the vtable, meshes that don't fit their shape
 	double censusMs = 0.0;
+	Spread staticCenters;                 // centres of static actors' bounds, in PhysX coordinates; planes left out
+	Spread dynamicCenters;                // the same for dynamic actors
+	std::vector<CapsuleSample> capsules;  // capsules on dynamic actors
 };
 
 struct RegionResult
@@ -107,13 +133,14 @@ struct CoordinateCheck
 
 struct DumpReport
 {
-	std::string probeVersion = "0.2.0";
+	std::string probeVersion = "0.3.0";
 	std::string time;
 	std::string trigger;
 	std::string runtime;
 	std::string physxFileVersion;
 	std::vector<ModuleReport> modules;
 	std::optional<PlayerPose> player;
+	std::optional<Vec3d> physxOrigin;  // where PhysX's origin was taken to be, in world coordinates (from dump.request)
 	bool compatibilityPass = false;
 	std::vector<CompatStep> steps;
 	uint64_t censusSkipped = 0;

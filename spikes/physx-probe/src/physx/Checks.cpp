@@ -130,4 +130,43 @@ Tally TrimTally(const Tally& aTally, size_t aKeep)
 	}
 	return kept;
 }
+
+Spread SpreadOf(const std::vector<Vec3d>& aPoints)
+{
+	Spread spread;
+	spread.count = aPoints.size();
+	if (aPoints.empty())
+	{
+		return spread;
+	}
+	std::vector<double> values(aPoints.size());
+	const auto          axis = [&](double Vec3d::*aAxis, double& aMin, double& aMedian, double& aMax) {
+		std::transform(aPoints.begin(), aPoints.end(), values.begin(), [&](const Vec3d& aPoint) { return aPoint.*aAxis; });
+		const auto middle = values.begin() + (values.size() - 1) / 2;
+		std::nth_element(values.begin(), middle, values.end());
+		aMedian = *middle;
+		const auto [lowest, highest] = std::minmax_element(values.begin(), values.end());
+		aMin = *lowest;
+		aMax = *highest;
+	};
+	axis(&Vec3d::x, spread.min.x, spread.median.x, spread.max.x);
+	axis(&Vec3d::y, spread.min.y, spread.median.y, spread.max.y);
+	axis(&Vec3d::z, spread.min.z, spread.median.z, spread.max.z);
+	return spread;
+}
+
+bool FiniteBounds(const PxBounds3& aBounds)
+{
+	constexpr float kMaxExtent = 100'000.0f;
+	for (unsigned axis = 0; axis < 3; ++axis)
+	{
+		const float lo = aBounds.minimum[axis];
+		const float hi = aBounds.maximum[axis];
+		if (!std::isfinite(lo) || !std::isfinite(hi) || lo > hi || hi - lo > kMaxExtent)
+		{
+			return false;
+		}
+	}
+	return true;
+}
 }

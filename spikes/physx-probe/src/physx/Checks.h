@@ -5,6 +5,7 @@
 
 #include <cstddef>
 #include <string>
+#include <vector>
 
 // The pure parts of the compatibility check and the census bookkeeping. No PhysX calls happen here.
 namespace cpmc::px
@@ -36,4 +37,11 @@ std::string SanitizeName(const char* aName, size_t aMaxLength = 128);
 
 // Keeps the aKeep most common entries (ties by name) and folds the rest into "other".
 Tally TrimTally(const Tally& aTally, size_t aKeep = 64);
+
+// The spread of a set of points (see Spread).
+Spread SpreadOf(const std::vector<Vec3d>& aPoints);
+
+// Bounds that place an actor somewhere: not empty, finite, and under 100 km across. A plane's bounds are
+// effectively infinite, so they don't.
+bool FiniteBounds(const physx::PxBounds3& aBounds);
 }

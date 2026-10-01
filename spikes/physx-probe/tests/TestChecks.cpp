@@ -64,3 +64,33 @@ TEST(TrimTallyKeepsTheMostCommon)
 	CHECK_EQ(trimmed.at("other"), uint64_t(2));
 	CHECK_EQ(TrimTally(tally, 10).size(), size_t(4));  // nothing to fold, so no "other"
 }
+
+TEST(SpreadGivesTheMinimumMedianAndMaximumOfEachAxis)
+{
+	const cpmc::Spread spread = SpreadOf({ { 1.0, 30.0, -5.0 }, { 3.0, 10.0, -1.0 }, { 2.0, 20.0, -3.0 } });
+	CHECK_EQ(spread.count, uint64_t(3));
+	CHECK_EQ(spread.min.x, 1.0);
+	CHECK_EQ(spread.min.y, 10.0);
+	CHECK_EQ(spread.min.z, -5.0);
+	CHECK_EQ(spread.median.x, 2.0);
+	CHECK_EQ(spread.median.y, 20.0);
+	CHECK_EQ(spread.median.z, -3.0);
+	CHECK_EQ(spread.max.x, 3.0);
+	CHECK_EQ(spread.max.y, 30.0);
+	CHECK_EQ(spread.max.z, -1.0);
+}
+
+TEST(SpreadOfAnEvenCountTakesTheLowerMiddle)
+{
+	CHECK_EQ(SpreadOf({ { 4.0, 0.0, 0.0 }, { 1.0, 0.0, 0.0 }, { 3.0, 0.0, 0.0 }, { 2.0, 0.0, 0.0 } }).median.x, 2.0);
+	CHECK_EQ(SpreadOf({}).count, uint64_t(0));
+}
+
+TEST(FiniteBoundsLeaveOutPlanesAndEmptyActors)
+{
+	CHECK(FiniteBounds(PxBounds3(PxVec3(-1.0f), PxVec3(1.0f))));
+	CHECK(FiniteBounds(PxBounds3(PxVec3(-3000.0f, 2000.0f, -50.0f), PxVec3(-2900.0f, 2400.0f, 300.0f))));
+	CHECK(!FiniteBounds(PxBounds3(PxVec3(-PX_MAX_BOUNDS_EXTENTS), PxVec3(PX_MAX_BOUNDS_EXTENTS))));  // a plane's
+	CHECK(!FiniteBounds(PxBounds3::empty()));  // an actor without shapes
+	CHECK(!FiniteBounds(PxBounds3(PxVec3(0.0f), PxVec3(std::nanf(""), 0.0f, 0.0f))));
+}

@@ -63,8 +63,9 @@ public:
 	CheckResult Check();
 
 	// Census, region selection, overlap query and triangle extraction, all under the scene's read lock. aScene must
-	// come from this dump's Check(). aFeet is V's feet (world), used for the nearest capsule. At most aTriangleBudget
-	// triangles are kept. After 100 skipped objects the census stops and the region work is left out.
+	// come from this dump's Check(). aRegion and aFeet (V's feet, used for the nearest capsule) are in PhysX
+	// coordinates. At most aTriangleBudget triangles are kept. The census also notes where the scene's actors are and
+	// every capsule on a dynamic actor. After 100 skipped objects the census stops and the region work is left out.
 	SceneDump DumpScene(physx::PxScene* aScene, int aIndex, const physx::PxBounds3& aRegion, const physx::PxVec3& aFeet,
 	                    uint64_t aTriangleBudget);
 

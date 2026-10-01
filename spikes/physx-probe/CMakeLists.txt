@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.25)
 
-project(PhysXProbe VERSION 0.2.0 LANGUAGES CXX)
+project(PhysXProbe VERSION 0.3.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -27,6 +27,7 @@ add_library(probe_core STATIC
 	src/ObjWriter.cpp
 	src/ReportJson.cpp
 	src/DumpWriter.cpp
+	src/DumpRequest.cpp
 	src/physx/PhysxSession.cpp
 	src/Probe.cpp
 )
@@ -67,6 +68,8 @@ add_executable(probe_tests
 	tests/TestAudit.cpp
 	tests/TestReadable.cpp
 	tests/TestGameAbi.cpp
+	tests/TestDumpRequest.cpp
+	tests/TestProbe.cpp
 )
 target_link_libraries(probe_tests PRIVATE probe_core)
 add_test(NAME probe_tests COMMAND probe_tests)
