@@ -12929,7 +12929,7 @@ Note what you see as you go: Step 9 records it. These commands come back again a
 **Files:**
 - Create: `docs/spikes/2026-10-01-block-render-results.md`
 
-- [ ] **Step 1: Deploy (the game must not be running)**
+- [x] **Step 1: Deploy (the game must not be running)**
 
 ```bash
 tasklist | grep -i -c "cyberpunk2077.exe"
@@ -12950,7 +12950,7 @@ Expected:
 
 The second configure clears `CP2077_DIR` again.
 
-- [ ] **Step 2: Build the atlas into the plugin's folder**
+- [x] **Step 2: Build the atlas into the plugin's folder**
 
 ```bash
 cd /d/Cyberpunk-Minecraft/spikes/block-render \
@@ -12958,7 +12958,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render \
 ```
 Expected: `atlas: 256 x 64, 62 sprites, 50 blocks, written to E:/Cyberpunk2077/red4ext/plugins/BlockRender`.
 
-- [ ] **Step 3: Loading, at the main menu**
+- [x] **Step 3: Loading, at the main menu**
 
 Ask the user to launch Cyberpunk 2077 from Epic, wait at the main menu without loading a save, and say when they're
 there. Then read the whole log, and the status:
@@ -12990,7 +12990,7 @@ Ask the user two things:
 **If the game crashed or froze,** stop here. Read the log and the newest folder in
 `%LOCALAPPDATA%\REDEngine\ReportQueue\`, and record what happened in Step 9.
 
-- [ ] **Step 4: A frame log at the main menu**
+- [x] **Step 4: A frame log at the main menu**
 
 Send `log`, wait 3 seconds, and read the log's newest lines. Expected: `request: log: armed for the next two frames`,
 then `request: log: written to logs\<time>\frame.json (...)`. Then run the summary. Note:
@@ -12998,7 +12998,7 @@ then `request: log: written to logs\<time>\frame.json (...)`. Then run the summa
 - each `present` event's queue, which should end with `(the main queue)`;
 - which threads start frames, and how many lists the menu's frames have.
 
-- [ ] **Step 5: A frame log in free roam, standing still**
+- [x] **Step 5: A frame log in free roam, standing still**
 
 Ask the user four things:
 1. Load a save that's in free roam.
@@ -13038,7 +13038,7 @@ Then check the gates for step 2. The renderer relies on each of them:
   `D32_FLOAT`), and it gives a state;
 - **legacy barriers only:** `enhancedBarriers` is 0 in the totals.
 
-- [ ] **Step 6: The dumps**
+- [x] **Step 6: The dumps**
 
 **If `enhancedBarriers` wasn't 0,** don't dump: the dumps move resources with legacy barriers. Note it, and go to
 Step 7.
@@ -13061,7 +13061,7 @@ G-buffer target holds:
 
 Note the stencil values too.
 
-- [ ] **Step 7: A frame log while turning**
+- [x] **Step 7: A frame log while turning**
 
 Ask the user to turn slowly with the mouse, and keep turning until you say. Send `log`, wait 3 seconds, tell the user
 they can stop, and run the summary. Note:
@@ -13070,7 +13070,7 @@ they can stop, and run the summary. Note:
   small difference is expected while turning;
 - whether the order of events matches Step 5's.
 
-- [ ] **Step 8: Across a grid line, if Streamline's position was offset**
+- [x] **Step 8: Across a grid line, if Streamline's position was offset**
 
 If Step 5 found Streamline's camera position offset from the script camera's:
 1. Ask the user to walk across one of the 1,024 m grid lines. The PhysX probe's overlay shows how far each line is.
@@ -13079,7 +13079,7 @@ If Step 5 found Streamline's camera position offset from the script camera's:
 
 If there was no offset, skip this step.
 
-- [ ] **Step 9: Record step 1's results, and commit**
+- [x] **Step 9: Record step 1's results, and commit**
 
 Write `docs/spikes/2026-10-01-block-render-results.md` with these sections, filled from the logs, the summaries, the
 dumps and the user's screenshots:
@@ -13128,7 +13128,7 @@ The commands are Task 29's.
 **Files:**
 - Modify: `docs/spikes/2026-10-01-block-render-results.md`
 
-- [ ] **Step 1: Set the render origin, if step 1 found an offset**
+- [x] **Step 1: Set the render origin, if step 1 found an offset**
 
 If Streamline's camera position was offset from the script camera's by a fixed amount, the renderer's render origin
 is the script camera's position minus Streamline's. Send each of these, a value at a time, two seconds apart:
@@ -13137,7 +13137,7 @@ is the script camera's position minus Streamline's. Send each of these, a value 
 
 If there was no offset, skip this step.
 
-- [ ] **Step 2: Switch drawing on**
+- [x] **Step 2: Switch drawing on**
 
 Send `mode present`, wait 3 seconds, then read the log and the status. Expected:
 - in the log: `request: mode present`, then `atlas: 256 x 64, 5 levels, 50 blocks`, `renderer: ready` and
@@ -13147,7 +13147,7 @@ Send `mode present`, wait 3 seconds, then read the log and the status. Expected:
 
 If frames go on being skipped, the status says why.
 
-- [ ] **Step 3: Place a cube**
+- [x] **Step 3: Place a cube**
 
 Ask the user to face an open patch of ground, a few metres away, stand still, and say when they're there. Send
 `place cube`, and read the log's newest lines. Expected: `request: placed cube: 1 blocks, Minecraft x y z to x y z`.
@@ -13159,7 +13159,7 @@ Ask the user what they see, and for a screenshot. The cube should be:
 - textured like Minecraft's stone;
 - with its top brightest and its sides darker.
 
-- [ ] **Step 4: Step 2's pass criteria**
+- [x] **Step 4: Step 2's pass criteria**
 
 Ask the user to:
 - walk around the cube;
@@ -13178,7 +13178,7 @@ Read the status while the user moves. Note:
 - `late camera`;
 - `gpu=` and `frame=`.
 
-- [ ] **Step 5: The sampler, to check the textures**
+- [x] **Step 5: The sampler, to check the textures**
 
 Ask the user to face open ground again, and say when they're there. Send `place sampler`. Then ask for a
 screenshot, close enough to see the textures. Check:
@@ -13186,16 +13186,16 @@ screenshot, close enough to see the textures. Check:
 - glass and leaves are cut out, showing what's behind them;
 - each face's brightness matches Minecraft's: top 1.0, north and south 0.8, east and west 0.6.
 
-- [ ] **Step 6: The cost**
+- [x] **Step 6: The cost**
 
 With the blocks in view, note the status's `gpu=` and `frame=` lines. Then send `mode off`, wait 3 seconds, and note
 `frame=` again.
 
-- [ ] **Step 7: Clean up**
+- [x] **Step 7: Clean up**
 
 Send `clear`, then `mode off`, two seconds apart. Expected: `request: cleared`, then `request: mode off`.
 
-- [ ] **Step 8: Record step 2's results, and commit**
+- [x] **Step 8: Record step 2's results, and commit**
 
 Add a section to `docs/spikes/2026-10-01-block-render-results.md`:
 - **Verdict for step 2:** pass or fail, in one sentence.
