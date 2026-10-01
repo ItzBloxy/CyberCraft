@@ -3847,7 +3847,7 @@ their border. Only the main thread touches the world.
 - Create: `src/world/BlockWorld.h`, `src/world/BlockWorld.cpp`, `tests/TestBlockWorld.cpp`
 - Modify: `CMakeLists.txt`
 
-- [ ] **Step 1: Write the failing test, `tests/TestBlockWorld.cpp`**
+- [x] **Step 1: Write the failing test, `tests/TestBlockWorld.cpp`**
 
 ```cpp
 #include "Harness.h"
@@ -3927,7 +3927,7 @@ TEST(BlockWorldClearEmptiesEverySection)
 }
 ```
 
-- [ ] **Step 2: Edit `CMakeLists.txt` to add the test**
+- [x] **Step 2: Edit `CMakeLists.txt` to add the test**
 
 ```cmake
 	tests/TestAtlas.cpp
@@ -3939,7 +3939,7 @@ TEST(BlockWorldClearEmptiesEverySection)
 )
 ```
 
-- [ ] **Step 3: Build; it must fail**
+- [x] **Step 3: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -3948,7 +3948,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `fatal error C1083: Cannot open include file: 'world/BlockWorld.h'`.
 
-- [ ] **Step 4: Write `src/world/BlockWorld.h`**
+- [x] **Step 4: Write `src/world/BlockWorld.h`**
 
 ```cpp
 #pragma once
@@ -4018,7 +4018,7 @@ private:
 }
 ```
 
-- [ ] **Step 5: Write `src/world/BlockWorld.cpp`**
+- [x] **Step 5: Write `src/world/BlockWorld.cpp`**
 
 ```cpp
 #include "world/BlockWorld.h"
@@ -4110,7 +4110,7 @@ const BlockWorld::Section* BlockWorld::Find(const SectionPos& aSection) const
 }
 ```
 
-- [ ] **Step 6: Edit `CMakeLists.txt` to add the source**
+- [x] **Step 6: Edit `CMakeLists.txt` to add the source**
 
 ```cmake
 	src/render/Atlas.cpp
@@ -4122,7 +4122,7 @@ const BlockWorld::Section* BlockWorld::Find(const SectionPos& aSection) const
 )
 ```
 
-- [ ] **Step 7: Build and run the tests; they must pass**
+- [x] **Step 7: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -4132,7 +4132,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `56 test(s), 0 failure(s)`.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
