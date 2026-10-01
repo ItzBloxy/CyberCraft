@@ -355,8 +355,11 @@ spikes/block-render/
 
 - **Which lists:** it follows each command list from `Reset` to `Close`. A list whose `Reset` came before tracking
   started is marked untracked, and nothing is ever drawn into it.
-- **When:** it runs only while a log or a dump needs it, step 3's drawing is on, or `set tracking 1` holds it. Run 3
-  measured no cost from it, but it stays off when nothing needs it.
+- **When:** every list is tracked only while a log or a dump needs it, or `set tracking 1` holds it. Step 3's drawing
+  watches just the DLSS evaluate's lists, which are tracked from their `Reset` while the rest aren't.
+- **What it costs while off:** the hooks count the tracked lists that are recording. While none is, a hooked call
+  costs one atomic read, not a lookup. Run 4 measured the plugin doubling the frame time with drawing off, and the
+  lookup under the tracker's lock on every call was the likeliest cause.
 - **What it keeps:**
   - the bound render targets and depth, with their resources;
   - each resource's state after the last barrier recorded in the list. A resource in the middle of a split barrier
@@ -647,7 +650,7 @@ checked once a second. Each file holds one command. Unknown commands are logged 
 | `place field <n>` | Adds rolling terrain of about n blocks (with step 3) |
 | `clear` | Removes all blocks |
 | `reload` | Recompiles the shaders |
-| `set <name> <value>` | Changes a tuning value. Step 2 has `ao`, `brightness`, `tolerance` (the depth test's), `cull`, `origin.x`, `origin.y` and `origin.z` (the render origin), and `tracking` (1 holds command list tracking on, to measure it). Step 3 adds `exposure`, `jittersign` and `mvsign`, and step 4 the G-buffer encoding values step 1 finds |
+| `set <name> <value>` | Changes a tuning value. Step 2 has `ao`, `brightness`, `tolerance` (the depth test's), `cull`, `origin.x`, `origin.y` and `origin.z` (the render origin), and `tracking` (1 holds command list tracking on, to measure it). Step 3 adds `exposure`, `jittersign` and `mvsign`, and `hooks.lists`, `hooks.views`, `hooks.submit`, `hooks.present` and `hooks.sl` (0 makes that group of hooks pass straight through, to measure what it costs). Step 4 adds the G-buffer encoding values step 1 finds |
 
 ## The frame log
 
@@ -864,6 +867,13 @@ The second run, steps 1 and 2, led to Task 31:
 - **The G-buffer dump:** the game records the pass over many lists, so each set of targets keeps one copy, which every
   pass records again.
 - **Tracking:** it runs only while a log or a dump needs it.
+
+The fourth run, step 3, led to Tasks 45 and 46:
+- **What the hooks cost:** with drawing off, the plugin doubled the frame time (26.5 ms against 13.6 ms without it).
+  `set hooks.<group> 0` makes a group of hooks pass straight through, to measure each.
+- **Tracking while it's off** costs one atomic read per hooked call, not a lookup.
+- **Step 3's drawing tracks only the DLSS lists,** not every list.
+- **The exposure** starts at 2.5, the value the run settled on.
 
 What else the runs found goes in the results, `docs/spikes/2026-10-01-block-render-results.md`.
 

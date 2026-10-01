@@ -31,8 +31,8 @@ Minecraft blocks on the finished frame. Then run spike 3's first two steps in th
 
 **Spec:** [docs/superpowers/specs/2026-10-01-block-render-design.md](../specs/2026-10-01-block-render-design.md)
 
-**Parts 2 and 3:** Part 2 is step 3 (blocks before DLSS): Tasks 35 to 45, which Task 34 planned from step 1's
-findings. Part 3 is step 4 (blocks in the G-buffer), which Task 45 plans once step 3 has run in the game.
+**Parts 2 and 3:** Part 2 is step 3 (blocks before DLSS): Tasks 35 to 48, which Task 34 planned from step 1's
+findings. Part 3 is step 4 (blocks in the G-buffer), which Task 48 plans once step 3 has run in the game.
 
 ---
 
@@ -14305,7 +14305,8 @@ this plan. As in Part 1, compile and test their code in a scratch clone first, a
 
 ## Part 2: step 3, blocks before DLSS
 
-Tasks 35 to 45, planned after Part 1 closed (see "How Part 1 went").
+Tasks 35 to 48, planned after Part 1 closed (see "How Part 1 went"). Run 4 found that the hooks cost a lot even
+with drawing off, so Tasks 45 to 47 were added to find and fix that before Part 2 closes.
 
 **Goal:** draw the blocks into the frame before DLSS. DLSS then upscales them, and the game tone maps, blooms and
 grades them with the scene, under the HUD and the menus. Then run step 3 in the game with the user.
@@ -14327,15 +14328,15 @@ grades them with the scene, under the HUD and the menus. Then run step 3 in the 
   should test first.
 
 **Already verified:** as in Part 1, all the code was compiled and tested in the scratch clone first. Tasks 35 to 43
-were then replayed in a fresh clone from the end of Part 1, applying every step as written and checking every
-expected result:
+were then replayed in a fresh clone from the end of Part 1, and Tasks 45 and 46 from the end of Task 44, applying
+every step as written and checking every expected result:
 - zero compiler warnings;
-- 101 C++ tests and 22 Python tests passing;
+- 104 C++ tests and 22 Python tests passing;
 - the DLL exporting exactly `Main`, `Query` and `Supports`;
 - the replayed files identical to the scratch clone's.
 
-**Test counts:** the C++ count goes 86, 88, 93, 96, 97, 100, then 101 from Task 41 on. The Python count is 22 from
-Task 41 on.
+**Test counts:** the C++ count goes 86, 88, 93, 96, 97, 100, 101 from Task 41, 103 from Task 45, then 104 from Task
+46 on. The Python count is 22 from Task 41 on.
 
 **The commands and rules** in "Before you start" apply here too: the game and the user, deploying, and no faults.
 
@@ -17970,22 +17971,972 @@ cd /d/Cyberpunk-Minecraft && git add docs/spikes \
 
 ---
 
-### Task 45: Close Part 2, and plan Part 3
+### Task 45: Switches that show what each group of hooks costs
+
+Run 4 found that BlockRender doubles the frame time with drawing off: 26.5 ms at run 3's corner, against 13.6 ms
+without it. To find out where that goes, `set hooks.<group> 0` makes a group of hooks call their originals and do
+nothing else, and `1` turns it back on. The groups:
+- **`lists`:** the command list calls the tracker follows;
+- **`views`:** the device's view creation and descriptor copies;
+- **`submit`:** `ExecuteCommandLists`;
+- **`present`:** `Present` and `Present1`;
+- **`sl`:** the four Streamline imports.
+
+The status's hooks line says which are off. A group switched off loses track while it's off: the views registry
+misses views made meanwhile, and drawing skips frames without the submissions or Streamline's calls. So the switches
+are for measuring, not for leaving off.
+
+**Files:**
+- Create: `src/hooks/HookGroups.h`, `src/hooks/HookGroups.cpp`, `tests/TestHookGroups.cpp`
+- Modify: `CMakeLists.txt`, `src/hooks/D3D12Hooks.cpp`, `src/hooks/StreamlineHooks.cpp`, `src/Plugin.cpp`
+
+- [ ] **Step 1: Write the failing test, `tests/TestHookGroups.cpp`**
+
+```cpp
+#include "Harness.h"
+
+#include "hooks/HookGroups.h"
+
+using cpmc::HookGroup;
+
+TEST(HookGroupsGoByTheirNames)
+{
+	CHECK(cpmc::HookGroupNamed("lists") == HookGroup::Lists);
+	CHECK(cpmc::HookGroupNamed("views") == HookGroup::Views);
+	CHECK(cpmc::HookGroupNamed("submit") == HookGroup::Submit);
+	CHECK(cpmc::HookGroupNamed("present") == HookGroup::Present);
+	CHECK(cpmc::HookGroupNamed("sl") == HookGroup::Streamline);
+	CHECK(!cpmc::HookGroupNamed("everything"));
+}
+
+TEST(HookGroupsSwitchOffAndOnAgain)
+{
+	CHECK_STR(cpmc::HookGroupsSummary(), "all hooks on");
+	cpmc::SetHookGroup(HookGroup::Views, false);
+	cpmc::SetHookGroup(HookGroup::Submit, false);
+	CHECK(!cpmc::HookGroupOn(HookGroup::Views));
+	CHECK(cpmc::HookGroupOn(HookGroup::Lists));
+	CHECK_STR(cpmc::HookGroupsSummary(), "hooks off: views, submit");
+	cpmc::SetHookGroup(HookGroup::Views, true);
+	cpmc::SetHookGroup(HookGroup::Submit, true);
+	CHECK_STR(cpmc::HookGroupsSummary(), "all hooks on");
+}
+```
+
+- [ ] **Step 2: Edit `CMakeLists.txt` to add the test**
+
+```cmake
+	tests/TestPredlss.cpp
+)
+```
+```cmake
+	tests/TestPredlss.cpp
+	tests/TestHookGroups.cpp
+)
+```
+
+- [ ] **Step 3: Build; it must fail**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C" | sort -u | head -3
+```
+Expected: `error C1083: Cannot open include file: 'hooks/HookGroups.h'`.
+
+- [ ] **Step 4: Write `src/hooks/HookGroups.h`**
+
+```cpp
+#pragma once
+
+#include <optional>
+#include <string>
+#include <string_view>
+
+namespace cpmc
+{
+// Groups of hooks. `set hooks.<name> 0` makes a group's hooks call their originals and do nothing else, so the game
+// can show what each group costs: run 4 found the plugin doubled the frame time with drawing off.
+enum class HookGroup
+{
+	Lists,       // "lists": the command list calls the tracker follows
+	Views,       // "views": the device's view creation and descriptor copies
+	Submit,      // "submit": ExecuteCommandLists
+	Present,     // "present": Present and Present1
+	Streamline,  // "sl": the four Streamline imports
+};
+
+// The group called aName, if there is one.
+std::optional<HookGroup> HookGroupNamed(std::string_view aName);
+void                     SetHookGroup(HookGroup aGroup, bool aOn);
+bool                     HookGroupOn(HookGroup aGroup);  // one relaxed atomic read: cheap enough for every call
+std::string              HookGroupsSummary();             // "all hooks on", or "hooks off: lists, views"
+}
+```
+
+- [ ] **Step 5: Write `src/hooks/HookGroups.cpp`**
+
+```cpp
+#include "hooks/HookGroups.h"
+
+#include <array>
+#include <atomic>
+
+namespace cpmc
+{
+namespace
+{
+constexpr std::array<std::string_view, 5> kNames = { "lists", "views", "submit", "present", "sl" };
+std::array<std::atomic<bool>, 5>          g_on = { true, true, true, true, true };
+}
+
+std::optional<HookGroup> HookGroupNamed(std::string_view aName)
+{
+	for (size_t i = 0; i < kNames.size(); ++i)
+	{
+		if (kNames[i] == aName)
+		{
+			return HookGroup(i);
+		}
+	}
+	return std::nullopt;
+}
+
+void SetHookGroup(HookGroup aGroup, bool aOn)
+{
+	g_on[size_t(aGroup)].store(aOn, std::memory_order_relaxed);
+}
+
+bool HookGroupOn(HookGroup aGroup)
+{
+	return g_on[size_t(aGroup)].load(std::memory_order_relaxed);
+}
+
+std::string HookGroupsSummary()
+{
+	std::string off;
+	for (size_t i = 0; i < kNames.size(); ++i)
+	{
+		if (!g_on[i].load(std::memory_order_relaxed))
+		{
+			off += (off.empty() ? "" : ", ") + std::string(kNames[i]);
+		}
+	}
+	return off.empty() ? "all hooks on" : "hooks off: " + off;
+}
+}
+```
+
+- [ ] **Step 6: Edit `CMakeLists.txt` to add the source**
+
+```cmake
+	src/render/Predlss.cpp
+)
+```
+```cmake
+	src/render/Predlss.cpp
+	src/hooks/HookGroups.cpp
+)
+```
+
+- [ ] **Step 7: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `103 test(s), 0 failure(s)`.
+
+- [ ] **Step 8: Edit `src/hooks/D3D12Hooks.cpp` to let each group pass straight through**
+
+```cpp
+#include "hooks/D3D12Hooks.h"
+
+#include "hooks/Slots.h"
+```
+```cpp
+#include "hooks/D3D12Hooks.h"
+
+#include "hooks/HookGroups.h"
+#include "hooks/Slots.h"
+```
+```cpp
+// The list's state, if it's being tracked and is recording.
+ListState* Recording(void* aList)
+{
+	ListState* state = g_tracker.Find(aList);
+```
+```cpp
+// The list's state, if it's being tracked and is recording, and the list hooks are on.
+ListState* Recording(void* aList)
+{
+	if (!HookGroupOn(HookGroup::Lists))
+	{
+		return nullptr;
+	}
+	ListState* state = g_tracker.Find(aList);
+```
+```cpp
+	g_original.createRtv(aDevice, aResource, aDesc, aHandle);
+	uint32_t mip = 0, plane = 0, slice = 0;
+```
+```cpp
+	g_original.createRtv(aDevice, aResource, aDesc, aHandle);
+	if (!HookGroupOn(HookGroup::Views))
+	{
+		return;
+	}
+	uint32_t mip = 0, plane = 0, slice = 0;
+```
+```cpp
+	g_original.createDsv(aDevice, aResource, aDesc, aHandle);
+	uint32_t mip = 0, slice = 0;
+```
+```cpp
+	g_original.createDsv(aDevice, aResource, aDesc, aHandle);
+	if (!HookGroupOn(HookGroup::Views))
+	{
+		return;
+	}
+	uint32_t mip = 0, slice = 0;
+```
+```cpp
+	const auto kind = KindOf(aType);
+	if (!kind)
+```
+```cpp
+	const auto kind = KindOf(aType);
+	if (!kind || !HookGroupOn(HookGroup::Views))
+```
+```cpp
+	if (const auto kind = KindOf(aType))
+	{
+		g_views.Copy(*kind, aDest.ptr, aSource.ptr, aCount);
+```
+```cpp
+	if (const auto kind = KindOf(aType); kind && HookGroupOn(HookGroup::Views))
+	{
+		g_views.Copy(*kind, aDest.ptr, aSource.ptr, aCount);
+```
+```cpp
+void STDMETHODCALLTYPE ExecuteCommandLists(ID3D12CommandQueue* aQueue, UINT aCount, ID3D12CommandList* const* aLists)
+{
+	if (ID3D12GraphicsCommandList* evaluate = g_evaluateList.load())
+```
+```cpp
+void STDMETHODCALLTYPE ExecuteCommandLists(ID3D12CommandQueue* aQueue, UINT aCount, ID3D12CommandList* const* aLists)
+{
+	if (!HookGroupOn(HookGroup::Submit))
+	{
+		return g_original.executeCommandLists(aQueue, aCount, aLists);
+	}
+	if (ID3D12GraphicsCommandList* evaluate = g_evaluateList.load())
+```
+```cpp
+	const HRESULT result = g_original.reset(aList, aAllocator, aState);
+	if (SUCCEEDED(result) && g_tracking.load(std::memory_order_relaxed))
+```
+```cpp
+	const HRESULT result = g_original.reset(aList, aAllocator, aState);
+	if (SUCCEEDED(result) && g_tracking.load(std::memory_order_relaxed) && HookGroupOn(HookGroup::Lists))
+```
+```cpp
+HRESULT STDMETHODCALLTYPE Present(IDXGISwapChain* aSwapChain, UINT aSyncInterval, UINT aFlags)
+{
+	if ((aFlags & DXGI_PRESENT_TEST) == 0)
+```
+```cpp
+HRESULT STDMETHODCALLTYPE Present(IDXGISwapChain* aSwapChain, UINT aSyncInterval, UINT aFlags)
+{
+	if ((aFlags & DXGI_PRESENT_TEST) == 0 && HookGroupOn(HookGroup::Present))
+```
+```cpp
+HRESULT STDMETHODCALLTYPE Present1(IDXGISwapChain1* aSwapChain, UINT aSyncInterval, UINT aFlags, const DXGI_PRESENT_PARAMETERS* aParameters)
+{
+	if ((aFlags & DXGI_PRESENT_TEST) == 0)
+```
+```cpp
+HRESULT STDMETHODCALLTYPE Present1(IDXGISwapChain1* aSwapChain, UINT aSyncInterval, UINT aFlags, const DXGI_PRESENT_PARAMETERS* aParameters)
+{
+	if ((aFlags & DXGI_PRESENT_TEST) == 0 && HookGroupOn(HookGroup::Present))
+```
+
+- [ ] **Step 9: Edit `src/hooks/StreamlineHooks.cpp` the same way**
+
+```cpp
+#include "hooks/D3D12Hooks.h"
+#include "hooks/ImportPatch.h"
+```
+```cpp
+#include "hooks/D3D12Hooks.h"
+#include "hooks/HookGroups.h"
+#include "hooks/ImportPatch.h"
+```
+```cpp
+	const sl::Result result = g_getNewFrameToken(aToken, aFrameIndex);
+	if (result == sl::Result::eOk && aToken)
+```
+```cpp
+	const sl::Result result = g_getNewFrameToken(aToken, aFrameIndex);
+	if (result == sl::Result::eOk && aToken && HookGroupOn(HookGroup::Streamline))
+```
+```cpp
+sl::Result SetConstants(const sl::Constants& aValues, const sl::FrameToken& aFrame, const sl::ViewportHandle& aViewport)
+{
+	ReadableMemory memory;
+```
+```cpp
+sl::Result SetConstants(const sl::Constants& aValues, const sl::FrameToken& aFrame, const sl::ViewportHandle& aViewport)
+{
+	if (!HookGroupOn(HookGroup::Streamline))
+	{
+		return g_setConstants(aValues, aFrame, aViewport);
+	}
+	ReadableMemory memory;
+```
+```cpp
+sl::Result SetTag(const sl::ViewportHandle& aViewport, const sl::ResourceTag* aTags, uint32_t aCount, sl::CommandBuffer* aList)
+{
+	ReadableMemory     memory;
+```
+```cpp
+sl::Result SetTag(const sl::ViewportHandle& aViewport, const sl::ResourceTag* aTags, uint32_t aCount, sl::CommandBuffer* aList)
+{
+	if (!HookGroupOn(HookGroup::Streamline))
+	{
+		return g_setTag(aViewport, aTags, aCount, aList);
+	}
+	ReadableMemory     memory;
+```
+```cpp
+	if (aFeature == sl::kFeatureDLSS)
+	{
+		++g_evaluates;
+```
+```cpp
+	if (aFeature == sl::kFeatureDLSS && HookGroupOn(HookGroup::Streamline))
+	{
+		++g_evaluates;
+```
+
+- [ ] **Step 10: Edit `src/Plugin.cpp` for `set hooks.<group>`, and the status**
+
+```cpp
+#include "hooks/D3D12Hooks.h"
+#include "hooks/StreamlineHooks.h"
+```
+```cpp
+#include "hooks/D3D12Hooks.h"
+#include "hooks/HookGroups.h"
+#include "hooks/StreamlineHooks.h"
+```
+```cpp
+	if (aRequest.what == "tracking")
+	{
+```
+```cpp
+	if (aRequest.what.starts_with("hooks."))
+	{
+		const std::string_view               name = std::string_view(aRequest.what).substr(6);
+		const std::optional<cpmc::HookGroup> group = cpmc::HookGroupNamed(name);
+		if (!group)
+		{
+			return Report(std::format("set: there's no hook group called \"{}\": they're lists, views, submit, present and sl", name));
+		}
+		cpmc::SetHookGroup(*group, aRequest.number != 0.0);
+		return Report(std::format("set {} {}: {}", aRequest.what, aRequest.number != 0.0 ? 1 : 0, cpmc::HookGroupsSummary()));
+	}
+	if (aRequest.what == "tracking")
+	{
+```
+```cpp
+	report.hooks = g_hooked ? std::format("{}; {}; log {}; dump {}", cpmc::slhooks::Summary(), cpmc::d3d::Summary(), g_frameLog->State(),
+	                                      g_dumps->State())
+	                        : "not installed (see red4ext\\logs)";
+```
+```cpp
+	report.hooks = g_hooked ? std::format("{}; {}; {}; log {}; dump {}", cpmc::slhooks::Summary(), cpmc::d3d::Summary(),
+	                                      cpmc::HookGroupsSummary(), g_frameLog->State(), g_dumps->State())
+	                        : "not installed (see red4ext\\logs)";
+```
+
+- [ ] **Step 11: Build; it must compile without warnings, and the tests still pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `103 test(s), 0 failure(s)`.
+
+- [ ] **Step 12: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "block-render: switches that show what each group of hooks costs" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 46: Tracking that costs nothing while it's off, and drawing before DLSS that tracks two lists
+
+Every hooked command list call asked the tracker for its list, under the tracker's lock, even with tracking off: about
+10,000 calls a frame, from up to 12 threads, each missing the per-thread cache. That's the likeliest cause of the
+hooks' cost that run 4 measured. Two changes:
+- **Off costs nothing:** the hooks count the tracked lists between their `Reset` and `Close`. While none is recording,
+  a hooked call costs one atomic read, not a lookup.
+- **Drawing before DLSS tracks only the DLSS lists:** it no longer turns tracking on for every list. Each evaluate's
+  list is watched instead, tracked from its next `Reset` while everything else goes untracked (`ListWatch`). The game
+  alternates between two DLSS lists, so drawing starts within a few frames, as before.
+
+Run 4 settled `exposure` at 2.5, which becomes the default. The version goes to 0.4.0.
+
+**Files:**
+- Create: `src/track/ListWatch.h`, `src/track/ListWatch.cpp`, `tests/TestListWatch.cpp`
+- Modify: `CMakeLists.txt`, `src/hooks/D3D12Hooks.h`, `src/hooks/D3D12Hooks.cpp`, `src/render/Renderer.h`,
+  `src/render/Renderer.cpp`, `src/Plugin.cpp`
+
+- [ ] **Step 1: Write the failing test, `tests/TestListWatch.cpp`**
+
+```cpp
+#include "Harness.h"
+
+#include "track/ListWatch.h"
+
+namespace
+{
+const void* List(uintptr_t aAddress)
+{
+	return reinterpret_cast<const void*>(aAddress);
+}
+}
+
+TEST(ListWatchKeepsTheLastFewListsNamed)
+{
+	cpmc::ListWatch watch;
+	CHECK_EQ(watch.Count(), size_t(0));
+	CHECK(!watch.Contains(List(0x10)));
+	CHECK(!watch.Contains(nullptr));
+	watch.Add(List(0x10));
+	watch.Add(List(0x20));
+	watch.Add(List(0x10));  // already watched: nothing moves
+	CHECK_EQ(watch.Count(), size_t(2));
+	CHECK(watch.Contains(List(0x10)) && watch.Contains(List(0x20)));
+	CHECK(!watch.Contains(nullptr));  // empty slots aren't lists
+	watch.Add(List(0x30));
+	watch.Add(List(0x40));
+	watch.Add(List(0x50));  // a fifth: the oldest goes
+	CHECK_EQ(watch.Count(), cpmc::ListWatch::kSize);
+	CHECK(!watch.Contains(List(0x10)));
+	CHECK(watch.Contains(List(0x50)));
+	watch.Add(nullptr);  // ignored
+	CHECK(watch.Contains(List(0x20)));
+	watch.Clear();
+	CHECK_EQ(watch.Count(), size_t(0));
+	CHECK(!watch.Contains(List(0x50)));
+}
+```
+
+- [ ] **Step 2: Edit `CMakeLists.txt` to add the test**
+
+```cmake
+	tests/TestHookGroups.cpp
+)
+```
+```cmake
+	tests/TestHookGroups.cpp
+	tests/TestListWatch.cpp
+)
+```
+
+- [ ] **Step 3: Build; it must fail**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C" | sort -u | head -3
+```
+Expected: `error C1083: Cannot open include file: 'track/ListWatch.h'`.
+
+- [ ] **Step 4: Write `src/track/ListWatch.h`**
+
+```cpp
+#pragma once
+
+#include <array>
+#include <atomic>
+#include <cstddef>
+
+namespace cpmc
+{
+// The command lists tracked even while tracking is off: drawing before DLSS needs the DLSS evaluate's lists' first
+// transitions, and nothing else. The game alternates between two such lists, so the last few named are kept. One
+// thread names them (the evaluate's); any thread may ask, with a few atomic reads and no lock.
+class ListWatch
+{
+public:
+	static constexpr size_t kSize = 4;
+
+	void   Add(const void* aList);  // a list already watched stays where it is
+	void   Clear();
+	bool   Contains(const void* aList) const;
+	size_t Count() const;
+
+private:
+	std::array<std::atomic<const void*>, kSize> lists_{};
+	std::atomic<size_t>                         next_{ 0 };
+};
+}
+```
+
+- [ ] **Step 5: Write `src/track/ListWatch.cpp`**
+
+```cpp
+#include "track/ListWatch.h"
+
+namespace cpmc
+{
+void ListWatch::Add(const void* aList)
+{
+	if (!aList || Contains(aList))
+	{
+		return;
+	}
+	lists_[next_.fetch_add(1, std::memory_order_relaxed) % kSize].store(aList, std::memory_order_release);
+}
+
+void ListWatch::Clear()
+{
+	for (auto& list : lists_)
+	{
+		list.store(nullptr, std::memory_order_release);
+	}
+}
+
+bool ListWatch::Contains(const void* aList) const
+{
+	for (const auto& list : lists_)
+	{
+		if (list.load(std::memory_order_acquire) == aList)
+		{
+			return aList != nullptr;
+		}
+	}
+	return false;
+}
+
+size_t ListWatch::Count() const
+{
+	size_t count = 0;
+	for (const auto& list : lists_)
+	{
+		count += list.load(std::memory_order_acquire) ? 1 : 0;
+	}
+	return count;
+}
+}
+```
+
+- [ ] **Step 6: Edit `CMakeLists.txt` to add the source, and the version**
+
+```cmake
+project(BlockRender VERSION 0.3.0 LANGUAGES C CXX)
+```
+```cmake
+project(BlockRender VERSION 0.4.0 LANGUAGES C CXX)
+```
+```cmake
+	src/hooks/HookGroups.cpp
+)
+```
+```cmake
+	src/hooks/HookGroups.cpp
+	src/track/ListWatch.cpp
+)
+```
+
+- [ ] **Step 7: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `104 test(s), 0 failure(s)`.
+
+- [ ] **Step 8: Edit `src/hooks/D3D12Hooks.h` to watch lists**
+
+```cpp
+void RequestTracking();
+void ReleaseTracking();
+bool Tracking();
+```
+```cpp
+void RequestTracking();
+void ReleaseTracking();
+bool Tracking();
+
+// A list to track from its next Reset even while tracking is off: drawing before DLSS names each evaluate's list, the
+// only lists it needs. The last few named stay watched until UnwatchLists.
+void WatchList(const void* aList);
+void UnwatchLists();
+```
+
+- [ ] **Step 9: Edit `src/hooks/D3D12Hooks.cpp` to count the lists recording, and watch lists**
+
+```cpp
+#include "log/EventNames.h"
+```
+```cpp
+#include "log/EventNames.h"
+#include "track/ListWatch.h"
+```
+```cpp
+StateTracker                 g_tracker;
+```
+```cpp
+StateTracker                 g_tracker;
+ListWatch                    g_watch;                // lists tracked even while tracking is off
+std::atomic<int>             g_listsRecording{ 0 };  // tracked lists between their Reset and their Close
+```
+```cpp
+// The list's state, if it's being tracked and is recording, and the list hooks are on.
+ListState* Recording(void* aList)
+{
+	if (!HookGroupOn(HookGroup::Lists))
+	{
+		return nullptr;
+	}
+	ListState* state = g_tracker.Find(aList);
+	return state && state->Recording() ? state : nullptr;
+}
+```
+```cpp
+// The list's state, if it's tracked and recording. While no list is, this costs one atomic read, not a lookup under
+// the tracker's lock: the likeliest cause of the hooks' cost that run 4 measured.
+ListState* Tracked(void* aList)
+{
+	if (g_listsRecording.load(std::memory_order_relaxed) == 0)
+	{
+		return nullptr;
+	}
+	ListState* state = g_tracker.Find(aList);
+	return state && state->Recording() ? state : nullptr;
+}
+
+// The list's state, if the list hooks are on and the list is tracked: every list while tracking is on, and the
+// watched ones while it's off.
+ListState* Recording(void* aList)
+{
+	if (!HookGroupOn(HookGroup::Lists) || (!g_tracking.load(std::memory_order_relaxed) && !g_watch.Contains(aList)))
+	{
+		return nullptr;
+	}
+	return Tracked(aList);
+}
+```
+```cpp
+	if (SUCCEEDED(result) && g_tracking.load(std::memory_order_relaxed) && HookGroupOn(HookGroup::Lists))
+	{
+		g_tracker.ForReset(aList).Begin(g_frame.load(std::memory_order_relaxed), g_logging.load(std::memory_order_relaxed));
+	}
+```
+```cpp
+	if (SUCCEEDED(result) && HookGroupOn(HookGroup::Lists) && (g_tracking.load(std::memory_order_relaxed) || g_watch.Contains(aList)))
+	{
+		ListState& state = g_tracker.ForReset(aList);
+		if (!state.Recording())
+		{
+			g_listsRecording.fetch_add(1, std::memory_order_relaxed);
+		}
+		state.Begin(g_frame.load(std::memory_order_relaxed), g_logging.load(std::memory_order_relaxed));
+	}
+```
+```cpp
+	if (ListState* state = Recording(aList))
+	{
+		Each([&](HookEvents& aListener) { aListener.OnPassEnd(aList, *state, true); });
+		Each([&](HookEvents& aListener) { aListener.OnClose(aList, *state); });
+		state->End();
+	}
+	return g_original.close(aList);
+```
+```cpp
+	// Every tracked list ends here, even one that tracking or the list hooks have let go of since its Reset, so the
+	// count of lists recording stays right.
+	if (ListState* state = Tracked(aList))
+	{
+		if (Recording(aList))
+		{
+			Each([&](HookEvents& aListener) { aListener.OnPassEnd(aList, *state, true); });
+			Each([&](HookEvents& aListener) { aListener.OnClose(aList, *state); });
+		}
+		state->End();
+		g_listsRecording.fetch_sub(1, std::memory_order_relaxed);
+	}
+	return g_original.close(aList);
+```
+```cpp
+void SetLogging(bool aLogging)
+{
+	g_logging = aLogging;
+}
+```
+```cpp
+void SetLogging(bool aLogging)
+{
+	g_logging = aLogging;
+}
+
+void WatchList(const void* aList)
+{
+	g_watch.Add(aList);
+}
+
+void UnwatchLists()
+{
+	g_watch.Clear();
+}
+```
+```cpp
+	return std::format("device {}, {} vtable entries, present {}, main queue {}, tracking {}",
+	                   g_device.load() ? (g_seenAtCreation.load() ? "seen at creation" : "patched late") : "not seen",
+	                   g_patcher.Count(), g_original.present ? "patched" : "not patched", g_mainQueue.load() ? "known" : "unknown",
+	                   g_tracking.load() ? "on" : "off");
+```
+```cpp
+	return std::format("device {}, {} vtable entries, present {}, main queue {}, tracking {}, {} lists watched",
+	                   g_device.load() ? (g_seenAtCreation.load() ? "seen at creation" : "patched late") : "not seen",
+	                   g_patcher.Count(), g_original.present ? "patched" : "not patched", g_mainQueue.load() ? "known" : "unknown",
+	                   g_tracking.load() ? "on" : "off", g_watch.Count());
+```
+
+- [ ] **Step 10: Edit `src/render/Renderer.h` for watched lists, and the exposure**
+
+```cpp
+//   own. Its barriers start from the state the DLSS list found each buffer in (its first transitions), so command lists
+//   are tracked while this mode is on.
+```
+```cpp
+//   own. Its barriers start from the state the DLSS list found each buffer in (its first transitions), so the DLSS
+//   lists are watched: tracked from their Reset, while every other list goes untracked.
+```
+```cpp
+	void               Fail(const std::string& aWhy);  // logs, and switches drawing off
+	void               ReleaseTracking();               // if predlss asked for it
+```
+```cpp
+	void               Fail(const std::string& aWhy);  // logs, and switches drawing off
+```
+```cpp
+	std::atomic<Mode>     mode_{ Mode::Off };
+	bool                  trackingRequested_ = false;
+```
+```cpp
+	std::atomic<Mode>     mode_{ Mode::Off };
+```
+```cpp
+	float exposure_ = 3.0f;    // predlss: what the linear colour is multiplied by; run 2 put sunlit ground at 0.6 to 1
+```
+```cpp
+	float exposure_ = 2.5f;    // predlss: what the linear colour is multiplied by; run 4 settled on 2.5 by eye
+```
+
+- [ ] **Step 11: Edit `src/render/Renderer.cpp` to watch the DLSS lists**
+
+```cpp
+	const Mode mode = aMode == "present" ? Mode::Present : aMode == "predlss" ? Mode::Predlss : Mode::Off;
+	if (mode == Mode::Predlss && !trackingRequested_)
+	{
+		d3d::RequestTracking();  // our barriers start from the DLSS list's first transitions
+		trackingRequested_ = true;
+	}
+	else if (mode != Mode::Predlss)
+	{
+		ReleaseTracking();
+	}
+	mode_ = mode;
+```
+```cpp
+	const Mode mode = aMode == "present" ? Mode::Present : aMode == "predlss" ? Mode::Predlss : Mode::Off;
+	if (mode != Mode::Predlss)
+	{
+		d3d::UnwatchLists();  // predlss watches the DLSS lists as their evaluates come
+	}
+	mode_ = mode;
+```
+```cpp
+	mode_ = Mode::Off;
+	ReleaseTracking();
+}
+
+void Renderer::ReleaseTracking()
+{
+	if (trackingRequested_)
+	{
+		d3d::ReleaseTracking();
+		trackingRequested_ = false;
+	}
+}
+```
+```cpp
+	mode_ = Mode::Off;
+	d3d::UnwatchLists();
+}
+```
+```cpp
+		predlssList_ = aCall.list;
+		return;
+```
+```cpp
+		predlssList_ = aCall.list;
+		d3d::WatchList(aCall.list);  // tracked from its next Reset: its first transitions are where our barriers start
+		return;
+```
+```cpp
+	std::lock_guard lock(mutex_);
+	ReleaseTracking();
+```
+```cpp
+	std::lock_guard lock(mutex_);
+	d3d::UnwatchLists();
+```
+
+- [ ] **Step 12: Edit `src/Plugin.cpp` for the version**
+
+```cpp
+constexpr const char* kVersion = "0.3.0";
+```
+```cpp
+constexpr const char* kVersion = "0.4.0";
+```
+```cpp
+	aInfo->version = RED4EXT_V1_SEMVER(0, 3, 0);
+```
+```cpp
+	aInfo->version = RED4EXT_V1_SEMVER(0, 4, 0);
+```
+
+- [ ] **Step 13: Build; it must compile without warnings, and the tests still pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `104 test(s), 0 failure(s)`.
+
+- [ ] **Step 14: Check the DLL's exports and imports**
+
+```bash
+DUMPBIN="/c/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/dumpbin.exe"
+B=/d/Cyberpunk-Minecraft/spikes/block-render/build/RelWithDebInfo/BlockRender.dll
+"$DUMPBIN" -nologo -exports "$B" | grep -E " (Main|Query|Supports) = "; \
+  "$DUMPBIN" -nologo -dependents "$B" | grep -iE "d3d|dxgi|sl\."
+```
+Expected: exactly `Main`, `Query` and `Supports`, then `D3DCOMPILER_47.dll` and `d3d12.dll`.
+
+- [ ] **Step 15: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "block-render: tracking that costs nothing while it's off, and predlss tracks only the DLSS lists (0.4.0)" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 47: In the game: what the hooks cost now
+
+Run 5, at run 3's corner, with the same save. Run 4 measured 13.6 ms there without BlockRender, and 26.5 ms with it.
+The commands are Task 44's.
+
+**Files:**
+- Modify: `docs/spikes/2026-10-01-block-render-results.md`
+
+- [ ] **Step 1: Deploy (the game must not be running)**
+
+Run Task 44 Step 1's two commands. Expected: `0`, then the plugin's folder with `BlockRender.dll`, `BlockRender.pdb`,
+`shaders`, `atlas.bin` and `atlas.json`, the overlay's folder with `init.lua`, and `installed`.
+
+- [ ] **Step 2: Load, at the corner**
+
+Ask the user to launch the game, load the free-roam save, go to the corner, face south-west, and stand still. Then
+read the log's first lines, the status and `frames.txt`. Expected:
+- `BlockRender 0.4.0 loaded`;
+- in the status, `mode=off`, `tracking off, 0 lists watched` and `all hooks on`.
+
+- [ ] **Step 3: What the hooks cost, idle**
+
+Read the status's `frame=` line and `frames.txt` five times each, a second apart, as in Task 44 Step 3. Expected:
+about the 13.6 ms run 4 measured without BlockRender. If so, the lookups were the cost.
+
+- [ ] **Step 4: If it isn't, which group costs it**
+
+Only if Step 3 is well above 13.6 ms: switch each group off in turn, with `set hooks.lists 0`, then `views`,
+`submit`, `present` and `sl`, five readings each, and back on with `1` before the next. The group whose switch brings
+the frame time down holds the cost. Note each group's readings.
+
+- [ ] **Step 5: Tracking on**
+
+Send `set tracking 1`, read five times, then `set tracking 0`. That's what tracking every list costs, which frame logs
+and dumps still do while they run.
+
+- [ ] **Step 6: Drawing before DLSS**
+
+Ask the user to face open ground. Send `mode predlss` and `place cube`, wait three seconds, and read the status. Expected:
+- `2 lists watched`, and `tracking off`;
+- frames drawn at the frame rate, and none skipped after the first second.
+
+Read five times. Then ask the user to check the cube is steady standing still and leaves no trails strafing, with a
+screenshot.
+
+- [ ] **Step 7: 10,000 blocks**
+
+Send `clear`, then `place field 10000`, and read five times.
+
+- [ ] **Step 8: Clean up**
+
+Send `clear`, then `mode off`, two seconds apart. Expected: `mode=off`, `tracking off, 0 lists watched`.
+
+- [ ] **Step 9: Record the results, and commit**
+
+In `docs/spikes/2026-10-01-block-render-results.md`, add what run 5 found:
+- the hooks' cost, idle;
+- each group's, if Step 4 ran;
+- tracking on, drawing before DLSS, and 10,000 blocks.
+
+Then commit:
+```bash
+cd /d/Cyberpunk-Minecraft && git add docs/spikes \
+  && git commit -q -m "block-render: what the hooks cost after the fixes" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 48: Close Part 2, and plan Part 3
 
 **Files:**
 - Modify: `docs/superpowers/plans/2026-10-01-block-render.md` (this plan)
 
 - [ ] **Step 1: Add "How Part 2 went" to this plan**
 
-Add a section after Task 45, as Part 1's closed it. Cover:
-- what Task 44 found, and any fixes it needed;
+Add a section after Task 48, as Part 1's closed it. Cover:
+- what Tasks 44 and 47 found, and Tasks 45 and 46's fixes;
 - any amendments made along the way;
 - what step 3's run decides for step 4:
   - where blocks can go into the G-buffer: the G-buffer lists' last submission, and the states they leave their
     targets in;
   - whether the base colour is gamma-encoded, from Task 44's dump;
   - the stencil value, and whether blocks must write motion vectors;
-  - what the hooks cost, for the tracking step 4 needs.
+  - what the hooks cost now, and what tracking costs, for the tracking step 4 needs.
 
 - [ ] **Step 2: Commit**
 
@@ -17997,6 +18948,6 @@ cd /d/Cyberpunk-Minecraft && git add docs/superpowers/plans \
 
 - [ ] **Step 3: Plan Part 3**
 
-Use superpowers:writing-plans to write Part 3's tasks (spec step 4) from what steps 1 to 3 found, as Tasks 46 on in
+Use superpowers:writing-plans to write Part 3's tasks (spec step 4) from what steps 1 to 3 found, as Tasks 49 on in
 this plan. As in Parts 1 and 2, compile and test their code in a scratch clone first, and replay the tasks before
 committing.
