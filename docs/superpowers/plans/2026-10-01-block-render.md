@@ -1930,7 +1930,7 @@ SDK's C interface layouts (the `...Vtbl` structs), and `TestSlots.cpp` compares 
 - Create: `src/hooks/Slots.h`, `tests/SlotsC.c`, `tests/TestSlots.cpp`
 - Modify: `CMakeLists.txt`
 
-- [ ] **Step 1: Write `tests/SlotsC.c`**
+- [x] **Step 1: Write `tests/SlotsC.c`**
 
 ```c
 /* Compiled as C, where the Windows SDK declares each COM interface as a struct of function pointers: the vtable slot
@@ -1999,7 +1999,7 @@ size_t SlotsC_Dxgi(int aWhich)
 }
 ```
 
-- [ ] **Step 2: Write the failing test, `tests/TestSlots.cpp`**
+- [x] **Step 2: Write the failing test, `tests/TestSlots.cpp`**
 
 ```cpp
 #include "Harness.h"
@@ -2059,7 +2059,7 @@ TEST(SlotsMatchTheSdksDxgiLayouts)
 }
 ```
 
-- [ ] **Step 3: Edit `CMakeLists.txt` to add both**
+- [x] **Step 3: Edit `CMakeLists.txt` to add both**
 
 ```cmake
 	tests/TestPatches.cpp
@@ -2072,7 +2072,7 @@ TEST(SlotsMatchTheSdksDxgiLayouts)
 )
 ```
 
-- [ ] **Step 4: Build; it must fail**
+- [x] **Step 4: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -2081,7 +2081,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `fatal error C1083: Cannot open include file: 'hooks/Slots.h'`.
 
-- [ ] **Step 5: Write `src/hooks/Slots.h`**
+- [x] **Step 5: Write `src/hooks/Slots.h`**
 
 ```cpp
 #pragma once
@@ -2131,7 +2131,7 @@ constexpr size_t kPresent1 = 22;
 }
 ```
 
-- [ ] **Step 6: Build and run the tests; they must pass**
+- [x] **Step 6: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -2141,7 +2141,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `31 test(s), 0 failure(s)`.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \

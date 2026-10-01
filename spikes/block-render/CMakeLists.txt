@@ -42,6 +42,8 @@ add_executable(render_tests
 	tests/TestLogQueue.cpp
 	tests/TestSl.cpp
 	tests/TestPatches.cpp
+	tests/TestSlots.cpp
+	tests/SlotsC.c
 )
 target_link_libraries(render_tests PRIVATE render_core)
 add_test(NAME render_tests COMMAND render_tests WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
