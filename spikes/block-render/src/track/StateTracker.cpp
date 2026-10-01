@@ -1,5 +1,6 @@
 #include "track/StateTracker.h"
 
+#include <algorithm>
 #include <atomic>
 #include <mutex>
 
@@ -20,6 +21,30 @@ struct Cached
 thread_local Cached t_cached;
 
 std::atomic<uint64_t> g_nextTrackerId{ 1 };
+
+// The same descriptor, made from the same resource.
+bool SameTarget(const BoundTarget& aA, const BoundTarget& aB)
+{
+	const void* a = aA.view ? aA.view->resource : nullptr;
+	const void* b = aB.view ? aB.view->resource : nullptr;
+	return aA.handle == aB.handle && a == b;
+}
+
+bool SameTargets(const Targets& aA, const Targets& aB)
+{
+	if (aA.rtvs.size() != aB.rtvs.size() || aA.dsv.has_value() != aB.dsv.has_value() || (aA.dsv && !SameTarget(*aA.dsv, *aB.dsv)))
+	{
+		return false;
+	}
+	for (size_t i = 0; i < aA.rtvs.size(); ++i)
+	{
+		if (!SameTarget(aA.rtvs[i], aB.rtvs[i]))
+		{
+			return false;
+		}
+	}
+	return true;
+}
 }
 
 void ListState::Begin(uint32_t aFrame, bool aLogging)
@@ -28,6 +53,7 @@ void ListState::Begin(uint32_t aFrame, bool aLogging)
 	logging_ = aLogging;
 	frame_ = aFrame;
 	targets_ = {};
+	wide_.clear();
 	states_.clear();
 	firsts_.clear();
 	passes_.clear();
@@ -54,6 +80,12 @@ PassRecord* ListState::CurrentPass()
 void ListState::SetTargets(Targets aTargets, bool aRenderPass)
 {
 	targets_ = std::move(aTargets);
+	const bool wide = targets_.rtvs.size() >= 3 && targets_.dsv;
+	if (wide && wide_.size() < kMostWideTargets &&
+	    std::none_of(wide_.begin(), wide_.end(), [&](const Targets& aKept) { return SameTargets(aKept, targets_); }))
+	{
+		wide_.push_back(targets_);
+	}
 	if (logging_)
 	{
 		PassRecord pass;

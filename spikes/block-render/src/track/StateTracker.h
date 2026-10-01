@@ -68,6 +68,11 @@ public:
 	void SetTargets(Targets aTargets, bool aRenderPass = false);
 	const Targets& CurrentTargets() const { return targets_; }
 
+	// The distinct target sets the list bound with three or more render targets and a depth buffer, in the order it
+	// bound them: the first kMostWideTargets. Kept whether or not a log runs, so step 4 can tell the G-buffer's lists.
+	static constexpr size_t kMostWideTargets = 4;
+	const std::vector<Targets>& WideTargets() const { return wide_; }
+
 	void Count(Counter aCounter);
 	void Event(std::string aName);
 
@@ -100,6 +105,7 @@ private:
 	bool                                       logging_ = false;
 	uint32_t                                   frame_ = 0;
 	Targets                                    targets_;
+	std::vector<Targets>                       wide_;
 	std::unordered_map<void*, uint32_t>        states_;
 	std::unordered_map<void*, FirstTransition> firsts_;
 	std::vector<PassRecord>                    passes_;

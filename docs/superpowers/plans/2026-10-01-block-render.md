@@ -19768,7 +19768,7 @@ costs next to nothing.
 **Files:**
 - Modify: `tests/TestStateTracker.cpp`, `src/track/StateTracker.h`, `src/track/StateTracker.cpp`
 
-- [ ] **Step 1: Edit `tests/TestStateTracker.cpp` to add the failing test**
+- [x] **Step 1: Edit `tests/TestStateTracker.cpp` to add the failing test**
 
 ```cpp
 	Targets nullTarget = Gbuffer(9);  // the game's forward passes bind a null target, which has no size
@@ -19810,7 +19810,7 @@ TEST(ListStateKeepsTheWideTargetSetsItBindsEvenWithoutALog)
 }
 ```
 
-- [ ] **Step 2: Build; it must fail**
+- [x] **Step 2: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -19819,7 +19819,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `'WideTargets': is not a member of 'cpmc::ListState'`.
 
-- [ ] **Step 3: Edit `src/track/StateTracker.h` to keep the wide target sets**
+- [x] **Step 3: Edit `src/track/StateTracker.h` to keep the wide target sets**
 
 ```cpp
 	void SetTargets(Targets aTargets, bool aRenderPass = false);
@@ -19844,7 +19844,7 @@ Expected: `'WideTargets': is not a member of 'cpmc::ListState'`.
 	std::unordered_map<void*, uint32_t>        states_;
 ```
 
-- [ ] **Step 4: Edit `src/track/StateTracker.cpp` to keep them**
+- [x] **Step 4: Edit `src/track/StateTracker.cpp` to keep them**
 
 ```cpp
 thread_local Cached t_cached;
@@ -19919,7 +19919,7 @@ void ListState::SetTargets(Targets aTargets, bool aRenderPass)
 #include <atomic>
 ```
 
-- [ ] **Step 5: Build and run the tests; they must pass**
+- [x] **Step 5: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -19929,7 +19929,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `105 test(s), 0 failure(s)`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \

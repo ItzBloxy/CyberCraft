@@ -156,3 +156,30 @@ TEST(GbufferCandidatesNeedThreeTargetsAndADepthAtRenderSize)
 	nullTarget.rtvs[1] = Target(0, 0, 0);
 	CHECK(!cpmc::IsGbufferCandidate(nullTarget, 1707, 960));
 }
+
+TEST(ListStateKeepsTheWideTargetSetsItBindsEvenWithoutALog)
+{
+	ListState list;
+	list.Begin(1, false);  // no log
+	Targets one;
+	one.rtvs = { Target(5, 1707, 960) };
+	list.SetTargets(one);          // one target: not wide
+	list.SetTargets(Gbuffer(9));   // three targets and a depth buffer
+	list.SetTargets(one);
+	list.SetTargets(Gbuffer(9));   // the same set again: kept once
+	list.SetTargets(Gbuffer(10));  // another depth buffer: another set
+	CHECK(list.Passes().empty());  // passes are still recorded only while logging
+	CHECK_EQ(list.WideTargets().size(), size_t(2));
+	CHECK(list.WideTargets()[0].dsv->view->resource == reinterpret_cast<void*>(9));
+	CHECK(list.WideTargets()[1].dsv->view->resource == reinterpret_cast<void*>(10));
+	Targets noDepth = Gbuffer(11);
+	noDepth.dsv.reset();
+	list.SetTargets(noDepth);  // no depth buffer: not wide
+	for (uintptr_t depth = 12; depth < 20; ++depth)
+	{
+		list.SetTargets(Gbuffer(depth));
+	}
+	CHECK_EQ(list.WideTargets().size(), ListState::kMostWideTargets);  // the first few only
+	list.Begin(2, false);
+	CHECK(list.WideTargets().empty());  // a new recording starts empty
+}
