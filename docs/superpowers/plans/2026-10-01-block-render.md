@@ -9836,7 +9836,7 @@ cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
 - Create: `src/log/FrameLog.h`, `src/log/FrameLog.cpp`, `src/log/Dumps.h`, `src/log/Dumps.cpp`
 - Modify: `CMakeLists.txt`
 
-- [ ] **Step 1: Write `src/log/FrameLog.h`**
+- [x] **Step 1: Write `src/log/FrameLog.h`**
 
 ```cpp
 #pragma once
@@ -9904,7 +9904,7 @@ ResourceInfo DescribeResource(void* aResource);
 }
 ```
 
-- [ ] **Step 2: Write `src/log/FrameLog.cpp`**
+- [x] **Step 2: Write `src/log/FrameLog.cpp`**
 
 ```cpp
 #include "log/FrameLog.h"
@@ -10220,7 +10220,7 @@ std::optional<FrameLogData> FrameLog::TakeFinished(const std::string& aVersion, 
 }
 ```
 
-- [ ] **Step 3: Write `src/log/Dumps.h`**
+- [x] **Step 3: Write `src/log/Dumps.h`**
 
 ```cpp
 #pragma once
@@ -10305,7 +10305,7 @@ private:
 }
 ```
 
-- [ ] **Step 4: Write `src/log/Dumps.cpp`**
+- [x] **Step 4: Write `src/log/Dumps.cpp`**
 
 ```cpp
 #include "log/Dumps.h"
@@ -10646,7 +10646,7 @@ void Dumps::Update(const std::string& aFolderName)
 }
 ```
 
-- [ ] **Step 5: Edit `CMakeLists.txt` to add the sources**
+- [x] **Step 5: Edit `CMakeLists.txt` to add the sources**
 
 ```cmake
 	src/render/Gpu.cpp
@@ -10659,7 +10659,7 @@ void Dumps::Update(const std::string& aFolderName)
 )
 ```
 
-- [ ] **Step 6: Build; it must compile without warnings, and the tests still pass**
+- [x] **Step 6: Build; it must compile without warnings, and the tests still pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -10669,7 +10669,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `83 test(s), 0 failure(s)`.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \

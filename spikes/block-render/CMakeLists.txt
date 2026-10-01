@@ -53,6 +53,8 @@ add_library(render_runtime STATIC
 	src/hooks/StreamlineHooks.cpp
 	src/track/GpuApi.cpp
 	src/render/Gpu.cpp
+	src/log/FrameLog.cpp
+	src/log/Dumps.cpp
 )
 target_link_libraries(render_runtime PUBLIC render_core RED4ext::SDK d3d12)
 
