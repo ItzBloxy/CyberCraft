@@ -84,6 +84,8 @@ void Scene(JsonWriter& aJson, const SceneCensus& aScene)
 		aJson.String(name);
 	}
 	aJson.EndArray();
+	aJson.Key("skipped").BeginObject().Key("unreadable").UInt(aScene.skippedUnreadable);
+	aJson.Key("unauditedVtable").UInt(aScene.skippedUnaudited).EndObject();
 	aJson.Key("mismatches").UInt(aScene.mismatches);
 	aJson.Key("censusMs").Number(aScene.censusMs);
 	aJson.EndObject();
@@ -107,7 +109,8 @@ void Region(JsonWriter& aJson, const RegionResult& aRegion)
 	Counts(aJson, aRegion.trianglesByCategory);
 	aJson.Key("skipped").BeginObject().Key("plane").UInt(aRegion.skippedPlanes);
 	aJson.Key("unknownGeometry").UInt(aRegion.unknownGeometry);
-	aJson.Key("badTriangles").UInt(aRegion.badTriangles).EndObject();
+	aJson.Key("badTriangles").UInt(aRegion.badTriangles);
+	aJson.Key("unreadable").UInt(aRegion.unreadable).EndObject();
 	aJson.Key("triangleCapHit").Bool(aRegion.triangleCapHit);
 	aJson.EndObject();
 }
@@ -148,6 +151,17 @@ std::string ReportToJson(const DumpReport& aReport)
 	json.Key("game").BeginObject();
 	json.Key("runtime").String(aReport.runtime);
 	json.Key("physxFileVersion").String(aReport.physxFileVersion);
+	json.Key("modules").BeginArray();
+	for (const ModuleReport& module : aReport.modules)
+	{
+		json.BeginObject();
+		json.Key("name").String(module.name);
+		json.Key("timestamp").String(std::format("0x{:x}", module.timestamp));
+		json.Key("imageSize").String(std::format("0x{:x}", module.imageSize));
+		json.Key("audited").Bool(module.audited);
+		json.EndObject();
+	}
+	json.EndArray();
 	json.EndObject();
 	json.Key("player");
 	aReport.player ? Player(json, *aReport.player) : void(json.Null());
@@ -164,6 +178,7 @@ std::string ReportToJson(const DumpReport& aReport)
 		json.EndObject();
 	}
 	json.EndArray();
+	json.Key("censusSkipped").UInt(aReport.censusSkipped);
 	json.Key("censusMismatches").UInt(aReport.censusMismatches);
 	json.EndObject();
 	json.Key("scenes").BeginArray();
@@ -177,7 +192,6 @@ std::string ReportToJson(const DumpReport& aReport)
 	json.Key("coordinateCheck");
 	aReport.coordinateCheck ? Coordinates(json, *aReport.coordinateCheck) : void(json.Null());
 	json.Key("mainThreadPauseMs").Number(aReport.mainThreadPauseMs);
-	json.Key("faults").UInt(aReport.faults);
 	json.Key("files").BeginObject();
 	if (aReport.objWritten)
 	{

@@ -27,6 +27,15 @@ struct PlayerPose
 	std::optional<CameraPose> camera;
 };
 
+// One of the game's PhysX DLLs, and whether it is the build the audit covers.
+struct ModuleReport
+{
+	std::string name;
+	uint32_t timestamp = 0;
+	uint32_t imageSize = 0;
+	bool audited = false;
+};
+
 struct CompatStep
 {
 	int step = 0;
@@ -54,7 +63,9 @@ struct SceneCensus
 	uint32_t namedActors = 0;
 	uint32_t actorsWithUserData = 0;
 	std::vector<std::string> actorNameSamples;
-	uint64_t mismatches = 0;
+	uint64_t skippedUnreadable = 0;  // objects whose memory couldn't be read
+	uint64_t skippedUnaudited = 0;   // objects whose vtable isn't an audited table
+	uint64_t mismatches = 0;         // type IDs that disagree with the vtable, meshes that don't fit their shape
 	double censusMs = 0.0;
 };
 
@@ -73,6 +84,7 @@ struct RegionResult
 	uint32_t skippedPlanes = 0;
 	uint32_t unknownGeometry = 0;
 	uint32_t badTriangles = 0;
+	uint32_t unreadable = 0;  // shapes and meshes that failed their checks during extraction
 	bool triangleCapHit = false;
 };
 
@@ -95,20 +107,21 @@ struct CoordinateCheck
 
 struct DumpReport
 {
-	std::string probeVersion = "0.1.0";
+	std::string probeVersion = "0.2.0";
 	std::string time;
 	std::string trigger;
 	std::string runtime;
 	std::string physxFileVersion;
+	std::vector<ModuleReport> modules;
 	std::optional<PlayerPose> player;
 	bool compatibilityPass = false;
 	std::vector<CompatStep> steps;
+	uint64_t censusSkipped = 0;
 	uint64_t censusMismatches = 0;
 	std::vector<SceneCensus> scenes;
 	std::optional<RegionResult> region;
 	std::optional<CoordinateCheck> coordinateCheck;
 	double mainThreadPauseMs = 0.0;
-	uint32_t faults = 0;
 	bool objWritten = false;
 };
 }

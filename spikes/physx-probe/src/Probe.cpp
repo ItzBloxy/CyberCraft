@@ -92,7 +92,6 @@ DumpData RunDump(px::PhysxSession& aSession, const PlayerPose& aPose, const std:
 
 	report.region = region;
 	report.coordinateCheck = check;
-	report.faults = faults;
 	report.compatibilityPass = open.pass && report.censusMismatches == 0;
 	for (auto& [name, triangles] : byCategory)
 	{

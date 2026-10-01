@@ -86,11 +86,11 @@ void RunOne(const std::string& aTrigger)
 	data.report.mainThreadPauseMs = double(end.QuadPart - start.QuadPart) * 1000.0 / double(frequency.QuadPart);
 
 	const auto& report = data.report;
-	Log("dump ({}): compatibility {}, {} scene(s), {} triangles, coordinate check {}, main-thread pause {:.1f} ms, {} fault(s)",
+	Log("dump ({}): compatibility {}, {} scene(s), {} triangles, coordinate check {}, main-thread pause {:.1f} ms, {} object(s) skipped",
 	    aTrigger, report.compatibilityPass ? "passed" : "FAILED", report.scenes.size(),
 	    report.region ? report.region->triangles : 0,
 	    report.coordinateCheck ? (report.coordinateCheck->pass ? "passed" : "FAILED") : "not run", report.mainThreadPauseMs,
-	    report.faults);
+	    report.censusSkipped);
 	for (const auto& step : report.steps)
 	{
 		if (!step.pass)
