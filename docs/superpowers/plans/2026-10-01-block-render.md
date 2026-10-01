@@ -314,13 +314,13 @@ it. It comes over with one change: the namespace is `cpmc`, not `cpmc::px`.
 - Copy from `spikes/physx-probe/`, then edit: `src/Readable.h`, `src/Readable.cpp`, `tests/TestReadable.cpp`
 - Modify: `CMakeLists.txt`
 
-- [ ] **Step 1: Copy `../physx-probe/tests/TestReadable.cpp` to `tests/TestReadable.cpp`**
+- [x] **Step 1: Copy `../physx-probe/tests/TestReadable.cpp` to `tests/TestReadable.cpp`**
 
 ```bash
 cp /d/Cyberpunk-Minecraft/spikes/physx-probe/tests/TestReadable.cpp /d/Cyberpunk-Minecraft/spikes/block-render/tests/
 ```
 
-- [ ] **Step 2: Edit `tests/TestReadable.cpp` for the new path and namespace**
+- [x] **Step 2: Edit `tests/TestReadable.cpp` for the new path and namespace**
 
 ```cpp
 #include "physx/Readable.h"
@@ -335,7 +335,7 @@ using cpmc::px::ReadableMemory;
 using cpmc::ReadableMemory;
 ```
 
-- [ ] **Step 3: Edit `CMakeLists.txt` to add the test**
+- [x] **Step 3: Edit `CMakeLists.txt` to add the test**
 
 ```cmake
 	tests/TestJson.cpp
@@ -347,7 +347,7 @@ using cpmc::ReadableMemory;
 )
 ```
 
-- [ ] **Step 4: Build; it must fail**
+- [x] **Step 4: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -356,13 +356,13 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `fatal error C1083: Cannot open include file: 'Readable.h'`.
 
-- [ ] **Step 5: Copy `../physx-probe/src/physx/Readable.h` to `src/Readable.h`**
+- [x] **Step 5: Copy `../physx-probe/src/physx/Readable.h` to `src/Readable.h`**
 
 ```bash
 cp /d/Cyberpunk-Minecraft/spikes/physx-probe/src/physx/Readable.h /d/Cyberpunk-Minecraft/spikes/block-render/src/
 ```
 
-- [ ] **Step 6: Edit `src/Readable.h` for the namespace**
+- [x] **Step 6: Edit `src/Readable.h` for the namespace**
 
 ```cpp
 namespace cpmc::px
@@ -371,13 +371,13 @@ namespace cpmc::px
 namespace cpmc
 ```
 
-- [ ] **Step 7: Copy `../physx-probe/src/physx/Readable.cpp` to `src/Readable.cpp`**
+- [x] **Step 7: Copy `../physx-probe/src/physx/Readable.cpp` to `src/Readable.cpp`**
 
 ```bash
 cp /d/Cyberpunk-Minecraft/spikes/physx-probe/src/physx/Readable.cpp /d/Cyberpunk-Minecraft/spikes/block-render/src/
 ```
 
-- [ ] **Step 8: Edit `src/Readable.cpp` for the path and namespace**
+- [x] **Step 8: Edit `src/Readable.cpp` for the path and namespace**
 
 ```cpp
 #include "physx/Readable.h"
@@ -392,7 +392,7 @@ namespace cpmc::px
 namespace cpmc
 ```
 
-- [ ] **Step 9: Edit `CMakeLists.txt` to add the source**
+- [x] **Step 9: Edit `CMakeLists.txt` to add the source**
 
 ```cmake
 	src/Json.cpp
@@ -404,7 +404,7 @@ namespace cpmc
 )
 ```
 
-- [ ] **Step 10: Build and run the tests; they must pass**
+- [x] **Step 10: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -414,7 +414,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `11 test(s), 0 failure(s)`.
 
-- [ ] **Step 11: Commit**
+- [x] **Step 11: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \

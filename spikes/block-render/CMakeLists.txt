@@ -22,6 +22,7 @@ target_include_directories(render_settings SYSTEM INTERFACE "${STREAMLINE_DIR}/i
 # Everything that doesn't need RED4ext or the running game.
 add_library(render_core STATIC
 	src/Json.cpp
+	src/Readable.cpp
 )
 target_link_libraries(render_core PUBLIC render_settings d3dcompiler dxguid)
 
@@ -31,6 +32,7 @@ add_executable(render_tests
 	tests/TestMain.cpp
 	tests/TestCoords.cpp
 	tests/TestJson.cpp
+	tests/TestReadable.cpp
 )
 target_link_libraries(render_tests PRIVATE render_core)
 add_test(NAME render_tests COMMAND render_tests WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
