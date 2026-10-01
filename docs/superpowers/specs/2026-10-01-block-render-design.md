@@ -1,7 +1,8 @@
 # Block render: design (spike 3)
 
-Date: 2026-10-01. Status: agreed with the user section by section in the brainstorm. This document awaits their
-review.
+Date: 2026-10-01. Status: agreed with the user section by section in the brainstorm, then revised after a deep
+self-review that checked its claims against Streamline's headers and guide, the published analyses and D3D12's rules.
+This document awaits the user's review.
 
 ## Purpose
 
@@ -43,10 +44,10 @@ A "no" at step 4 also counts as a result. The spike then ends at step 3, and the
   meshes can replace them: SkyCraft's Fabric mod (MIT, Minecraft 26.3) already builds them.
 - **What Minecraft's de-obfuscation changes.** Minecraft has shipped unobfuscated since 26.1. That makes the Minecraft
   side easy, and SkyCraft already relies on it. It does nothing for mapping Cyberpunk's renderer.
-- **Minecraft doesn't draw its own world.** SkyCraft's first design had Minecraft render its world from the game's
-  camera, and shared the image between the two games. SkyCraft moved to drawing the meshes itself, to light them with
-  Skyrim's sun, shadows, fog and weather. It kept a captured Minecraft image only for the HUD and the hand. Spike 3
-  follows the same split.
+- **Minecraft doesn't draw its own world.** SkyCraft's design document had Minecraft render its world from the game's
+  camera, and share the image between the two games. The finished SkyCraft draws the meshes itself, inside Skyrim's
+  frame, where they get Skyrim's sun, shadows, fog and weather. It uses a captured Minecraft image only for the HUD and
+  the hand. Spike 3 follows the same split.
 
 ## Non-goals
 
@@ -66,10 +67,10 @@ A "no" at step 4 also counts as a result. The spike then ends at step 3, and the
 ### The machine and its settings
 
 - **Hardware:** NVIDIA GeForce RTX 3070 (driver 32.0.16.1714), AMD Ryzen 7 9800X3D, Windows 10 Pro 19045.
-- **Display:** 2560×1440 in a borderless window, VSync off, Reflex on.
+- **Display:** 2560×1440 in a borderless window, SDR (HDR off), VSync off, Reflex on.
 - **Upscaling:** DLSS super resolution, Quality preset, transformer model. Quality renders at two thirds of the output
   on each axis, about 1707×960.
-- **Off:** frame generation and ray tracing.
+- **Off:** frame generation, ray tracing and dynamic resolution.
 - **Frame rate:** 40 to 80 fps in the city.
 
 ### Streamline and DLSS
@@ -96,10 +97,19 @@ A "no" at step 4 also counts as a result. The spike then ends at step 3, and the
   - the flags `depthInverted`, `cameraMotionIncluded`, `motionVectors3D`, `reset`, `orthographicProjection`,
     `motionVectorsDilated` and `motionVectorsJittered`.
 - **Buffer types** include depth (0), motion vectors (1), HUD-less colour (2), scaling input colour (3), scaling
-  output colour (4), exposure (13), and UI colour and alpha (23). Each tag's `sl::Resource` carries the native resource
-  and its D3D12 state.
-- **The approach works in this game:** [OptiScaler](https://github.com/optiscaler/OptiScaler/wiki/Cyberpunk-2077), an
-  open-source upscaler swapper, hooks Streamline to read Cyberpunk's DLSS inputs.
+  output colour (4), exposure (13), and UI colour and alpha (23).
+- **A tag (`sl::ResourceTag`)** holds:
+  - an `sl::Resource`, with the native resource and its D3D12 state at the evaluate;
+  - the buffer type and a lifecycle: valid only now, until the evaluate, or until present;
+  - an extent: the part of the resource that holds the image, when the resource is larger.
+- **Tags come two ways.** Global tags go through `slSetTag`. "Local" tags can also be passed among
+  `slEvaluateFeature`'s inputs. Local tags apply to that evaluate only, and don't touch the global ones.
+- **After each evaluate, the command list's state is put back.** In Streamline's normal mode, Streamline restores the
+  descriptor heaps, the compute root signature and its arguments, and the pipeline state. In its manual mode, the game
+  must restore them itself. Graphics state isn't restored, because DLSS doesn't change it.
+- **Prior art in this game:** [OptiScaler](https://github.com/optiscaler/OptiScaler/wiki/Cyberpunk-2077), an
+  open-source upscaler swapper, takes over Cyberpunk's DLSS inputs, and its frame-generation inputs through Streamline.
+  Its page doesn't say which calls it hooks.
 
 ### D3D12
 
@@ -120,8 +130,11 @@ A "no" at step 4 also counts as a result. The spike then ends at step 3, and the
     back buffers' render-target views;
   - the game's 128 command list contexts (0xD1AD80). Each `CommandListContext` holds a `debugName` (0x00), its
     `ID3D12GraphicsCommandList` (0x30) and a type (0x68).
-- **Hooking:** the SDK's `hooking->Attach` detours a function. BlockRender uses it once, at load, on
-  `D3D12CreateDevice`.
+
+  Nothing confirms these offsets hold for 2.31. Step 1 checks them in the game: the device found here must be the one
+  that `D3D12CreateDevice` returned, or Streamline's proxy for it.
+- **Hooking:** the SDK's `hooking->Attach` detours a function. BlockRender uses it at load only, on `D3D12CreateDevice`
+  and `CreateDXGIFactory2`.
 
 ### Other mods
 
@@ -131,20 +144,23 @@ A "no" at step 4 also counts as a result. The spike then ends at step 3, and the
 
 ### Cyberpunk's frame, as published
 
-Two analyses of the game's first versions, [zhangdoa.com](https://zhangdoa.com/rendering-analysis-cyberpunk-2077/) and
-[c0de517e](http://c0de517e.blogspot.com/2020/12/hallucinations-re-rendering-of.html), describe a deferred renderer.
-They captured at 1080p, without ray tracing or DLSS. In order:
+Two analyses of the game's first versions describe a deferred renderer. Both captured without ray tracing or DLSS:
+[zhangdoa.com](https://zhangdoa.com/rendering-analysis-cyberpunk-2077/) at 1080p with RenderDoc and PIX, and
+[c0de517e](http://c0de517e.blogspot.com/2020/12/hallucinations-re-rendering-of.html) at High with RenderDoc. In
+order:
 1. **A partial depth pre-pass.**
-2. **A G-buffer** of four render targets:
+2. **A G-buffer** of three or four render targets:
    - `R10G10B10A2_UNORM`: albedo, with an object mask in alpha;
-   - `R10G10B10A2_UNORM`: the world-space normal, stored as 0.5n + 0.5;
-   - `R8G8B8A8_UNORM`: metalness, roughness and other attributes;
-   - `R16G16_FLOAT`: motion vectors.
+   - `R10G10B10A2_UNORM`: the world-space normal, stored as 0.5n + 0.5. Its 2-bit alpha marks hair (c0de517e);
+   - `R8G8B8A8_UNORM`: metalness, roughness, translucency and emissive, in that order (c0de517e);
+   - `R16G16_FLOAT`: motion vectors (zhangdoa only).
 
-   Depth and stencil are `D32_FLOAT_S8X24_UINT`. The stencil marks bodies (0x15), faces (0x35), hair (0x95) and
+   Depth and stencil are `D32_FLOAT_S8X24_UINT`. The stencil tags kinds of object: moving objects, skin, cars,
+   vegetation, hair and roads (c0de517e). zhangdoa gives the values for bodies (0x15), faces (0x35), hair (0x95) and
    trees (0xA0).
-3. **Decals,** then four shadow cascades, tiled lighting in compute, screen-space reflections and volumetric fog.
-4. **TAA,** bloom and colour grading.
+3. **Decals,** then shadow cascades, clustered lighting in compute (with contact shadows), ambient occlusion,
+   screen-space reflections and volumetric fog.
+4. **TAA,** bloom, tone mapping with auto-exposure, and colour grading.
 5. **The UI,** last.
 
 Version 2.31 has changed since then. Here DLSS replaces TAA, and there's path tracing. So the frame log re-checks all
@@ -169,7 +185,7 @@ SkyCraft's section vertex, which the test structures use too:
 | 12–19 | `float u, v` | Atlas coordinates |
 | 20–23 | `uint8 r, g, b, a` | Tint and ambient occlusion, without Minecraft's per-face brightness |
 | 24–27 | `uint32 light` | Block light (0–15) in bits 0–7, sky light (0–15) in bits 8–15 |
-| 28–31 | `uint32 flags` | Bit 0 cut-out, bit 1 translucent. Bits 4–7: the face's direction + 1, in Minecraft's order (down, up, north, south, west, east), or 0 for none |
+| 28–31 | `uint32 flags` | Bit 0: alpha-tested (opaque or cut-out). Bit 1: translucent. Bits 4–7: the face's direction + 1, in Minecraft's order (down, up, north, south, west, east), or 0 for none |
 
 - **Quads:** each is two triangles, so six vertices (corners 0, 1, 2, 0, 2, 3). There's no index buffer.
 - **World position:** the section's origin plus `WorldFromMc(x, y, z)`, which is `(x, −z, y)` (spike 1's `Coords.h`).
@@ -228,14 +244,14 @@ spikes/block-render/
 - **On load:**
   - reads `settings.txt` from its folder, if there is one. Two settings, both off unless set to 1: `dred` and
     `debuglayer` (see "Safety");
-  - installs the Streamline import patches and the `D3D12CreateDevice` detour.
+  - installs the Streamline import patches, and the detours on `D3D12CreateDevice` and `CreateDXGIFactory2`.
 - **Every frame, on the main thread,** a game state for `Running` runs `OnUpdate`. It:
   - checks `blockrender.request` once a second, and runs the command;
   - places structures, meshes changed sections, and hands the meshes to the renderer;
   - writes the log lines the render threads queued;
   - once a second, writes the status file.
-- **On unload:** switches drawing off, puts back every patch that still holds our pointer, and releases our D3D12
-  objects.
+- **On unload:** switches drawing off, puts back every patch that still holds our pointer, waits for our fence (so
+  the GPU has finished with our work), and releases our D3D12 objects.
 
 ### Hooks
 
@@ -244,41 +260,54 @@ spikes/block-render/
   keeps the originals.
 - **`StreamlineHooks`:** each hook records what it's given, then calls the original and returns its result unchanged.
   - `slGetNewFrameToken`: notes the index of the frame the game is starting.
-  - `slSetConstants`: checks the struct's type GUID and version, then keeps viewport 0's constants in a small ring,
-    by frame index.
+  - `slSetConstants`: checks the struct's type GUID and version, then keeps each viewport's constants in a small
+    ring, by frame index. The viewport that DLSS evaluates is the one used.
   - `slSetTag`: checks each tag, then records its type, resource, state, extent and lifecycle for the frame. It reads
-    each resource's description (format and size).
-  - `slEvaluateFeature`: notes which command list evaluates DLSS super resolution. If that list is a Streamline proxy,
-    `slGetNativeInterface` gives the native one. The game doesn't import that function, so the plugin finds it among
-    `sl.interposer.dll`'s exports. Depending on the step, this hook:
-    - records dumps of the tagged buffers (step 1);
-    - copies the depth (step 2);
-    - draws, or marks the list for our own list to follow (step 3).
+    each resource's description: format, size and flags (the flags say whether it can be a render target).
+  - `slEvaluateFeature`: notes the viewport and which command list evaluates DLSS super resolution, and reads the
+    local tags among its inputs. For that evaluate, local tags take the place of global tags of the same type.
+    - **Native lists:** our tracker knows native D3D12 lists. A list whose vtable isn't `D3D12Core.dll`'s is taken to
+      be a Streamline proxy, and `slGetNativeInterface` gives the native one. The game doesn't import that function,
+      so the plugin finds it among `sl.interposer.dll`'s exports.
+    - **Depending on the step,** this hook:
+      - records dumps of the tagged buffers (step 1);
+      - copies the depth (step 2);
+      - draws, or marks the list for our own list to follow (step 3).
 - **`D3D12Hooks`:**
-  - **The device:** the detour on `D3D12CreateDevice` (the plugin loads `d3d12.dll` at load to find it) turns on DRED
-    or the debug layer if the settings ask for them, then calls the original. When a device comes back, it:
+  - **The device:** the detour on `D3D12CreateDevice` turns on DRED or the debug layer if the settings ask for them,
+    then calls the original. (At load, the plugin loads `d3d12.dll` and `dxgi.dll` itself, to find the two functions it
+    detours.) When a device comes back, the detour:
     - patches the device's vtable for `CreateRenderTargetView`, `CreateDepthStencilView`, `CopyDescriptors` and
       `CopyDescriptorsSimple`;
     - creates a command queue, a command allocator and a command list of its own, patches their vtables, then
       releases them;
     - logs that it saw the device.
-  - **The command queue:** `ExecuteCommandLists` puts our command lists into the game's submissions: uploads at the
-    front, and drawing straight after the list it follows. It also records the submissions for the frame log.
+  - **The command queue:** `ExecuteCommandLists` puts our command lists into the game's submissions on its main queue:
+    uploads at the front, and drawing straight after the list it follows. The main queue is the one the DLSS
+    evaluate's list is submitted on. The hook also records every submission, on every queue, for the frame log.
   - **The command lists:** the calls that the tracker and the log need:
     - `Reset` and `Close`;
     - `OMSetRenderTargets`, `BeginRenderPass` and `EndRenderPass`;
     - `ClearRenderTargetView` and `ClearDepthStencilView`;
     - `ResourceBarrier` and `Barrier`;
-    - `SetPipelineState`, `SetGraphicsRootSignature` and the calls that set graphics root arguments;
+    - `SetPipelineState`, `SetPipelineState1`, `SetGraphicsRootSignature` and the calls that set graphics root
+      arguments;
     - `RSSetViewports`, `RSSetScissorRects`, `IASetPrimitiveTopology` and `OMSetStencilRef`;
     - the draw and dispatch calls, `ExecuteIndirect` and `ExecuteBundle`;
     - `BeginEvent`, `EndEvent` and `SetMarker`.
-  - **The swap chain:** `Present` and `Present1`, patched on the swap chain the game uses (from `GetDeviceData()`) the
-    first time Streamline's hooks see a frame.
+  - **The swap chain:** `Present` and `Present1`, patched when the swap chain is created.
+    - A detour on `CreateDXGIFactory2`, set at load, patches the factory's swap-chain creation calls
+      (`CreateSwapChain` and `CreateSwapChainForHwnd`). Those then patch the new swap chain.
+    - If the swap chain already exists when the plugin loads, it comes from `GetDeviceData()` instead, once its vtable
+      is seen to lie in `dxgi.dll` or `sl.interposer.dll`.
   - **Why vtable patches:** everything after load is patched in vtables, because swapping one pointer is safe while
     the game's render threads are running. Rewriting the start of a heavily called function isn't.
 - **`VtablePatch`:** makes a vtable entry writable, swaps it atomically, restores the protection and keeps the
-  original. Restoring only puts the original back if the entry still holds ours.
+  original.
+  - **Patching twice** does nothing: an entry that already holds ours is left alone, so a second device or swap chain
+    is harmless.
+  - **Restoring** only puts the original back if the entry still holds ours, and only once `Readable` shows the
+    vtable's memory is still there.
 - **`Slots.h`:** the vtable slot of every patched method. A unit test checks each one against the C interface layouts
   in the Windows SDK's headers.
 
@@ -287,8 +316,8 @@ spikes/block-render/
 - **The map:** RTV and DSV descriptor handles to the resource and view description they were made with. It follows
   `CreateRenderTargetView`, `CreateDepthStencilView`, and copies of RTV and DSV descriptors, under a reader-writer
   lock.
-- **The fallback:** if step 1 shows the device was created before the plugin loaded, the map is filled from GpuApi's
-  own texture table instead (see "Risks").
+- **The fallbacks:** if step 1 shows the device was created before the plugin loaded, the game is made to re-create
+  its render targets while the patches watch, or else the map is filled from GpuApi's own texture table (see risk 1).
 
 ### `StateTracker`
 
@@ -298,20 +327,24 @@ spikes/block-render/
   - everything our drawing may change: the bound render targets and depth (with their resources), the pipeline
     state, the graphics root signature and every root argument set since it, the viewports, scissors, topology and
     stencil reference;
-  - each resource's state after the last barrier recorded in the list.
-- **`Restore(list)`** sets all of that on the list again, after our draws.
+  - each resource's state after the last barrier recorded in the list. A resource in the middle of a split barrier
+    (begun but not yet ended) counts as unknown.
+- **`Restore(list)`** sets all of that on the list again, after our draws. After changing the root signature, every
+  root argument has to be set again, which is why the tracker keeps them all.
 - **For the frame log,** when a log is armed, it splits each list into passes, with each change of render targets
   starting one. It counts each pass's draws, indirect draws, dispatches and clears, and keeps any event names.
 
 ### `ListNames`
 
-Finds a native command list's `CommandListContext` in `GetDeviceData()->commandLists`, and reads its `debugName`.
-Every read is range-checked with `Readable`. Only the frame log uses it.
+Finds a native command list's `CommandListContext` in `GetDeviceData()->commandLists`, and reads its `debugName`. If
+the context holds a Streamline proxy, the proxy's native list is compared. Every read is range-checked with `Readable`.
+Only the frame log uses it.
 
 ### `FrameLog` and dumps
 
-- **`log`** arms the next whole frame, from one `slGetNewFrameToken` to the next. It writes
-  `logs\<time>\frame.json` (see "The frame log").
+- **`log`** arms the next two whole frames, from one `slGetNewFrameToken` to the third after it, so that a whole
+  frame is in the log even if the game works on two frames at once. Every event carries the frame index Streamline gave
+  at the time. It writes `logs\<time>\frame.json` (see "The frame log").
 - **`dump <what>`** copies buffers into readback memory at the moment each is complete:
   - the tagged buffers at the DLSS evaluate;
   - the G-buffer candidates when their pass ends.
@@ -324,43 +357,60 @@ Every read is range-checked with `Readable`. Only the frame log uses it.
 ### `Renderer`
 
 - **Our D3D12 objects:**
-  - one root signature: a constant buffer view, two buffer views (vertices, and the atlas) and root constants;
+  - one root signature: a constant buffer view, three buffer views (the vertices, the atlas, and the depth copy in
+    step 2 or the exposure in step 3) and root constants;
   - pipeline states for each mode, and CPU-only RTV and DSV descriptor heaps of our own;
   - default-heap buffers for the section meshes and the atlas, an upload ring and a per-frame constant-buffer ring;
   - a command allocator and command list per frame in flight, a fence, and the GPU timer.
-- **No descriptor heaps:** the shaders read vertices and the atlas through root buffer views, so they need no
-  shader-visible descriptor heap, and the game's heaps are never changed. The one exception is step 2's Present pass:
-  it runs in our own list, and reads our depth copy through a heap of our own.
+- **Frames in flight:** the per-frame rings have room for six frames in flight, Streamline's own limit. Nothing ever
+  waits on the GPU: if a frame's slot is still in use, that frame is skipped and counted.
+- **No descriptor heaps:** the shaders read everything they need through root buffer views: the vertices, the atlas,
+  and in step 2 our depth copy. So they need no shader-visible descriptor heap, and the game's heaps are never changed.
 - **The modes:**
   - **`off`.**
   - **`present` (step 2):**
-    - At the DLSS evaluate, the tagged depth's depth plane is copied into our own `R32_FLOAT` texture. That's only
-      barriers and a copy, recorded in the game's list.
+    - At the DLSS evaluate, the depth plane of the tagged depth is copied into a buffer of ours, row by row, as
+      `CopyTextureRegion` lays it out. That's only barriers and a copy, recorded in the game's list.
     - At `Present`, our own list draws the blocks into the back buffer, before the original `Present` runs. The pixel
-      shader discards any pixel where the depth copy is nearer, mapping each output pixel to the render-resolution
-      depth.
+      shader discards any pixel where the copied depth is nearer, mapping each output pixel into the depth tag's
+      extent.
+    - The back buffer is taken from the swap chain each frame, and no reference to it is kept, so resizing the window
+      or changing resolution still works.
   - **`predlss` (step 3):** at the DLSS evaluate, draws into the tagged scaling-input colour. It tests and writes the
     tagged depth, and writes the tagged motion vectors. Shading is forward: the atlas, times the vertex colour, times
-    Minecraft's face brightness (up 1.0, down 0.5, north and south 0.8, east and west 0.6), times an exposure.
+    Minecraft's face brightness (up 1.0, down 0.5, north and south 0.8, east and west 0.6), brought to the scene's
+    brightness by its exposure.
     - **The exposure:** if the game tags an exposure texture, it's copied into a small buffer of ours each frame, and
-      the shader reads it. Otherwise it's `set exposure`.
-  - **`gbuffer` (step 4):** draws into the G-buffer targets and depth that the frame log found, writing albedo,
-    normal, material values and motion vectors in the encoding the dumps show.
+      the shader reads it. Otherwise it's `set exposure`. Whether the value multiplies or divides is settled in step 3.
+  - **`gbuffer` (step 4):** draws into the G-buffer targets and depth that the frame log found. It writes albedo,
+    normal, material values, motion vectors and the stencil value, in the encoding the dumps show. The stencil value
+    is the one the game's own static surfaces carry.
     - **Recognising the pass:** every frame, by its targets' formats and sizes, and by its depth being the main depth
       buffer that Streamline's latest tags name. The frame log shows whether the game alternates two depth buffers.
     - **Drawing once per frame:** our draws go in when the list leaves the pass, at its next change of render targets
       or at `Close`, and only once per frame. If the G-buffer pass is spread over several lists, one of them is enough,
       because depth testing sorts out which is in front.
+    - **Render passes:** if the game draws the G-buffer inside a render pass (`BeginRenderPass`), our draws go in after
+      `EndRenderPass`, never inside the pass.
 - **Where the commands go:** our own command list, in `ExecuteCommandLists`, when the frame log shows a list boundary
-  at the right point. Otherwise they're recorded into the game's list, followed by `StateTracker::Restore`.
+  at the right point. Otherwise they're recorded into the game's list, followed by `StateTracker::Restore`. At the
+  DLSS evaluate, the state that's restored after the evaluate (see "Streamline and DLSS") doesn't include graphics
+  state, so the tracker's restore is still needed there.
 - **The camera:** written into the constant buffer as late as possible, just before the list that holds our draws is
   submitted, from Streamline's constants for that frame. That's in `ExecuteCommandLists` in steps 3 and 4, and in
   `Present` in step 2, where the frame is the one whose DLSS evaluate came last. If the frame's constants haven't
   arrived yet, the previous frame's are used, and the frame is counted as "late camera" (see "Risks").
-- **Drawing:** one draw per section, skipping sections outside the view frustum. A cut-out pixel with alpha under 0.5
-  is discarded.
-- **GPU time:** timestamps before and after our draws, resolved into a readback buffer and read three frames later.
-  Timestamps and their resolves change no pipeline state, so they're safe in the game's list.
+- **Drawing:**
+  - one draw per section, skipping sections outside the view frustum;
+  - the viewport and scissor are the back buffer in step 2, the depth tag's extent in step 3, and the game's own at
+    that point in step 4;
+  - depth is tested in the direction that `depthInverted` gives;
+  - a cut-out pixel with alpha under 0.5 is discarded.
+- **Sections between threads:** the main thread hands over a new list of sections under a lock, and recording reads a
+  snapshot of it.
+- **GPU time:** timestamps before and after our draws, resolved into a readback buffer and read once our fence shows
+  the GPU has finished that frame. Timestamps and their resolves change no pipeline state, so they're safe in the
+  game's list.
 
 ### `Camera`
 
@@ -371,8 +421,11 @@ Every read is range-checked with `Readable`. Only the frame log uses it.
     (`set jittersign`).
 - **Motion vectors** for static points come from `clipToPrevClip`, in the units that `mvecScale` implies. Their sign
   is settled in step 3, against the game's own motion vectors (`set mvsign`).
-- **Positions are camera-relative.** Section origins are subtracted from the camera's position in doubles, so the GPU
-  only sees small numbers.
+- **Positions are camera-relative.** The camera's position is subtracted from each section's origin in doubles, so the
+  GPU only sees small numbers.
+- **A render origin, if there is one.** Like PhysX (spike 1), the renderer might work relative to an origin near V.
+  Step 1 shows whether `cameraPos` is in world coordinates or offset. If it's offset, the offset is subtracted from
+  section origins too.
 
 ### `Shaders`
 
@@ -383,8 +436,8 @@ starts, and again on `reload`. A compile error is logged, and the previous pipel
 
 - **Loading:** reads `atlas.bin` (RGBA8 pixels, with mip levels for each sprite) and `atlas.json` (each block's
   sprites per face, its tint and its cut-out flag) from the plugin's folder, and uploads the pixels into a buffer.
-- **Sampling:** the shader samples the nearest texel, picking a mip level from the UV derivatives, as Minecraft does
-  with mipmaps on.
+- **Sampling:** the shader samples the nearest texel of the nearest mip level, picked from the UV derivatives. That's
+  close to Minecraft with mipmaps on, which also blends between levels.
 
 ### `BlockWorld`, `Mesher` and `Structures`
 
@@ -395,8 +448,8 @@ starts, and again on `reload`. A compile error is logged, and the previous pipel
     same block, as glass does against glass;
   - writes the vertex format above, with sky light 15 and block light 0;
   - puts Minecraft-style corner ambient occlusion into the colour, switchable with `set ao`.
-- **`Structures`:** each is placed on the block grid at the height of V's feet, with its minimum corner 3 blocks ahead
-  of V.
+- **`Structures`:** each is placed on the block grid, with its minimum corner 3 blocks ahead of V. Its bottom layer is
+  the block layer that holds V's feet, so it sits partly sunk into the ground.
   - `cube`: one stone block.
   - `sampler`: every block in the atlas list, in a row with a gap between each, on a stone base.
   - `house`: 7×7 and 5 high. A cobblestone floor, oak plank walls, oak log corners, a glass window in each side, a
@@ -408,7 +461,7 @@ starts, and again on `reload`. A compile error is logged, and the previous pipel
 ### Status and the overlay
 
 - **`status.txt`:** once a second, the plugin writes it into the overlay's folder, with:
-  - the mode, and the frames drawn and skipped, with the last reason;
+  - the mode, the frames drawn and skipped (with the last reason), and the frames drawn with a late camera;
   - the sections, blocks and vertices;
   - our GPU time and the frame time, as the average and the worst over that second;
   - the last request's result, and where each structure is.
@@ -435,26 +488,36 @@ dumps.
 1. At the main menu: `log`.
 2. In free roam, standing still with the mouse left alone: `log`, then `dump all`.
 3. One more `log` while turning slowly.
+4. If Streamline's camera position differs from the script camera's, one more `log`, standing still on the far side
+   of one of the 1,024 m grid lines that the PhysX overlay shows.
 
 **Pass:**
 - All four Streamline patches are in place, and the device detour saw the game's device. If it didn't, that's
   recorded, and the fallback is needed.
-- Standing still, Streamline's `cameraPos` is within 0.01 m of the script camera's position, and `cameraFwd` within
-  0.1° of its forward.
-- Depth, motion vectors and the scaling input colour are tagged at the render resolution, and the scaling output
-  colour at 2560×1440.
-- The G-buffer pass is found among the candidates: the passes that draw into three or more render-resolution targets
-  with the tagged depth. Where several share those targets, such as decals after the G-buffer, their order and draw
-  counts tell them apart. The dumps show what each target holds. If the pass isn't found, the log shows why.
+- `GetDeviceData()`'s device is the one the detour saw, or Streamline's proxy for it. That confirms the SDK's GpuApi
+  offsets for 2.31.
+- Standing still, Streamline's `cameraFwd` is within 0.1° of the script camera's forward. Its `cameraPos` is within
+  0.01 m of the script camera's position, or differs by an offset. In that case, the second log shows whether the
+  offset is fixed or follows a grid near V, like PhysX's origin.
+- Depth, motion vectors and the scaling input colour are tagged, with extents (or sizes, without an extent) of the
+  render resolution. The scaling output colour is 2560×1440.
+- The G-buffer pass is found among the candidates: the passes that draw into three or more targets the size of the
+  tagged depth, with the tagged depth bound. Where several share those targets, such as decals after the G-buffer,
+  their order and draw counts tell them apart. The dumps show what each target holds. If the pass isn't found, the log
+  shows why.
 - CET's overlay still works.
 
 **Also recorded:**
 - the order of `slGetNewFrameToken`, `slSetConstants`, `slSetTag`, the G-buffer list's submission and
   `slEvaluateFeature`;
 - whether the G-buffer pass and the DLSS evaluate sit at command-list boundaries;
+- whether the game uses Streamline's proxies or its manual mode;
 - the depth convention: `depthInverted`, near and far;
+- the matrices' convention: which row or column of `cameraViewToClip` holds the perspective terms, and whether it
+  already holds the jitter, which Streamline says it mustn't;
 - how `cameraFOV` and `cameraAspectRatio` relate to the script camera's vertical 68.24°;
-- which barrier API the game uses;
+- each tag's flags and lifecycle, and whether it's global or local;
+- which barrier API the game uses, and whether it uses render passes;
 - every command list of the frame, with its name.
 
 ### Step 2: a cube on the finished frame
@@ -497,7 +560,9 @@ dumps.
 - The blocks are lit by the sun and darkened by the city's shadows, and lit by street lights at night.
 - Fog thickens on them with distance, and their ambient occlusion and reflections look plausible.
 - DLSS keeps them as steady as in step 3.
-- No other pass shows artifacts: decals, materials picked by stencil, reflections or ambient occlusion.
+- No other pass shows artifacts: decals, materials picked by stencil, reflections or ambient occlusion. One exception
+  is expected and only noted: the game's projected decals (dirt, graffiti) also land on blocks placed inside a decal's
+  volume.
 
 **Recorded:** our GPU time at step 3's block counts, and screenshots from step 3 and step 4, side by side.
 
@@ -511,7 +576,7 @@ checked once a second. Each file holds one command. Unknown commands are logged 
 
 | Command | Does |
 |---|---|
-| `log` | Logs the next whole frame |
+| `log` | Logs the next two whole frames |
 | `dump depth\|mvec\|color\|gbuffer\|all` | Dumps on the next frame |
 | `mode off\|present\|predlss\|gbuffer` | Switches drawing, from the next frame |
 | `place cube\|sampler\|house` | Adds that structure 3 blocks ahead of V |
@@ -524,22 +589,26 @@ checked once a second. Each file holds one command. Unknown commands are logged 
 
 `frame.json` holds:
 - **`pluginVersion`, `time` and `frameIndex`.**
-- **`device`:** whether the detour saw the device being created, and how many RTVs and DSVs the registry knows, plus
-  how many handles came up that it didn't know.
+- **`device`:**
+  - whether the detour saw the device being created;
+  - whether `GetDeviceData()`'s device, queue and swap chain are native or Streamline proxies, and whether the device
+    matches the one the detour saw;
+  - how many RTVs and DSVs the registry knows, and how many handles came up that it didn't know.
 - **`scriptCamera`:** the position, forward and field of view from the game's scripts (`PlayerLocator`), read on the
   main thread during the logged frame.
 - **`streamline`:**
   - `constants`: every field of `sl::Constants`;
-  - `tags`: for each tag, the buffer type and its name, the resource, its format and size, its state, lifecycle and
-    extent;
-  - `evaluates`: the feature and the command list.
+  - `tags`: for each tag, whether it's global or local, the buffer type and its name, the resource, its format, size
+    and flags, and its state, lifecycle and extent;
+  - `evaluates`: the feature, the viewport and the command list.
 - **`events`:** the frame's Streamline calls, submissions and present, in order, each with its thread.
 - **`submissions`:** for each `ExecuteCommandLists` call, the queue and its lists. Each list has its address, its
   game name, and its passes. Each pass has:
   - its render targets and depth, as resource, format and size, with whether the depth is the tagged one;
   - its counts of draws, indirect draws, dispatches and clears;
   - its event names.
-- **`gbufferCandidates`:** each pass that draws into three or more render-resolution targets with the tagged depth.
+- **`gbufferCandidates`:** each pass that draws into three or more targets the size of the tagged depth, with the
+  tagged depth bound.
 
 ## Safety
 
@@ -551,9 +620,11 @@ checked once a second. Each file holds one command. Unknown commands are logged 
   fault:
   - every read of game memory is range-checked with `Readable`;
   - Streamline structs are checked by type GUID, version and size before they're read;
-  - COM calls go only to objects that D3D12 or Streamline handed to the plugin.
-- **Checks before every draw.** The tagged buffers and the G-buffer pass must match what the frame log recorded:
-  formats, sizes, and the main depth buffer. If they don't, that frame is skipped and counted. 30 skipped frames in a
+  - COM calls go only to objects that D3D12 or Streamline handed to the plugin. An object found through GpuApi is
+    used only once its vtable is seen to lie in the module it should come from: `D3D12Core.dll`, `dxgi.dll` or
+    `sl.interposer.dll`.
+- **Checks before every draw.** The tagged buffers and the G-buffer pass must match what step 1 found: formats, sizes,
+  and the main depth buffer. If they don't, that frame is skipped and counted. 30 skipped frames in a
   row switch the mode off, and log why.
 - **Barriers.** We only move resources whose current state we know, and put each back exactly as it was.
 - **If the GPU crashes.**
@@ -592,14 +663,21 @@ checked once a second. Each file holds one command. Unknown commands are logged 
   - the byte layout matches SkyCraft's.
 - **The block-to-world mapping,** with the sign flip on y.
 - **The camera maths:**
-  - the view and projection from known Streamline values;
-  - the jitter's sign and scale;
-  - a static point's motion vector between two cameras.
-- **Streamline's struct layouts:** the offset of every field read, against the 2.7.2 headers.
+  - the view and projection from known Streamline values, with and without a render origin;
+  - the jitter moves a projected point by the given number of pixels, with either sign;
+  - a static point's motion vector between two cameras;
+  - the present pass's mapping from an output pixel into the depth tag's extent.
+- **Streamline:**
+  - the offset of every struct field read, against the 2.7.2 headers;
+  - local tags taking the place of global tags of the same type, for one evaluate only.
 - **The patchers:** an import-table patch on the test program's own imports, and a vtable patch on a fake COM object,
-  each put back afterwards.
+  each put back afterwards. Patching twice changes nothing.
 - **`Slots.h`** against the C interface layouts in the Windows SDK.
-- **The state tracker:** its restore sequence, on a fake command list that records the calls.
+- **`ViewRegistry`:** views created, and copied singly and in ranges.
+- **The state tracker,** on a fake command list that records the calls:
+  - its restore sequence;
+  - every root argument set again after a root signature change;
+  - a split barrier leaving its resource's state unknown.
 - **The rest:** the request parser, the DDS writer's headers, and the frame log's JSON.
 
 ### pytest
@@ -609,26 +687,45 @@ checked once a second. Each file holds one command. Unknown commands are logged 
 
 ### In the game
 
-See "The four steps". Every step also checks that CET's overlay still works, and that the game's frame time with every
-mode off matches the game without the plugin.
+See "The four steps". Every step also checks that CET's overlay still works. Step 3 measures what the hooks alone cost.
 
 ## Risks
 
-1. **The plugin loads after the game creates its device,** so the registry misses render targets made before then.
-   **Fallback:** fill it from GpuApi's own texture table. The swap chain's back-buffer texture ID, with the back buffer
-   that `GetBuffer` returns, locates that table's entries.
+1. **The plugin loads after the game creates its device,** so the detours never fire, and the registry misses render
+   targets made before the patches.
+   **First fallback:** patch the device found through `GetDeviceData()`, once its vtable checks out. Then change the
+   DLSS preset in the game's settings and back, which makes the game re-create its render targets while the patches
+   watch.
+   **Second fallback:** fill the registry from GpuApi's own texture table. The swap chain's back-buffer texture ID,
+   with the back buffer that `GetBuffer` returns, locates that table's entries.
 2. **Streamline's constants arrive after the G-buffer list is submitted,** so our blocks would be one frame behind.
    **Fallback:** read the game's own camera constants, which the G-buffer pass's draws bind as a root constant buffer.
+   Reading them needs the CPU address of the game's upload buffers, so the device's resource creation would be patched
+   too.
 3. **The G-buffer encoding has changed since the published analyses.** The dumps and `set` experiments settle it.
-   Anything that can't be decoded is copied from a static surface of the game's next to the blocks.
+   Anything that can't be decoded, the stencil value included, is copied from a static surface of the game's next to
+   the blocks.
 4. **Mirrors and other views** render their own G-buffer passes. We only draw into passes with the main depth buffer.
-5. **The game uses enhanced barriers** (`Barrier`, which Agility SDK 615 supports), or render passes. Our barriers and
-   draws then use the same API. The frame log shows which.
+5. **The game uses enhanced barriers** (`Barrier`, which Agility SDK 615 supports), or render passes. Our barriers
+   then use the same API, and our draws go between render passes. The frame log shows which.
 6. **A GPU crash while developing.** Each mode is off by default, steps go one at a time, and DRED or the debug layer
    shows where it happened.
 7. **Clashes with CET, Streamline, Reflex or launcher overlays.** Our patches call whatever they replaced, and every
    step checks CET's overlay.
-8. **Tracking costs frame time.** The hooks run on every command list call. Step 3 measures the hooks alone, and if
-   they cost noticeably, tracking is limited to the lists we draw into.
+8. **Tracking costs frame time.** The hooks run on every command list call. Step 3 measures the hooks alone. If they
+   cost noticeably, tracking is limited to the lists that matter: direct lists, or lists with the game's names for the
+   passes we use.
 9. **A game patch** changes the renderer, the Streamline version or the Agility SDK. The frame log would show it, and
    only 2.31 is supported.
+10. **The SDK's GpuApi offsets don't hold for 2.31.** Step 1's device check shows it. The frame log then drops the
+    lists' names, and nothing else is read through GpuApi: the swap chain comes only from the factory detour.
+11. **The tagged buffers can't be drawn into together.** A buffer's flags may not allow it to be a render target:
+    the scaling input colour or the motion vectors might be written only by compute shaders. Or the colour, motion
+    vectors and depth may differ in size, and D3D12 only binds render targets and depth of the same size. Step 3 then
+    draws into targets of our own, and a compute pass writes the result into the game's buffers. That needs a
+    descriptor heap, so the tracker follows the game's descriptor heaps too, and puts them back.
+12. **A tag is valid only when it's made** (its lifecycle says "only now"), so the buffer's contents may be gone by the
+    evaluate. We then copy or draw at the tag call instead, in the list it names.
+13. **Passes read depth before our G-buffer draws,** for example ambient occlusion computed right after the depth
+    pre-pass. Those passes won't see the blocks. The frame log shows the order. The fallback is to draw the blocks'
+    depth into the depth pre-pass as well.
