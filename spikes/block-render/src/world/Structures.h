@@ -27,8 +27,15 @@ std::pair<Vec3d, Vec3d> WorldBox(const Placed& aPlaced);
 
 // Adds a structure with its minimum corner at aOrigin (see the spec's "Structures"):
 // - "cube": one stone block;
-// - "sampler": every block of the atlas, in a row along +x with a gap between each, on a stone base.
-// Nothing, with aError saying why, for another name or when the atlas lacks stone.
+// - "sampler": every block of the atlas, in a row along +x with a gap between each, on a stone base;
+// - "house": 7 x 7 and 5 high: a cobblestone floor, oak plank walls with oak log corners, a glass window in each wall,
+//   a doorway, a plank roof, and an oak leaves bush beside it.
+// Nothing, with aError saying why, for another name or when the atlas lacks a block it needs.
 std::optional<Placed> PlaceStructure(BlockWorld& aWorld, const Atlas& aAtlas, std::string_view aName, const BlockPos& aOrigin,
                                      std::string& aError);
+
+// Adds rolling ground of grass over dirt over stone with its minimum corner at aOrigin, holding aBlocks blocks, or up to
+// 9 more, since it's made of whole columns. Nothing, with aError saying why, for no blocks or when the atlas lacks a
+// block it needs.
+std::optional<Placed> PlaceField(BlockWorld& aWorld, const Atlas& aAtlas, const BlockPos& aOrigin, size_t aBlocks, std::string& aError);
 }

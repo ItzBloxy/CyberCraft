@@ -15578,7 +15578,7 @@ The test atlas lacks some of their blocks, so the tests build one with all of th
 - Modify: `tests/TestStructures.cpp`, `src/world/Structures.h`, `src/Plugin.cpp`
 - Rewrite: `src/world/Structures.cpp`
 
-- [ ] **Step 1: Edit `tests/TestStructures.cpp` to test the house and the field**
+- [x] **Step 1: Edit `tests/TestStructures.cpp` to test the house and the field**
 
 ```cpp
 using cpmc::BlockPos;
@@ -15693,7 +15693,7 @@ TEST(StructuresNeedTheirBlocks)
 }
 ```
 
-- [ ] **Step 2: Build; it must fail**
+- [x] **Step 2: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -15702,7 +15702,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `'PlaceField': is not a member of 'cpmc'`.
 
-- [ ] **Step 3: Edit `src/world/Structures.h` to add them**
+- [x] **Step 3: Edit `src/world/Structures.h` to add them**
 
 ```cpp
 // Adds a structure with its minimum corner at aOrigin (see the spec's "Structures"):
@@ -15728,7 +15728,7 @@ std::optional<Placed> PlaceStructure(BlockWorld& aWorld, const Atlas& aAtlas, st
 std::optional<Placed> PlaceField(BlockWorld& aWorld, const Atlas& aAtlas, const BlockPos& aOrigin, size_t aBlocks, std::string& aError);
 ```
 
-- [ ] **Step 4: Write `src/world/Structures.cpp`**
+- [x] **Step 4: Write `src/world/Structures.cpp`**
 
 ```cpp
 #include "world/Structures.h"
@@ -15914,7 +15914,7 @@ std::optional<Placed> PlaceField(BlockWorld& aWorld, const Atlas& aAtlas, const 
 }
 ```
 
-- [ ] **Step 5: Build and run the tests; they must pass**
+- [x] **Step 5: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -15924,7 +15924,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `100 test(s), 0 failure(s)`.
 
-- [ ] **Step 6: Edit `src/Plugin.cpp` to place fields**
+- [x] **Step 6: Edit `src/Plugin.cpp` to place fields**
 
 ```cpp
 	const cpmc::BlockPos                origin = cpmc::PlacementOrigin(pose->feet, pose->forward);
@@ -15938,7 +15938,7 @@ Expected: no error or warning lines, then `100 test(s), 0 failure(s)`.
 	                                               : cpmc::PlaceStructure(g_world, atlas, aRequest.what, origin, error);
 ```
 
-- [ ] **Step 7: Build; it must compile without warnings, and the tests still pass**
+- [x] **Step 7: Build; it must compile without warnings, and the tests still pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -15948,7 +15948,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `100 test(s), 0 failure(s)`.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \

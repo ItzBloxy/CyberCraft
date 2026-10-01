@@ -135,8 +135,11 @@ void Place(const cpmc::Request& aRequest)
 	{
 		return Report("place " + aRequest.what + ": there's no player");
 	}
-	const cpmc::BlockPos                origin = cpmc::PlacementOrigin(pose->feet, pose->forward);
-	const std::optional<cpmc::Placed>   placed = cpmc::PlaceStructure(g_world, *g_renderer->AtlasData(), aRequest.what, origin, error);
+	const cpmc::BlockPos              origin = cpmc::PlacementOrigin(pose->feet, pose->forward);
+	const cpmc::Atlas&                atlas = *g_renderer->AtlasData();
+	const std::optional<cpmc::Placed> placed = aRequest.what == "field"
+	                                               ? cpmc::PlaceField(g_world, atlas, origin, size_t(aRequest.number), error)
+	                                               : cpmc::PlaceStructure(g_world, atlas, aRequest.what, origin, error);
 	if (!placed)
 	{
 		return Report("place " + aRequest.what + ": " + error);
