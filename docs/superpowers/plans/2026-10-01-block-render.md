@@ -5168,7 +5168,7 @@ cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
 - Create: `src/log/FrameLogData.h`, `src/log/FrameLogJson.cpp`, `tests/TestFrameLogJson.cpp`
 - Modify: `CMakeLists.txt`
 
-- [ ] **Step 1: Write the failing test, `tests/TestFrameLogJson.cpp`**
+- [x] **Step 1: Write the failing test, `tests/TestFrameLogJson.cpp`**
 
 ```cpp
 #include "Harness.h"
@@ -5299,7 +5299,7 @@ TEST(FrameLogWritesNullWithoutAScriptCamera)
 }
 ```
 
-- [ ] **Step 2: Edit `CMakeLists.txt` to add the test**
+- [x] **Step 2: Edit `CMakeLists.txt` to add the test**
 
 ```cmake
 	tests/TestDds.cpp
@@ -5311,7 +5311,7 @@ TEST(FrameLogWritesNullWithoutAScriptCamera)
 )
 ```
 
-- [ ] **Step 3: Build; it must fail**
+- [x] **Step 3: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -5320,7 +5320,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `fatal error C1083: Cannot open include file: 'log/FrameLogData.h'`.
 
-- [ ] **Step 4: Write `src/log/FrameLogData.h`**
+- [x] **Step 4: Write `src/log/FrameLogData.h`**
 
 ```cpp
 #pragma once
@@ -5457,7 +5457,7 @@ std::string FrameLogJson(const FrameLogData& aLog);
 }
 ```
 
-- [ ] **Step 5: Write `src/log/FrameLogJson.cpp`**
+- [x] **Step 5: Write `src/log/FrameLogJson.cpp`**
 
 ```cpp
 #include "log/FrameLogData.h"
@@ -5825,7 +5825,7 @@ std::string FrameLogJson(const FrameLogData& aLog)
 }
 ```
 
-- [ ] **Step 6: Edit `CMakeLists.txt` to add the source**
+- [x] **Step 6: Edit `CMakeLists.txt` to add the source**
 
 ```cmake
 	src/log/DdsWriter.cpp
@@ -5837,7 +5837,7 @@ std::string FrameLogJson(const FrameLogData& aLog)
 )
 ```
 
-- [ ] **Step 7: Build and run the tests; they must pass**
+- [x] **Step 7: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -5847,7 +5847,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `75 test(s), 0 failure(s)`.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
