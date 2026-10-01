@@ -73,7 +73,8 @@ FrameLogData SampleLog()
 	gbuffer.events.push_back("GBuffer");
 	cpmc::PassRecord unknown;
 	unknown.targets.rtvs.push_back({ 0x123, std::nullopt });
-	log.lists.push_back({ 0x7100, "Scene", 100, { gbuffer, unknown } });
+	log.lists.push_back({ 0x7100, "Scene", 100, { gbuffer, unknown },
+	                      { { 0x1, 0x0, 0, cpmc::ListState::kBeginOnly, std::nullopt }, { 0x5000, 0x10, 0xFFFFFFFF, 0, 0x80 } } });
 	log.gbufferCandidates.push_back({ 0x7100, 0 });
 	return log;
 }
@@ -114,8 +115,27 @@ TEST(FrameLogWritesEverySection)
 	CHECK(Has(json, "\"depthIsTagged\": true"));
 	CHECK(Has(json, "\"indexedDraws\": 812"));
 	CHECK(Has(json, "\"unknown\": true"));
+	CHECK(Has(json, "\"resource\": \"0x1\",\n          \"firstBefore\": \"0x0\",\n          \"firstSubresource\": 0,\n"
+	                "          \"firstFlags\": 1,\n          \"after\": null"));
+	CHECK(Has(json, "\"firstSubresource\": \"all\""));
+	CHECK(Has(json, "\"after\": \"0x80\""));
 	CHECK(Has(json, "\"gbufferCandidates\": [\n    {\n      \"list\": \"0x7100\",\n      \"pass\": 0\n    }\n  ]"));
 	CHECK_EQ(json.back(), '\n');
+}
+
+TEST(FrameLogTakesEachListsTransitionsByAddress)
+{
+	cpmc::ListState state;
+	state.Begin(1, true);
+	state.Transition(reinterpret_cast<void*>(0x20), 0x4, 0x8, cpmc::ListState::kAllSubresources, 0);
+	state.Transition(reinterpret_cast<void*>(0x10), 0x10, 0xC0, 0, cpmc::ListState::kBeginOnly);
+	const std::vector<cpmc::LogTransition> transitions = cpmc::TransitionsOf(state);
+	CHECK_EQ(transitions.size(), size_t(2));
+	CHECK_EQ(transitions[0].resource, uint64_t(0x10));
+	CHECK_EQ(transitions[0].firstFlags, cpmc::ListState::kBeginOnly);
+	CHECK(!transitions[0].after);  // begun, not ended
+	CHECK_EQ(transitions[1].firstBefore, 0x4u);
+	CHECK_EQ(transitions[1].after.value_or(0), 0x8u);
 }
 
 TEST(FrameLogWritesNullWithoutAScriptCamera)

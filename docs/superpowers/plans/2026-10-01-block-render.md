@@ -15970,7 +15970,7 @@ leave their targets.
 - Modify: `tests/TestFrameLogJson.cpp`, `src/log/FrameLogData.h`, `src/log/FrameLogJson.cpp`, `src/log/FrameLog.cpp`,
   `tools/test_frame_summary.py`, `tools/frame_summary.py`
 
-- [ ] **Step 1: Edit `tests/TestFrameLogJson.cpp` to test the transitions**
+- [x] **Step 1: Edit `tests/TestFrameLogJson.cpp` to test the transitions**
 
 ```cpp
 	log.lists.push_back({ 0x7100, "Scene", 100, { gbuffer, unknown } });
@@ -16011,7 +16011,7 @@ TEST(FrameLogTakesEachListsTransitionsByAddress)
 TEST(FrameLogWritesNullWithoutAScriptCamera)
 ```
 
-- [ ] **Step 2: Build; it must fail**
+- [x] **Step 2: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -16020,7 +16020,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `'LogTransition': is not a member of 'cpmc'`.
 
-- [ ] **Step 3: Edit `src/log/FrameLogData.h` to add the transitions**
+- [x] **Step 3: Edit `src/log/FrameLogData.h` to add the transitions**
 
 ```cpp
 struct LogList
@@ -16064,7 +16064,7 @@ std::string DxgiFormatName(uint32_t aFormat);
 std::vector<LogTransition> TransitionsOf(const ListState& aState);
 ```
 
-- [ ] **Step 4: Edit `src/log/FrameLogJson.cpp` to write them**
+- [x] **Step 4: Edit `src/log/FrameLogJson.cpp` to write them**
 
 ```cpp
 #include "Json.h"
@@ -16127,7 +16127,7 @@ std::string FrameLogJson(const FrameLogData& aLog)
 		json.EndArray();
 ```
 
-- [ ] **Step 5: Build and run the tests; they must pass**
+- [x] **Step 5: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -16137,7 +16137,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `101 test(s), 0 failure(s)`.
 
-- [ ] **Step 6: Edit `src/log/FrameLog.cpp` to keep each logged list's transitions**
+- [x] **Step 6: Edit `src/log/FrameLog.cpp` to keep each logged list's transitions**
 
 ```cpp
 		data_.lists.push_back({ reinterpret_cast<uintptr_t>(aList), names_ ? names_->Find(aList) : std::string(), aState.Frame(),
@@ -16148,7 +16148,7 @@ Expected: no error or warning lines, then `101 test(s), 0 failure(s)`.
 		                        aState.Passes(), TransitionsOf(aState) });
 ```
 
-- [ ] **Step 7: Build; it must compile without warnings, and the tests still pass**
+- [x] **Step 7: Build; it must compile without warnings, and the tests still pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -16158,7 +16158,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `101 test(s), 0 failure(s)`.
 
-- [ ] **Step 8: Edit `tools/test_frame_summary.py` to test the states**
+- [x] **Step 8: Edit `tools/test_frame_summary.py` to test the states**
 
 ```python
             "barriers": 4, "enhancedBarriers": 0, "events": ["GBuffer"],
@@ -16191,14 +16191,14 @@ def test_summary_shows_the_states_in_the_dlss_and_gbuffer_lists():
 def test_summary_without_a_script_camera_or_candidates():
 ```
 
-- [ ] **Step 9: Run it; the new test must fail**
+- [x] **Step 9: Run it; the new test must fail**
 
 ```bash
 cd /d/Cyberpunk-Minecraft/spikes/block-render/tools && uv run --no-project -q --with numpy --with pillow --with pytest pytest -q test_frame_summary.py 2>&1 | grep -E "^E |passed|failed"
 ```
 Expected: `AssertionError`, then `1 failed, 6 passed`.
 
-- [ ] **Step 10: Edit `tools/frame_summary.py` to print the states**
+- [x] **Step 10: Edit `tools/frame_summary.py` to print the states**
 
 ```python
 def summarise(log):
@@ -16252,14 +16252,14 @@ def summarise(log):
             add(f"{entry['list']} frame {entry['frame']} [G-buffer]: {states}")
 ```
 
-- [ ] **Step 11: Run all the tools' tests; they must pass**
+- [x] **Step 11: Run all the tools' tests; they must pass**
 
 ```bash
 cd /d/Cyberpunk-Minecraft/spikes/block-render/tools && uv run --no-project -q --with numpy --with pillow --with pytest pytest -q 2>&1 | tail -1
 ```
 Expected: `22 passed`.
 
-- [ ] **Step 12: Commit**
+- [x] **Step 12: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \

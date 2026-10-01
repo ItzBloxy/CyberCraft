@@ -70,6 +70,10 @@ LOG = {
             "draws": 0, "indexedDraws": 812, "indirect": 3, "bundles": 0, "dispatches": 0, "clears": 0,
             "barriers": 4, "enhancedBarriers": 0, "events": ["GBuffer"],
         }],
+        "transitions": [
+            {"resource": "0x1", "firstBefore": "0x0", "firstSubresource": 0, "firstFlags": 1, "after": None},
+            {"resource": "0x5000", "firstBefore": "0x10", "firstSubresource": "all", "firstFlags": 0, "after": "0x80"},
+        ],
     }],
     "gbufferCandidates": [{"list": "0x7100", "pass": 0}],
 }
@@ -112,6 +116,16 @@ def test_summary_marks_the_dlss_and_gbuffer_lists():
     assert "0x7100 'Scene' frame 100: 1 passes, 815 draws, 0 dispatches [DLSS, G-buffer candidate]" in summary
     assert "target 2: R8G8B8A8_UNORM 2560x1440 (0x3)" in summary
     assert "depth: D32_FLOAT_S8X24_UINT 2560x1440 (0x5000), tagged: True" in summary
+
+
+def test_summary_shows_the_states_in_the_dlss_and_gbuffer_lists():
+    summary = text()
+    assert "0x7100 frame 100 [DLSS]\n  depth 0x5000: 0x10 -> 0x80; tagged 0x80" in summary
+    assert ("0x7100 frame 100 [G-buffer]: 0x1: 0x0 (subresource 0, flags 1) -> unknown, 0x2: not moved, "
+            "0x3: not moved, 0x5000: 0x10 -> 0x80") in summary
+    older = copy.deepcopy(LOG)
+    del older["lists"][0]["transitions"]  # logs from 0.2.0 and before
+    assert "  depth 0x5000: not logged; tagged 0x80" in text(older)
 
 
 def test_summary_without_a_script_camera_or_candidates():

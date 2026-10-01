@@ -2,6 +2,7 @@
 
 #include "Json.h"
 
+#include <algorithm>
 #include <cmath>
 #include <format>
 #include <iterator>
@@ -250,6 +251,19 @@ std::string DxgiFormatName(uint32_t aFormat)
 	return std::format("format {}", aFormat);
 }
 
+std::vector<LogTransition> TransitionsOf(const ListState& aState)
+{
+	std::vector<LogTransition> transitions;
+	for (const auto& [resource, first] : aState.FirstTransitions())
+	{
+		transitions.push_back({ reinterpret_cast<uintptr_t>(resource), first.before, first.subresource, first.flags,
+		                        aState.StateOf(resource) });
+	}
+	std::sort(transitions.begin(), transitions.end(),
+	          [](const LogTransition& aA, const LogTransition& aB) { return aA.resource < aB.resource; });
+	return transitions;
+}
+
 std::string FrameLogJson(const FrameLogData& aLog)
 {
 	JsonWriter json;
@@ -345,6 +359,20 @@ std::string FrameLogJson(const FrameLogData& aLog)
 		for (const PassRecord& pass : list.passes)
 		{
 			Pass(json, pass, taggedDepth);
+		}
+		json.EndArray();
+		json.Key("transitions").BeginArray();
+		for (const LogTransition& transition : list.transitions)
+		{
+			json.BeginObject();
+			json.Key("resource").String(Hex(transition.resource));
+			json.Key("firstBefore").String(Hex(transition.firstBefore));
+			json.Key("firstSubresource");
+			transition.firstSubresource == ListState::kAllSubresources ? json.String("all") : json.UInt(transition.firstSubresource);
+			json.Key("firstFlags").UInt(transition.firstFlags);
+			json.Key("after");
+			transition.after ? json.String(Hex(*transition.after)) : json.Null();
+			json.EndObject();
 		}
 		json.EndArray();
 		json.EndObject();

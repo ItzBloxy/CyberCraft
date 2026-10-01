@@ -214,7 +214,7 @@ void FrameLog::OnClose(ID3D12GraphicsCommandList* aList, ListState& aState)
 	if (Recording())
 	{
 		data_.lists.push_back({ reinterpret_cast<uintptr_t>(aList), names_ ? names_->Find(aList) : std::string(), aState.Frame(),
-		                        aState.Passes() });
+		                        aState.Passes(), TransitionsOf(aState) });
 	}
 }
 

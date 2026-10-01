@@ -61,12 +61,24 @@ struct LogEvaluate
 	uint64_t nativeList = 0;  // the D3D12 list underneath, if it was a Streamline proxy
 };
 
+// A resource's transitions in one list: the first one's state before, subresource and flags (see
+// ListState::FirstTransition), and the state after the last, if that's known.
+struct LogTransition
+{
+	uint64_t                resource = 0;
+	uint32_t                firstBefore = 0;
+	uint32_t                firstSubresource = 0;
+	uint32_t                firstFlags = 0;
+	std::optional<uint32_t> after;
+};
+
 struct LogList
 {
-	uint64_t                list = 0;
-	std::string             name;  // the game's name for it, if found
-	uint32_t                frame = 0;
-	std::vector<PassRecord> passes;
+	uint64_t                   list = 0;
+	std::string                name;  // the game's name for it, if found
+	uint32_t                   frame = 0;
+	std::vector<PassRecord>    passes;
+	std::vector<LogTransition> transitions;  // by resource address
 };
 
 struct LogSubmission
@@ -126,6 +138,9 @@ struct FrameLogData
 
 // The name dxgiformat.h gives a format, without the DXGI_FORMAT_ prefix, or "format <n>".
 std::string DxgiFormatName(uint32_t aFormat);
+
+// The transitions a list recorded, by resource address.
+std::vector<LogTransition> TransitionsOf(const ListState& aState);
 
 // frame.json, pretty-printed.
 std::string FrameLogJson(const FrameLogData& aLog);

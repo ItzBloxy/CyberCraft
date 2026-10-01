@@ -74,6 +74,24 @@ def target_text(target):
     return text
 
 
+def state_text(entry, resource):
+    """A resource's states in a logged list: its first transition's state before, and the state after its last."""
+    if "transitions" not in entry:
+        return "not logged"
+    for transition in entry["transitions"]:
+        if transition["resource"] == resource:
+            first = transition["firstBefore"]
+            notes = []
+            if transition["firstSubresource"] != "all":
+                notes.append(f"subresource {transition['firstSubresource']}")
+            if transition["firstFlags"]:
+                notes.append(f"flags {transition['firstFlags']}")
+            if notes:
+                first += f" ({', '.join(notes)})"
+            return f"{first} -> {transition['after'] or 'unknown'}"
+    return "not moved"
+
+
 def summarise(log):
     out = []
     add = out.append
@@ -201,6 +219,27 @@ def summarise(log):
         add(f"{entry['list']} '{entry['name']}' frame {entry['frame']}: {len(passes)} passes, {draws} draws, {dispatches} "
             f"dispatches{(' [' + ', '.join(marks) + ']') if marks else ''}")
     add(f"in all: {len(log['lists'])} lists; {totals}; {render_passes} render passes")
+
+    add("")
+    add("== States in the DLSS and G-buffer lists (before the first transition -> after the last)")
+    tagged = {}
+    for tag in log["tags"]:
+        if tag["resource"] != "0x0":
+            tagged.setdefault(tag["resource"], (tag["name"], tag["state"]))
+    for entry in log["lists"]:
+        if entry["list"] in native_lists:
+            add(f"{entry['list']} frame {entry['frame']} [DLSS]")
+            for resource, (name, state) in tagged.items():
+                add(f"  {name} {resource}: {state_text(entry, resource)}; tagged {state}")
+        if entry["list"] in candidate_lists:
+            resources = []
+            for index, p in enumerate(entry["passes"]):
+                if (entry["list"], index) in candidates:
+                    for t in p["targets"] + [p["depth"]]:
+                        if t and not t.get("unknown") and t["resource"] not in resources:
+                            resources.append(t["resource"])
+            states = ", ".join(f"{resource}: {state_text(entry, resource)}" for resource in resources)
+            add(f"{entry['list']} frame {entry['frame']} [G-buffer]: {states}")
 
     add("")
     add("== G-buffer candidates")
