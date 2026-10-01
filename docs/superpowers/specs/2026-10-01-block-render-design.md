@@ -875,6 +875,13 @@ The fourth run, step 3, led to Tasks 45 and 46:
 - **Step 3's drawing tracks only the DLSS lists,** not every list.
 - **The exposure** starts at 2.5, the value the run settled on.
 
+The fifth run found the hooks' cost, and led to Task 48:
+- **Where it was:** in the Streamline hooks' readability checks. `VirtualQuery` reports the size of the whole region
+  an address lies in, which it finds by walking the region's pages, and the game's heaps run to gigabytes: about
+  12 ms a frame.
+- **The fix:** `Readable` now answers pages in the working set with `QueryWorkingSetEx`, which costs the same for any
+  page, and asks `VirtualQuery` only about the rest.
+
 What else the runs found goes in the results, `docs/spikes/2026-10-01-block-render-results.md`.
 
 ## Changes while planning Part 2

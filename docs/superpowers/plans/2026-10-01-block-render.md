@@ -31,8 +31,8 @@ Minecraft blocks on the finished frame. Then run spike 3's first two steps in th
 
 **Spec:** [docs/superpowers/specs/2026-10-01-block-render-design.md](../specs/2026-10-01-block-render-design.md)
 
-**Parts 2 and 3:** Part 2 is step 3 (blocks before DLSS): Tasks 35 to 48, which Task 34 planned from step 1's
-findings. Part 3 is step 4 (blocks in the G-buffer), which Task 48 plans once step 3 has run in the game.
+**Parts 2 and 3:** Part 2 is step 3 (blocks before DLSS): Tasks 35 to 50, which Task 34 planned from step 1's
+findings. Part 3 is step 4 (blocks in the G-buffer), which Task 50 plans once step 3 has run in the game.
 
 ---
 
@@ -14305,8 +14305,8 @@ this plan. As in Part 1, compile and test their code in a scratch clone first, a
 
 ## Part 2: step 3, blocks before DLSS
 
-Tasks 35 to 48, planned after Part 1 closed (see "How Part 1 went"). Run 4 found that the hooks cost a lot even
-with drawing off, so Tasks 45 to 47 were added to find and fix that before Part 2 closes.
+Tasks 35 to 50, planned after Part 1 closed (see "How Part 1 went"). Run 4 found that the hooks cost a lot even
+with drawing off, so Tasks 45 to 49 were added to find and fix that before Part 2 closes.
 
 **Goal:** draw the blocks into the frame before DLSS. DLSS then upscales them, and the game tone maps, blooms and
 grades them with the scene, under the HUD and the menus. Then run step 3 in the game with the user.
@@ -14328,15 +14328,15 @@ grades them with the scene, under the HUD and the menus. Then run step 3 in the 
   should test first.
 
 **Already verified:** as in Part 1, all the code was compiled and tested in the scratch clone first. Tasks 35 to 43
-were then replayed in a fresh clone from the end of Part 1, and Tasks 45 and 46 from the end of Task 44, applying
-every step as written and checking every expected result:
+were then replayed in a fresh clone from the end of Part 1, Tasks 45 and 46 from the end of Task 44, and Task 48
+from the end of Task 47, applying every step as written and checking every expected result:
 - zero compiler warnings;
-- 104 C++ tests and 22 Python tests passing;
+- 105 C++ tests and 22 Python tests passing;
 - the DLL exporting exactly `Main`, `Query` and `Supports`;
 - the replayed files identical to the scratch clone's.
 
-**Test counts:** the C++ count goes 86, 88, 93, 96, 97, 100, 101 from Task 41, 103 from Task 45, then 104 from Task
-46 on. The Python count is 22 from Task 41 on.
+**Test counts:** the C++ count goes 86, 88, 93, 96, 97, 100, 101 from Task 41, 103 from Task 45, 104 from Task 46,
+then 105 from Task 48 on. The Python count is 22 from Task 41 on.
 
 **The commands and rules** in "Before you start" apply here too: the game and the user, deploying, and no faults.
 
@@ -18897,9 +18897,14 @@ Ask the user to face open ground. Send `mode predlss` and `place cube`, wait thr
 Read five times. Then ask the user to check the cube is steady standing still and leaves no trails strafing, with a
 screenshot.
 
+Run 5 skipped this step: Step 4 found the Streamline hooks' cost, which would have swamped it. Task 49
+measures it after Task 48's fix.
+
 - [ ] **Step 7: 10,000 blocks**
 
 Send `clear`, then `place field 10000`, and read five times.
+
+Run 5 skipped this step too, for the same reason. Task 49 does it.
 
 - [x] **Step 8: Clean up**
 
@@ -18921,15 +18926,352 @@ cd /d/Cyberpunk-Minecraft && git add docs/spikes \
 
 ---
 
-### Task 48: Close Part 2, and plan Part 3
+### Task 48: Readability checks that don't walk the game's heaps
+
+Run 5 found what the hooks cost: the Streamline hooks' readability checks. `ReadableMemory` asked `VirtualQuery` about
+each struct the game hands Streamline. `VirtualQuery` reports the size of the whole region an address lies in, which
+it finds by walking the region's pages: 1.5 ms in the middle of a 1 GB region here. The game's `sl::Resource` structs
+live in heaps of gigabytes, so each `slSetTag` took about 2.3 ms, 12 ms a frame. Now a page in the working set is
+answered by `QueryWorkingSetEx`, 0.0013 ms for any page. Only a page that isn't there falls back to `VirtualQuery`.
+The version goes to 0.5.0.
+
+**Files:**
+- Modify: `tests/TestReadable.cpp`, `CMakeLists.txt`, `src/Plugin.cpp`
+- Rewrite: `src/Readable.h`, `src/Readable.cpp`
+
+- [ ] **Step 1: Edit `tests/TestReadable.cpp` to count the slow queries**
+
+```cpp
+	memory.Clear();
+	CHECK(memory.Range(base, 1));
+	VirtualFree(base, 0, MEM_RELEASE);
+}
+```
+```cpp
+	memory.Clear();
+	CHECK(memory.Range(base, 1));
+	VirtualFree(base, 0, MEM_RELEASE);
+}
+
+TEST(ReadableMemoryAnswersPagesInTheWorkingSetWithoutVirtualQuery)
+{
+	// VirtualQuery reports the size of the whole region an address lies in, which takes longer the bigger the region:
+	// in the game's heaps it cost 12 ms a frame. Pages in the working set are answered without it.
+	const size_t page = PageSize();
+	auto*        base = static_cast<uint8_t*>(VirtualAlloc(nullptr, 4 * page, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE));
+	CHECK(base != nullptr);
+	if (!base)
+	{
+		return;
+	}
+	base[0] = 1;  // written to, so in the working set
+	base[page] = 1;
+	ReadableMemory memory;
+	CHECK(memory.Range(base + 100, page));  // across both pages
+	CHECK_EQ(memory.SlowQueries(), size_t(0));
+	CHECK(memory.Range(base + 3 * page, 16));  // never touched, so not in the working set yet: VirtualQuery answers
+	CHECK_EQ(memory.SlowQueries(), size_t(1));
+	VirtualFree(base, 0, MEM_RELEASE);
+}
+```
+
+- [ ] **Step 2: Build; it must fail**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C" | sort -u | head -3
+```
+Expected: `'SlowQueries': is not a member of 'cpmc::ReadableMemory'`.
+
+- [ ] **Step 3: Write `src/Readable.h`**
+
+```cpp
+#pragma once
+
+#include <cstddef>
+#include <cstdint>
+#include <map>
+
+namespace cpmc
+{
+// Answers "can these bytes be read without faulting?".
+// - A page in the process's working set is answered by QueryWorkingSetEx, which costs the same for any page.
+// - Any other page goes to VirtualQuery. That reports the size of the whole region an address lies in, so it takes
+//   longer the bigger the region: run 5 found it costing 12 ms a frame in the game's heaps of gigabytes.
+// VirtualQuery's answers are remembered by region. The game's memory changes over time, so use one per dump and Clear()
+// it before the next.
+class ReadableMemory
+{
+public:
+	// True when every byte of [aAddress, aAddress + aSize) is committed, readable and not a guard page. A null or
+	// wrapping range never is; an empty range at a non-null address always is.
+	bool Range(const void* aAddress, size_t aSize);
+
+	void Clear();
+
+	size_t SlowQueries() const { return slowQueries_; }  // the VirtualQuery calls made so far
+
+private:
+	struct Region
+	{
+		uintptr_t end = 0;
+		bool      readable = false;
+	};
+
+	// True when every page of [aStart, aEnd) is in the working set, readable and not a guard page. A range of more than
+	// 16 pages isn't asked about, and goes to VirtualQuery.
+	bool Resident(uintptr_t aStart, uintptr_t aEnd) const;
+
+	// The region holding aAddress, from memory or from VirtualQuery. False if VirtualQuery fails.
+	bool Find(uintptr_t aAddress, Region& aOut);
+
+	std::map<uintptr_t, Region> regions_;  // by start address
+	size_t                      slowQueries_ = 0;
+};
+}
+```
+
+- [ ] **Step 4: Write `src/Readable.cpp`**
+
+```cpp
+#include "Readable.h"
+
+#include <Windows.h>
+#include <psapi.h>
+
+#include <iterator>
+
+namespace cpmc
+{
+namespace
+{
+constexpr DWORD kReadable = PAGE_READONLY | PAGE_READWRITE | PAGE_WRITECOPY | PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE |
+                            PAGE_EXECUTE_WRITECOPY;
+constexpr uintptr_t kPage = 4096;  // x64 Windows' page size
+constexpr size_t    kMostPages = 16;
+
+bool ReadableProtection(DWORD aProtect)
+{
+	return (aProtect & kReadable) != 0 && (aProtect & (PAGE_GUARD | PAGE_NOACCESS)) == 0;
+}
+}
+
+bool ReadableMemory::Range(const void* aAddress, size_t aSize)
+{
+	const auto start = reinterpret_cast<uintptr_t>(aAddress);
+	if (start == 0 || start + aSize < start)
+	{
+		return false;
+	}
+	const uintptr_t end = start + aSize;
+	if (aSize == 0 || Resident(start, end))
+	{
+		return true;
+	}
+	for (uintptr_t at = start; at < end;)
+	{
+		Region region;
+		if (!Find(at, region) || !region.readable)
+		{
+			return false;
+		}
+		at = region.end;
+	}
+	return true;
+}
+
+void ReadableMemory::Clear()
+{
+	regions_.clear();
+}
+
+bool ReadableMemory::Resident(uintptr_t aStart, uintptr_t aEnd) const
+{
+	const uintptr_t first = aStart & ~(kPage - 1);
+	const size_t    pages = size_t((aEnd - 1 - first) / kPage) + 1;
+	if (pages > kMostPages)
+	{
+		return false;
+	}
+	PSAPI_WORKING_SET_EX_INFORMATION entries[kMostPages]{};
+	for (size_t i = 0; i < pages; ++i)
+	{
+		entries[i].VirtualAddress = reinterpret_cast<void*>(first + i * kPage);
+	}
+	if (!QueryWorkingSetEx(GetCurrentProcess(), entries, DWORD(pages * sizeof(entries[0]))))
+	{
+		return false;
+	}
+	for (size_t i = 0; i < pages; ++i)
+	{
+		const PSAPI_WORKING_SET_EX_BLOCK& block = entries[i].VirtualAttributes;
+		if (!block.Valid || !ReadableProtection(DWORD(block.Win32Protection)))
+		{
+			return false;
+		}
+	}
+	return true;
+}
+
+bool ReadableMemory::Find(uintptr_t aAddress, Region& aOut)
+{
+	auto next = regions_.upper_bound(aAddress);
+	if (next != regions_.begin())
+	{
+		const auto& [start, region] = *std::prev(next);
+		if (aAddress < region.end)
+		{
+			aOut = region;
+			return true;
+		}
+	}
+	MEMORY_BASIC_INFORMATION info{};
+	++slowQueries_;
+	if (VirtualQuery(reinterpret_cast<const void*>(aAddress), &info, sizeof(info)) == 0)
+	{
+		return false;
+	}
+	const auto base = reinterpret_cast<uintptr_t>(info.BaseAddress);
+	aOut.end = base + info.RegionSize;
+	aOut.readable = info.State == MEM_COMMIT && ReadableProtection(info.Protect);
+	regions_[base] = aOut;
+	return true;
+}
+}
+```
+
+- [ ] **Step 5: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `105 test(s), 0 failure(s)`.
+
+- [ ] **Step 6: Edit `CMakeLists.txt` for the version**
+
+```cmake
+project(BlockRender VERSION 0.4.0 LANGUAGES C CXX)
+```
+```cmake
+project(BlockRender VERSION 0.5.0 LANGUAGES C CXX)
+```
+
+- [ ] **Step 7: Edit `src/Plugin.cpp` for the version**
+
+```cpp
+constexpr const char* kVersion = "0.4.0";
+```
+```cpp
+constexpr const char* kVersion = "0.5.0";
+```
+```cpp
+	aInfo->version = RED4EXT_V1_SEMVER(0, 4, 0);
+```
+```cpp
+	aInfo->version = RED4EXT_V1_SEMVER(0, 5, 0);
+```
+
+- [ ] **Step 8: Build; it must compile without warnings, and the tests still pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `105 test(s), 0 failure(s)`.
+
+- [ ] **Step 9: Check the DLL's exports and imports**
+
+```bash
+DUMPBIN="/c/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/dumpbin.exe"
+B=/d/Cyberpunk-Minecraft/spikes/block-render/build/RelWithDebInfo/BlockRender.dll
+"$DUMPBIN" -nologo -exports "$B" | grep -E " (Main|Query|Supports) = "; \
+  "$DUMPBIN" -nologo -dependents "$B" | grep -iE "d3d|dxgi|sl\."
+```
+Expected: exactly `Main`, `Query` and `Supports`, then `D3DCOMPILER_47.dll` and `d3d12.dll`. `QueryWorkingSetEx` comes
+from `kernel32.dll`.
+
+- [ ] **Step 10: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "block-render: readability checks that don't walk the game's heaps (0.5.0)" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 49: In the game: what BlockRender costs after the fix
+
+Run 6, at run 3's corner, with the same save, standing still. Without BlockRender, run 4 measured 13.6 ms there. The
+commands are Task 44's.
+
+**Files:**
+- Modify: `docs/spikes/2026-10-01-block-render-results.md`
+
+- [ ] **Step 1: Deploy (the game must not be running)**
+
+Run Task 44 Step 1's two commands. Expected: `0`, then the plugin's folder with `BlockRender.dll`, `BlockRender.pdb`,
+`shaders`, `atlas.bin` and `atlas.json`, the overlay's folder with `init.lua`, and `installed`.
+
+- [ ] **Step 2: Load, at the corner**
+
+Ask the user to launch the game, load the free-roam save, go to the corner, face south-west, and stand still. Then
+read the log's first lines and the status. Expected: `BlockRender 0.5.0 loaded`, `mode=off`, and `all hooks on`.
+
+- [ ] **Step 3: Idle**
+
+Read the status's `frame=` line and `frames.txt` five times each, a second apart. Expected: about 13.6 ms, the game's
+time without BlockRender.
+
+- [ ] **Step 4: Tracking on**
+
+Send `set tracking 1`, read five times, then `set tracking 0`. Expected: within about half a millisecond of Step 3, as
+run 5 found with the Streamline hooks off.
+
+- [ ] **Step 5: Drawing before DLSS**
+
+Ask the user to face open ground. Send `mode predlss` and `place cube`, wait three seconds, and read the status. Expected:
+- `2 lists watched` and `tracking off`;
+- frames drawn at the frame rate, and none skipped after the first second.
+
+Read five times. Then ask the user to check the cube is steady standing still and leaves no trails strafing, at the
+default `exposure` of 2.5, with a screenshot.
+
+- [ ] **Step 6: 10,000 and 100,000 blocks**
+
+Send `clear`, `place field 10000`, and read five times. Then `clear`, `place field 100000`, and read five times again.
+
+- [ ] **Step 7: Clean up**
+
+Send `clear`, then `mode off`, two seconds apart. Expected: `mode=off`, and `0 lists watched`.
+
+- [ ] **Step 8: Record the results, and commit**
+
+In `docs/spikes/2026-10-01-block-render-results.md`, add what run 6 found: BlockRender's cost idle, with tracking on,
+drawing before DLSS, and at 10,000 and 100,000 blocks. Then commit:
+```bash
+cd /d/Cyberpunk-Minecraft && git add docs/spikes \
+  && git commit -q -m "block-render: what BlockRender costs after the fix" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 50: Close Part 2, and plan Part 3
 
 **Files:**
 - Modify: `docs/superpowers/plans/2026-10-01-block-render.md` (this plan)
 
 - [ ] **Step 1: Add "How Part 2 went" to this plan**
 
-Add a section after Task 48, as Part 1's closed it. Cover:
-- what Tasks 44 and 47 found, and Tasks 45 and 46's fixes;
+Add a section after Task 50, as Part 1's closed it. Cover:
+- what Tasks 44, 47 and 49 found, and Tasks 45, 46 and 48's fixes;
 - any amendments made along the way;
 - what step 3's run decides for step 4:
   - where blocks can go into the G-buffer: the G-buffer lists' last submission, and the states they leave their
@@ -18948,6 +19290,6 @@ cd /d/Cyberpunk-Minecraft && git add docs/superpowers/plans \
 
 - [ ] **Step 3: Plan Part 3**
 
-Use superpowers:writing-plans to write Part 3's tasks (spec step 4) from what steps 1 to 3 found, as Tasks 49 on in
+Use superpowers:writing-plans to write Part 3's tasks (spec step 4) from what steps 1 to 3 found, as Tasks 51 on in
 this plan. As in Parts 1 and 2, compile and test their code in a scratch clone first, and replay the tasks before
 committing.
