@@ -827,7 +827,7 @@ wait in a queue of at most 2,000, and lines beyond that are counted.
 - Create: `src/LogQueue.h`, `src/LogQueue.cpp`, `tests/TestLogQueue.cpp`
 - Modify: `CMakeLists.txt`
 
-- [ ] **Step 1: Write the failing test, `tests/TestLogQueue.cpp`**
+- [x] **Step 1: Write the failing test, `tests/TestLogQueue.cpp`**
 
 ```cpp
 #include "Harness.h"
@@ -883,7 +883,7 @@ TEST(LogQueueTakesLinesFromManyThreads)
 }
 ```
 
-- [ ] **Step 2: Edit `CMakeLists.txt` to add the test**
+- [x] **Step 2: Edit `CMakeLists.txt` to add the test**
 
 ```cmake
 	tests/TestRequests.cpp
@@ -895,7 +895,7 @@ TEST(LogQueueTakesLinesFromManyThreads)
 )
 ```
 
-- [ ] **Step 3: Build; it must fail**
+- [x] **Step 3: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -904,7 +904,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `fatal error C1083: Cannot open include file: 'LogQueue.h'`.
 
-- [ ] **Step 4: Write `src/LogQueue.h`**
+- [x] **Step 4: Write `src/LogQueue.h`**
 
 ```cpp
 #pragma once
@@ -937,7 +937,7 @@ private:
 }
 ```
 
-- [ ] **Step 5: Write `src/LogQueue.cpp`**
+- [x] **Step 5: Write `src/LogQueue.cpp`**
 
 ```cpp
 #include "LogQueue.h"
@@ -977,7 +977,7 @@ std::vector<std::string> LogQueue::Drain()
 }
 ```
 
-- [ ] **Step 6: Edit `CMakeLists.txt` to add the source**
+- [x] **Step 6: Edit `CMakeLists.txt` to add the source**
 
 ```cmake
 	src/Requests.cpp
@@ -989,7 +989,7 @@ std::vector<std::string> LogQueue::Drain()
 )
 ```
 
-- [ ] **Step 7: Build and run the tests; they must pass**
+- [x] **Step 7: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -999,7 +999,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `19 test(s), 0 failure(s)`.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
