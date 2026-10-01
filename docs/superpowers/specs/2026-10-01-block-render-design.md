@@ -439,24 +439,32 @@ Every read is range-checked with `Readable`.
     - **The jitter and motion vectors:** the vertices move by the frame's jitter, and the motion vectors come from
       Streamline's `clipToPrevClip`, which is for row vectors (checked against two cameras from run 2's log). Step 3
       settles both signs with `set jittersign` and `set mvsign`.
-  - **`gbuffer` (step 4):** draws into the G-buffer targets and depth that the frame log found. It writes albedo,
-    normal, material values, motion vectors and the stencil value, in the encoding the dumps show. The stencil value
-    is the one the game's own static surfaces carry.
-    - **Recognising the pass:** every frame, by its targets' formats at the render size, and by its depth buffer: the
-      G-buffer's own `D32_FLOAT_S8X24_UINT`, not the tagged depth, which is a copy (step 1's results).
-    - **Drawing once per frame:** our draws go in when the list leaves the pass, at its next change of render targets
-      or at `Close`, and only once per frame. If the G-buffer pass is spread over several lists, one of them is enough,
-      because depth testing sorts out which is in front.
-    - **Render passes:** if the game draws the G-buffer inside a render pass (`BeginRenderPass`), our draws go in after
-      `EndRenderPass`, never inside the pass.
+  - **`gbuffer` (step 4):** our own list goes into the submission holding the list that ends the G-buffer, just
+    before it. It writes the base colour, normal, material values, motion vectors and stencil class into the
+    G-buffer's targets, in the encoding the dumps show, testing and writing its depth. Then it writes the blocks'
+    depth into the tagged depth.
+    - **Recognising the G-buffer:** every frame, a list that binds three render targets in its formats (and maybe
+      the motion vectors as a fourth), at the render size, with its depth buffer: the G-buffer's own
+      `D32_FLOAT_S8X24_UINT`, not the tagged depth, which is a copy (step 1's results). Each list keeps the target
+      sets it binds with three or more render targets, whether or not a log runs.
+    - **Its end:** the first list after the G-buffer's to take the whole of the normals and of the material values
+      out of RENDER_TARGET. Run 7's frame logs found it every frame, as a submission of its own. Just before it,
+      every target is a render target and the depth is writable, and everything that reads the G-buffer comes after.
+    - **Barrier states:** from that list's first transitions, and for the base colour, which it doesn't move, from
+      the whole transitions of the lists submitted before it in the frame. A list that isn't tracked makes them
+      unknown, and an unknown state skips the frame.
+    - **The motion vectors and the tagged depth:** the game's last G-buffer list fills in the camera's motion and
+      copies the G-buffer's depth into the tagged depth, before our list. So the blocks write their own: `set
+      gbmotion 0` and `set gbdepth 0` leave them out, to see what each changes.
 - **Where the commands go:** our own command list, in the game's `ExecuteCommandLists`, at a list boundary the frame
-  log shows. For step 3 that's just before the DLSS list, which the evaluate has to itself. Nothing is recorded into
-  the game's lists, so nothing has to be put back.
+  log shows. For step 3 that's just before the DLSS list, which the evaluate has to itself, and for step 4 just before
+  the list that ends the G-buffer. Nothing is recorded into the game's lists, so nothing has to be put back.
 - **The camera:** written into the constant buffer as late as possible, just before the list that holds our draws is
   submitted, from Streamline's constants for that frame. That's in `ExecuteCommandLists` in steps 3 and 4, and in
   `Present` in step 2, where the frame is the latest DLSS frame whose list has been submitted. If the frame's
   constants haven't arrived yet, the previous frame's are used, and the frame is counted as "late camera" (see
-  "Risks"). In step 2, a late camera is a draw that uses the same DLSS frame as the draw before it.
+  "Risks"). In step 2, a late camera is a draw that uses the same DLSS frame as the draw before it. In step 4, it's
+  a frame whose evaluate hasn't come by the G-buffer's end; that frame is skipped instead.
 - **Drawing:**
   - one draw per section, skipping sections outside the view frustum;
   - the viewport and scissor are the back buffer in step 2, the depth tag's extent in step 3, and the game's own at
@@ -651,7 +659,7 @@ checked once a second. Each file holds one command. Unknown commands are logged 
 | `place field <n>` | Adds rolling terrain of about n blocks (with step 3) |
 | `clear` | Removes all blocks |
 | `reload` | Recompiles the shaders |
-| `set <name> <value>` | Changes a tuning value. Step 2 has `ao`, `brightness`, `tolerance` (the depth test's), `cull`, `origin.x`, `origin.y` and `origin.z` (the render origin), and `tracking` (1 holds command list tracking on, to measure it). Step 3 adds `exposure`, `jittersign` and `mvsign`, and `hooks.lists`, `hooks.views`, `hooks.submit`, `hooks.present` and `hooks.sl` (0 makes that group of hooks pass straight through, to measure what it costs). Step 4 adds the G-buffer encoding values step 1 finds |
+| `set <name> <value>` | Changes a tuning value. Step 2 has `ao`, `brightness`, `tolerance` (the depth test's), `cull`, `origin.x`, `origin.y` and `origin.z` (the render origin), and `tracking` (1 holds command list tracking on, to measure it). Step 3 adds `exposure`, `jittersign` and `mvsign`, and `hooks.lists`, `hooks.views`, `hooks.submit`, `hooks.present` and `hooks.sl` (0 makes that group of hooks pass straight through, to measure what it costs). Step 4 adds the encoding's values, `stencil`, `metalness`, `roughness` and `materialb`, and `gbmotion` and `gbdepth` (1 writes the blocks' motion vectors and tagged depth, 0 leaves the game's) |
 
 ## The frame log
 
@@ -758,8 +766,14 @@ checked once a second. Each file holds one command. Unknown commands are logged 
   - each buffer's state before the DLSS list, from its first transition there or its tag;
   - the barriers in and back, leaving out a buffer already in the state wanted;
   - our list going into a submission just before the list it precedes.
+- **Drawing into the G-buffer (step 4):**
+  - each list keeps the target sets it binds with three or more render targets;
+  - the G-buffer's targets, and the list that ends it;
+  - the known states between submitted lists;
+  - the faces' normals in world axes.
 - **The shaders** compile, their constant buffers match `FrameConstants.h` by reflection, the step 3 shader writes
-  the colour and the motion vectors, and faces toward the camera wind so that back-face culling keeps them.
+  the colour and the motion vectors, the step 4 shader the G-buffer's four targets, and faces toward the camera wind
+  so that back-face culling keeps them.
 - **The rest:**
   - the request and settings parsers, and the log queue;
   - the atlas reader, the DDS writer and the event names;
@@ -789,6 +803,8 @@ See "The four steps". Every step also checks that CET's overlay still works. Ste
    **Fallback:** read the game's own camera constants, which the G-buffer pass's draws bind as a root constant buffer.
    Reading them needs the CPU address of the game's upload buffers, so the device's resource creation would be patched
    too.
+   **Found in run 7:** with the hooks' cost fixed, the constants come about 2 ms before the G-buffer's first
+   submission. The game doesn't wait for them, so step 4 counts the frames where they come late.
 3. **The G-buffer encoding has changed since the published analyses.** The dumps and `set` experiments settle it.
    Anything that can't be decoded, the stencil value included, is copied from a static surface of the game's next to
    the blocks.
@@ -905,3 +921,17 @@ include:
 - **CET's own frame time,** in `frames.txt`, measures what the hooks cost without BlockRender.
 - **Step 4 is planned after step 3's run,** as the plan's Part 3: it reuses step 3's machinery, which the game should
   test first.
+
+## Changes while planning Part 3
+
+Planning step 4 (the plan's Part 3) from run 7's frame logs changed these details, which the sections above include:
+- **Our own list, again:** it goes just before the list that ends the G-buffer, not into the game's lists at a pass's
+  end. So render passes wouldn't matter either, and step 1 found none.
+- **The end of the G-buffer** is found by its transitions, and the G-buffer's lists by the target sets each list
+  keeps.
+- **Barrier states across lists:** the base colour's state comes from the lists submitted before the end, since the
+  end doesn't move it.
+- **The motion vectors and the tagged depth:** the game makes both before the end, so the blocks write their own,
+  with a switch for each to see what it changes.
+- **A late camera skips the frame** in step 4, instead of drawing with the previous camera, whose jitter differs.
+- **The settings** for step 4 are named: `stencil`, `metalness`, `roughness`, `materialb`, `gbmotion` and `gbdepth`.

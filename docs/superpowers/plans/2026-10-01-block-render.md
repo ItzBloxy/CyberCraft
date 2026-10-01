@@ -1,4 +1,4 @@
-# Block Render Implementation Plan, Parts 1 and 2 (steps 1 to 3)
+# Block Render Implementation Plan, Parts 1 to 3 (steps 1 to 4)
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 >
@@ -6,7 +6,8 @@
 
 **Goal:** Build BlockRender, a RED4ext plugin that maps Cyberpunk 2077's frame through its Streamline calls and draws
 Minecraft blocks on the finished frame. Then run spike 3's first two steps in the game with the user: the frame log
-(step 1) and a cube on the finished frame (step 2). Part 2 then draws the blocks into the frame before DLSS (step 3).
+(step 1) and a cube on the finished frame (step 2). Part 2 then draws the blocks into the frame before DLSS (step 3),
+and Part 3 into the game's G-buffer (step 4).
 
 **Architecture:** A C++20 RED4ext plugin, built like spike 1's.
 - **`render_core`** holds everything that can be tested without the game, with unit tests:
@@ -32,7 +33,8 @@ Minecraft blocks on the finished frame. Then run spike 3's first two steps in th
 **Spec:** [docs/superpowers/specs/2026-10-01-block-render-design.md](../specs/2026-10-01-block-render-design.md)
 
 **Parts 2 and 3:** Part 2 is step 3 (blocks before DLSS): Tasks 35 to 52, which Task 34 planned from step 1's
-findings. Part 3 is step 4 (blocks in the G-buffer), which Task 52 plans once step 3 has run in the game.
+findings. Part 3 is step 4 (blocks in the G-buffer): Tasks 53 to 58, which Task 52 planned once step 3 had run in
+the game.
 
 ---
 
@@ -98,7 +100,12 @@ All paths under `src/`, `tests/`, `shaders/` and `tools/` are relative to `spike
 | `src/render/Atlas.*` | `atlas.bin` |
 | `src/render/Gpu.*` | Small D3D12 helpers: buffers, footprints and copies |
 | `src/render/Shaders.*`, `src/render/FrameConstants.h`, `shaders/blocks.hlsl` | The block shaders, compiled in the game |
-| `src/render/Renderer.*` | Our D3D12 objects and drawing at `Present` |
+| `src/render/Renderer.*` | Our D3D12 objects, and drawing in each mode |
+| `src/render/Pipeline.*` | The blocks' rasterizer state |
+| `src/hooks/Submission.*` | Lists of ours in the game's submissions (Part 2) |
+| `src/hooks/HookGroups.*` | Switches that let each group of hooks pass straight through (Part 2) |
+| `src/render/Predlss.*` | Drawing before DLSS: the checks, the starting states and the barriers (Part 2) |
+| `src/render/Gbuffer.*` | Drawing into the G-buffer: its targets, its end, and the states there (Part 3) |
 | `src/world/Vertex.h`, `src/world/BlockWorld.*`, `src/world/Mesher.*`, `src/world/Structures.*` | Blocks, SkyCraft's vertex, meshing, and the test structures |
 | `src/log/DdsWriter.*` | `.dds` files for dumps |
 | `src/log/FrameLogData.h`, `src/log/FrameLogJson.cpp`, `src/log/FrameLog.*` | The frame log, and its `frame.json` |
@@ -19650,7 +19657,7 @@ cd /d/Cyberpunk-Minecraft && git add docs/superpowers/plans \
   && git log --oneline -1
 ```
 
-- [ ] **Step 3: Plan Part 3**
+- [x] **Step 3: Plan Part 3**
 
 Use superpowers:writing-plans to write Part 3's tasks (spec step 4) from what steps 1 to 3 found, as Tasks 53 on in
 this plan. As in Parts 1 and 2, compile and test their code in a scratch clone first, and replay the tasks before
@@ -19710,3 +19717,2941 @@ committing.
 - **Light:** the game lights sunlit ground at about 9 times its linear base colour, so lit blocks will look brighter
   than step 3's.
 - **Tracking:** step 4 needs every list tracked, as `predlss` does, at about 0.1 ms.
+
+---
+
+## Part 3: step 4, blocks in the G-buffer
+
+Tasks 53 to 58, planned after Part 2 closed (see "How Part 2 went").
+
+**Goal:** draw the blocks into the game's G-buffer, so that the game lights, shadows and fogs them as its own
+geometry. Then run step 4 in the game with the user, and answer the spike's question.
+
+**How it works:**
+- **Our list goes just before the list that ends the G-buffer** (Tasks 54 and 56). That list is a submission of its
+  own, which takes the G-buffer's targets out of RENDER_TARGET, and run 7's frame logs found it every frame. Just
+  before it, every target is a render target and the depth is writable, so no barrier is needed. Everything after
+  it sees the blocks: the second queue's work, the lighting and DLSS.
+- **Each frame, the lists show where things are:**
+  - a list that binds the G-buffer's targets is a G-buffer list (Tasks 53 and 54);
+  - the first list after them to take the normals and the material values out of RENDER_TARGET is the end;
+  - our barriers start from that list's first transitions, and for the base colour, which it doesn't move, from the
+    lists before it (`KnownStates`).
+- **The camera is the frame's own:** the evaluate brings it about 2 ms before the G-buffer is submitted. When it comes
+  late, the frame is skipped and counted.
+- **The blocks write what the G-buffer holds** (Task 55): the base colour as Minecraft shows it, the face's
+  world-space normal, the material values, and the motion vectors. A second pass writes their depth into the tagged
+  depth, which the game copied from the G-buffer's depth just before the end.
+- **The game run settles the rest live** (Task 57): the stencil class, whether the blocks need their own motion vectors
+  and tagged depth, and their material values.
+
+**Already verified:** as in Parts 1 and 2, all the code was compiled and tested in the scratch clone first. Tasks 53
+to 56 were then replayed in a fresh clone from the end of Part 2, applying every step as written and checking every
+expected result:
+- zero compiler warnings;
+- 111 C++ tests passing;
+- the DLL exporting exactly `Main`, `Query` and `Supports`;
+- the replayed files identical to the scratch clone's.
+
+**Test counts:** the C++ count goes 105 from Task 53, 110 from Task 54, then 111 from Task 55 on. The Python tools
+don't change.
+
+**The commands and rules** in "Before you start" apply here too: the game and the user, deploying, and no faults.
+
+### Task 53: Each list keeps the G-buffer-like target sets it binds
+
+Step 4 finds the G-buffer every frame without a frame log: a list that binds the G-buffer's targets is a G-buffer
+list. Until now a list kept its passes only while a log runs. Now it also keeps, always, the distinct target sets it
+binds with three or more render targets and a depth buffer, at most four of them. Few lists bind such sets, so this
+costs next to nothing.
+
+**Files:**
+- Modify: `tests/TestStateTracker.cpp`, `src/track/StateTracker.h`, `src/track/StateTracker.cpp`
+
+- [ ] **Step 1: Edit `tests/TestStateTracker.cpp` to add the failing test**
+
+```cpp
+	Targets nullTarget = Gbuffer(9);  // the game's forward passes bind a null target, which has no size
+	nullTarget.rtvs[1] = Target(0, 0, 0);
+	CHECK(!cpmc::IsGbufferCandidate(nullTarget, 1707, 960));
+}
+```
+```cpp
+	Targets nullTarget = Gbuffer(9);  // the game's forward passes bind a null target, which has no size
+	nullTarget.rtvs[1] = Target(0, 0, 0);
+	CHECK(!cpmc::IsGbufferCandidate(nullTarget, 1707, 960));
+}
+
+TEST(ListStateKeepsTheWideTargetSetsItBindsEvenWithoutALog)
+{
+	ListState list;
+	list.Begin(1, false);  // no log
+	Targets one;
+	one.rtvs = { Target(5, 1707, 960) };
+	list.SetTargets(one);          // one target: not wide
+	list.SetTargets(Gbuffer(9));   // three targets and a depth buffer
+	list.SetTargets(one);
+	list.SetTargets(Gbuffer(9));   // the same set again: kept once
+	list.SetTargets(Gbuffer(10));  // another depth buffer: another set
+	CHECK(list.Passes().empty());  // passes are still recorded only while logging
+	CHECK_EQ(list.WideTargets().size(), size_t(2));
+	CHECK(list.WideTargets()[0].dsv->view->resource == reinterpret_cast<void*>(9));
+	CHECK(list.WideTargets()[1].dsv->view->resource == reinterpret_cast<void*>(10));
+	Targets noDepth = Gbuffer(11);
+	noDepth.dsv.reset();
+	list.SetTargets(noDepth);  // no depth buffer: not wide
+	for (uintptr_t depth = 12; depth < 20; ++depth)
+	{
+		list.SetTargets(Gbuffer(depth));
+	}
+	CHECK_EQ(list.WideTargets().size(), ListState::kMostWideTargets);  // the first few only
+	list.Begin(2, false);
+	CHECK(list.WideTargets().empty());  // a new recording starts empty
+}
+```
+
+- [ ] **Step 2: Build; it must fail**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C" | sort -u | head -3
+```
+Expected: `'WideTargets': is not a member of 'cpmc::ListState'`.
+
+- [ ] **Step 3: Edit `src/track/StateTracker.h` to keep the wide target sets**
+
+```cpp
+	void SetTargets(Targets aTargets, bool aRenderPass = false);
+	const Targets& CurrentTargets() const { return targets_; }
+```
+```cpp
+	void SetTargets(Targets aTargets, bool aRenderPass = false);
+	const Targets& CurrentTargets() const { return targets_; }
+
+	// The distinct target sets the list bound with three or more render targets and a depth buffer, in the order it
+	// bound them: the first kMostWideTargets. Kept whether or not a log runs, so step 4 can tell the G-buffer's lists.
+	static constexpr size_t kMostWideTargets = 4;
+	const std::vector<Targets>& WideTargets() const { return wide_; }
+```
+```cpp
+	Targets                                    targets_;
+	std::unordered_map<void*, uint32_t>        states_;
+```
+```cpp
+	Targets                                    targets_;
+	std::vector<Targets>                       wide_;
+	std::unordered_map<void*, uint32_t>        states_;
+```
+
+- [ ] **Step 4: Edit `src/track/StateTracker.cpp` to keep them**
+
+```cpp
+thread_local Cached t_cached;
+
+std::atomic<uint64_t> g_nextTrackerId{ 1 };
+}
+```
+```cpp
+thread_local Cached t_cached;
+
+std::atomic<uint64_t> g_nextTrackerId{ 1 };
+
+// The same descriptor, made from the same resource.
+bool SameTarget(const BoundTarget& aA, const BoundTarget& aB)
+{
+	const void* a = aA.view ? aA.view->resource : nullptr;
+	const void* b = aB.view ? aB.view->resource : nullptr;
+	return aA.handle == aB.handle && a == b;
+}
+
+bool SameTargets(const Targets& aA, const Targets& aB)
+{
+	if (aA.rtvs.size() != aB.rtvs.size() || aA.dsv.has_value() != aB.dsv.has_value() || (aA.dsv && !SameTarget(*aA.dsv, *aB.dsv)))
+	{
+		return false;
+	}
+	for (size_t i = 0; i < aA.rtvs.size(); ++i)
+	{
+		if (!SameTarget(aA.rtvs[i], aB.rtvs[i]))
+		{
+			return false;
+		}
+	}
+	return true;
+}
+}
+```
+```cpp
+	targets_ = {};
+	states_.clear();
+```
+```cpp
+	targets_ = {};
+	wide_.clear();
+	states_.clear();
+```
+```cpp
+void ListState::SetTargets(Targets aTargets, bool aRenderPass)
+{
+	targets_ = std::move(aTargets);
+```
+```cpp
+void ListState::SetTargets(Targets aTargets, bool aRenderPass)
+{
+	targets_ = std::move(aTargets);
+	const bool wide = targets_.rtvs.size() >= 3 && targets_.dsv;
+	if (wide && wide_.size() < kMostWideTargets &&
+	    std::none_of(wide_.begin(), wide_.end(), [&](const Targets& aKept) { return SameTargets(aKept, targets_); }))
+	{
+		wide_.push_back(targets_);
+	}
+```
+```cpp
+#include "track/StateTracker.h"
+
+#include <atomic>
+```
+```cpp
+#include "track/StateTracker.h"
+
+#include <algorithm>
+#include <atomic>
+```
+
+- [ ] **Step 5: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `105 test(s), 0 failure(s)`.
+
+- [ ] **Step 6: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "block-render: each list keeps the G-buffer-like target sets it binds" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 54: Finding the G-buffer, its end, and the states there
+
+`src/render/Gbuffer.h` holds step 4's parts that need no GPU, each settled by run 7's frame logs:
+- **`MainGbuffer`:** a set of targets is the G-buffer's when its render targets are R10G10B10A2_UNORM,
+  R10G10B10A2_UNORM and R8G8B8A8_UNORM, maybe with the R16G16_FLOAT motion vectors as a fourth, and its depth buffer
+  is D32_FLOAT_S8X24_UINT, all at the render size and in mip 0.
+- **`EndsGbuffer`:** the list that ends the G-buffer takes the whole of the normals and of the material values out of
+  RENDER_TARGET. The G-buffer's own lists never do: the normals' first mip moves on its own in two of them.
+- **`KnownStates`:** a few resources' states on the main queue, from the whole transitions of the lists submitted to
+  it, in order. The end doesn't move the base colour, so its state comes from the lists before.
+- **`FaceNormal`:** each block face's normal in world axes, as the G-buffer's shader writes it.
+
+**Files:**
+- Create: `tests/TestGbuffer.cpp`, `src/render/Gbuffer.h`, `src/render/Gbuffer.cpp`
+- Modify: `CMakeLists.txt`
+
+- [ ] **Step 1: Write the failing test, `tests/TestGbuffer.cpp`**
+
+```cpp
+#include "Harness.h"
+
+#include "render/Gbuffer.h"
+
+#include <d3d12.h>
+
+using cpmc::BoundTarget;
+using cpmc::GbufferTargets;
+using cpmc::KnownStates;
+using cpmc::ListState;
+using cpmc::Targets;
+using cpmc::ViewInfo;
+
+namespace
+{
+constexpr uint32_t kAll = ListState::kAllSubresources;
+
+BoundTarget View(uintptr_t aResource, DXGI_FORMAT aFormat, ViewInfo::Kind aKind = ViewInfo::Kind::Rtv)
+{
+	ViewInfo view;
+	view.kind = aKind;
+	view.resource = reinterpret_cast<void*>(aResource);
+	view.viewFormat = uint32_t(aFormat);
+	view.width = 1707;
+	view.height = 960;
+	return { aResource * 100, view };
+}
+
+// The G-buffer's targets as the frame logs found them: the base colour is 1, the normals 2, the material values 3,
+// the motion vectors 4 and the depth 5.
+Targets Gbuffer(bool aMotion)
+{
+	Targets targets;
+	targets.rtvs = { View(1, DXGI_FORMAT_R10G10B10A2_UNORM), View(2, DXGI_FORMAT_R10G10B10A2_UNORM),
+		             View(3, DXGI_FORMAT_R8G8B8A8_UNORM) };
+	if (aMotion)
+	{
+		targets.rtvs.push_back(View(4, DXGI_FORMAT_R16G16_FLOAT));
+	}
+	targets.dsv = View(5, DXGI_FORMAT_D32_FLOAT_S8X24_UINT, ViewInfo::Kind::Dsv);
+	return targets;
+}
+
+void* Resource(uintptr_t aResource)
+{
+	return reinterpret_cast<void*>(aResource);
+}
+}
+
+TEST(GbufferIsFoundByItsTargetsFormats)
+{
+	const auto three = cpmc::MainGbuffer(Gbuffer(false), 1707, 960);
+	CHECK(three.has_value());
+	if (three)
+	{
+		CHECK(three->base == Resource(1) && three->normals == Resource(2) && three->material == Resource(3));
+		CHECK(three->depth == Resource(5));
+	}
+	const auto four = cpmc::MainGbuffer(Gbuffer(true), 1707, 960);  // with the motion vectors
+	CHECK(four.has_value() && three && *four == *three);
+}
+
+TEST(GbufferRefusesOtherTargets)
+{
+	CHECK(!cpmc::MainGbuffer(Gbuffer(false), 2560, 1440));  // not the render size
+	Targets after = Gbuffer(false);  // the pass after the G-buffer that the frame logs also found
+	after.rtvs = { View(6, DXGI_FORMAT_R16G16_SNORM), View(7, DXGI_FORMAT_R8_UNORM), View(8, DXGI_FORMAT_R8_UNORM) };
+	CHECK(!cpmc::MainGbuffer(after, 1707, 960));
+	Targets depth = Gbuffer(false);
+	depth.dsv->view->viewFormat = uint32_t(DXGI_FORMAT_D32_FLOAT);
+	CHECK(!cpmc::MainGbuffer(depth, 1707, 960));
+	Targets mip = Gbuffer(false);
+	mip.rtvs[1].view->mip = 1;
+	CHECK(!cpmc::MainGbuffer(mip, 1707, 960));
+	Targets five = Gbuffer(true);
+	five.rtvs.push_back(View(9, DXGI_FORMAT_R8_UNORM));
+	CHECK(!cpmc::MainGbuffer(five, 1707, 960));
+	Targets unknown = Gbuffer(false);
+	unknown.rtvs[0].view.reset();
+	CHECK(!cpmc::MainGbuffer(unknown, 1707, 960));
+}
+
+TEST(GbufferEndsWhereTheNormalsAndMaterialLeaveRenderTarget)
+{
+	const GbufferTargets gbuffer = *cpmc::MainGbuffer(Gbuffer(false), 1707, 960);
+	ListState end;  // the one-list submission after the G-buffer
+	end.Begin(1, false);
+	end.Transition(Resource(4), 0x4, 0x40, kAll, 0);   // the motion vectors
+	end.Transition(Resource(3), 0x4, 0x40, kAll, 0);   // the material values
+	end.Transition(Resource(2), 0x4, 0x40, kAll, 0);   // the normals
+	end.Transition(Resource(5), 0x10, 0x40, kAll, 0);  // the depth
+	CHECK(cpmc::EndsGbuffer(end, gbuffer));
+
+	ListState start;  // the G-buffer's first list moves them into RENDER_TARGET
+	start.Begin(1, false);
+	start.Transition(Resource(2), 0x40, 0x4, kAll, 0);
+	start.Transition(Resource(3), 0x40, 0x4, kAll, 0);
+	CHECK(!cpmc::EndsGbuffer(start, gbuffer));
+
+	ListState mips;  // a G-buffer list that moves only the normals' first mip
+	mips.Begin(1, false);
+	mips.Transition(Resource(2), 0x4, 0x8C0, 0, 0);
+	mips.Transition(Resource(3), 0x4, 0x40, kAll, 0);
+	CHECK(!cpmc::EndsGbuffer(mips, gbuffer));
+
+	ListState normalsOnly;
+	normalsOnly.Begin(1, false);
+	normalsOnly.Transition(Resource(2), 0x4, 0x40, kAll, 0);
+	CHECK(!cpmc::EndsGbuffer(normalsOnly, gbuffer));
+
+	ListState split;  // ends split barriers begun in an earlier list
+	split.Begin(1, false);
+	split.Transition(Resource(2), 0x4, 0x40, kAll, ListState::kEndOnly);
+	split.Transition(Resource(3), 0x4, 0x40, kAll, ListState::kEndOnly);
+	CHECK(!cpmc::EndsGbuffer(split, gbuffer));
+}
+
+TEST(KnownStatesFollowTheListsAsTheyAreSubmitted)
+{
+	KnownStates states;
+	states.Watch({ Resource(1), Resource(2) });
+	ListState first;  // the G-buffer's first list: the base colour and the normals into RENDER_TARGET
+	first.Begin(1, false);
+	first.Transition(Resource(1), 0x40, 0x4, kAll, 0);
+	first.Transition(Resource(2), 0x40, 0x4, kAll, 0);
+	first.Transition(Resource(9), 0x0, 0x4, kAll, 0);  // not watched
+	ListState mips;  // the normals' first mip moves on its own
+	mips.Begin(1, false);
+	mips.Transition(Resource(2), 0x4, 0x8C0, 0, 0);
+	ListState end;  // moves the whole of the normals out, and leaves the base colour
+	end.Begin(1, false);
+	end.Transition(Resource(2), 0x4, 0x40, kAll, 0);
+	ListState quiet;
+	quiet.Begin(1, false);
+
+	CHECK(!states.Before(quiet, Resource(1)));  // nothing known yet
+	states.Apply(first);
+	CHECK_EQ(states.Before(quiet, Resource(1)).value_or(0), 0x4u);
+	CHECK_EQ(states.Before(quiet, Resource(2)).value_or(0), 0x4u);
+	CHECK(!states.Before(quiet, Resource(9)));  // not watched
+	states.Apply(mips);
+	CHECK(!states.Before(quiet, Resource(2)));                    // one subresource moved: the whole is unknown
+	CHECK_EQ(states.Before(end, Resource(2)).value_or(0), 0x4u);  // but the next list says where it starts
+	CHECK_EQ(states.Before(end, Resource(1)).value_or(0), 0x4u);  // and doesn't move the base colour
+	states.Forget();
+	CHECK(!states.Before(end, Resource(1)));
+	CHECK_EQ(states.Before(end, Resource(2)).value_or(0), 0x4u);  // still known from the list itself
+}
+
+TEST(GbufferNormalsAreMinecraftsDirectionsInWorldAxes)
+{
+	const auto is = [](cpmc::Face aFace, double aX, double aY, double aZ) {
+		const cpmc::Vec3d normal = cpmc::FaceNormal(aFace);
+		return normal.x == aX && normal.y == aY && normal.z == aZ;
+	};
+	CHECK(is(cpmc::Face::Down, 0, 0, -1));
+	CHECK(is(cpmc::Face::Up, 0, 0, 1));
+	CHECK(is(cpmc::Face::North, 0, 1, 0));  // world y is north: Minecraft's -z
+	CHECK(is(cpmc::Face::South, 0, -1, 0));
+	CHECK(is(cpmc::Face::West, -1, 0, 0));
+	CHECK(is(cpmc::Face::East, 1, 0, 0));
+}
+```
+
+- [ ] **Step 2: Edit `CMakeLists.txt` to add the test**
+
+```cmake
+	tests/TestHookGroups.cpp
+)
+```
+```cmake
+	tests/TestHookGroups.cpp
+	tests/TestGbuffer.cpp
+)
+```
+
+- [ ] **Step 3: Build; it must fail**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C" | sort -u | head -3
+```
+Expected: `error C1083: Cannot open include file: 'render/Gbuffer.h'`.
+
+- [ ] **Step 4: Write `src/render/Gbuffer.h`**
+
+```cpp
+#pragma once
+
+#include "Coords.h"
+#include "track/StateTracker.h"
+#include "world/Vertex.h"
+
+#include <cstdint>
+#include <optional>
+#include <utility>
+#include <vector>
+
+// Drawing into the G-buffer (step 4): the parts that need no GPU. Our list goes just before the list that ends the
+// G-buffer, and draws into its targets as the game's own geometry does.
+namespace cpmc
+{
+// The G-buffer's targets, as step 1 found them.
+struct GbufferTargets
+{
+	void* base = nullptr;      // R10G10B10A2_UNORM: the base colour, sRGB-encoded
+	void* normals = nullptr;   // R10G10B10A2_UNORM: world-space normals as n x 0.5 + 0.5; it has mip levels
+	void* material = nullptr;  // R8G8B8A8_UNORM: metalness, roughness, a translucency amount and emission
+	void* depth = nullptr;     // D32_FLOAT_S8X24_UINT: the depth, and a stencil class for each kind of surface
+
+	bool operator==(const GbufferTargets&) const = default;
+};
+
+// The G-buffer, if aTargets are its targets at aWidth x aHeight, the render size (the tagged depth's): three render
+// targets in its formats, maybe the motion vectors as a fourth, and its depth-stencil buffer, all views of mip 0.
+std::optional<GbufferTargets> MainGbuffer(const Targets& aTargets, uint64_t aWidth, uint32_t aHeight);
+
+// True when aList ends the G-buffer: its first transitions take the whole of the normals and of the material values
+// out of RENDER_TARGET. The frame logs found one such list each frame, just after the G-buffer's draws.
+bool EndsGbuffer(const ListState& aList, const GbufferTargets& aGbuffer);
+
+// A few resources' states on the main queue between the lists submitted to it, as far as tracked lists show them.
+class KnownStates
+{
+public:
+	void Watch(const std::vector<void*>& aResources);  // these from now on, all unknown
+	void Forget();                                     // all unknown: a new frame, or a list that wasn't tracked
+
+	// aList was submitted after everything applied so far. Each watched resource it moves ends where its last
+	// transition leaves it, which is unknown after a transition of one subresource or the first half of a split.
+	void Apply(const ListState& aList);
+
+	// A resource's state just before aNext: where aNext's first transition of it starts, if that covers the whole
+	// resource and doesn't end a split barrier; if aNext doesn't move it, its known state; otherwise nothing.
+	std::optional<uint32_t> Before(const ListState& aNext, void* aResource) const;
+
+private:
+	std::vector<std::pair<void*, std::optional<uint32_t>>> states_;
+};
+
+// The world-space normal of a block face: Minecraft's direction for it, in world axes (x east, y north, z up).
+// shaders/blocks.hlsl's kFaceNormal holds the same.
+Vec3d FaceNormal(Face aFace);
+}
+```
+
+- [ ] **Step 5: Write `src/render/Gbuffer.cpp`**
+
+```cpp
+#include "render/Gbuffer.h"
+
+#include <d3d12.h>
+
+namespace cpmc
+{
+namespace
+{
+// The G-buffer's render targets in order, as step 1 found them; the fourth, the motion vectors, only in some passes.
+constexpr DXGI_FORMAT kTargetFormats[4] = { DXGI_FORMAT_R10G10B10A2_UNORM, DXGI_FORMAT_R10G10B10A2_UNORM,
+	                                        DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_R16G16_FLOAT };
+
+bool FirstMip(const ViewInfo& aView)
+{
+	return aView.mip == 0 && aView.firstSlice == 0;
+}
+}
+
+std::optional<GbufferTargets> MainGbuffer(const Targets& aTargets, uint64_t aWidth, uint32_t aHeight)
+{
+	// The candidate rule checks there are three or more render targets and a depth buffer, all known and render-sized.
+	if (!IsGbufferCandidate(aTargets, aWidth, aHeight) || aTargets.rtvs.size() > 4)
+	{
+		return std::nullopt;
+	}
+	for (size_t i = 0; i < aTargets.rtvs.size(); ++i)
+	{
+		const ViewInfo& view = *aTargets.rtvs[i].view;
+		if (view.viewFormat != uint32_t(kTargetFormats[i]) || !FirstMip(view))
+		{
+			return std::nullopt;
+		}
+	}
+	const ViewInfo& depth = *aTargets.dsv->view;
+	if (depth.viewFormat != uint32_t(DXGI_FORMAT_D32_FLOAT_S8X24_UINT) || !FirstMip(depth))
+	{
+		return std::nullopt;
+	}
+	return GbufferTargets{ aTargets.rtvs[0].view->resource, aTargets.rtvs[1].view->resource, aTargets.rtvs[2].view->resource,
+		                   depth.resource };
+}
+
+bool EndsGbuffer(const ListState& aList, const GbufferTargets& aGbuffer)
+{
+	const auto leaves = [&](void* aResource) {
+		const std::optional<ListState::FirstTransition> first = aList.FirstTransitionOf(aResource);
+		return first && first->subresource == ListState::kAllSubresources && (first->flags & ListState::kEndOnly) == 0 &&
+		       first->before == uint32_t(D3D12_RESOURCE_STATE_RENDER_TARGET);
+	};
+	return leaves(aGbuffer.normals) && leaves(aGbuffer.material);
+}
+
+void KnownStates::Watch(const std::vector<void*>& aResources)
+{
+	states_.clear();
+	for (void* resource : aResources)
+	{
+		states_.emplace_back(resource, std::nullopt);
+	}
+}
+
+void KnownStates::Forget()
+{
+	for (auto& [resource, state] : states_)
+	{
+		state.reset();
+	}
+}
+
+void KnownStates::Apply(const ListState& aList)
+{
+	for (auto& [resource, state] : states_)
+	{
+		if (aList.FirstTransitionOf(resource))
+		{
+			state = aList.StateOf(resource);
+		}
+	}
+}
+
+std::optional<uint32_t> KnownStates::Before(const ListState& aNext, void* aResource) const
+{
+	if (const std::optional<ListState::FirstTransition> first = aNext.FirstTransitionOf(aResource))
+	{
+		const bool whole = first->subresource == ListState::kAllSubresources && (first->flags & ListState::kEndOnly) == 0;
+		return whole ? std::optional<uint32_t>(first->before) : std::nullopt;
+	}
+	for (const auto& [resource, state] : states_)
+	{
+		if (resource == aResource)
+		{
+			return state;
+		}
+	}
+	return std::nullopt;
+}
+
+Vec3d FaceNormal(Face aFace)
+{
+	// Minecraft's directions in its own axes (x east, y up, z south), in Face's order.
+	constexpr Vec3d kMinecraft[6] = { { 0, -1, 0 }, { 0, 1, 0 }, { 0, 0, -1 }, { 0, 0, 1 }, { -1, 0, 0 }, { 1, 0, 0 } };
+	return WorldFromMc(kMinecraft[size_t(aFace)]);
+}
+}
+```
+
+- [ ] **Step 6: Edit `CMakeLists.txt` to add the source**
+
+```cmake
+	src/hooks/HookGroups.cpp
+)
+```
+```cmake
+	src/hooks/HookGroups.cpp
+	src/render/Gbuffer.cpp
+)
+```
+
+- [ ] **Step 7: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `110 test(s), 0 failure(s)`.
+
+- [ ] **Step 8: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "block-render: finding the G-buffer, its end, and the states there" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 55: Shaders for the G-buffer
+
+Two new entry points in `shaders/blocks.hlsl`:
+- **`GbufferPS`** writes the G-buffer's four targets: the base colour as Minecraft shows it (sRGB-encoded, like the
+  game's, and without Minecraft's face brightness, since the game's light does that), the face's world-space normal,
+  the material values, and the motion vectors as in step 3.
+- **`DepthPS`** has no outputs. Its pass writes the blocks' depth into the tagged depth, the copy of the G-buffer's
+  depth that DLSS reads. The game makes that copy before the point where our list goes.
+
+The material values come from the frame's constants, which grow by 16 bytes to 272. Each frame's constants now take
+512 bytes in the renderer's ring, a multiple of a constant buffer view's 256-byte alignment.
+
+**Files:**
+- Modify: `tests/TestShaders.cpp`, `src/render/FrameConstants.h`, `shaders/blocks.hlsl`, `src/render/Shaders.h`,
+  `src/render/Shaders.cpp`, `src/render/Renderer.cpp`
+
+- [ ] **Step 1: Edit `tests/TestShaders.cpp` to add the failing checks**
+
+```cpp
+		CHECK(!shaders->predlss.empty());
+```
+```cpp
+		CHECK(!shaders->predlss.empty());
+		CHECK(!shaders->gbuffer.empty());
+		CHECK(!shaders->depth.empty());
+```
+```cpp
+		CHECK_EQ(ConstantBufferSize(shaders->predlss, "Frame"), UINT(sizeof(cpmc::FrameConstants)));
+```
+```cpp
+		CHECK_EQ(ConstantBufferSize(shaders->predlss, "Frame"), UINT(sizeof(cpmc::FrameConstants)));
+		CHECK_EQ(ConstantBufferSize(shaders->gbuffer, "Frame"), UINT(sizeof(cpmc::FrameConstants)));
+		CHECK_EQ(ConstantBufferSize(shaders->depth, "Frame"), UINT(sizeof(cpmc::FrameConstants)));
+```
+```cpp
+TEST(ShadersReportCompileErrors)
+```
+```cpp
+TEST(ShadersWriteTheGbuffer)
+{
+	std::string error;
+	const auto  shaders = cpmc::CompileBlockShaders(ShaderSource(), error);
+	CHECK(shaders.has_value());
+	if (shaders)
+	{
+		CHECK_EQ(Outputs(shaders->gbuffer), 4u);  // the base colour, normals, material values and motion vectors
+		CHECK_EQ(Outputs(shaders->depth), 0u);    // depth only
+	}
+}
+
+TEST(ShadersReportCompileErrors)
+```
+
+- [ ] **Step 2: Build; it must fail**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C" | sort -u | head -3
+```
+Expected: `'gbuffer': is not a member of 'cpmc::BlockShaders'`.
+
+- [ ] **Step 3: Edit `src/render/FrameConstants.h` for the material values**
+
+```cpp
+	float    jitter[4];           // the jitter as an offset per unit of clip w (ClipJitter): x, y; 0; 0
+};
+static_assert(sizeof(FrameConstants) == 256);
+```
+```cpp
+	float    jitter[4];           // the jitter as an offset per unit of clip w (ClipJitter): x, y; 0; 0
+	float    material[4];         // the G-buffer's material values: metalness, roughness, B; 0
+};
+static_assert(sizeof(FrameConstants) == 272);
+```
+
+- [ ] **Step 4: Edit `shaders/blocks.hlsl` to add the G-buffer's shaders**
+
+```hlsl
+    float4 jitter;                    // the jitter as an offset per unit of clip w: x, y
+};
+```
+```hlsl
+    float4 jitter;                    // the jitter as an offset per unit of clip w: x, y
+    float4 material;                  // the G-buffer's material values: metalness, roughness, B; 0
+};
+```
+```hlsl
+struct PredlssOut
+{
+    float4 colour : SV_Target0;
+    float2 motion : SV_Target1;
+};
+```
+```hlsl
+// As Camera.cpp's MotionVector: a fraction of the screen, from where the point is to where it was.
+float2 MotionVector(VSOut i)
+{
+    const float2 now = i.clip.xy / i.clip.w;
+    const float2 before = i.prevClip.xy / i.prevClip.w;
+    return (before - now) * float2(0.5, -0.5) * tuning.w;
+}
+
+struct PredlssOut
+{
+    float4 colour : SV_Target0;
+    float2 motion : SV_Target1;
+};
+```
+```hlsl
+    o.colour = float4(Linear(texel.rgb * i.colour.rgb) * kFaceShade[min(i.face, 6)] * tuning.z, 1.0);
+    // As Camera.cpp's MotionVector: a fraction of the screen, from where the point is to where it was.
+    const float2 now = i.clip.xy / i.clip.w;
+    const float2 before = i.prevClip.xy / i.prevClip.w;
+    o.motion = (before - now) * float2(0.5, -0.5) * tuning.w;
+    return o;
+}
+```
+```hlsl
+    o.colour = float4(Linear(texel.rgb * i.colour.rgb) * kFaceShade[min(i.face, 6)] * tuning.z, 1.0);
+    o.motion = MotionVector(i);
+    return o;
+}
+
+// Each face's world-space normal, by the flags' direction + 1: none, down, up, north, south, west, east. As FaceNormal
+// in src/render/Gbuffer.cpp: Minecraft's directions in world axes (x east, y north, z up).
+static const float3 kFaceNormal[7] = { float3(0, 0, 1), float3(0, 0, -1), float3(0, 0, 1), float3(0, 1, 0), float3(0, -1, 0),
+                                       float3(-1, 0, 0), float3(1, 0, 0) };
+
+struct GbufferOut
+{
+    float4 base     : SV_Target0;  // the base colour, sRGB-encoded as the atlas is
+    float4 normal   : SV_Target1;  // the world-space normal, as n * 0.5 + 0.5
+    float4 material : SV_Target2;  // metalness, roughness, B (likely translucency), emission
+    float2 motion   : SV_Target3;
+};
+
+// Step 4: into the G-buffer, which the game then lights, shadows and fogs as its own. The colour is Minecraft's
+// without its face brightness: the game's light does that, from the normal. Alphas are 0, as on the game's ordinary
+// surfaces.
+GbufferOut GbufferPS(VSOut i)
+{
+    const float4 texel = SampleAtlas(i.uv);
+    if (texel.a < 0.5)
+    {
+        discard;
+    }
+    GbufferOut o;
+    o.base = float4(saturate(texel.rgb * i.colour.rgb * tuning.x), 0.0);
+    o.normal = float4(kFaceNormal[min(i.face, 6)] * 0.5 + 0.5, 0.0);
+    o.material = float4(material.xyz, 0.0);
+    o.motion = MotionVector(i);
+    return o;
+}
+
+// Step 4's second pass: the blocks' depth into the tagged depth, the copy of the G-buffer's depth that DLSS reads.
+void DepthPS(VSOut i)
+{
+    if (SampleAtlas(i.uv).a < 0.5)
+    {
+        discard;
+    }
+}
+```
+
+- [ ] **Step 5: Edit `src/render/Shaders.h` for the new entry points**
+
+```cpp
+	std::vector<uint8_t> predlss;  // PredlssPS
+};
+```
+```cpp
+	std::vector<uint8_t> predlss;  // PredlssPS
+	std::vector<uint8_t> gbuffer;  // GbufferPS
+	std::vector<uint8_t> depth;    // DepthPS
+};
+```
+
+- [ ] **Step 6: Edit `src/render/Shaders.cpp` to compile them**
+
+```cpp
+	auto predlss = CompileShader(aSource, "blocks.hlsl", "PredlssPS", "ps_5_1", aError);
+	if (!predlss)
+	{
+		return std::nullopt;
+	}
+	return BlockShaders{ std::move(*vertex), std::move(*present), std::move(*predlss) };
+```
+```cpp
+	auto predlss = CompileShader(aSource, "blocks.hlsl", "PredlssPS", "ps_5_1", aError);
+	if (!predlss)
+	{
+		return std::nullopt;
+	}
+	auto gbuffer = CompileShader(aSource, "blocks.hlsl", "GbufferPS", "ps_5_1", aError);
+	if (!gbuffer)
+	{
+		return std::nullopt;
+	}
+	auto depth = CompileShader(aSource, "blocks.hlsl", "DepthPS", "ps_5_1", aError);
+	if (!depth)
+	{
+		return std::nullopt;
+	}
+	return BlockShaders{ std::move(*vertex), std::move(*present), std::move(*predlss), std::move(*gbuffer), std::move(*depth) };
+```
+
+- [ ] **Step 7: Edit `src/render/Renderer.cpp` for the constants' new size**
+
+```cpp
+constexpr uint64_t kConstantsStride = 256;  // a constant buffer view's alignment
+```
+```cpp
+constexpr uint64_t kConstantsStride = 512;  // a frame's constants, rounded up to a constant buffer view's alignment
+static_assert(sizeof(FrameConstants) <= kConstantsStride && kConstantsStride % 256 == 0);
+```
+
+- [ ] **Step 8: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `111 test(s), 0 failure(s)`.
+
+- [ ] **Step 9: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "block-render: shaders for the G-buffer" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 56: The renderer draws into the G-buffer (mode gbuffer)
+
+The renderer's fourth mode, as "Changes while planning Part 3" in the spec has it:
+- **Every list is tracked,** as for `predlss`.
+- **Seeing each submission** on the main queue (`SeeGbufferSubmission`):
+  - a list that bound the G-buffer's targets (`MainGbuffer`, Task 54) marks the G-buffer as drawn in this frame;
+  - the first list after that to take the normals and the material values out of RENDER_TARGET (`EndsGbuffer`) ends
+    it, and our list goes just before it;
+  - every tracked list updates the known states (`KnownStates`) of the G-buffer's four targets and of the tagged
+    motion vectors and depth. A list that isn't tracked makes them all unknown.
+- **The camera** is the latest evaluate's, which the frame logs found about 2 ms before the G-buffer every frame. If
+  that evaluate's DLSS list has already gone, this frame's camera hasn't come yet: the frame is skipped, and counted
+  as a late camera.
+- **Our list** draws the blocks into the G-buffer's base colour, normals, material values and motion vectors, with its
+  depth and stencil (Task 55's `GbufferPS`). Then, with `DepthPS`, it draws them into the tagged depth, which the game
+  copied from the G-buffer's depth before the end. Barriers are needed only where a state isn't the one wanted: none,
+  by the frame logs.
+- **Settings,** to settle live:
+  - `stencil` (0 to 255, default 0, buildings' class);
+  - `metalness`, `roughness` and `materialb` (0 to 1, defaults 0, 0.85 and 0.33: dirt's, from run 3's dump);
+  - `gbmotion` and `gbdepth` (1 or 0): whether to write the motion vectors and the tagged depth.
+
+Predlss and gbuffer now share the jittered constants (`JitteredConstants`) and the tagged depth's extent
+(`DepthExtent`). The version goes to 0.7.0. Only the game can test the renderer: Task 57 is this task's test.
+
+**Files:**
+- Rewrite: `src/render/Renderer.h`, `src/render/Renderer.cpp`
+- Modify: `CMakeLists.txt`, `src/Plugin.cpp`
+
+- [ ] **Step 1: Write `src/render/Renderer.h`**
+
+```cpp
+#pragma once
+
+#include "Coords.h"
+#include "LogQueue.h"
+#include "hooks/HookEvents.h"
+#include "render/Atlas.h"
+#include "render/Camera.h"
+#include "render/FrameConstants.h"
+#include "render/Gbuffer.h"
+#include "render/Gpu.h"
+#include "render/Shaders.h"
+#include "world/BlockWorld.h"
+#include "world/Vertex.h"
+
+#include <array>
+#include <atomic>
+#include <filesystem>
+#include <map>
+#include <mutex>
+#include <optional>
+#include <string>
+#include <string_view>
+#include <vector>
+
+namespace cpmc
+{
+// The plugin's own drawing (the spec's "Renderer"). The modes:
+// - off;
+// - present (step 2): at each DLSS evaluate the tagged depth's depth plane is copied into a buffer of ours, inside the
+//   game's list. Once that list is submitted, the next Present draws the blocks into the back buffer with our own list,
+//   on the same queue, hidden where the copied depth says the game drew something nearer;
+// - predlss (step 3): a list of ours goes into the submission holding the DLSS evaluate's list, just before it. It draws
+//   into the tagged colour, motion vectors and depth, with the frame's jitter, so DLSS takes the blocks for the game's
+//   own. Its barriers start from the state the DLSS list found each buffer in (its first transitions), so every
+//   command list is tracked while this mode is on: the game rotates through too many DLSS lists to watch only those;
+// - gbuffer (step 4): a list of ours goes into the submission holding the list that ends the G-buffer, just before it.
+//   It draws into the G-buffer's base colour, normals, material values and motion vectors, testing and writing its
+//   depth and stencil, then into the tagged depth, the copy of that depth which the game has made by then. The game
+//   then lights, shadows and fogs the blocks as its own. Every list is tracked: the G-buffer's lists are known by their
+//   targets, its end by its transitions, and the states our barriers start from by both.
+class Renderer : public HookEvents
+{
+public:
+	Renderer(LogQueue& aLog, std::filesystem::path aFolder);
+
+	// Main thread.
+	bool         SetMode(std::string_view aMode, std::string& aError);
+	std::string  ModeName() const;
+	bool         LoadAtlas(std::string& aError);  // atlas.bin, from the plugin's folder
+	const Atlas* AtlasData() const;               // null until loaded; it stays valid, since the atlas is loaded once
+	bool         ReloadShaders(std::string& aError);
+	// brightness, tolerance, cull, origin.x/y/z; for predlss, exposure, jittersign and mvsign; for gbuffer, stencil,
+	// metalness, roughness, materialb, gbmotion and gbdepth
+	bool         Set(std::string_view aName, double aValue, std::string& aError);
+	void         UploadSection(const SectionPos& aSection, std::vector<Vertex> aVertices);  // no vertices: remove it
+	void         Update();  // uploads, and frees what the GPU has finished with
+
+	struct Stats
+	{
+		uint64_t    drawn = 0;
+		uint64_t    skipped = 0;
+		uint64_t    lateCamera = 0;  // present: drawn with the same DLSS frame as the draw before; gbuffer: skipped,
+		                             // because the frame's camera came after its G-buffer
+		std::string lastSkip;
+		double      gpuMsAverage = -1.0;
+		double      gpuMsWorst = -1.0;
+		double      frameMsAverage = -1.0;
+		double      frameMsWorst = -1.0;
+		size_t      sections = 0;
+		size_t      vertices = 0;
+	};
+	Stats TakeStats();  // since the last call
+	void  Shutdown();   // waits for the GPU, then releases everything
+
+	void               OnEvaluate(const EvaluateCall& aCall) override;
+	void               OnSubmit(ID3D12CommandQueue* aQueue, UINT aCount, ID3D12CommandList* const* aLists) override;
+	ID3D12CommandList* ListBefore(ID3D12CommandQueue* aQueue, ID3D12CommandList* aList) override;
+	void               OnSubmitted(ID3D12CommandQueue* aQueue, UINT aCount, ID3D12CommandList* const* aLists) override;
+	void               OnPresent(IDXGISwapChain* aSwapChain) override;
+
+private:
+	enum class Mode
+	{
+		Off,
+		Present,
+		Predlss,
+		Gbuffer,
+	};
+
+	static constexpr uint32_t kSlots = 8;  // frames in flight: more than Streamline's 6
+
+	struct SectionGpu
+	{
+		gpu::ComPtr<ID3D12Resource> buffer;
+		uint32_t                    vertices = 0;
+		uint64_t                    ready = 0;  // the fence value its upload signals
+	};
+
+	struct Frame  // present: one DLSS evaluate's
+	{
+		const void* list = nullptr;  // the game's list holding the depth copy; compared, never used
+		uint32_t    frame = 0;
+		bool        valid = false;  // its constants were found
+		SlConstants constants;
+		bool        depth = false;  // the depth copy holds its depth
+		uint32_t    rowFloats = 0;
+		sl::Extent  extent{};
+	};
+
+	struct Evaluate  // predlss and gbuffer: one DLSS evaluate's
+	{
+		const void*                list = nullptr;  // the DLSS list; compared, never used
+		std::optional<SlConstants> constants;
+		SlTag                      colour;  // the scaling input colour
+		SlTag                      motion;
+		SlTag                      depth;
+	};
+
+	// gbuffer: the resources whose states the main queue's lists show, in watched_'s order
+	enum Watched : size_t
+	{
+		kBase,
+		kNormals,
+		kMaterial,
+		kGbufferDepth,
+		kMotion,
+		kTaggedDepth,
+		kWatched,
+	};
+
+	struct GbufferFrame  // gbuffer: what this frame's submissions have shown so far
+	{
+		uint32_t                                     frame = 0;        // the frame it is
+		bool                                         seen = false;     // a G-buffer list has been submitted
+		bool                                         decided = false;  // drawn, or counted as skipped
+		const void*                                  end = nullptr;    // the list that ends the G-buffer, once found
+		std::array<std::optional<uint32_t>, kWatched> before{};        // each watched resource's state just before it
+	};
+
+	// All with the mutex held.
+	bool               EnsureObjects();  // false until the main queue is known, or if creating them failed
+	bool               EnsurePipeline(DXGI_FORMAT aFormat, bool aReversed);
+	bool               EnsurePredlssPipeline(bool aReversed);
+	bool               EnsureGbufferPipeline(bool aReversed);
+	bool               EnsureDepthPipeline(bool aReversed);
+	bool               EnsureDepthTarget(uint32_t aWidth, uint32_t aHeight);
+	ID3D12CommandList* RecordPredlss(ID3D12CommandQueue* aQueue, ID3D12GraphicsCommandList* aDlssList);  // null: skipped
+	void               SeeGbufferSubmission(UINT aCount, ID3D12CommandList* const* aLists);
+	void               WatchGbuffer();  // the G-buffer's targets and the tagged buffers, if they changed
+	ID3D12CommandList* RecordGbuffer(ID3D12CommandQueue* aQueue);  // null: skipped
+	FrameConstants     BaseConstants(const CameraFrame& aCamera) const;  // the camera, the atlas and the tuning values
+	// BaseConstants, plus the image's size, the jitter and the motion: predlss and gbuffer draw at the render size
+	FrameConstants     JitteredConstants(const CameraFrame& aCamera, const SlConstants& aGame, const sl::Extent& aExtent) const;
+	void               DrawSections(ID3D12GraphicsCommandList* aList, const CameraFrame& aCamera, uint64_t aCompleted);
+	void               Skip(const std::string& aWhy);
+	void               Fail(const std::string& aWhy);  // logs, and switches drawing off
+	void               ReleaseTracking();               // if predlss or gbuffer asked for it
+	uint64_t           Signal();
+	void               Retire(gpu::ComPtr<ID3D12Resource> aResource);
+	void               ReadTimings(uint32_t aSlot);
+
+	LogQueue&             log_;
+	std::filesystem::path folder_;
+	mutable std::mutex    mutex_;
+	std::atomic<Mode>     mode_{ Mode::Off };
+	bool                  trackingRequested_ = false;
+	uint32_t              trackedSince_ = 0;  // lists reset from this frame on are tracked
+
+	float   brightness_ = 1.0f;
+	float   tolerance_ = 0.0001f;
+	int     cull_ = 1;  // 0 none, 1 back faces, 2 front faces
+	Vec3d   renderOrigin_;
+	float   exposure_ = 2.5f;      // predlss: what the linear colour is multiplied by; run 4 settled on 2.5 by eye
+	float   jitterSign_ = 1.0f;    // predlss and gbuffer: 1 or -1 as the jitter's sign, 0 for none
+	float   mvSign_ = 1.0f;        // predlss and gbuffer: 1 or -1 as the motion vectors' sign, 0 for none
+	uint8_t stencil_ = 0;          // gbuffer: the stencil class; buildings carry 0
+	float   metalness_ = 0.0f;     // gbuffer: the material values run 3's dump found for dirt
+	float   roughness_ = 0.85f;
+	float   materialB_ = 0.33f;
+	bool    gbufferMotion_ = true;  // gbuffer: write the motion vectors, as the game wrote them before our list
+	bool    gbufferDepth_ = true;   // gbuffer: write the tagged depth, which the game copied before our list
+
+	ID3D12Device*                                              device_ = nullptr;  // the game's
+	ID3D12CommandQueue*                                        queue_ = nullptr;   // the game's main queue
+	gpu::ComPtr<ID3D12RootSignature>                           rootSignature_;
+	std::optional<BlockShaders>                                shaders_;
+	gpu::ComPtr<ID3D12PipelineState>                           pipeline_;
+	DXGI_FORMAT                                                pipelineFormat_ = DXGI_FORMAT_UNKNOWN;
+	int                                                        pipelineCull_ = -1;
+	bool                                                       pipelineReversed_ = false;
+	gpu::ComPtr<ID3D12PipelineState>                           predlssPipeline_;
+	int                                                        predlssCull_ = -1;
+	bool                                                       predlssReversed_ = false;
+	gpu::ComPtr<ID3D12PipelineState>                           gbufferPipeline_;
+	int                                                        gbufferCull_ = -1;
+	bool                                                       gbufferReversed_ = false;
+	bool                                                       gbufferMotionWrites_ = false;
+	gpu::ComPtr<ID3D12PipelineState>                           depthPipeline_;
+	int                                                        depthCull_ = -1;
+	bool                                                       depthReversed_ = false;
+	// RTVs: the back buffer; predlss's colour and motion vectors; gbuffer's base colour, normals, material values and
+	// motion vectors. DSVs: our depth buffer; predlss's depth; gbuffer's G-buffer depth and tagged depth.
+	gpu::ComPtr<ID3D12DescriptorHeap>                          rtvHeap_;
+	gpu::ComPtr<ID3D12DescriptorHeap>                          dsvHeap_;
+	uint32_t                                                   rtvIncrement_ = 0;
+	uint32_t                                                   dsvIncrement_ = 0;
+	gpu::ComPtr<ID3D12Resource>                                depthTarget_;
+	uint32_t                                                   depthWidth_ = 0;
+	uint32_t                                                   depthHeight_ = 0;
+	gpu::ComPtr<ID3D12Resource>                                constants_;  // upload: kSlots x kConstantsStride bytes
+	uint8_t*                                                   constantsMapped_ = nullptr;
+	std::array<gpu::ComPtr<ID3D12CommandAllocator>, kSlots>    allocators_;
+	std::array<gpu::ComPtr<ID3D12GraphicsCommandList>, kSlots> lists_;
+	std::array<uint64_t, kSlots>                               slotFence_{};
+	uint64_t                                                   recordings_ = 0;  // lists of ours recorded to draw
+	gpu::ComPtr<ID3D12CommandAllocator>                        uploadAllocator_;
+	gpu::ComPtr<ID3D12GraphicsCommandList>                     uploadList_;
+	uint64_t                                                   uploadFence_ = 0;
+	gpu::ComPtr<ID3D12Fence>                                   fence_;
+	uint64_t                                                   fenceValue_ = 0;
+	gpu::ComPtr<ID3D12QueryHeap>                               queries_;
+	gpu::ComPtr<ID3D12Resource>                                timings_;  // readback: kSlots x 2 timestamps
+	uint64_t*                                                  timingsMapped_ = nullptr;
+	uint64_t                                                   timestampFrequency_ = 0;
+
+	std::optional<Atlas>                                           atlas_;
+	gpu::ComPtr<ID3D12Resource>                                    atlasBuffer_;
+	uint64_t                                                       atlasReady_ = 0;
+	bool                                                           atlasUploaded_ = false;
+	std::map<SectionPos, SectionGpu>                               sections_;
+	std::vector<std::pair<SectionPos, std::vector<Vertex>>>        pending_;
+	std::vector<std::pair<gpu::ComPtr<ID3D12Resource>, uint64_t>> retired_;
+
+	gpu::ComPtr<ID3D12Resource>              depthCopy_;
+	uint64_t                                 depthCopyBytes_ = 0;
+	std::vector<gpu::ComPtr<ID3D12Resource>> oldDepthCopies_;  // a game list not yet submitted may still use them
+	Frame                                    recorded_;        // the latest evaluate, its list not yet submitted
+	std::atomic<const void*>                 recordedList_{ nullptr };
+	Frame                                    submitted_;       // the latest evaluate whose list was submitted
+	std::optional<uint32_t>                  lastDrawnFrame_;
+	const void*                              checkedSwapChain_ = nullptr;  // compared, never used
+	bool                                     swapChainOnMainQueue_ = false;
+	uint32_t                                 consecutiveSkips_ = 0;
+
+	Evaluate                 predlss_;  // predlss: the latest evaluate, until its list is submitted
+	std::atomic<const void*> predlssList_{ nullptr };
+
+	Evaluate                      latest_;                   // gbuffer: the latest evaluate
+	bool                          latestSubmitted_ = false;  // its DLSS list has been submitted: the next is late
+	uint64_t                      renderWidth_ = 0;          // the tagged depth's size, the G-buffer's too
+	uint32_t                      renderHeight_ = 0;
+	std::optional<GbufferTargets> gbuffer_;  // as last seen
+	std::vector<void*>            watched_;  // kWatched resources once the G-buffer has been seen; empty until then
+	KnownStates                   knownStates_;
+	GbufferFrame                  gbufferFrame_;
+	std::atomic<const void*>      gbufferEnd_{ nullptr };  // gbufferFrame_.end, read without the lock
+
+	Stats    stats_;
+	double   gpuMsSum_ = 0.0;
+	uint64_t gpuSamples_ = 0;
+	double   frameMsSum_ = 0.0;
+	uint64_t frameSamples_ = 0;
+	int64_t  lastPresent_ = 0;
+};
+}
+```
+
+- [ ] **Step 2: Write `src/render/Renderer.cpp`**
+
+```cpp
+#include "render/Renderer.h"
+
+#include "hooks/D3D12Hooks.h"
+#include "log/DdsWriter.h"
+#include "log/FrameLogData.h"
+#include "render/Pipeline.h"
+#include "render/Predlss.h"
+
+#include <dxgi1_4.h>
+
+#include <algorithm>
+#include <cmath>
+#include <cstring>
+#include <format>
+#include <fstream>
+#include <iterator>
+
+namespace cpmc
+{
+namespace
+{
+constexpr uint64_t kConstantsStride = 512;  // a frame's constants, rounded up to a constant buffer view's alignment
+static_assert(sizeof(FrameConstants) <= kConstantsStride && kConstantsStride % 256 == 0);
+constexpr uint32_t kSkipsBeforeOff = 30;     // the spec's "Checks before every draw"
+constexpr int64_t  kTrackedFramesAgo = 3;    // a DLSS list tracked longer ago than this was recorded again untracked
+
+// Our descriptors, by their index in our CPU-only heaps.
+constexpr uint32_t kBackBufferRtv = 0;
+constexpr uint32_t kPredlssRtvs = 1;  // the colour, then the motion vectors
+constexpr uint32_t kGbufferRtvs = 3;  // the base colour, normals, material values and motion vectors
+constexpr uint32_t kRtvs = 7;
+constexpr uint32_t kOwnDepthDsv = 0;
+constexpr uint32_t kPredlssDsv = 1;
+constexpr uint32_t kGbufferDsv = 2;
+constexpr uint32_t kTaggedDepthDsv = 3;
+constexpr uint32_t kDsvs = 4;
+
+// The G-buffer's render targets in order, as step 1 found them (MainGbuffer checks the game's views have them).
+constexpr DXGI_FORMAT kGbufferFormats[4] = { DXGI_FORMAT_R10G10B10A2_UNORM, DXGI_FORMAT_R10G10B10A2_UNORM, DXGI_FORMAT_R8G8B8A8_UNORM,
+	                                         DXGI_FORMAT_R16G16_FLOAT };
+
+// The slot of the list ListBefore handed to this thread's ExecuteCommandLists call, for OnSubmitted to signal: the
+// same thread makes both calls, while the main thread may change the mode in between.
+thread_local std::optional<uint32_t> t_insertedSlot;
+
+int64_t Now()
+{
+	LARGE_INTEGER now{};
+	QueryPerformanceCounter(&now);
+	return now.QuadPart;
+}
+
+double MsBetween(int64_t aFrom, int64_t aTo)
+{
+	LARGE_INTEGER frequency{};
+	QueryPerformanceFrequency(&frequency);
+	return double(aTo - aFrom) * 1000.0 / double(frequency.QuadPart);
+}
+
+std::optional<std::vector<uint8_t>> ReadWholeFile(const std::filesystem::path& aPath)
+{
+	std::ifstream in(aPath, std::ios::binary);
+	if (!in)
+	{
+		return std::nullopt;
+	}
+	return std::vector<uint8_t>(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+}
+
+// False when all eight corners of the box lie beyond the same side of the view, or behind the camera.
+bool Visible(const Mat4& aCameraToClip, const Vec3d& aLow, const Vec3d& aHigh)
+{
+	int outside[5] = {};
+	for (int corner = 0; corner < 8; ++corner)
+	{
+		const std::array<double, 4> point{ corner & 1 ? aHigh.x : aLow.x, corner & 2 ? aHigh.y : aLow.y,
+			                               corner & 4 ? aHigh.z : aLow.z, 1.0 };
+		const std::array<double, 4> clip = Transform(point, aCameraToClip);
+		outside[0] += clip[0] > clip[3] ? 1 : 0;
+		outside[1] += clip[0] < -clip[3] ? 1 : 0;
+		outside[2] += clip[1] > clip[3] ? 1 : 0;
+		outside[3] += clip[1] < -clip[3] ? 1 : 0;
+		outside[4] += clip[3] < 0.01 ? 1 : 0;
+	}
+	return std::none_of(std::begin(outside), std::end(outside), [](int aCount) { return aCount == 8; });
+}
+
+D3D12_RESOURCE_BARRIER Transition(ID3D12Resource* aResource, D3D12_RESOURCE_STATES aBefore, D3D12_RESOURCE_STATES aAfter)
+{
+	D3D12_RESOURCE_BARRIER barrier{};
+	barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+	barrier.Transition.pResource = aResource;
+	barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+	barrier.Transition.StateBefore = aBefore;
+	barrier.Transition.StateAfter = aAfter;
+	return barrier;
+}
+
+D3D12_CPU_DESCRIPTOR_HANDLE Offset(D3D12_CPU_DESCRIPTOR_HANDLE aHandle, uint32_t aIndex, uint32_t aIncrement)
+{
+	return { aHandle.ptr + size_t(aIndex) * aIncrement };
+}
+
+// Where the tagged depth's image lies in its buffer: the tag's extent, or the whole buffer without one.
+sl::Extent DepthExtent(const SlTag& aDepth, const D3D12_RESOURCE_DESC& aDesc)
+{
+	const bool wholeResource = aDepth.extent.width == 0 || aDepth.extent.height == 0;
+	return wholeResource ? sl::Extent{ 0, 0, uint32_t(aDesc.Width), aDesc.Height } : aDepth.extent;
+}
+}
+
+Renderer::Renderer(LogQueue& aLog, std::filesystem::path aFolder)
+	: log_(aLog)
+	, folder_(std::move(aFolder))
+{
+}
+
+bool Renderer::SetMode(std::string_view aMode, std::string& aError)
+{
+	const bool drawing = aMode == "present" || aMode == "predlss" || aMode == "gbuffer";
+	if (!drawing && aMode != "off")
+	{
+		aError = std::format("there's no mode called \"{}\"", aMode);
+		return false;
+	}
+	if (drawing)
+	{
+		if (!AtlasData() && !LoadAtlas(aError))
+		{
+			return false;
+		}
+		bool haveShaders = false;
+		{
+			std::lock_guard lock(mutex_);
+			haveShaders = shaders_.has_value();
+		}
+		if (!haveShaders && !ReloadShaders(aError))
+		{
+			return false;
+		}
+	}
+	std::lock_guard lock(mutex_);
+	recorded_ = {};
+	recordedList_ = nullptr;
+	submitted_ = {};
+	predlss_ = {};
+	predlssList_ = nullptr;
+	latest_ = {};
+	latestSubmitted_ = false;
+	gbufferFrame_ = {};
+	gbufferEnd_ = nullptr;
+	knownStates_.Forget();
+	lastDrawnFrame_.reset();
+	consecutiveSkips_ = 0;
+	const Mode mode = aMode == "present"   ? Mode::Present
+	                  : aMode == "predlss" ? Mode::Predlss
+	                  : aMode == "gbuffer" ? Mode::Gbuffer
+	                                       : Mode::Off;
+	const bool tracks = mode == Mode::Predlss || mode == Mode::Gbuffer;  // both start their barriers from tracked lists
+	if (tracks && !trackingRequested_)
+	{
+		d3d::RequestTracking();
+		trackingRequested_ = true;
+		trackedSince_ = d3d::CurrentFrame() + 1;  // lists reset from the next frame on are tracked
+	}
+	else if (!tracks)
+	{
+		ReleaseTracking();
+	}
+	mode_ = mode;
+	return true;
+}
+
+std::string Renderer::ModeName() const
+{
+	switch (mode_.load())
+	{
+	case Mode::Present: return "present";
+	case Mode::Predlss: return "predlss";
+	case Mode::Gbuffer: return "gbuffer";
+	default: return "off";
+	}
+}
+
+bool Renderer::LoadAtlas(std::string& aError)
+{
+	const auto bytes = ReadWholeFile(folder_ / "atlas.bin");
+	if (!bytes)
+	{
+		aError = "there's no atlas.bin in the plugin's folder: build it with tools/build_atlas.py";
+		return false;
+	}
+	auto atlas = ParseAtlas(*bytes, aError);
+	if (!atlas)
+	{
+		aError = "atlas.bin: " + aError;
+		return false;
+	}
+	std::lock_guard lock(mutex_);
+	atlas_ = std::move(*atlas);
+	atlasUploaded_ = false;
+	log_.Push(std::format("atlas: {} x {}, {} levels, {} blocks", atlas_->width, atlas_->height, atlas_->Levels(), atlas_->blocks.size()));
+	return true;
+}
+
+const Atlas* Renderer::AtlasData() const
+{
+	std::lock_guard lock(mutex_);
+	return atlas_ ? &*atlas_ : nullptr;
+}
+
+bool Renderer::ReloadShaders(std::string& aError)
+{
+	const auto bytes = ReadWholeFile(folder_ / "shaders" / "blocks.hlsl");
+	if (!bytes)
+	{
+		aError = "there's no shaders\\blocks.hlsl in the plugin's folder";
+		return false;
+	}
+	auto shaders = CompileBlockShaders(std::string(bytes->begin(), bytes->end()), aError);
+	if (!shaders)
+	{
+		return false;
+	}
+	std::lock_guard lock(mutex_);
+	shaders_ = std::move(*shaders);
+	pipeline_.Reset();  // rebuilt with the new shaders at the next draw
+	predlssPipeline_.Reset();
+	gbufferPipeline_.Reset();
+	depthPipeline_.Reset();
+	return true;
+}
+
+bool Renderer::Set(std::string_view aName, double aValue, std::string& aError)
+{
+	std::lock_guard lock(mutex_);
+	if (aName == "brightness" || aName == "tolerance" || aName == "exposure")
+	{
+		if (aValue < 0.0)
+		{
+			aError = std::format("{} can't be negative", aName);
+			return false;
+		}
+		(aName == "brightness" ? brightness_ : aName == "tolerance" ? tolerance_ : exposure_) = float(aValue);
+		return true;
+	}
+	if (aName == "jittersign" || aName == "mvsign")
+	{
+		if (aValue != 1.0 && aValue != -1.0 && aValue != 0.0)
+		{
+			aError = std::format("{} is 1, -1, or 0 for none", aName);
+			return false;
+		}
+		(aName == "jittersign" ? jitterSign_ : mvSign_) = float(aValue);
+		return true;
+	}
+	if (aName == "cull")
+	{
+		if (aValue != 0.0 && aValue != 1.0 && aValue != 2.0)
+		{
+			aError = "cull is 0 (none), 1 (back faces) or 2 (front faces)";
+			return false;
+		}
+		cull_ = int(aValue);
+		return true;
+	}
+	if (aName == "origin.x" || aName == "origin.y" || aName == "origin.z")
+	{
+		(aName == "origin.x" ? renderOrigin_.x : aName == "origin.y" ? renderOrigin_.y : renderOrigin_.z) = aValue;
+		return true;
+	}
+	if (aName == "stencil")
+	{
+		if (aValue < 0.0 || aValue > 255.0 || aValue != std::floor(aValue))
+		{
+			aError = "stencil is a whole number from 0 to 255";
+			return false;
+		}
+		stencil_ = uint8_t(aValue);
+		return true;
+	}
+	if (aName == "metalness" || aName == "roughness" || aName == "materialb")
+	{
+		if (aValue < 0.0 || aValue > 1.0)
+		{
+			aError = std::format("{} is from 0 to 1", aName);
+			return false;
+		}
+		(aName == "metalness" ? metalness_ : aName == "roughness" ? roughness_ : materialB_) = float(aValue);
+		return true;
+	}
+	if (aName == "gbmotion" || aName == "gbdepth")
+	{
+		if (aValue != 0.0 && aValue != 1.0)
+		{
+			aError = std::format("{} is 1, or 0 to leave the game's", aName);
+			return false;
+		}
+		(aName == "gbmotion" ? gbufferMotion_ : gbufferDepth_) = aValue == 1.0;
+		return true;
+	}
+	aError = std::format("there's no setting called \"{}\"", aName);
+	return false;
+}
+
+void Renderer::UploadSection(const SectionPos& aSection, std::vector<Vertex> aVertices)
+{
+	std::lock_guard lock(mutex_);
+	pending_.emplace_back(aSection, std::move(aVertices));
+}
+
+bool Renderer::EnsureObjects()
+{
+	if (fence_)
+	{
+		return true;
+	}
+	const d3d::Originals& original = d3d::Original();
+	queue_ = d3d::MainQueue();
+	device_ = queue_ ? d3d::Device() : nullptr;
+	if (queue_ && queue_->GetDesc().Type != D3D12_COMMAND_LIST_TYPE_DIRECT)
+	{
+		Fail("DLSS runs on a compute queue, and this build draws only on a direct one");
+		return false;
+	}
+	if (!device_ || !original.reset || !original.close || !original.executeCommandLists || !original.resourceBarrier ||
+	    !original.omSetRenderTargets || !original.clearDsv || !original.drawInstanced || !original.createRtv || !original.createDsv)
+	{
+		return false;  // not ready yet
+	}
+	D3D12_ROOT_PARAMETER parameters[5]{};
+	parameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;  // b0: the frame
+	parameters[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
+	parameters[1].Constants = { 1, 0, 4 };  // b1: the section
+	for (UINT i = 2; i < 5; ++i)            // t0 vertices, t1 atlas, t2 depth copy
+	{
+		parameters[i].ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV;
+		parameters[i].Descriptor = { i - 2, 0 };
+	}
+	const D3D12_ROOT_SIGNATURE_DESC rootDesc{ 5, parameters, 0, nullptr, D3D12_ROOT_SIGNATURE_FLAG_NONE };
+	gpu::ComPtr<ID3DBlob>           blob;
+	gpu::ComPtr<ID3DBlob>           error;
+	if (FAILED(D3D12SerializeRootSignature(&rootDesc, D3D_ROOT_SIGNATURE_VERSION_1, &blob, &error)) ||
+	    FAILED(device_->CreateRootSignature(0, blob->GetBufferPointer(), blob->GetBufferSize(), IID_PPV_ARGS(&rootSignature_))))
+	{
+		Fail("couldn't create the root signature");
+		return false;
+	}
+	const D3D12_DESCRIPTOR_HEAP_DESC rtvHeapDesc{ D3D12_DESCRIPTOR_HEAP_TYPE_RTV, kRtvs, D3D12_DESCRIPTOR_HEAP_FLAG_NONE, 0 };
+	const D3D12_DESCRIPTOR_HEAP_DESC dsvHeapDesc{ D3D12_DESCRIPTOR_HEAP_TYPE_DSV, kDsvs, D3D12_DESCRIPTOR_HEAP_FLAG_NONE, 0 };
+	const D3D12_QUERY_HEAP_DESC      queryDesc{ D3D12_QUERY_HEAP_TYPE_TIMESTAMP, kSlots * 2, 0 };
+	constants_ = gpu::MakeBuffer(device_, kSlots * kConstantsStride, D3D12_HEAP_TYPE_UPLOAD, D3D12_RESOURCE_STATE_GENERIC_READ);
+	timings_ = gpu::MakeBuffer(device_, kSlots * 2 * sizeof(uint64_t), D3D12_HEAP_TYPE_READBACK, D3D12_RESOURCE_STATE_COPY_DEST);
+	if (FAILED(device_->CreateDescriptorHeap(&rtvHeapDesc, IID_PPV_ARGS(&rtvHeap_))) ||
+	    FAILED(device_->CreateDescriptorHeap(&dsvHeapDesc, IID_PPV_ARGS(&dsvHeap_))) ||
+	    FAILED(device_->CreateQueryHeap(&queryDesc, IID_PPV_ARGS(&queries_))) || !constants_ || !timings_ ||
+	    FAILED(constants_->Map(0, nullptr, reinterpret_cast<void**>(&constantsMapped_))) ||
+	    FAILED(timings_->Map(0, nullptr, reinterpret_cast<void**>(&timingsMapped_))) ||
+	    FAILED(queue_->GetTimestampFrequency(&timestampFrequency_)))
+	{
+		Fail("couldn't create its heaps and buffers");
+		return false;
+	}
+	rtvIncrement_ = device_->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+	dsvIncrement_ = device_->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_DSV);
+	for (uint32_t slot = 0; slot < kSlots; ++slot)
+	{
+		if (FAILED(device_->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&allocators_[slot]))) ||
+		    FAILED(device_->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, allocators_[slot].Get(), nullptr,
+		                                      IID_PPV_ARGS(&lists_[slot]))))
+		{
+			Fail("couldn't create its command lists");
+			return false;
+		}
+		original.close(lists_[slot].Get());
+		lists_[slot]->SetName(L"BlockRender blocks");
+	}
+	gpu::ComPtr<ID3D12Fence> fence;
+	if (FAILED(device_->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&uploadAllocator_))) ||
+	    FAILED(device_->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, uploadAllocator_.Get(), nullptr, IID_PPV_ARGS(&uploadList_))) ||
+	    FAILED(device_->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence))))
+	{
+		Fail("couldn't create its upload list and fence");
+		return false;
+	}
+	original.close(uploadList_.Get());
+	uploadList_->SetName(L"BlockRender uploads");
+	rootSignature_->SetName(L"BlockRender root signature");
+	constants_->SetName(L"BlockRender constants");
+	timings_->SetName(L"BlockRender timings");
+	fence->SetName(L"BlockRender fence");
+	fence_ = fence;  // last: a fence means everything is ready
+	log_.Push("renderer: ready");
+	return true;
+}
+
+bool Renderer::EnsurePipeline(DXGI_FORMAT aFormat, bool aReversed)
+{
+	if (pipeline_ && pipelineFormat_ == aFormat && pipelineCull_ == cull_ && pipelineReversed_ == aReversed)
+	{
+		return true;
+	}
+	if (!shaders_)
+	{
+		Fail("there are no shaders");
+		return false;
+	}
+	D3D12_GRAPHICS_PIPELINE_STATE_DESC desc{};
+	desc.pRootSignature = rootSignature_.Get();
+	desc.VS = { shaders_->vertex.data(), shaders_->vertex.size() };
+	desc.PS = { shaders_->present.data(), shaders_->present.size() };
+	desc.BlendState.RenderTarget[0].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
+	desc.SampleMask = UINT_MAX;
+	desc.RasterizerState = BlockRasterizer(cull_);
+	desc.DepthStencilState.DepthEnable = TRUE;
+	desc.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL;
+	desc.DepthStencilState.DepthFunc = aReversed ? D3D12_COMPARISON_FUNC_GREATER : D3D12_COMPARISON_FUNC_LESS;
+	desc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+	desc.NumRenderTargets = 1;
+	desc.RTVFormats[0] = aFormat;
+	desc.DSVFormat = DXGI_FORMAT_D32_FLOAT;
+	desc.SampleDesc.Count = 1;
+	gpu::ComPtr<ID3D12PipelineState> pipeline;
+	if (FAILED(device_->CreateGraphicsPipelineState(&desc, IID_PPV_ARGS(&pipeline))))
+	{
+		Fail(std::format("couldn't create a pipeline for {}", DxgiFormatName(aFormat)));
+		return false;
+	}
+	pipeline->SetName(L"BlockRender present pipeline");
+	pipeline_ = pipeline;
+	pipelineFormat_ = aFormat;
+	pipelineCull_ = cull_;
+	pipelineReversed_ = aReversed;
+	return true;
+}
+
+bool Renderer::EnsurePredlssPipeline(bool aReversed)
+{
+	if (predlssPipeline_ && predlssCull_ == cull_ && predlssReversed_ == aReversed)
+	{
+		return true;
+	}
+	if (!shaders_)
+	{
+		Fail("there are no shaders");
+		return false;
+	}
+	D3D12_GRAPHICS_PIPELINE_STATE_DESC desc{};
+	desc.pRootSignature = rootSignature_.Get();
+	desc.VS = { shaders_->vertex.data(), shaders_->vertex.size() };
+	desc.PS = { shaders_->predlss.data(), shaders_->predlss.size() };
+	desc.BlendState.RenderTarget[0].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;  // no independent blend: both
+	desc.SampleMask = UINT_MAX;
+	desc.RasterizerState = BlockRasterizer(cull_);
+	desc.DepthStencilState.DepthEnable = TRUE;
+	desc.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL;
+	desc.DepthStencilState.DepthFunc = aReversed ? D3D12_COMPARISON_FUNC_GREATER : D3D12_COMPARISON_FUNC_LESS;
+	desc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+	desc.NumRenderTargets = 2;  // the scaling input colour, and the motion vectors
+	desc.RTVFormats[0] = DXGI_FORMAT_R16G16B16A16_FLOAT;
+	desc.RTVFormats[1] = DXGI_FORMAT_R16G16_FLOAT;
+	desc.DSVFormat = DXGI_FORMAT_D32_FLOAT;
+	desc.SampleDesc.Count = 1;
+	gpu::ComPtr<ID3D12PipelineState> pipeline;
+	if (FAILED(device_->CreateGraphicsPipelineState(&desc, IID_PPV_ARGS(&pipeline))))
+	{
+		Fail("couldn't create the pipeline for drawing before DLSS");
+		return false;
+	}
+	pipeline->SetName(L"BlockRender predlss pipeline");
+	predlssPipeline_ = pipeline;
+	predlssCull_ = cull_;
+	predlssReversed_ = aReversed;
+	return true;
+}
+
+bool Renderer::EnsureGbufferPipeline(bool aReversed)
+{
+	if (gbufferPipeline_ && gbufferCull_ == cull_ && gbufferReversed_ == aReversed && gbufferMotionWrites_ == gbufferMotion_)
+	{
+		return true;
+	}
+	if (!shaders_)
+	{
+		Fail("there are no shaders");
+		return false;
+	}
+	D3D12_GRAPHICS_PIPELINE_STATE_DESC desc{};
+	desc.pRootSignature = rootSignature_.Get();
+	desc.VS = { shaders_->vertex.data(), shaders_->vertex.size() };
+	desc.PS = { shaders_->gbuffer.data(), shaders_->gbuffer.size() };
+	desc.BlendState.IndependentBlendEnable = TRUE;  // so the motion vectors alone can be left alone
+	for (UINT i = 0; i < 4; ++i)
+	{
+		desc.BlendState.RenderTarget[i].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
+		desc.RTVFormats[i] = kGbufferFormats[i];
+	}
+	if (!gbufferMotion_)
+	{
+		desc.BlendState.RenderTarget[3].RenderTargetWriteMask = 0;
+	}
+	desc.SampleMask = UINT_MAX;
+	desc.RasterizerState = BlockRasterizer(cull_);
+	desc.DepthStencilState.DepthEnable = TRUE;
+	desc.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL;
+	desc.DepthStencilState.DepthFunc = aReversed ? D3D12_COMPARISON_FUNC_GREATER : D3D12_COMPARISON_FUNC_LESS;
+	// Every pixel drawn takes the stencil class: OMSetStencilRef sets it.
+	desc.DepthStencilState.StencilEnable = TRUE;
+	desc.DepthStencilState.StencilReadMask = D3D12_DEFAULT_STENCIL_READ_MASK;
+	desc.DepthStencilState.StencilWriteMask = D3D12_DEFAULT_STENCIL_WRITE_MASK;
+	const D3D12_DEPTH_STENCILOP_DESC replace{ D3D12_STENCIL_OP_KEEP, D3D12_STENCIL_OP_KEEP, D3D12_STENCIL_OP_REPLACE,
+		                                      D3D12_COMPARISON_FUNC_ALWAYS };
+	desc.DepthStencilState.FrontFace = replace;
+	desc.DepthStencilState.BackFace = replace;
+	desc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+	desc.NumRenderTargets = 4;
+	desc.DSVFormat = DXGI_FORMAT_D32_FLOAT_S8X24_UINT;
+	desc.SampleDesc.Count = 1;
+	gpu::ComPtr<ID3D12PipelineState> pipeline;
+	if (FAILED(device_->CreateGraphicsPipelineState(&desc, IID_PPV_ARGS(&pipeline))))
+	{
+		Fail("couldn't create the pipeline for drawing into the G-buffer");
+		return false;
+	}
+	pipeline->SetName(L"BlockRender gbuffer pipeline");
+	gbufferPipeline_ = pipeline;
+	gbufferCull_ = cull_;
+	gbufferReversed_ = aReversed;
+	gbufferMotionWrites_ = gbufferMotion_;
+	return true;
+}
+
+bool Renderer::EnsureDepthPipeline(bool aReversed)
+{
+	if (depthPipeline_ && depthCull_ == cull_ && depthReversed_ == aReversed)
+	{
+		return true;
+	}
+	if (!shaders_)
+	{
+		Fail("there are no shaders");
+		return false;
+	}
+	D3D12_GRAPHICS_PIPELINE_STATE_DESC desc{};
+	desc.pRootSignature = rootSignature_.Get();
+	desc.VS = { shaders_->vertex.data(), shaders_->vertex.size() };
+	desc.PS = { shaders_->depth.data(), shaders_->depth.size() };  // only to cut out what the atlas cuts out
+	desc.SampleMask = UINT_MAX;
+	desc.RasterizerState = BlockRasterizer(cull_);
+	desc.DepthStencilState.DepthEnable = TRUE;
+	desc.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL;
+	desc.DepthStencilState.DepthFunc = aReversed ? D3D12_COMPARISON_FUNC_GREATER : D3D12_COMPARISON_FUNC_LESS;
+	desc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+	desc.NumRenderTargets = 0;
+	desc.DSVFormat = DXGI_FORMAT_D32_FLOAT;
+	desc.SampleDesc.Count = 1;
+	gpu::ComPtr<ID3D12PipelineState> pipeline;
+	if (FAILED(device_->CreateGraphicsPipelineState(&desc, IID_PPV_ARGS(&pipeline))))
+	{
+		Fail("couldn't create the pipeline for the tagged depth");
+		return false;
+	}
+	pipeline->SetName(L"BlockRender depth pipeline");
+	depthPipeline_ = pipeline;
+	depthCull_ = cull_;
+	depthReversed_ = aReversed;
+	return true;
+}
+
+bool Renderer::EnsureDepthTarget(uint32_t aWidth, uint32_t aHeight)
+{
+	if (depthTarget_ && depthWidth_ == aWidth && depthHeight_ == aHeight)
+	{
+		return true;
+	}
+	if (depthTarget_)
+	{
+		Retire(depthTarget_);
+		depthTarget_.Reset();
+	}
+	D3D12_HEAP_PROPERTIES heap{};
+	heap.Type = D3D12_HEAP_TYPE_DEFAULT;
+	D3D12_RESOURCE_DESC desc{};
+	desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+	desc.Width = aWidth;
+	desc.Height = aHeight;
+	desc.DepthOrArraySize = 1;
+	desc.MipLevels = 1;
+	desc.Format = DXGI_FORMAT_D32_FLOAT;
+	desc.SampleDesc.Count = 1;
+	desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
+	D3D12_CLEAR_VALUE clear{};
+	clear.Format = DXGI_FORMAT_D32_FLOAT;
+	if (FAILED(device_->CreateCommittedResource(&heap, D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATE_DEPTH_WRITE, &clear,
+	                                            IID_PPV_ARGS(&depthTarget_))))
+	{
+		Fail("couldn't create its depth buffer");
+		return false;
+	}
+	depthTarget_->SetName(L"BlockRender depth");
+	d3d::Original().createDsv(device_, depthTarget_.Get(), nullptr, Offset(dsvHeap_->GetCPUDescriptorHandleForHeapStart(), kOwnDepthDsv, dsvIncrement_));
+	depthWidth_ = aWidth;
+	depthHeight_ = aHeight;
+	return true;
+}
+
+void Renderer::Skip(const std::string& aWhy)
+{
+	++stats_.skipped;
+	stats_.lastSkip = aWhy;
+	if (++consecutiveSkips_ == kSkipsBeforeOff)
+	{
+		Fail(std::format("{} frames in a row were skipped ({})", kSkipsBeforeOff, aWhy));
+	}
+}
+
+void Renderer::Fail(const std::string& aWhy)
+{
+	log_.Push("renderer: " + aWhy + ", so drawing is off");
+	stats_.lastSkip = aWhy;
+	mode_ = Mode::Off;
+	ReleaseTracking();
+}
+
+void Renderer::ReleaseTracking()
+{
+	if (trackingRequested_)
+	{
+		d3d::ReleaseTracking();
+		trackingRequested_ = false;
+	}
+}
+
+uint64_t Renderer::Signal()
+{
+	queue_->Signal(fence_.Get(), ++fenceValue_);
+	return fenceValue_;
+}
+
+void Renderer::Retire(gpu::ComPtr<ID3D12Resource> aResource)
+{
+	// Every list of ours that used it has been submitted, and the fence was signalled after each.
+	retired_.emplace_back(std::move(aResource), fenceValue_);
+}
+
+void Renderer::ReadTimings(uint32_t aSlot)
+{
+	const uint64_t begin = timingsMapped_[aSlot * 2];
+	const uint64_t end = timingsMapped_[aSlot * 2 + 1];
+	if (end > begin && timestampFrequency_ > 0)
+	{
+		const double ms = double(end - begin) * 1000.0 / double(timestampFrequency_);
+		gpuMsSum_ += ms;
+		++gpuSamples_;
+		stats_.gpuMsWorst = std::max(stats_.gpuMsWorst, ms);
+	}
+}
+
+void Renderer::Update()
+{
+	std::lock_guard lock(mutex_);
+	if ((!fence_ && mode_.load() == Mode::Off) || !EnsureObjects())
+	{
+		return;  // nothing is created until drawing is first switched on
+	}
+	const uint64_t completed = fence_->GetCompletedValue();
+	if (completed == UINT64_MAX)
+	{
+		return;  // the device was removed: the plugin reports it
+	}
+	std::erase_if(retired_, [completed](const auto& aEntry) { return aEntry.second <= completed; });
+	const bool atlasDue = atlas_ && !atlasUploaded_;
+	if ((pending_.empty() && !atlasDue) || completed < uploadFence_)
+	{
+		return;
+	}
+	const d3d::Originals& original = d3d::Original();
+	if (FAILED(uploadAllocator_->Reset()) || FAILED(original.reset(uploadList_.Get(), uploadAllocator_.Get(), nullptr)))
+	{
+		Fail("couldn't reset its upload list");
+		return;
+	}
+	const uint64_t                           ready = fenceValue_ + 1;  // the value the Signal below sets
+	std::vector<gpu::ComPtr<ID3D12Resource>> staging;
+	bool                                     failed = false;
+	const auto upload = [&](const void* aData, uint64_t aBytes) -> gpu::ComPtr<ID3D12Resource> {
+		auto  target = gpu::MakeBuffer(device_, aBytes, D3D12_HEAP_TYPE_DEFAULT, D3D12_RESOURCE_STATE_COMMON);
+		auto  source = gpu::MakeBuffer(device_, aBytes, D3D12_HEAP_TYPE_UPLOAD, D3D12_RESOURCE_STATE_GENERIC_READ);
+		void* mapped = nullptr;
+		if (!target || !source || FAILED(source->Map(0, nullptr, &mapped)))
+		{
+			failed = true;
+			return nullptr;
+		}
+		std::memcpy(mapped, aData, aBytes);
+		source->Unmap(0, nullptr);
+		uploadList_->CopyBufferRegion(target.Get(), 0, source.Get(), 0, aBytes);
+		staging.push_back(source);
+		return target;
+	};
+	if (atlasDue)
+	{
+		if (atlasBuffer_)
+		{
+			Retire(atlasBuffer_);
+		}
+		atlasBuffer_ = upload(atlas_->texels.data(), atlas_->texels.size() * sizeof(uint32_t));
+		if (atlasBuffer_)
+		{
+			atlasBuffer_->SetName(L"BlockRender atlas");
+		}
+		atlasReady_ = ready;
+		atlasUploaded_ = true;
+	}
+	for (auto& [section, vertices] : pending_)
+	{
+		if (const auto found = sections_.find(section); found != sections_.end())
+		{
+			Retire(found->second.buffer);
+			sections_.erase(found);
+		}
+		if (vertices.empty())
+		{
+			continue;
+		}
+		SectionGpu gpuSection;
+		gpuSection.buffer = upload(vertices.data(), vertices.size() * sizeof(Vertex));
+		gpuSection.vertices = uint32_t(vertices.size());
+		gpuSection.ready = ready;
+		if (gpuSection.buffer)
+		{
+			gpuSection.buffer->SetName(L"BlockRender section");
+			sections_[section] = std::move(gpuSection);
+		}
+	}
+	pending_.clear();
+	original.close(uploadList_.Get());
+	ID3D12CommandList* lists[] = { uploadList_.Get() };
+	original.executeCommandLists(queue_, 1, lists);
+	uploadFence_ = Signal();
+	for (auto& buffer : staging)
+	{
+		retired_.emplace_back(std::move(buffer), uploadFence_);
+	}
+	if (failed)
+	{
+		log_.Push("renderer: couldn't create some upload buffers; those sections aren't drawn");
+	}
+}
+
+Renderer::Stats Renderer::TakeStats()
+{
+	std::lock_guard lock(mutex_);
+	Stats stats = stats_;
+	stats.gpuMsAverage = gpuSamples_ ? gpuMsSum_ / double(gpuSamples_) : -1.0;
+	stats.frameMsAverage = frameSamples_ ? frameMsSum_ / double(frameSamples_) : -1.0;
+	stats.sections = sections_.size();
+	for (const auto& [section, gpuSection] : sections_)
+	{
+		stats.vertices += gpuSection.vertices;
+	}
+	stats_ = {};
+	gpuMsSum_ = frameMsSum_ = 0.0;
+	gpuSamples_ = frameSamples_ = 0;
+	return stats;
+}
+
+FrameConstants Renderer::BaseConstants(const CameraFrame& aCamera) const
+{
+	FrameConstants constants{};
+	for (size_t i = 0; i < 16; ++i)
+	{
+		constants.cameraToClip[i] = float(aCamera.cameraToClip[i]);
+	}
+	constants.atlasInfo[0] = atlas_->width;
+	constants.atlasInfo[1] = atlas_->height;
+	constants.atlasInfo[2] = atlas_->Levels();
+	for (size_t i = 0; i < atlas_->levelOffsets.size() && i < 8; ++i)
+	{
+		constants.atlasLevels[i] = atlas_->levelOffsets[i];
+	}
+	constants.tuning[0] = brightness_;
+	constants.tuning[1] = tolerance_;
+	constants.tuning[2] = exposure_;
+	constants.tuning[3] = mvSign_;
+	constants.material[0] = metalness_;
+	constants.material[1] = roughness_;
+	constants.material[2] = materialB_;
+	return constants;
+}
+
+FrameConstants Renderer::JitteredConstants(const CameraFrame& aCamera, const SlConstants& aGame, const sl::Extent& aExtent) const
+{
+	FrameConstants constants = BaseConstants(aCamera);
+	constants.target[0] = float(aExtent.width);
+	constants.target[1] = float(aExtent.height);
+	constants.target[2] = 1.0f / float(aExtent.width);
+	constants.target[3] = 1.0f / float(aExtent.height);
+	for (size_t i = 0; i < 16; ++i)
+	{
+		constants.clipToPrevClip[i] = aGame.clipToPrevClip[i];
+	}
+	const std::array<double, 2> jitter = ClipJitter(aGame.jitter[0], aGame.jitter[1], aExtent.width, aExtent.height, jitterSign_);
+	constants.jitter[0] = float(jitter[0]);
+	constants.jitter[1] = float(jitter[1]);
+	return constants;
+}
+
+void Renderer::DrawSections(ID3D12GraphicsCommandList* aList, const CameraFrame& aCamera, uint64_t aCompleted)
+{
+	for (const auto& [section, gpuSection] : sections_)
+	{
+		if (gpuSection.ready > aCompleted)
+		{
+			continue;  // still uploading
+		}
+		const Vec3d corner = WorldFromMc({ section.x * 16.0, section.y * 16.0, section.z * 16.0 });
+		const Vec3d offset{ corner.x - aCamera.origin.x, corner.y - aCamera.origin.y, corner.z - aCamera.origin.z };
+		// The section fills world x..x+16, y-16..y and z..z+16 from that corner, since Minecraft z runs along world -y.
+		if (!Visible(aCamera.cameraToClip, { offset.x, offset.y - 16.0, offset.z }, { offset.x + 16.0, offset.y, offset.z + 16.0 }))
+		{
+			continue;
+		}
+		const float sectionConstants[4] = { float(offset.x), float(offset.y), float(offset.z), 0.0f };
+		aList->SetGraphicsRoot32BitConstants(1, 4, sectionConstants, 0);
+		aList->SetGraphicsRootShaderResourceView(2, gpuSection.buffer->GetGPUVirtualAddress());
+		d3d::Original().drawInstanced(aList, gpuSection.vertices, 1, 0, 0);
+	}
+}
+
+void Renderer::OnEvaluate(const EvaluateCall& aCall)
+{
+	const Mode mode = mode_.load();
+	if (mode == Mode::Predlss || mode == Mode::Gbuffer)
+	{
+		Evaluate evaluate;
+		evaluate.list = aCall.list;
+		evaluate.constants = aCall.constants;
+		for (const SlTag& tag : aCall.tags)
+		{
+			if (tag.type == sl::kBufferTypeScalingInputColor)
+			{
+				evaluate.colour = tag;
+			}
+			else if (tag.type == sl::kBufferTypeMotionVectors)
+			{
+				evaluate.motion = tag;
+			}
+			else if (tag.type == sl::kBufferTypeDepth)
+			{
+				evaluate.depth = tag;
+			}
+		}
+		std::lock_guard lock(mutex_);
+		if (mode_.load() == Mode::Predlss)
+		{
+			predlss_ = evaluate;
+			predlssList_ = aCall.list;
+		}
+		else if (mode_.load() == Mode::Gbuffer)
+		{
+			latest_ = evaluate;
+			latestSubmitted_ = false;
+			if (auto* depth = static_cast<ID3D12Resource*>(evaluate.depth.resource))
+			{
+				const D3D12_RESOURCE_DESC desc = depth->GetDesc();
+				renderWidth_ = desc.Width;
+				renderHeight_ = desc.Height;
+			}
+			WatchGbuffer();
+		}
+		return;
+	}
+	if (mode != Mode::Present)
+	{
+		return;
+	}
+	std::lock_guard lock(mutex_);
+	if (mode_.load() != Mode::Present || !aCall.list || !EnsureObjects())
+	{
+		return;
+	}
+	recorded_ = {};
+	recorded_.list = aCall.list;
+	recorded_.frame = aCall.frame;
+	recorded_.valid = aCall.constants.has_value();
+	if (aCall.constants)
+	{
+		recorded_.constants = *aCall.constants;
+	}
+	recordedList_ = aCall.list;
+	const SlTag* depth = nullptr;
+	for (const SlTag& tag : aCall.tags)
+	{
+		if (tag.type == sl::kBufferTypeDepth && tag.resource && tag.state != 0xFFFFFFFF)
+		{
+			depth = &tag;
+		}
+	}
+	if (!depth)
+	{
+		return;  // drawn without the game's depth
+	}
+	auto*                     resource = static_cast<ID3D12Resource*>(depth->resource);
+	const D3D12_RESOURCE_DESC desc = resource->GetDesc();
+	if (desc.Dimension != D3D12_RESOURCE_DIMENSION_TEXTURE2D || DumpFormat(desc.Format, 0) != uint32_t(DXGI_FORMAT_R32_FLOAT))
+	{
+		return;
+	}
+	const uint32_t       subresource = gpu::PlaneSubresource(desc, 0);
+	const gpu::Footprint footprint = gpu::FootprintOf(device_, desc, subresource);
+	if (!depthCopy_ || depthCopyBytes_ < footprint.totalBytes)
+	{
+		if (depthCopy_)
+		{
+			oldDepthCopies_.push_back(depthCopy_);
+		}
+		depthCopy_ = gpu::MakeBuffer(device_, footprint.totalBytes, D3D12_HEAP_TYPE_DEFAULT, D3D12_RESOURCE_STATE_COMMON);
+		depthCopyBytes_ = depthCopy_ ? footprint.totalBytes : 0;
+		if (!depthCopy_)
+		{
+			Fail("couldn't create the depth copy");
+			return;
+		}
+		depthCopy_->SetName(L"BlockRender depth copy");
+	}
+	if (!gpu::RecordCopy(aCall.list, resource, subresource, depth->state, depthCopy_.Get(), footprint))
+	{
+		return;  // drawn without the game's depth
+	}
+	recorded_.depth = true;
+	recorded_.rowFloats = footprint.layout.Footprint.RowPitch / 4;
+	recorded_.extent = DepthExtent(*depth, desc);
+}
+
+void Renderer::OnSubmit(ID3D12CommandQueue* aQueue, UINT aCount, ID3D12CommandList* const* aLists)
+{
+	if (mode_.load() == Mode::Gbuffer)
+	{
+		if (aQueue == d3d::MainQueue())
+		{
+			std::lock_guard lock(mutex_);
+			if (mode_.load() == Mode::Gbuffer)
+			{
+				SeeGbufferSubmission(aCount, aLists);
+			}
+		}
+		return;
+	}
+	const void* recorded = recordedList_.load();
+	if (!recorded)
+	{
+		return;
+	}
+	for (UINT i = 0; i < aCount; ++i)
+	{
+		if (static_cast<const void*>(aLists[i]) == recorded)
+		{
+			std::lock_guard lock(mutex_);
+			if (recorded_.list == recorded)
+			{
+				submitted_ = recorded_;
+				recorded_ = {};
+				recordedList_ = nullptr;
+			}
+			return;
+		}
+	}
+}
+
+void Renderer::WatchGbuffer()
+{
+	std::vector<void*> watched;
+	if (gbuffer_)
+	{
+		watched = { gbuffer_->base, gbuffer_->normals, gbuffer_->material, gbuffer_->depth, latest_.motion.resource,
+			        latest_.depth.resource };
+	}
+	if (watched != watched_)
+	{
+		watched_ = watched;
+		knownStates_.Watch(watched_);  // all unknown until the lists show them again
+	}
+}
+
+void Renderer::SeeGbufferSubmission(UINT aCount, ID3D12CommandList* const* aLists)
+{
+	const uint32_t frame = d3d::CurrentFrame();
+	if (frame != gbufferFrame_.frame)
+	{
+		gbufferFrame_ = {};
+		gbufferFrame_.frame = frame;
+		gbufferEnd_ = nullptr;
+		knownStates_.Forget();  // only lists submitted in this frame say where things are
+	}
+	for (UINT i = 0; i < aCount; ++i)
+	{
+		const void* list = aLists[i];
+		if (list == latest_.list && !latestSubmitted_)
+		{
+			// The frame's DLSS list: the G-buffer is long done, and the next frame's evaluate is the next camera.
+			latestSubmitted_ = true;
+			if (!gbufferFrame_.decided)
+			{
+				gbufferFrame_.decided = true;
+				Skip(gbufferFrame_.seen ? "the G-buffer's end wasn't found" : "no G-buffer list was seen in this frame");
+			}
+			continue;
+		}
+		const ListState* state = d3d::Tracker().Find(aLists[i]);
+		if (!state || state->Recording() || state->Frame() < trackedSince_)
+		{
+			knownStates_.Forget();  // a list we can't see into could move anything
+			continue;
+		}
+		for (const Targets& targets : state->WideTargets())
+		{
+			const std::optional<GbufferTargets> found = MainGbuffer(targets, renderWidth_, renderHeight_);
+			if (found)
+			{
+				gbufferFrame_.seen = true;
+				if (found != gbuffer_)
+				{
+					gbuffer_ = found;
+					WatchGbuffer();
+				}
+			}
+		}
+		if (gbufferFrame_.seen && !gbufferFrame_.decided && !gbufferFrame_.end && EndsGbuffer(*state, *gbuffer_))
+		{
+			gbufferFrame_.end = list;
+			for (size_t k = 0; k < watched_.size() && k < kWatched; ++k)
+			{
+				gbufferFrame_.before[k] = knownStates_.Before(*state, watched_[k]);
+			}
+			gbufferEnd_ = list;
+		}
+		knownStates_.Apply(*state);
+	}
+}
+
+ID3D12CommandList* Renderer::ListBefore(ID3D12CommandQueue* aQueue, ID3D12CommandList* aList)
+{
+	const void* list = aList;
+	if (list == predlssList_.load())
+	{
+		std::lock_guard lock(mutex_);
+		if (mode_.load() != Mode::Predlss || predlss_.list != aList)
+		{
+			return nullptr;
+		}
+		ID3D12CommandList* ours = RecordPredlss(aQueue, static_cast<ID3D12GraphicsCommandList*>(aList));
+		predlss_ = {};  // each evaluate draws once
+		predlssList_ = nullptr;
+		return ours;
+	}
+	if (list != gbufferEnd_.load())
+	{
+		return nullptr;  // most lists: no lock taken
+	}
+	std::lock_guard lock(mutex_);
+	if (mode_.load() != Mode::Gbuffer || gbufferFrame_.end != list || gbufferFrame_.decided)
+	{
+		return nullptr;
+	}
+	gbufferFrame_.end = nullptr;
+	gbufferFrame_.decided = true;  // each frame draws once
+	gbufferEnd_ = nullptr;
+	return RecordGbuffer(aQueue);
+}
+
+ID3D12CommandList* Renderer::RecordPredlss(ID3D12CommandQueue* aQueue, ID3D12GraphicsCommandList* aDlssList)
+{
+	if (!EnsureObjects())
+	{
+		Skip("not ready: the main queue isn't known yet");
+		return nullptr;
+	}
+	const uint64_t completed = fence_->GetCompletedValue();
+	if (completed == UINT64_MAX)
+	{
+		Fail(std::format("the device was removed (0x{:08x})", uint32_t(device_->GetDeviceRemovedReason())));
+		return nullptr;
+	}
+	if (aQueue != queue_)
+	{
+		Skip("the DLSS list went to another queue than the main one");
+		return nullptr;
+	}
+	if (!predlss_.constants)
+	{
+		Skip("the DLSS frame came without constants");
+		return nullptr;
+	}
+	auto* colour = static_cast<ID3D12Resource*>(predlss_.colour.resource);
+	auto* motion = static_cast<ID3D12Resource*>(predlss_.motion.resource);
+	auto* depth = static_cast<ID3D12Resource*>(predlss_.depth.resource);
+	if (!colour || !motion || !depth)
+	{
+		Skip("the scaling input colour, motion vectors and depth aren't all tagged");
+		return nullptr;
+	}
+	const D3D12_RESOURCE_DESC colourDesc = colour->GetDesc();
+	const D3D12_RESOURCE_DESC motionDesc = motion->GetDesc();
+	const D3D12_RESOURCE_DESC depthDesc = depth->GetDesc();
+	std::string               why;
+	if (!CheckPredlssTargets(colourDesc, motionDesc, depthDesc, why))
+	{
+		Skip(why);
+		return nullptr;
+	}
+	const ListState* dlss = d3d::Tracker().Find(aDlssList);
+	if (!dlss || dlss->Recording() || int64_t(d3d::CurrentFrame()) - int64_t(dlss->Frame()) > kTrackedFramesAgo)
+	{
+		Skip("the DLSS list wasn't tracked from its Reset");
+		return nullptr;
+	}
+	const std::optional<uint32_t> colourState = StateBeforeList(*dlss, colour, predlss_.colour.state);
+	const std::optional<uint32_t> motionState = StateBeforeList(*dlss, motion, predlss_.motion.state);
+	const std::optional<uint32_t> depthState = StateBeforeList(*dlss, depth, predlss_.depth.state);
+	if (!colourState || !motionState || !depthState)
+	{
+		Skip("a tagged buffer's state before the DLSS list isn't known");
+		return nullptr;
+	}
+	if (!atlasBuffer_ || completed < atlasReady_)
+	{
+		Skip("the atlas isn't on the GPU yet");
+		return nullptr;
+	}
+	const std::optional<CameraFrame> camera = MakeCameraFrame(*predlss_.constants, renderOrigin_);
+	if (!camera)
+	{
+		Skip("the camera isn't understood");
+		return nullptr;
+	}
+	if (!EnsurePredlssPipeline(camera->reversedDepth))
+	{
+		return nullptr;
+	}
+	const uint32_t slot = uint32_t(recordings_ % kSlots);
+	if (completed < slotFence_[slot])
+	{
+		Skip("the GPU is still busy with an earlier frame");
+		return nullptr;
+	}
+	if (slotFence_[slot] != 0)
+	{
+		ReadTimings(slot);
+	}
+
+	const sl::Extent     extent = DepthExtent(predlss_.depth, depthDesc);
+	const FrameConstants constants = JitteredConstants(*camera, *predlss_.constants, extent);
+	std::memcpy(constantsMapped_ + slot * kConstantsStride, &constants, sizeof(constants));
+
+	// Our own list: calls the hooks watch go through their originals, so nothing of ours reaches the tracker.
+	const d3d::Originals&      original = d3d::Original();
+	ID3D12GraphicsCommandList* list = lists_[slot].Get();
+	if (FAILED(allocators_[slot]->Reset()) || FAILED(original.reset(list, allocators_[slot].Get(), predlssPipeline_.Get())))
+	{
+		Fail("couldn't reset a command list");
+		return nullptr;
+	}
+	list->EndQuery(queries_.Get(), D3D12_QUERY_TYPE_TIMESTAMP, slot * 2);
+	const std::vector<Move> into = MovesInto({ { colour, *colourState, D3D12_RESOURCE_STATE_RENDER_TARGET },
+	                                           { motion, *motionState, D3D12_RESOURCE_STATE_RENDER_TARGET },
+	                                           { depth, *depthState, D3D12_RESOURCE_STATE_DEPTH_WRITE } });
+	const std::vector<D3D12_RESOURCE_BARRIER> toTargets = Barriers(into);
+	if (!toTargets.empty())
+	{
+		original.resourceBarrier(list, UINT(toTargets.size()), toTargets.data());
+	}
+	const D3D12_CPU_DESCRIPTOR_HANDLE rtvs[2] = { Offset(rtvHeap_->GetCPUDescriptorHandleForHeapStart(), kPredlssRtvs, rtvIncrement_),
+		                                          Offset(rtvHeap_->GetCPUDescriptorHandleForHeapStart(), kPredlssRtvs + 1, rtvIncrement_) };
+	const D3D12_CPU_DESCRIPTOR_HANDLE dsv = Offset(dsvHeap_->GetCPUDescriptorHandleForHeapStart(), kPredlssDsv, dsvIncrement_);
+	D3D12_RENDER_TARGET_VIEW_DESC     colourView{};
+	colourView.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+	colourView.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;
+	D3D12_RENDER_TARGET_VIEW_DESC motionView = colourView;
+	motionView.Format = DXGI_FORMAT_R16G16_FLOAT;
+	D3D12_DEPTH_STENCIL_VIEW_DESC depthView{};
+	depthView.Format = DepthViewFormat(depthDesc.Format);
+	depthView.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
+	original.createRtv(device_, colour, &colourView, rtvs[0]);
+	original.createRtv(device_, motion, &motionView, rtvs[1]);
+	original.createDsv(device_, depth, &depthView, dsv);
+	original.omSetRenderTargets(list, 2, rtvs, FALSE, &dsv);
+	const D3D12_VIEWPORT viewport{ float(extent.left), float(extent.top), float(extent.width), float(extent.height), 0.0f, 1.0f };
+	const D3D12_RECT     scissor{ LONG(extent.left), LONG(extent.top), LONG(extent.left + extent.width), LONG(extent.top + extent.height) };
+	list->RSSetViewports(1, &viewport);
+	list->RSSetScissorRects(1, &scissor);
+	list->SetGraphicsRootSignature(rootSignature_.Get());
+	list->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+	list->SetGraphicsRootConstantBufferView(0, constants_->GetGPUVirtualAddress() + slot * kConstantsStride);
+	list->SetGraphicsRootShaderResourceView(3, atlasBuffer_->GetGPUVirtualAddress());
+	list->SetGraphicsRootShaderResourceView(4, atlasBuffer_->GetGPUVirtualAddress());  // t2: only step 2's shader reads it
+	DrawSections(list, *camera, completed);
+	const std::vector<D3D12_RESOURCE_BARRIER> back = Barriers(MovesBack(into));
+	if (!back.empty())
+	{
+		original.resourceBarrier(list, UINT(back.size()), back.data());
+	}
+	list->EndQuery(queries_.Get(), D3D12_QUERY_TYPE_TIMESTAMP, slot * 2 + 1);
+	list->ResolveQueryData(queries_.Get(), D3D12_QUERY_TYPE_TIMESTAMP, slot * 2, 2, timings_.Get(), slot * 2 * sizeof(uint64_t));
+	if (FAILED(original.close(list)))
+	{
+		Fail("couldn't close a command list");
+		return nullptr;
+	}
+	++recordings_;
+	t_insertedSlot = slot;
+	return list;
+}
+
+ID3D12CommandList* Renderer::RecordGbuffer(ID3D12CommandQueue* aQueue)
+{
+	if (!EnsureObjects())
+	{
+		Skip("not ready: the main queue isn't known yet");
+		return nullptr;
+	}
+	const uint64_t completed = fence_->GetCompletedValue();
+	if (completed == UINT64_MAX)
+	{
+		Fail(std::format("the device was removed (0x{:08x})", uint32_t(device_->GetDeviceRemovedReason())));
+		return nullptr;
+	}
+	if (aQueue != queue_)
+	{
+		Skip("the G-buffer ended on another queue than the main one");
+		return nullptr;
+	}
+	if (!latest_.list || latestSubmitted_)
+	{
+		++stats_.lateCamera;  // this frame's evaluate, which brings its camera, hasn't come yet
+		Skip("the frame's camera came after its G-buffer");
+		return nullptr;
+	}
+	if (!latest_.constants)
+	{
+		Skip("the DLSS frame came without constants");
+		return nullptr;
+	}
+	auto* colour = static_cast<ID3D12Resource*>(latest_.colour.resource);
+	auto* motion = static_cast<ID3D12Resource*>(latest_.motion.resource);
+	auto* taggedDepth = static_cast<ID3D12Resource*>(latest_.depth.resource);
+	if (!colour || !motion || !taggedDepth)
+	{
+		Skip("the scaling input colour, motion vectors and depth aren't all tagged");
+		return nullptr;
+	}
+	const D3D12_RESOURCE_DESC depthDesc = taggedDepth->GetDesc();
+	std::string               why;
+	if (!CheckPredlssTargets(colour->GetDesc(), motion->GetDesc(), depthDesc, why))
+	{
+		Skip(why);
+		return nullptr;
+	}
+	if (!gbuffer_ || watched_.size() != kWatched || watched_[kMotion] != motion || watched_[kTaggedDepth] != taggedDepth)
+	{
+		Skip("the G-buffer and the tagged buffers aren't the ones watched");
+		return nullptr;
+	}
+	static constexpr const char* kNames[kWatched] = { "base colour", "normals", "material values", "G-buffer's depth",
+		                                              "motion vectors", "tagged depth" };
+	for (size_t k = 0; k < kWatched; ++k)
+	{
+		if (!gbufferFrame_.before[k] && (k != kTaggedDepth || gbufferDepth_))
+		{
+			Skip(std::format("the state of the {} before the G-buffer's end isn't known", kNames[k]));
+			return nullptr;
+		}
+	}
+	if (!atlasBuffer_ || completed < atlasReady_)
+	{
+		Skip("the atlas isn't on the GPU yet");
+		return nullptr;
+	}
+	const std::optional<CameraFrame> camera = MakeCameraFrame(*latest_.constants, renderOrigin_);
+	if (!camera)
+	{
+		Skip("the camera isn't understood");
+		return nullptr;
+	}
+	if (!EnsureGbufferPipeline(camera->reversedDepth) || (gbufferDepth_ && !EnsureDepthPipeline(camera->reversedDepth)))
+	{
+		return nullptr;
+	}
+	const uint32_t slot = uint32_t(recordings_ % kSlots);
+	if (completed < slotFence_[slot])
+	{
+		Skip("the GPU is still busy with an earlier frame");
+		return nullptr;
+	}
+	if (slotFence_[slot] != 0)
+	{
+		ReadTimings(slot);
+	}
+
+	const sl::Extent     extent = DepthExtent(latest_.depth, depthDesc);
+	const FrameConstants constants = JitteredConstants(*camera, *latest_.constants, extent);
+	std::memcpy(constantsMapped_ + slot * kConstantsStride, &constants, sizeof(constants));
+
+	// Our own list: calls the hooks watch go through their originals, so nothing of ours reaches the tracker.
+	const d3d::Originals&      original = d3d::Original();
+	ID3D12GraphicsCommandList* list = lists_[slot].Get();
+	if (FAILED(allocators_[slot]->Reset()) || FAILED(original.reset(list, allocators_[slot].Get(), gbufferPipeline_.Get())))
+	{
+		Fail("couldn't reset a command list");
+		return nullptr;
+	}
+	list->EndQuery(queries_.Get(), D3D12_QUERY_TYPE_TIMESTAMP, slot * 2);
+	ID3D12Resource* targets[4] = { static_cast<ID3D12Resource*>(gbuffer_->base), static_cast<ID3D12Resource*>(gbuffer_->normals),
+		                           static_cast<ID3D12Resource*>(gbuffer_->material), motion };
+	auto* gbufferDepth = static_cast<ID3D12Resource*>(gbuffer_->depth);
+	std::vector<Move> wanted = { { targets[0], *gbufferFrame_.before[kBase], D3D12_RESOURCE_STATE_RENDER_TARGET },
+		                         { targets[1], *gbufferFrame_.before[kNormals], D3D12_RESOURCE_STATE_RENDER_TARGET },
+		                         { targets[2], *gbufferFrame_.before[kMaterial], D3D12_RESOURCE_STATE_RENDER_TARGET },
+		                         { motion, *gbufferFrame_.before[kMotion], D3D12_RESOURCE_STATE_RENDER_TARGET },
+		                         { gbufferDepth, *gbufferFrame_.before[kGbufferDepth], D3D12_RESOURCE_STATE_DEPTH_WRITE } };
+	if (gbufferDepth_)
+	{
+		wanted.push_back({ taggedDepth, *gbufferFrame_.before[kTaggedDepth], D3D12_RESOURCE_STATE_DEPTH_WRITE });
+	}
+	const std::vector<Move>                   into = MovesInto(wanted);
+	const std::vector<D3D12_RESOURCE_BARRIER> toTargets = Barriers(into);
+	if (!toTargets.empty())
+	{
+		original.resourceBarrier(list, UINT(toTargets.size()), toTargets.data());
+	}
+	D3D12_CPU_DESCRIPTOR_HANDLE rtvs[4]{};
+	for (uint32_t i = 0; i < 4; ++i)
+	{
+		rtvs[i] = Offset(rtvHeap_->GetCPUDescriptorHandleForHeapStart(), kGbufferRtvs + i, rtvIncrement_);
+		D3D12_RENDER_TARGET_VIEW_DESC view{};
+		view.Format = kGbufferFormats[i];
+		view.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;  // mip 0, as the game's views
+		original.createRtv(device_, targets[i], &view, rtvs[i]);
+	}
+	const D3D12_CPU_DESCRIPTOR_HANDLE gbufferDsv = Offset(dsvHeap_->GetCPUDescriptorHandleForHeapStart(), kGbufferDsv, dsvIncrement_);
+	D3D12_DEPTH_STENCIL_VIEW_DESC     gbufferDepthView{};
+	gbufferDepthView.Format = DXGI_FORMAT_D32_FLOAT_S8X24_UINT;
+	gbufferDepthView.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
+	original.createDsv(device_, gbufferDepth, &gbufferDepthView, gbufferDsv);
+	original.omSetRenderTargets(list, 4, rtvs, FALSE, &gbufferDsv);
+	list->OMSetStencilRef(stencil_);
+	const D3D12_VIEWPORT viewport{ float(extent.left), float(extent.top), float(extent.width), float(extent.height), 0.0f, 1.0f };
+	const D3D12_RECT     scissor{ LONG(extent.left), LONG(extent.top), LONG(extent.left + extent.width), LONG(extent.top + extent.height) };
+	list->RSSetViewports(1, &viewport);
+	list->RSSetScissorRects(1, &scissor);
+	list->SetGraphicsRootSignature(rootSignature_.Get());
+	list->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+	list->SetGraphicsRootConstantBufferView(0, constants_->GetGPUVirtualAddress() + slot * kConstantsStride);
+	list->SetGraphicsRootShaderResourceView(3, atlasBuffer_->GetGPUVirtualAddress());
+	list->SetGraphicsRootShaderResourceView(4, atlasBuffer_->GetGPUVirtualAddress());  // t2: only step 2's shader reads it
+	DrawSections(list, *camera, completed);
+	if (gbufferDepth_)
+	{
+		// The game copied the G-buffer's depth into the tagged depth before our list, so the blocks go in there too.
+		const D3D12_CPU_DESCRIPTOR_HANDLE taggedDsv = Offset(dsvHeap_->GetCPUDescriptorHandleForHeapStart(), kTaggedDepthDsv, dsvIncrement_);
+		D3D12_DEPTH_STENCIL_VIEW_DESC     taggedView{};
+		taggedView.Format = DepthViewFormat(depthDesc.Format);
+		taggedView.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
+		original.createDsv(device_, taggedDepth, &taggedView, taggedDsv);
+		list->SetPipelineState(depthPipeline_.Get());
+		original.omSetRenderTargets(list, 0, nullptr, FALSE, &taggedDsv);
+		DrawSections(list, *camera, completed);
+	}
+	const std::vector<D3D12_RESOURCE_BARRIER> back = Barriers(MovesBack(into));
+	if (!back.empty())
+	{
+		original.resourceBarrier(list, UINT(back.size()), back.data());
+	}
+	list->EndQuery(queries_.Get(), D3D12_QUERY_TYPE_TIMESTAMP, slot * 2 + 1);
+	list->ResolveQueryData(queries_.Get(), D3D12_QUERY_TYPE_TIMESTAMP, slot * 2, 2, timings_.Get(), slot * 2 * sizeof(uint64_t));
+	if (FAILED(original.close(list)))
+	{
+		Fail("couldn't close a command list");
+		return nullptr;
+	}
+	++recordings_;
+	t_insertedSlot = slot;
+	return list;
+}
+
+void Renderer::OnSubmitted(ID3D12CommandQueue*, UINT, ID3D12CommandList* const*)
+{
+	if (!t_insertedSlot)
+	{
+		return;
+	}
+	const uint32_t  slot = *t_insertedSlot;
+	t_insertedSlot.reset();
+	std::lock_guard lock(mutex_);
+	slotFence_[slot] = Signal();  // signalled whatever the mode is now: our list went to the GPU
+	++stats_.drawn;
+	consecutiveSkips_ = 0;
+}
+
+void Renderer::OnPresent(IDXGISwapChain* aSwapChain)
+{
+	const int64_t   now = Now();
+	std::lock_guard lock(mutex_);
+	if (lastPresent_ != 0)
+	{
+		const double ms = MsBetween(lastPresent_, now);
+		frameMsSum_ += ms;
+		++frameSamples_;
+		stats_.frameMsWorst = std::max(stats_.frameMsWorst, ms);
+	}
+	lastPresent_ = now;
+	if (mode_.load() != Mode::Present)
+	{
+		return;
+	}
+	if (!EnsureObjects())
+	{
+		return Skip("not ready: the main queue isn't known yet");
+	}
+	const uint64_t completed = fence_->GetCompletedValue();
+	if (completed == UINT64_MAX)
+	{
+		return Fail(std::format("the device was removed (0x{:08x})", uint32_t(device_->GetDeviceRemovedReason())));
+	}
+	if (aSwapChain != checkedSwapChain_)
+	{
+		checkedSwapChain_ = aSwapChain;
+		swapChainOnMainQueue_ = d3d::PresentQueue(aSwapChain) == queue_;
+		log_.Push(std::format("renderer: swap chain 0x{:x} presents on {}", reinterpret_cast<uintptr_t>(aSwapChain),
+		                      swapChainOnMainQueue_ ? "the main queue" : "another queue"));
+	}
+	if (!swapChainOnMainQueue_)
+	{
+		return Skip("the swap chain presents on another queue than DLSS's");
+	}
+	if (!submitted_.list)
+	{
+		return Skip("no DLSS frame has been submitted yet");
+	}
+	if (!submitted_.valid)
+	{
+		return Skip("the DLSS frame came without constants");
+	}
+	if (!atlasBuffer_ || completed < atlasReady_)
+	{
+		return Skip("the atlas isn't on the GPU yet");
+	}
+	const std::optional<CameraFrame> camera = MakeCameraFrame(submitted_.constants, renderOrigin_);
+	if (!camera)
+	{
+		return Skip("the camera isn't understood");
+	}
+	gpu::ComPtr<IDXGISwapChain3> swapChain;
+	gpu::ComPtr<ID3D12Resource>  backBuffer;
+	if (FAILED(aSwapChain->QueryInterface(IID_PPV_ARGS(&swapChain))) ||
+	    FAILED(swapChain->GetBuffer(swapChain->GetCurrentBackBufferIndex(), IID_PPV_ARGS(&backBuffer))))
+	{
+		return Skip("no back buffer");
+	}
+	const D3D12_RESOURCE_DESC target = backBuffer->GetDesc();
+	if (!EnsurePipeline(target.Format, camera->reversedDepth) || !EnsureDepthTarget(uint32_t(target.Width), target.Height))
+	{
+		return;
+	}
+	const uint32_t slot = uint32_t(recordings_ % kSlots);
+	if (completed < slotFence_[slot])
+	{
+		return Skip("the GPU is still busy with an earlier frame");
+	}
+	if (slotFence_[slot] != 0)
+	{
+		ReadTimings(slot);
+	}
+
+	FrameConstants constants = BaseConstants(*camera);  // no jitter: the image is already resolved
+	constants.target[0] = float(target.Width);
+	constants.target[1] = float(target.Height);
+	constants.target[2] = 1.0f / float(target.Width);
+	constants.target[3] = 1.0f / float(target.Height);
+	constants.depthExtent[0] = float(submitted_.extent.left);
+	constants.depthExtent[1] = float(submitted_.extent.top);
+	constants.depthExtent[2] = float(submitted_.extent.width);
+	constants.depthExtent[3] = float(submitted_.extent.height);
+	constants.depthInfo[0] = submitted_.rowFloats;
+	constants.depthInfo[1] = submitted_.depth ? 1u : 0u;
+	constants.depthInfo[2] = camera->reversedDepth ? 1u : 0u;
+	std::memcpy(constantsMapped_ + slot * kConstantsStride, &constants, sizeof(constants));
+
+	// Our own list: calls the hooks watch go through their originals, so nothing of ours reaches the tracker.
+	const d3d::Originals&      original = d3d::Original();
+	ID3D12GraphicsCommandList* list = lists_[slot].Get();
+	if (FAILED(allocators_[slot]->Reset()) || FAILED(original.reset(list, allocators_[slot].Get(), pipeline_.Get())))
+	{
+		return Fail("couldn't reset a command list");
+	}
+	list->EndQuery(queries_.Get(), D3D12_QUERY_TYPE_TIMESTAMP, slot * 2);
+	const D3D12_RESOURCE_BARRIER toTarget = Transition(backBuffer.Get(), D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET);
+	original.resourceBarrier(list, 1, &toTarget);
+	const D3D12_CPU_DESCRIPTOR_HANDLE rtv = Offset(rtvHeap_->GetCPUDescriptorHandleForHeapStart(), kBackBufferRtv, rtvIncrement_);
+	const D3D12_CPU_DESCRIPTOR_HANDLE dsv = Offset(dsvHeap_->GetCPUDescriptorHandleForHeapStart(), kOwnDepthDsv, dsvIncrement_);
+	original.createRtv(device_, backBuffer.Get(), nullptr, rtv);
+	original.clearDsv(list, dsv, D3D12_CLEAR_FLAG_DEPTH, camera->reversedDepth ? 0.0f : 1.0f, 0, 0, nullptr);
+	original.omSetRenderTargets(list, 1, &rtv, FALSE, &dsv);
+	const D3D12_VIEWPORT viewport{ 0.0f, 0.0f, float(target.Width), float(target.Height), 0.0f, 1.0f };
+	const D3D12_RECT     scissor{ 0, 0, LONG(target.Width), LONG(target.Height) };
+	list->RSSetViewports(1, &viewport);
+	list->RSSetScissorRects(1, &scissor);
+	list->SetGraphicsRootSignature(rootSignature_.Get());
+	list->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+	list->SetGraphicsRootConstantBufferView(0, constants_->GetGPUVirtualAddress() + slot * kConstantsStride);
+	list->SetGraphicsRootShaderResourceView(3, atlasBuffer_->GetGPUVirtualAddress());
+	// Without a depth copy the shader never reads t2, but the root argument still needs a valid buffer.
+	list->SetGraphicsRootShaderResourceView(4, (submitted_.depth ? depthCopy_ : atlasBuffer_)->GetGPUVirtualAddress());
+	DrawSections(list, *camera, completed);
+	const D3D12_RESOURCE_BARRIER toPresent = Transition(backBuffer.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT);
+	original.resourceBarrier(list, 1, &toPresent);
+	list->EndQuery(queries_.Get(), D3D12_QUERY_TYPE_TIMESTAMP, slot * 2 + 1);
+	list->ResolveQueryData(queries_.Get(), D3D12_QUERY_TYPE_TIMESTAMP, slot * 2, 2, timings_.Get(), slot * 2 * sizeof(uint64_t));
+	if (FAILED(original.close(list)))
+	{
+		return Fail("couldn't close a command list");
+	}
+	ID3D12CommandList* lists[] = { list };
+	original.executeCommandLists(queue_, 1, lists);
+	slotFence_[slot] = Signal();
+	++recordings_;
+	++stats_.drawn;
+	if (lastDrawnFrame_ == submitted_.frame)
+	{
+		++stats_.lateCamera;
+	}
+	lastDrawnFrame_ = submitted_.frame;
+	consecutiveSkips_ = 0;
+}
+
+void Renderer::Shutdown()
+{
+	mode_ = Mode::Off;
+	std::lock_guard lock(mutex_);
+	ReleaseTracking();
+	if (fence_ && fence_->GetCompletedValue() < fenceValue_)
+	{
+		const HANDLE event = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+		if (event && SUCCEEDED(fence_->SetEventOnCompletion(fenceValue_, event)))
+		{
+			WaitForSingleObject(event, 2000);
+		}
+		if (event)
+		{
+			CloseHandle(event);
+		}
+	}
+	if (constantsMapped_)
+	{
+		constants_->Unmap(0, nullptr);
+		constantsMapped_ = nullptr;
+	}
+	if (timingsMapped_)
+	{
+		timings_->Unmap(0, nullptr);
+		timingsMapped_ = nullptr;
+	}
+	sections_.clear();
+	pending_.clear();
+	retired_.clear();
+	oldDepthCopies_.clear();
+	lists_ = {};
+	allocators_ = {};
+	depthCopy_.Reset();
+	atlasBuffer_.Reset();
+	depthTarget_.Reset();
+	pipeline_.Reset();
+	predlssPipeline_.Reset();
+	gbufferPipeline_.Reset();
+	depthPipeline_.Reset();
+	rootSignature_.Reset();
+	rtvHeap_.Reset();
+	dsvHeap_.Reset();
+	constants_.Reset();
+	timings_.Reset();
+	queries_.Reset();
+	uploadList_.Reset();
+	uploadAllocator_.Reset();
+	fence_.Reset();
+}
+}
+```
+
+- [ ] **Step 3: Edit `CMakeLists.txt` for the version**
+
+```cmake
+project(BlockRender VERSION 0.6.0 LANGUAGES C CXX)
+```
+```cmake
+project(BlockRender VERSION 0.7.0 LANGUAGES C CXX)
+```
+
+- [ ] **Step 4: Edit `src/Plugin.cpp` for the version**
+
+```cpp
+constexpr const char* kVersion = "0.6.0";
+```
+```cpp
+constexpr const char* kVersion = "0.7.0";
+```
+```cpp
+	aInfo->version = RED4EXT_V1_SEMVER(0, 6, 0);
+```
+```cpp
+	aInfo->version = RED4EXT_V1_SEMVER(0, 7, 0);
+```
+
+- [ ] **Step 5: Build; it must compile without warnings, and the tests still pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `111 test(s), 0 failure(s)`.
+
+- [ ] **Step 6: Check the DLL's exports and imports**
+
+```bash
+DUMPBIN="/c/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/dumpbin.exe"
+B=/d/Cyberpunk-Minecraft/spikes/block-render/build/RelWithDebInfo/BlockRender.dll
+"$DUMPBIN" -nologo -exports "$B" | grep -E " (Main|Query|Supports) = "; \
+  "$DUMPBIN" -nologo -dependents "$B" | grep -iE "d3d|dxgi|sl\."
+```
+Expected: exactly `Main`, `Query` and `Supports`, then `D3DCOMPILER_47.dll` and `d3d12.dll`.
+
+- [ ] **Step 7: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "block-render: the renderer draws into the G-buffer (mode gbuffer, 0.7.0)" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 57: In the game: step 4 (blocks in the G-buffer)
+
+Run 8, at run 3's corner (x −116.6, y −2005.2, facing south-west, heading about 220), with the same save. The commands
+are Task 44's. Each of step 4's unknowns has a setting that changes it live, as `exposure` did in step 3:
+- **`stencil`:** the class the game's passes see the blocks as. Buildings carry 0, bare dirt 1 and roads 2.
+- **`gbmotion`:** whether the blocks need motion vectors of their own, or the game's are enough.
+- **`gbdepth`:** whether the blocks need to be in the tagged depth, which DLSS reads.
+- **`roughness`, `metalness` and `materialb`:** how the light falls on them.
+
+If drawing skips frames, the status says why: stop there, and fix it in a new task before going on.
+
+**Files:**
+- Modify: `docs/spikes/2026-10-01-block-render-results.md`
+
+- [ ] **Step 1: Deploy (the game must not be running)**
+
+Run Task 44 Step 1's two commands. Expected: `0`, then the plugin's folder with `BlockRender.dll`, `BlockRender.pdb`,
+`shaders`, `atlas.bin` and `atlas.json`, the overlay's folder with `init.lua`, and `installed`.
+
+- [ ] **Step 2: Load, at the corner**
+
+Ask the user to launch the game, load the free-roam save, go to the corner, face south-west, and stand still. Then
+read the log's first lines and the status. Expected:
+- `BlockRender 0.7.0 loaded`;
+- in the status, `mode=off`, `tracking off` and `all hooks on`.
+
+Read the status's `frame=` line and `frames.txt` five times each, a second apart: the idle frame time.
+
+- [ ] **Step 3: The cube, in the G-buffer**
+
+Send `mode gbuffer` and `place cube`, wait three seconds, and read the status. Expected:
+- `mode=gbuffer` and `tracking on`;
+- frames drawn at the frame rate, none skipped after the first two seconds, and no late cameras.
+
+Read five times. Then ask the user to look at the cube, with a screenshot. Expected:
+- the game lights it: its sunlit faces bright, the others in shade, as the buildings' faces;
+- it's no longer as bright as step 3's blocks, nor as flat.
+
+- [ ] **Step 4: Step 3 and step 4, side by side**
+
+Ask the user to keep the same view. Send `mode predlss`, and ask for a screenshot; then `mode gbuffer` again, and ask
+for another.
+
+- [ ] **Step 5: The stencil class**
+
+Ask the user to watch the cube while `set stencil` goes through 1, 2, 20 (0x14, poles) and back to 0, three seconds
+each. Note what changes with each: the light, the ground's decals, reflections. Settle on the value that looks like
+the game's own surfaces.
+
+- [ ] **Step 6: Steady, and no trails**
+
+Ask the user to stand still and watch the cube's edges, then to strafe left and right past it. Expected: steady edges,
+and no trails. Then repeat the strafing with `set gbmotion 0`, and again with `set gbdepth 0`, setting each back to 1
+after. Note what each changes: trails mean the blocks need their own motion vectors; smearing or ghosting at the
+edges means DLSS needs their depth.
+
+- [ ] **Step 7: Turning fast**
+
+Record the status twice a second while the user turns fast, sprints and strafes for about 15 seconds, as in Task 51
+Step 5. Expected: no skipped frames and no late cameras. Ask whether the cube flickered.
+
+- [ ] **Step 8: The light**
+
+Ask the user to place a cube in a building's shadow and in the sun (`place cube` places it in front of them), then to
+use the game's Skip Time to the night, near street lights, with screenshots. Expected: shadowed, sunlit and lamp-lit
+like the buildings around it. If the weather allows, check fog or rain on it too.
+
+- [ ] **Step 9: More blocks, and the timings**
+
+At an open spot, `place house`, and ask the user to walk around it, with a screenshot. Then back at the corner, with
+the same view, `clear`, then `place field 10000` and read the status five times, then `clear`, `place field 100000`,
+and five times again. Note the GPU time and the frame time of each.
+
+- [ ] **Step 10: Clean up**
+
+Send `clear`, then `mode off`, two seconds apart. Expected: `mode=off` and `tracking off`, and no errors in the log.
+
+- [ ] **Step 11: Record the results, and commit**
+
+In `docs/spikes/2026-10-01-block-render-results.md`, add step 4:
+- whether the game lights, shadows and fogs the blocks, from the screenshots;
+- the stencil class, and what `gbmotion` and `gbdepth` showed;
+- turning fast: skips and late cameras;
+- the timings at 10,000 and 100,000 blocks;
+- the verdict for step 4.
+
+Then commit:
+```bash
+cd /d/Cyberpunk-Minecraft && git add docs/spikes \
+  && git commit -q -m "block-render: step 4's results" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 58: Close Part 3, and the spike
+
+**Files:**
+- Modify: `docs/superpowers/plans/2026-10-01-block-render.md` (this plan),
+  `docs/spikes/2026-10-01-block-render-results.md`
+
+- [ ] **Step 1: Add "How Part 3 went" to this plan**
+
+Add a section after Task 58, as Parts 1 and 2 closed. Cover:
+- what Task 57 found, and the fixes, if any;
+- any amendments made along the way;
+- what the spike answers: can Night City show Minecraft's blocks at a player's building scale, at an acceptable frame
+  rate and with a believable look? Say what a SkyCraft for Cyberpunk would build on, and what it still has to solve.
+
+- [ ] **Step 2: Bring the results' verdict up to date**
+
+In `docs/spikes/2026-10-01-block-render-results.md`, retitle it for steps 1 to 4, and put the spike's answer at the top
+of the verdict.
+
+- [ ] **Step 3: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add docs/superpowers/plans docs/spikes \
+  && git commit -q -m "block-render: how Part 3 went, and the spike's answer" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+- [ ] **Step 4: Finish the branch**
+
+Use superpowers:finishing-a-development-branch.
+
+---
+
