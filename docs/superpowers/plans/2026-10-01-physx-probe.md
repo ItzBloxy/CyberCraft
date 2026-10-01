@@ -5117,7 +5117,7 @@ the game's DLLs, and the spec's revision 2 redesigns the compatibility check aro
 - Modify: `extern/physx-3.4.2/PhysX_3.4/Include/PxShape.h` (one declaration)
 - Modify: `extern/physx-3.4.2/README.md`
 
-- [ ] **Step 1: Stop builds from installing into the game**
+- [x] **Step 1: Stop builds from installing into the game**
 
 The CMake cache still has `CP2077_DIR=E:/Cyberpunk2077` from Task 13, so every build would copy a half-finished plugin
 into the game. Task 22 sets it again.
@@ -5128,7 +5128,7 @@ cd /d/Cyberpunk-Minecraft/spikes/physx-probe && "$CMAKE" --preset default -DCP20
 ```
 Expected: `CP2077_DIR:PATH=`
 
-- [ ] **Step 2: Write the failing test `tests/TestAudit.cpp`**
+- [x] **Step 2: Write the failing test `tests/TestAudit.cpp`**
 
 It checks the vtable slot of every PhysX call the probe makes against the slot the audit verified in the game's DLLs,
 and the layout of every struct the game reads from or writes into the probe's memory.
@@ -5378,7 +5378,7 @@ TEST(SharedStructsHaveTheGamesLayout)
 }
 ```
 
-- [ ] **Step 3: Edit `CMakeLists.txt`: add the test**
+- [x] **Step 3: Edit `CMakeLists.txt`: add the test**
 
 Replace:
 ```cmake
@@ -5392,7 +5392,7 @@ with:
 )
 ```
 
-- [ ] **Step 4: Run the tests; exactly the `PxShape` slots fail**
+- [x] **Step 4: Run the tests; exactly the `PxShape` slots fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -5404,7 +5404,7 @@ Expected: no lines from the build filter. Then 11 lines like
 each one slot low, then `FAIL ShapeCallsUseTheGamesSlots` and `50 test(s), 11 failure(s)`. Every other class, the hit
 callbacks and the struct layouts already match.
 
-- [ ] **Step 5: Edit `extern/physx-3.4.2/PhysX_3.4/Include/PxShape.h`: declare the game's extra function**
+- [x] **Step 5: Edit `extern/physx-3.4.2/PhysX_3.4/Include/PxShape.h`: declare the game's extra function**
 
 The header uses tabs; keep them. Replace:
 ```cpp
@@ -5424,7 +5424,7 @@ with:
 	virtual		PxU32					getReferenceCount() const = 0;
 ```
 
-- [ ] **Step 6: Run the tests; they all pass**
+- [x] **Step 6: Run the tests; they all pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -5433,7 +5433,7 @@ cd /d/Cyberpunk-Minecraft/spikes/physx-probe && "$CMAKE" --build --preset releas
 ```
 Expected: no lines from the build filter, then `50 test(s), 0 failure(s)`
 
-- [ ] **Step 7: Write `extern/physx-3.4.2/README.md`**
+- [x] **Step 7: Write `extern/physx-3.4.2/README.md`**
 
 ```markdown
 # NVIDIA PhysX 3.4.2 public headers
@@ -5448,7 +5448,7 @@ build has that virtual function there, and NVIDIA's public headers don't. Everyt
 `docs/spikes/2026-10-01-physx-abi-audit.md`.
 ```
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add extern/physx-3.4.2 spikes/physx-probe \
@@ -5465,7 +5465,7 @@ cd /d/Cyberpunk-Minecraft && git add extern/physx-3.4.2 spikes/physx-probe \
 - Create: `tests/TestReadable.cpp`
 - Modify: `CMakeLists.txt`
 
-- [ ] **Step 1: Write the failing test `tests/TestReadable.cpp`**
+- [x] **Step 1: Write the failing test `tests/TestReadable.cpp`**
 
 It uses real pages: readable, no access, a guard page, reserved but never committed.
 ```cpp
@@ -5549,7 +5549,7 @@ TEST(ReadableMemoryRemembersRegionsUntilCleared)
 }
 ```
 
-- [ ] **Step 2: Edit `CMakeLists.txt`: add the test**
+- [x] **Step 2: Edit `CMakeLists.txt`: add the test**
 
 Replace:
 ```cmake
@@ -5563,7 +5563,7 @@ with:
 )
 ```
 
-- [ ] **Step 3: Build; it fails**
+- [x] **Step 3: Build; it fails**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -5571,7 +5571,7 @@ cd /d/Cyberpunk-Minecraft/spikes/physx-probe && "$CMAKE" --build --preset releas
 ```
 Expected: `fatal error C1083: Cannot open include file: 'physx/Readable.h'`
 
-- [ ] **Step 4: Write `src/physx/Readable.h`**
+- [x] **Step 4: Write `src/physx/Readable.h`**
 
 ```cpp
 #pragma once
@@ -5608,7 +5608,7 @@ private:
 }
 ```
 
-- [ ] **Step 5: Write `src/physx/Readable.cpp`**
+- [x] **Step 5: Write `src/physx/Readable.cpp`**
 
 ```cpp
 #include "physx/Readable.h"
@@ -5677,7 +5677,7 @@ bool ReadableMemory::Find(uintptr_t aAddress, Region& aOut)
 }
 ```
 
-- [ ] **Step 6: Edit `CMakeLists.txt`: add `Readable.cpp` to `probe_core`**
+- [x] **Step 6: Edit `CMakeLists.txt`: add `Readable.cpp` to `probe_core`**
 
 Replace:
 ```cmake
@@ -5689,7 +5689,7 @@ with:
 	src/physx/Readable.cpp
 ```
 
-- [ ] **Step 7: Run the tests; they all pass**
+- [x] **Step 7: Run the tests; they all pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -5698,7 +5698,7 @@ cd /d/Cyberpunk-Minecraft/spikes/physx-probe && "$CMAKE" --build --preset releas
 ```
 Expected: no lines from the build filter, then `54 test(s), 0 failure(s)`
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/physx-probe \
@@ -5715,7 +5715,7 @@ cd /d/Cyberpunk-Minecraft && git add spikes/physx-probe \
 - Create: `tests/TestGameAbi.cpp`
 - Modify: `CMakeLists.txt`
 
-- [ ] **Step 1: Write the failing test `tests/TestGameAbi.cpp`**
+- [x] **Step 1: Write the failing test `tests/TestGameAbi.cpp`**
 
 ```cpp
 #include "Harness.h"
@@ -5849,7 +5849,7 @@ TEST(CheckObjectCoversTheBytesTheCallerReads)
 }
 ```
 
-- [ ] **Step 2: Edit `CMakeLists.txt`: add the test**
+- [x] **Step 2: Edit `CMakeLists.txt`: add the test**
 
 Replace:
 ```cmake
@@ -5863,7 +5863,7 @@ with:
 )
 ```
 
-- [ ] **Step 3: Build; it fails**
+- [x] **Step 3: Build; it fails**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -5871,7 +5871,7 @@ cd /d/Cyberpunk-Minecraft/spikes/physx-probe && "$CMAKE" --build --preset releas
 ```
 Expected: `fatal error C1083: Cannot open include file: 'physx/GameAbi.h'`
 
-- [ ] **Step 4: Write `src/physx/GameAbi.h`**
+- [x] **Step 4: Write `src/physx/GameAbi.h`**
 
 The RVAs and identities come from `docs/spikes/2026-10-01-physx-abi-audit.md`.
 ```cpp
@@ -5963,7 +5963,7 @@ ObjectCheck CheckObject(ReadableMemory& aMemory, const ModuleBases& aBases, cons
 }
 ```
 
-- [ ] **Step 5: Write `src/physx/GameAbi.cpp`**
+- [x] **Step 5: Write `src/physx/GameAbi.cpp`**
 
 ```cpp
 #include "physx/GameAbi.h"
@@ -6071,7 +6071,7 @@ ObjectCheck CheckObject(ReadableMemory& aMemory, const ModuleBases& aBases, cons
 }
 ```
 
-- [ ] **Step 6: Edit `CMakeLists.txt`: add `GameAbi.cpp` to `probe_core`**
+- [x] **Step 6: Edit `CMakeLists.txt`: add `GameAbi.cpp` to `probe_core`**
 
 Replace:
 ```cmake
@@ -6083,7 +6083,7 @@ with:
 	src/physx/GameAbi.cpp
 ```
 
-- [ ] **Step 7: Run the tests; they all pass**
+- [x] **Step 7: Run the tests; they all pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -6092,7 +6092,7 @@ cd /d/Cyberpunk-Minecraft/spikes/physx-probe && "$CMAKE" --build --preset releas
 ```
 Expected: no lines from the build filter, then `60 test(s), 0 failure(s)`
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/physx-probe \
@@ -6108,7 +6108,7 @@ cd /d/Cyberpunk-Minecraft && git add spikes/physx-probe \
 - Modify: `tests/TestReportJson.cpp`, `src/Report.h`, `src/ReportJson.cpp`
 - Modify: `src/Probe.cpp`, `src/Plugin.cpp` (one line each, so the build stays green until Tasks 20 and 21)
 
-- [ ] **Step 1: Write the failing test `tests/TestReportJson.cpp`**
+- [x] **Step 1: Write the failing test `tests/TestReportJson.cpp`**
 
 It expects version 0.2.0, the DLL identities, the skip counts, and no `faults`.
 ```cpp
@@ -6202,7 +6202,7 @@ TEST(ReportWithGeometryHasItsSections)
 }
 ```
 
-- [ ] **Step 2: Build; it fails**
+- [x] **Step 2: Build; it fails**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -6210,7 +6210,7 @@ cd /d/Cyberpunk-Minecraft/spikes/physx-probe && "$CMAKE" --build --preset releas
 ```
 Expected: `error C2039: 'modules': is not a member of 'cpmc::DumpReport'` (and more like it)
 
-- [ ] **Step 3: Write `src/Report.h`**
+- [x] **Step 3: Write `src/Report.h`**
 
 ```cpp
 #pragma once
@@ -6342,7 +6342,7 @@ struct DumpReport
 }
 ```
 
-- [ ] **Step 4: Write `src/ReportJson.cpp`**
+- [x] **Step 4: Write `src/ReportJson.cpp`**
 
 ```cpp
 #include "ReportJson.h"
@@ -6552,7 +6552,7 @@ std::string ReportToJson(const DumpReport& aReport)
 }
 ```
 
-- [ ] **Step 5: Edit `src/Probe.cpp`: drop the removed `faults` field**
+- [x] **Step 5: Edit `src/Probe.cpp`: drop the removed `faults` field**
 
 Task 20 rewrites this file; this keeps it compiling until then. Replace:
 ```cpp
@@ -6564,7 +6564,7 @@ with:
 	report.coordinateCheck = check;
 ```
 
-- [ ] **Step 6: Edit `src/Plugin.cpp`: log skipped objects instead of faults**
+- [x] **Step 6: Edit `src/Plugin.cpp`: log skipped objects instead of faults**
 
 Replace:
 ```cpp
@@ -6583,7 +6583,7 @@ with:
 	    report.censusSkipped);
 ```
 
-- [ ] **Step 7: Run the tests; they all pass**
+- [x] **Step 7: Run the tests; they all pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -6592,7 +6592,7 @@ cd /d/Cyberpunk-Minecraft/spikes/physx-probe && "$CMAKE" --build --preset releas
 ```
 Expected: no lines from the build filter, then `60 test(s), 0 failure(s)`
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/physx-probe \
@@ -6615,7 +6615,7 @@ be tested offline, and Task 22 tests the rest.
 - Modify: `CMakeLists.txt` (`/EHsc`, no `TestGuard.cpp`)
 - Delete: `tests/TestGuard.cpp`
 
-- [ ] **Step 1: Write `src/physx/PhysxSession.h`**
+- [x] **Step 1: Write `src/physx/PhysxSession.h`**
 
 ```cpp
 #pragma once
@@ -6711,7 +6711,7 @@ private:
 }
 ```
 
-- [ ] **Step 2: Write `src/physx/PhysxSession.cpp`**
+- [x] **Step 2: Write `src/physx/PhysxSession.cpp`**
 
 ```cpp
 #include "physx/PhysxSession.h"
@@ -7402,7 +7402,7 @@ std::optional<float> PhysxSession::RaycastDown(PxScene* aScene, const PxVec3& aF
 }
 ```
 
-- [ ] **Step 3: Edit `src/physx/ShapeTriangles.h`: `AppendTriangles` takes the checks**
+- [x] **Step 3: Edit `src/physx/ShapeTriangles.h`: `AppendTriangles` takes the checks**
 
 Replace:
 ```cpp
@@ -7441,7 +7441,7 @@ void AppendTriangles(const physx::PxShape& aShape, const physx::PxTransform& aAc
                      ReadableMemory& aMemory, const ModuleBases& aBases, std::vector<Tri>& aOut, AppendStats& aStats);
 ```
 
-- [ ] **Step 4: Edit `src/physx/ShapeTriangles.cpp`: check meshes and arrays in `AppendTriangles`**
+- [x] **Step 4: Edit `src/physx/ShapeTriangles.cpp`: check meshes and arrays in `AppendTriangles`**
 
 Replace the whole function, which is the last one in the file:
 ```cpp
@@ -7706,7 +7706,7 @@ void AppendTriangles(const PxShape& aShape, const PxTransform& aActorPose, const
 }
 ```
 
-- [ ] **Step 5: Write `src/Probe.cpp`**
+- [x] **Step 5: Write `src/Probe.cpp`**
 
 ```cpp
 #include "Probe.h"
@@ -7816,7 +7816,7 @@ DumpData RunDump(px::PhysxSession& aSession, const PlayerPose& aPose, const std:
 }
 ```
 
-- [ ] **Step 6: Write `src/physx/Checks.h`**
+- [x] **Step 6: Write `src/physx/Checks.h`**
 
 `ConcreteTypeForName` and `IsPhysX342` go: `GameAbi` now gives each class's type ID, and step 1 checks the build's identity.
 ```cpp
@@ -7861,7 +7861,7 @@ Tally TrimTally(const Tally& aTally, size_t aKeep = 64);
 }
 ```
 
-- [ ] **Step 7: Edit `src/physx/Checks.cpp`: remove the two functions**
+- [x] **Step 7: Edit `src/physx/Checks.cpp`: remove the two functions**
 
 Replace:
 ```cpp
@@ -7938,7 +7938,7 @@ namespace cpmc::px
 bool TolerancesPlausible(float aLength, float aSpeed)
 ```
 
-- [ ] **Step 8: Edit `tests/TestChecks.cpp`: remove their tests**
+- [x] **Step 8: Edit `tests/TestChecks.cpp`: remove their tests**
 
 Replace:
 ```cpp
@@ -7972,13 +7972,13 @@ with:
 TEST(PlausibilityRanges)
 ```
 
-- [ ] **Step 9: Delete `tests/TestGuard.cpp`**
+- [x] **Step 9: Delete `tests/TestGuard.cpp`**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git rm -q spikes/physx-probe/tests/TestGuard.cpp
 ```
 
-- [ ] **Step 10: Edit `CMakeLists.txt`: no guard, so standard C++ exceptions only**
+- [x] **Step 10: Edit `CMakeLists.txt`: no guard, so standard C++ exceptions only**
 
 Replace:
 ```cmake
@@ -8000,7 +8000,7 @@ with nothing (delete the line):
 ```cmake
 ```
 
-- [ ] **Step 11: Build; no warnings, and the tests pass**
+- [x] **Step 11: Build; no warnings, and the tests pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -8009,7 +8009,7 @@ cd /d/Cyberpunk-Minecraft/spikes/physx-probe && "$CMAKE" --build --preset releas
 ```
 Expected: no lines from the build filter, then `55 test(s), 0 failure(s)`
 
-- [ ] **Step 12: Check the DLL's exports and imports**
+- [x] **Step 12: Check the DLL's exports and imports**
 
 ```bash
 DUMPBIN="/c/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/dumpbin.exe"
@@ -8019,7 +8019,7 @@ cd /d/Cyberpunk-Minecraft/spikes/physx-probe && echo "entry points: $("$DUMPBIN"
 ```
 Expected: `entry points: 3`, `PhysX3 imports: 0`, then `0` (nothing left of the guard or the name checks).
 
-- [ ] **Step 13: Commit**
+- [x] **Step 13: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add -A spikes/physx-probe \
@@ -8034,7 +8034,7 @@ cd /d/Cyberpunk-Minecraft && git add -A spikes/physx-probe \
 **Files:**
 - Modify: `src/Plugin.cpp` (rewritten), `CMakeLists.txt` (the project version)
 
-- [ ] **Step 1: Write `src/Plugin.cpp`**
+- [x] **Step 1: Write `src/Plugin.cpp`**
 
 The automatic trigger goes (see the spec's `Plugin.cpp` section), and the version becomes 0.2.0.
 ```cpp
@@ -8240,7 +8240,7 @@ RED4EXT_C_EXPORT uint32_t RED4EXT_CALL Supports()
 }
 ```
 
-- [ ] **Step 2: Edit `CMakeLists.txt`: the project version**
+- [x] **Step 2: Edit `CMakeLists.txt`: the project version**
 
 Replace:
 ```cmake
@@ -8251,7 +8251,7 @@ with:
 project(PhysXProbe VERSION 0.2.0 LANGUAGES CXX)
 ```
 
-- [ ] **Step 3: Build; no warnings, the tests pass, and the DLL says 0.2.0**
+- [x] **Step 3: Build; no warnings, the tests pass, and the DLL says 0.2.0**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -8260,7 +8260,7 @@ cd /d/Cyberpunk-Minecraft/spikes/physx-probe && "$CMAKE" --build --preset releas
 ```
 Expected: no lines from the build filter, then `55 test(s), 0 failure(s)`, then `1`
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/physx-probe \
@@ -8278,7 +8278,7 @@ their mouse or keyboard. Write down the numbers as you go; Step 6 records them.
 **Files:**
 - Create: `docs/spikes/2026-10-01-physx-probe-results.md`
 
-- [ ] **Step 1: Deploy (the game must not be running)**
+- [x] **Step 1: Deploy (the game must not be running)**
 
 ```bash
 tasklist | grep -i -c "cyberpunk2077.exe"
@@ -8295,7 +8295,7 @@ cd /d/Cyberpunk-Minecraft/spikes/physx-probe && rm -f /e/Cyberpunk2077/red4ext/p
 ```
 Expected: `PhysXProbe.dll`, `PhysXProbe.pdb` and `dumps` in the folder, then `installed`.
 
-- [ ] **Step 2: The startup world, at the main menu**
+- [x] **Step 2: The startup world, at the main menu**
 
 Ask the user to launch Cyberpunk 2077 from Epic and wait at the main menu, without loading a save, and to say when
 they're there. Then run:
@@ -8324,7 +8324,7 @@ Pass criteria for the startup world:
 - `shapeFlags` and the filter tallies filled in. Revision 1's report had them empty, because the census faulted on
   every shape.
 
-- [ ] **Step 3: Free roam**
+- [x] **Step 3: Free roam**
 
 Send the user these instructions:
 1. Load a save that's in free roam, not a scene.
@@ -8356,7 +8356,7 @@ Pass criteria (the spec's):
 - **Skipped objects with unaudited vtables:** the live world has a class or build the audit didn't cover.
 - **Unreadable objects:** the world changed under the read, which means a race.
 
-- [ ] **Step 4: Render and compare with the screenshot**
+- [x] **Step 4: Render and compare with the screenshot**
 
 ```bash
 D=/e/Cyberpunk2077/red4ext/plugins/PhysXProbe/dumps/$(ls -t /e/Cyberpunk2077/red4ext/plugins/PhysXProbe/dumps | head -1)
@@ -8371,7 +8371,7 @@ Look at `eye.png` next to the user's screenshot, and at `top.png` too. Criterion
 If everything lines up but looks too wide or too narrow, rerender with `--fov-axis h`, then note which axis the game's
 field of view is.
 
-- [ ] **Step 5: A second dump somewhere different, triggered from here**
+- [x] **Step 5: A second dump somewhere different, triggered from here**
 
 Ask the user to walk somewhere different (indoors, or up some stairs), stand still, screenshot again, and say when
 they're there. Then run:
@@ -8380,7 +8380,7 @@ touch /e/Cyberpunk2077/red4ext/plugins/PhysXProbe/dump.request; sleep 5; ls -t /
 ```
 Expected: a new dump folder, and `dump (request)` in the log. Repeat Steps 3 and 4 for it.
 
-- [ ] **Step 6: Record the results and commit**
+- [x] **Step 6: Record the results and commit**
 
 Write `docs/spikes/2026-10-01-physx-probe-results.md` with these sections. Fill every value from the reports and your
 observations:
@@ -8413,6 +8413,24 @@ Include the screenshots and renders side by side, or link to their dump folders.
 cd /d/Cyberpunk-Minecraft && git add docs/spikes \
   && git commit -q -m "physx-probe: in-game results" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
 ```
+
+### How Task 22 went (2026-10-01)
+
+- **The startup world** passed Step 2 as written.
+- **The first free-roam dump** passed compatibility, but found nothing near V in PhysX space: no actor bounds, no overlap
+  hits and no ray hit. The startup world had matched at the origin, so the mismatch was horizontal.
+- **The locator, 0.3.0 (`2562a9b`), added with the user's go-ahead:**
+  - each scene reports where its actors are, and every capsule on a dynamic actor;
+  - `dump.request` may say `origin <x> <y> <z>` (where PhysX's origin is in world coordinates), and the dump then
+    reads PhysX at world − origin.
+
+  It uses only calls the audit verified, and adds 8 unit tests (63 in all).
+- **What it found:** V's controller capsule showed PhysX's origin at (0, 1024, 0) north of y = 512 and at (0, 0, 0)
+  south of it, so the game re-centres PhysX on a 1,024 m grid.
+- **With the origin:** all four criteria passed at three spots.
+- **The renderer** now hides kinematic capsules by default (`9d7a558`), because the camera sits inside V's own.
+
+`docs/spikes/2026-10-01-physx-probe-results.md` has the results.
 
 ---
 ## Afterwards

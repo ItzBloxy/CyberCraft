@@ -6,6 +6,10 @@ RED4ext SDK and the PhysX 3.4.2 sources. Revision 2 follows the first in-game ru
   public headers in one class.
 - **The crash:** a fault guard can't protect the game, because the game's crash handler fires first.
 
+Revision 2.1 (0.3.0) came from the first city dumps, where nothing lay near V in PhysX space. The probe now says where
+each scene's actors are and where every capsule on a dynamic actor is, and `dump.request` can give PhysX's origin. That
+showed the game re-centres PhysX on a 1,024 m grid: see `docs/spikes/2026-10-01-physx-probe-results.md`.
+
 ## Purpose
 
 This is the first of three spikes that de-risk a SkyCraft-style "play Cyberpunk 2077 as a Minecraft player" mod.
@@ -144,6 +148,9 @@ small files, each with one job.
 - There are two triggers:
   - **F10:** edge-detected with `GetAsyncKeyState`, and only while the foreground window belongs to the game's process.
   - **Request file:** `dump.request` in the plugin folder, checked once a second and deleted when the dump starts.
+    It may be empty, or hold one line `origin <x> <y> <z>`: where PhysX's origin is in world coordinates (metres).
+    With an origin, the dump reads PhysX at world − origin for the region box, the ray and the nearest capsule, and
+    moves the triangles back into world coordinates. Any other text is logged and ignored.
 - There is no automatic trigger. Revision 1 had one, 10 seconds after V was first found, but it fired on the
   stand-in player during the startup legal screen. No signal a plugin can reach would hold it back until a save is
   loaded (see Environment), and a timed dump could also land mid-load, while the world is changing fastest.
@@ -396,7 +403,7 @@ and reported, and the in-game pass criteria require both counts to be zero.
 
 ```json
 {
-  "probeVersion": "0.2.0",
+  "probeVersion": "0.3.0",
   "time": "2026-10-01T12:34:56",
   "trigger": "hotkey | request",
   "game": {
@@ -412,6 +419,7 @@ and reported, and the in-game pass criteria require both counts to be zero.
     "forward": [0.0, 1.0, 0.0],
     "camera": { "position": [0.0, 0.0, 1.7], "forward": [0.0, 1.0, 0.0], "fov": 80.0 }
   },
+  "physxOrigin": null,
   "compatibility": {
     "pass": true,
     "steps": [ { "step": 1, "name": "build", "pass": true, "detail": "..." } ],
@@ -433,7 +441,11 @@ and reported, and the in-game pass criteria require both counts to be zero.
     "namedActors": 0, "actorsWithUserData": 0, "actorNameSamples": [ "..." ],
     "skipped": { "unreadable": 0, "unauditedVtable": 0 },
     "mismatches": 0,
-    "censusMs": 0.0
+    "censusMs": 0.0,
+    "staticCenters": { "count": 0, "min": null, "median": null, "max": null },
+    "dynamicCenters": { "count": 0, "min": null, "median": null, "max": null },
+    "capsules": [ { "actor": "0x...", "center": [0.0, 0.0, 0.0], "axis": [0.0, 0.0, 1.0], "radius": 0.32,
+                    "halfHeight": 0.4, "kind": "kinematic", "queryFilter": "...", "simulationFilter": "..." } ]
   } ],
   "region": {
     "center": [0.0, 0.0, 0.0], "halfExtents": [32.0, 32.0, 24.0],
@@ -449,11 +461,18 @@ and reported, and the in-game pass criteria require both counts to be zero.
 ```
 
 - `player.camera` is `null` when the camera couldn't be read.
+- `physxOrigin` is the origin `dump.request` gave, or `null`. `player`, `region.center` and the OBJ are in world
+  coordinates either way.
+- `staticCenters` and `dynamicCenters` give the minimum, median and maximum of the centres of the scene's actor bounds,
+  in raw PhysX coordinates. Actors with unbounded shapes (planes) are left out, and the three are `null` when there
+  are none.
+- `capsules` lists the capsules on dynamic actors in raw PhysX coordinates (at most 4,096 per scene). `actor` is the
+  actor's address, which matches the same actor across dumps. Character controllers are among them.
 - The census's skips are split into objects whose memory wasn't readable and objects whose vtable isn't an audited
   table; `compatibility.censusSkipped` and `censusMismatches` sum them over the scenes.
 - In the region, `skipped.unreadable` counts shapes whose mesh data failed the range check.
-- Revision 1's `faults` count is gone, because nothing is caught any more. `probeVersion` is 0.2.0 from revision 2
-  on, and the load log line shows the same version.
+- Revision 1's `faults` count is gone, because nothing is caught any more. `probeVersion` is 0.2.0 for revision 2
+  and 0.3.0 from revision 2.1 on, and the load log line shows the same version.
 
 ## Error handling
 
