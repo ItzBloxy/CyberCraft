@@ -47,7 +47,7 @@ logs and the dumps. Plan: [2026-10-01-block-render.md](../superpowers/plans/2026
 | 4 | 23:29 | 0.3.0: Tasks 35 to 43 | Step 3 at the same corner and in the Badlands, then the game without the plugin |
 | 5 | 00:18 | 0.4.0: plus Tasks 45 and 46 | At the same corner: the hook groups switched off in turn found the Streamline hooks' cost |
 | 6 | 00:30 | 0.5.0: plus Task 48 | At the same corner: what BlockRender costs after the fix, step 3 again up to 100,000 blocks, and a flicker turning fast |
-| 7 | 00:56 | 0.6.0: plus Task 50 | At the same corner: drawing before DLSS with every list tracked, turning fast |
+| 7 | 00:56 | 0.6.0: plus Task 50 | At the same corner: drawing before DLSS with every list tracked, turning fast, then four frame logs |
 
 Runs 5 to 7 were just after midnight, on 2026-10-02.
 
@@ -437,6 +437,9 @@ nothing measurable. The cube's GPU time is 0.007 ms.
 - **What the user saw:** no flicker at all. The cube was steady with no trails, its edges sharp and clean, and the
   pistol in V's hand drew over it.
 
+**Four frame logs** followed, with drawing off: one taken during a fight with the police, then three standing at the
+corner. "For step 4" has what they show.
+
 ### For step 4
 
 - **The base colour is sRGB-encoded.** Sunlit ground facing up gets the same light in every pixel. Its pre-DLSS colour
@@ -456,3 +459,24 @@ nothing measurable. The cube's GPU time is 0.007 ms.
   - the G-buffer depth goes between 0xE0 (read) and 0x10 (write);
   - the second target (normals) moves one subresource at a time, so it likely has mip levels;
   - the motion vector buffer goes from 0x40 to a render target in the list that first draws into it.
+- **The camera is known before the G-buffer is submitted.** In all eight frames of run 7's frame logs, Streamline's
+  constants and the DLSS evaluate came 2.0 to 3.1 ms before the G-buffer's first submission. In run 4's log, with
+  the slow Streamline hooks, they came 5.3 ms after it in one of its two frames. The game doesn't wait for them, so
+  it's a race the camera wins by about 2 ms: step 4 must count the frames it loses.
+- **Where the G-buffer ends,** the same in every frame logged, on the main queue:
+  1. a 10-list submission: its first list makes the targets render targets (0x4) and the depth writable (0x10),
+     then 9 lists draw the G-buffer;
+  2. a 7-list submission draws the rest, and leaves the depth writable;
+  3. a 1-list submission moves the normals, material values, motion and depth to 0x40 (non-pixel shader
+     resource). The base colour stays a render target.
+
+  Just before that 1-list submission, every target is a render target and the depth is writable, so a list of ours
+  there needs no barriers.
+- **Who reads it next:**
+  - **the second queue** submits a list 0.08 to 0.12 ms after the move, in every frame logged: likely async compute
+    reading the G-buffer;
+  - **an 11-list submission** draws without touching the G-buffer: likely shadow maps;
+  - **a transition list** moves every target to 0xC0 and the depth to 0xE0. The list after it, with 47 to 57
+    passes and 36 to 42 dispatches, is likely the lighting.
+
+  So blocks must be in the G-buffer before the 1-list submission, for the second queue's reads too.
