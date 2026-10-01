@@ -2995,7 +2995,7 @@ serve step 3 and the present pass's depth test.
 - Create: `src/render/Camera.h`, `src/render/Camera.cpp`, `tests/TestCamera.cpp`
 - Modify: `CMakeLists.txt`
 
-- [ ] **Step 1: Write the failing test, `tests/TestCamera.cpp`**
+- [x] **Step 1: Write the failing test, `tests/TestCamera.cpp`**
 
 ```cpp
 #include "Harness.h"
@@ -3146,7 +3146,7 @@ TEST(CameraMapsOutputPixelsIntoTheDepthExtent)
 }
 ```
 
-- [ ] **Step 2: Edit `CMakeLists.txt` to add the test**
+- [x] **Step 2: Edit `CMakeLists.txt` to add the test**
 
 ```cmake
 	tests/TestStateTracker.cpp
@@ -3158,7 +3158,7 @@ TEST(CameraMapsOutputPixelsIntoTheDepthExtent)
 )
 ```
 
-- [ ] **Step 3: Build; it must fail**
+- [x] **Step 3: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -3167,7 +3167,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `fatal error C1083: Cannot open include file: 'render/Camera.h'`.
 
-- [ ] **Step 4: Write `src/render/Camera.h`**
+- [x] **Step 4: Write `src/render/Camera.h`**
 
 ```cpp
 #pragma once
@@ -3230,7 +3230,7 @@ std::pair<uint32_t, uint32_t> DepthTexelFor(uint32_t aX, uint32_t aY, uint32_t a
 }
 ```
 
-- [ ] **Step 5: Write `src/render/Camera.cpp`**
+- [x] **Step 5: Write `src/render/Camera.cpp`**
 
 ```cpp
 #include "render/Camera.h"
@@ -3417,7 +3417,7 @@ std::pair<uint32_t, uint32_t> DepthTexelFor(uint32_t aX, uint32_t aY, uint32_t a
 }
 ```
 
-- [ ] **Step 6: Edit `CMakeLists.txt` to add the source**
+- [x] **Step 6: Edit `CMakeLists.txt` to add the source**
 
 ```cmake
 	src/track/StateTracker.cpp
@@ -3429,7 +3429,7 @@ std::pair<uint32_t, uint32_t> DepthTexelFor(uint32_t aX, uint32_t aY, uint32_t a
 )
 ```
 
-- [ ] **Step 7: Build and run the tests; they must pass**
+- [x] **Step 7: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -3439,7 +3439,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `48 test(s), 0 failure(s)`.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
