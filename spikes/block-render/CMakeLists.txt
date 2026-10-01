@@ -44,6 +44,7 @@ add_library(render_core STATIC
 	src/hooks/Submission.cpp
 	src/render/Predlss.cpp
 	src/hooks/HookGroups.cpp
+	src/render/Gbuffer.cpp
 )
 target_link_libraries(render_core PUBLIC render_settings d3dcompiler dxguid)
 
@@ -110,6 +111,7 @@ add_executable(render_tests
 	tests/TestSubmission.cpp
 	tests/TestPredlss.cpp
 	tests/TestHookGroups.cpp
+	tests/TestGbuffer.cpp
 )
 target_link_libraries(render_tests PRIVATE render_core)
 add_test(NAME render_tests COMMAND render_tests WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")

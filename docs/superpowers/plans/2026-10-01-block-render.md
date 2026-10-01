@@ -19955,7 +19955,7 @@ cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
 - Create: `tests/TestGbuffer.cpp`, `src/render/Gbuffer.h`, `src/render/Gbuffer.cpp`
 - Modify: `CMakeLists.txt`
 
-- [ ] **Step 1: Write the failing test, `tests/TestGbuffer.cpp`**
+- [x] **Step 1: Write the failing test, `tests/TestGbuffer.cpp`**
 
 ```cpp
 #include "Harness.h"
@@ -20122,7 +20122,7 @@ TEST(GbufferNormalsAreMinecraftsDirectionsInWorldAxes)
 }
 ```
 
-- [ ] **Step 2: Edit `CMakeLists.txt` to add the test**
+- [x] **Step 2: Edit `CMakeLists.txt` to add the test**
 
 ```cmake
 	tests/TestHookGroups.cpp
@@ -20134,7 +20134,7 @@ TEST(GbufferNormalsAreMinecraftsDirectionsInWorldAxes)
 )
 ```
 
-- [ ] **Step 3: Build; it must fail**
+- [x] **Step 3: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -20143,7 +20143,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `error C1083: Cannot open include file: 'render/Gbuffer.h'`.
 
-- [ ] **Step 4: Write `src/render/Gbuffer.h`**
+- [x] **Step 4: Write `src/render/Gbuffer.h`**
 
 ```cpp
 #pragma once
@@ -20205,7 +20205,7 @@ Vec3d FaceNormal(Face aFace);
 }
 ```
 
-- [ ] **Step 5: Write `src/render/Gbuffer.cpp`**
+- [x] **Step 5: Write `src/render/Gbuffer.cpp`**
 
 ```cpp
 #include "render/Gbuffer.h"
@@ -20314,7 +20314,7 @@ Vec3d FaceNormal(Face aFace)
 }
 ```
 
-- [ ] **Step 6: Edit `CMakeLists.txt` to add the source**
+- [x] **Step 6: Edit `CMakeLists.txt` to add the source**
 
 ```cmake
 	src/hooks/HookGroups.cpp
@@ -20326,7 +20326,7 @@ Vec3d FaceNormal(Face aFace)
 )
 ```
 
-- [ ] **Step 7: Build and run the tests; they must pass**
+- [x] **Step 7: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -20336,7 +20336,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `110 test(s), 0 failure(s)`.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
