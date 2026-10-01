@@ -36,6 +36,17 @@ UINT ConstantBufferSize(const std::vector<uint8_t>& aCode, const char* aName)
 	}
 	return desc.Size;
 }
+
+UINT Outputs(const std::vector<uint8_t>& aCode)
+{
+	Microsoft::WRL::ComPtr<ID3D12ShaderReflection> reflection;
+	D3D12_SHADER_DESC                              desc{};
+	if (FAILED(D3DReflect(aCode.data(), aCode.size(), IID_PPV_ARGS(&reflection))) || FAILED(reflection->GetDesc(&desc)))
+	{
+		return 0;
+	}
+	return desc.OutputParameters;
+}
 }
 
 TEST(ShadersCompileFromTheShaderFile)
@@ -50,10 +61,24 @@ TEST(ShadersCompileFromTheShaderFile)
 	{
 		CHECK(!shaders->vertex.empty());
 		CHECK(!shaders->present.empty());
+		CHECK(!shaders->predlss.empty());
 		// The constant buffers match the C++ structs byte for byte.
 		CHECK_EQ(ConstantBufferSize(shaders->vertex, "Frame"), UINT(sizeof(cpmc::FrameConstants)));
 		CHECK_EQ(ConstantBufferSize(shaders->vertex, "Section"), UINT(sizeof(cpmc::SectionConstants)));
 		CHECK_EQ(ConstantBufferSize(shaders->present, "Frame"), UINT(sizeof(cpmc::FrameConstants)));
+		CHECK_EQ(ConstantBufferSize(shaders->predlss, "Frame"), UINT(sizeof(cpmc::FrameConstants)));
+	}
+}
+
+TEST(ShadersWriteColourAndMotionBeforeDlss)
+{
+	std::string error;
+	const auto  shaders = cpmc::CompileBlockShaders(ShaderSource(), error);
+	CHECK(shaders.has_value());
+	if (shaders)
+	{
+		CHECK_EQ(Outputs(shaders->present), 1u);
+		CHECK_EQ(Outputs(shaders->predlss), 2u);  // the colour, and the motion vectors
 	}
 }
 

@@ -15352,7 +15352,7 @@ cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
 - Modify: `tests/TestShaders.cpp`, `src/render/FrameConstants.h`, `shaders/blocks.hlsl`, `src/render/Shaders.h`,
   `src/render/Shaders.cpp`
 
-- [ ] **Step 1: Edit `tests/TestShaders.cpp` to test `PredlssPS`**
+- [x] **Step 1: Edit `tests/TestShaders.cpp` to test `PredlssPS`**
 
 ```cpp
 	return desc.Size;
@@ -15408,7 +15408,7 @@ TEST(ShadersWriteColourAndMotionBeforeDlss)
 }
 ```
 
-- [ ] **Step 2: Build; it must fail**
+- [x] **Step 2: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -15417,7 +15417,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `'predlss': is not a member of 'cpmc::BlockShaders'`.
 
-- [ ] **Step 3: Edit `src/render/FrameConstants.h` to add the motion vectors' matrix and the jitter**
+- [x] **Step 3: Edit `src/render/FrameConstants.h` to add the motion vectors' matrix and the jitter**
 
 ```cpp
 struct FrameConstants
@@ -15448,7 +15448,7 @@ struct FrameConstants
 static_assert(sizeof(FrameConstants) == 256);
 ```
 
-- [ ] **Step 4: Edit `shaders/blocks.hlsl` for the jitter, the motion vectors and `PredlssPS`**
+- [x] **Step 4: Edit `shaders/blocks.hlsl` for the jitter, the motion vectors and `PredlssPS`**
 
 ```hlsl
     uint4  atlasLevels[2];            // where each level's texels start
@@ -15520,7 +15520,7 @@ PredlssOut PredlssPS(VSOut i)
 }
 ```
 
-- [ ] **Step 5: Edit `src/render/Shaders.h` to add `PredlssPS`**
+- [x] **Step 5: Edit `src/render/Shaders.h` to add `PredlssPS`**
 
 ```cpp
 	std::vector<uint8_t> present;  // PresentPS
@@ -15530,7 +15530,7 @@ PredlssOut PredlssPS(VSOut i)
 	std::vector<uint8_t> predlss;  // PredlssPS
 ```
 
-- [ ] **Step 6: Edit `src/render/Shaders.cpp` to compile it**
+- [x] **Step 6: Edit `src/render/Shaders.cpp` to compile it**
 
 ```cpp
 	return BlockShaders{ std::move(*vertex), std::move(*present) };
@@ -15544,7 +15544,7 @@ PredlssOut PredlssPS(VSOut i)
 	return BlockShaders{ std::move(*vertex), std::move(*present), std::move(*predlss) };
 ```
 
-- [ ] **Step 7: Build and run the tests; they must pass**
+- [x] **Step 7: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -15554,7 +15554,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `97 test(s), 0 failure(s)`.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \

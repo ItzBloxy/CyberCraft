@@ -19,7 +19,9 @@ cbuffer Frame : register(b0)
     uint4  depthInfo;                 // floats per row of the depth copy; 1 if there is a copy; 1 if depth is reversed
     uint4  atlasInfo;                 // width, height, levels
     uint4  atlasLevels[2];            // where each level's texels start
-    float4 tuning;                    // brightness; depth tolerance
+    float4 tuning;                    // brightness; depth tolerance; exposure; the motion vectors' sign
+    row_major float4x4 clipToPrevClip;  // Streamline's: a clip position to where it was a frame before
+    float4 jitter;                    // the jitter as an offset per unit of clip w: x, y
 };
 
 cbuffer Section : register(b1)
@@ -38,6 +40,8 @@ struct VSOut
     float2 uv       : TEXCOORD0;
     float4 colour   : COLOR0;
     nointerpolation uint face : TEXCOORD1;
+    float4 clip     : TEXCOORD2;  // without jitter
+    float4 prevClip : TEXCOORD3;  // where it was a frame before
 };
 
 VSOut BlocksVS(uint id : SV_VertexID)
@@ -46,7 +50,10 @@ VSOut BlocksVS(uint id : SV_VertexID)
     VSOut o;
     // Minecraft (x, y, z) is world (x, -z, y).
     const float3 world = sectionOffset + float3(v.position.x, -v.position.z, v.position.y);
-    o.position = mul(float4(world, 1.0), cameraToClip);
+    const float4 clip = mul(float4(world, 1.0), cameraToClip);
+    o.position = float4(clip.xy + jitter.xy * clip.w, clip.zw);
+    o.clip = clip;
+    o.prevClip = mul(clip, clipToPrevClip);
     o.uv = v.uv;
     o.colour = float4(v.colour & 0xFF, (v.colour >> 8) & 0xFF, (v.colour >> 16) & 0xFF, v.colour >> 24) / 255.0;
     o.face = (v.flags >> 4) & 15;
@@ -93,4 +100,34 @@ float4 PresentPS(VSOut i) : SV_Target0
         }
     }
     return float4(texel.rgb * i.colour.rgb * kFaceShade[min(i.face, 6)] * tuning.x, 1.0);
+}
+
+// The sRGB curve, undone: the atlas holds Minecraft's colours as they look, and the scene before DLSS is linear.
+float3 Linear(float3 aColour)
+{
+    return aColour <= 0.04045 ? aColour / 12.92 : pow(abs((aColour + 0.055) / 1.055), 2.4);
+}
+
+struct PredlssOut
+{
+    float4 colour : SV_Target0;
+    float2 motion : SV_Target1;
+};
+
+// Step 3: into the scene's colour before DLSS, which then tone maps, blooms and grades the blocks with the rest. The
+// game's own depth hides what's behind, and the motion vectors let DLSS follow the blocks as the camera moves.
+PredlssOut PredlssPS(VSOut i)
+{
+    const float4 texel = SampleAtlas(i.uv);
+    if (texel.a < 0.5)
+    {
+        discard;
+    }
+    PredlssOut o;
+    o.colour = float4(Linear(texel.rgb * i.colour.rgb) * kFaceShade[min(i.face, 6)] * tuning.z, 1.0);
+    // As Camera.cpp's MotionVector: a fraction of the screen, from where the point is to where it was.
+    const float2 now = i.clip.xy / i.clip.w;
+    const float2 before = i.prevClip.xy / i.prevClip.w;
+    o.motion = (before - now) * float2(0.5, -0.5) * tuning.w;
+    return o;
 }

@@ -19,6 +19,7 @@ struct BlockShaders
 {
 	std::vector<uint8_t> vertex;   // BlocksVS
 	std::vector<uint8_t> present;  // PresentPS
+	std::vector<uint8_t> predlss;  // PredlssPS
 };
 
 // Every entry point of shaders/blocks.hlsl, from its text. Nothing, with the messages in aError, if any fails.
