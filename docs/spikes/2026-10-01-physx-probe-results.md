@@ -1,16 +1,16 @@
 # PhysX probe: in-game results
 
-Date: 2026-10-01. Game: Cyberpunk 2077 2.31 (Epic). Probe 0.2.0 (plan Tasks 16 to 21) and 0.3.0 (a locator added
-during Task 22, see "Coordinates"). The user played; the agent triggered dumps through `dump.request` and read the
-reports.
+Date: 2026-10-01. Game: Cyberpunk 2077 2.31 (Epic). Probe 0.2.0 (plan Tasks 16 to 21), 0.3.0 (a locator added
+during Task 22, see "Coordinates") and 0.4.0 (an origin watch, see "The origin rule, measured"). The user played; the
+agent triggered dumps and the watch through `dump.request` and read the reports and logs.
 
 ## Verdict
 
 **Pass, with one finding that shapes the collision exporter:**
 - **Reading the game's PhysX works.** The probe reads the city's physics world through NVIDIA's 3.4.2 headers,
   corrected by the audit, with no faults and nothing skipped.
-- **PhysX coordinates are not world coordinates.** The game keeps PhysX's origin on a 1,024 m grid near V, so a reader
-  must subtract that origin.
+- **PhysX coordinates are not world coordinates.** The game keeps PhysX's origin at the 1,024 m grid point nearest V,
+  one frame behind V, so a reader must subtract that origin. V's own controller gives it exactly, every frame.
 - **All four criteria pass with the origin applied,** at three spots in the city.
 
 ## Revision 1
@@ -147,10 +147,8 @@ down the rest: the compatibility check's sampling, and the locks and rays of 7 t
   - **The other one,** with radius 1.0 and query filter 0:0:400001:0, encloses V. The startup world has it too.
   - **The offset:** in all ten 0.3.0 dumps between y = 520 and y = 685, V's feet minus the controller's centre was
     exactly (0, 1024, −1). At y = 505.8 it was (0, 0, −1).
-- **The rule this fits:** PhysX coordinates = world − origin, and the origin is the multiple of 1,024 m nearest V. It
-  switched within 6 m of y = 512.
-  - **Seen:** only the Y switch. V stayed near x = −190 and z = 70.
-  - **Open:** whether X and Z switch the same way, and whether there's hysteresis on the way back north.
+- **The rule:** PhysX coordinates = world − origin. The dumps showed only one switch, near y = 512; the origin watch
+  then measured the rule frame by frame (see "The origin rule, measured").
 - **The field of view:** the camera's reported 68.24° is the vertical field of view. Renders with the default
   `--fov-axis v` match the screenshots; `h` is visibly too narrow.
 
@@ -173,13 +171,45 @@ In the renders, grey is static, blue dynamic and orange kinematic. Traffic moved
 re-check dump, so its car doesn't line up. The dumps are in `E:\Cyberpunk2077\red4ext\plugins\PhysXProbe\dumps\`,
 under the names in the tables.
 
+## The origin rule, measured
+
+Probe 0.4.0 added an origin watch (`287d6a2`). While it runs, it reads V's controller every frame, logs each origin
+change with V's position in the frames before and after, and writes a status line every 2 seconds. The user walked
+back and forth across y = 512, then x = −512, then drove across both and across y = −512. A small Cyber Engine Tweaks
+overlay showed position and heading, so the lines could be found
+(`spikes/physx-probe/tools/physxprobe_hud/init.lua`; copy its folder into CET's `mods` folder). The watch's log is
+[2026-10-01-physx-probe-results/origin-watch.log](2026-10-01-physx-probe-results/origin-watch.log).
+
+| | On foot | Driving |
+|---|---|---|
+| Frames watched | about 48,000, standing included | about 6,200, getting in and out included |
+| Origin changes | 15: y = 512 seven times, x = −512 eight times | 7: x = −512, y = 512, y = −512 |
+| V past the line in the last frame with the old origin | 0.001 to 0.150 m | 0.042 to 0.575 m |
+| V past the line in the first frame with the new one | 0.055 to 0.302 m | 0.583 to 1.279 m |
+| Controller lost | never | never, including getting in and out |
+| V's feet minus the controller, across | 0.000 m | 0.000 m; up to 0.041 m while getting in or out |
+
+What that settles:
+- **The origin is the 1,024 m grid point nearest V,** with x and y alike. Crossings went from (0, 0, 0) to
+  (0, 1024, 0), (−1024, 1024, 0), (−1024, 0, 0) and (−1024, −1024, 0), always switching where V passes 512 + k × 1,024.
+  Z stayed at 0, with V between 8 and 78 m up. No place in the city reaches the z = 512 line, so that one is untested.
+- **There's no hysteresis.** Each line switches at the same place in both directions.
+- **It runs exactly one frame behind V.** In all 22 changes, the first frame with V past the line still had the old
+  origin, and the next frame had the new one. A distance threshold can't explain that: V was once 0.15 m past a line
+  without a switch, and another switch came at 0.095 m.
+- **It never tears.** V's position and the controller agreed to 0.000 m in every frame of every switch, so a reader that
+  takes the origin from the controller always gets a consistent frame.
+- **Vehicles change nothing.** V's controller stays in the scene and rides along with V, so the origin can be read in a
+  car exactly as on foot.
+
 ## Surprises and next steps
 
-1. **The origin moves with V,** on a 1,024 m grid. The exporter has to read PhysX at world − origin and know the
-   origin at every export.
-   - **Where to get it:** V's own controller gives it without touching game internals: feet minus controller centre,
-     rounded to multiples of 1,024 m.
-   - **Still open:** the X and Z switches, hysteresis, and whether the switch can land between the exporter's reads.
+1. **The origin moves with V,** to the 1,024 m grid point nearest V, one frame late. The exporter has to read PhysX at
+   world − origin and know the origin at every export.
+   - **Where to get it:** V's own controller, every frame: feet minus controller centre, plus 1 m up, rounded to
+     multiples of 1,024 m. That needs no game internals, and works on foot and in vehicles.
+   - **What not to do:** computing the origin from V's *current* position is 1,024 m wrong for one frame at every
+     crossing. V's position in the previous frame matches the rule too, but the controller is the direct reading.
 2. **Character controllers aren't world collision.**
    - **For the exporter:** leave kinematic capsules out. V's own two enclose the camera.
    - **For the renderer:** it now hides them by default (`9d7a558`).

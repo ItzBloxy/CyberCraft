@@ -10,6 +10,13 @@ Revision 2.1 (0.3.0) came from the first city dumps, where nothing lay near V in
 each scene's actors are and where every capsule on a dynamic actor is, and `dump.request` can give PhysX's origin. That
 showed the game re-centres PhysX on a 1,024 m grid: see `docs/spikes/2026-10-01-physx-probe-results.md`.
 
+Revision 2.2 (0.4.0) adds an origin watch to measure that rule. `watch` in `dump.request` starts it and `stop` ends it.
+While it runs, it reads V's character controller every frame, and logs each origin change with V's position in the
+frames before and after, plus a status line every 2 seconds. It finds the controller once, by searching the kinematic
+capsules for one centred under V. After that it reads only that actor, while it is still in its scene and still fits.
+Measured: PhysX's origin is the 1,024 m grid point nearest V, one frame behind V, with no hysteresis, on foot and in
+vehicles.
+
 ## Purpose
 
 This is the first of three spikes that de-risk a SkyCraft-style "play Cyberpunk 2077 as a Minecraft player" mod.
@@ -150,7 +157,8 @@ small files, each with one job.
   - **Request file:** `dump.request` in the plugin folder, checked once a second and deleted when the dump starts.
     It may be empty, or hold one line `origin <x> <y> <z>`: where PhysX's origin is in world coordinates (metres).
     With an origin, the dump reads PhysX at world − origin for the region box, the ray and the nearest capsule, and
-    moves the triangles back into world coordinates. Any other text is logged and ignored.
+    moves the triangles back into world coordinates. `watch` and `stop` start and stop the origin watch (revision 2.2)
+    instead of dumping. Any other text is logged and ignored.
 - There is no automatic trigger. Revision 1 had one, 10 seconds after V was first found, but it fired on the
   stand-in player during the startup legal screen. No signal a plugin can reach would hold it back until a save is
   loaded (see Environment), and a timed dump could also land mid-load, while the world is changing fastest.

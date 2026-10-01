@@ -8429,6 +8429,11 @@ cd /d/Cyberpunk-Minecraft && git add docs/spikes \
   south of it, so the game re-centres PhysX on a 1,024 m grid.
 - **With the origin:** all four criteria passed at three spots.
 - **The renderer** now hides kinematic capsules by default (`9d7a558`), because the camera sits inside V's own.
+- **The origin watch, 0.4.0 (`287d6a2`),** came after the user asked to settle the rule. It reads V's controller every
+  frame and logs each origin change. It adds 4 tests (67 in all), plus a small CET overlay in the game folder for
+  finding the lines.
+- **What the watch measured:** the origin is the grid point nearest V, on x and y alike, one frame behind V, with no
+  hysteresis and no tearing, on foot and in vehicles. That's 22 changes over 54,000 frames.
 
 `docs/spikes/2026-10-01-physx-probe-results.md` has the results.
 
