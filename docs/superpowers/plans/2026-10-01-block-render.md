@@ -20612,7 +20612,7 @@ Predlss and gbuffer now share the jittered constants (`JitteredConstants`) and t
 - Rewrite: `src/render/Renderer.h`, `src/render/Renderer.cpp`
 - Modify: `CMakeLists.txt`, `src/Plugin.cpp`
 
-- [ ] **Step 1: Write `src/render/Renderer.h`**
+- [x] **Step 1: Write `src/render/Renderer.h`**
 
 ```cpp
 #pragma once
@@ -20882,7 +20882,7 @@ private:
 }
 ```
 
-- [ ] **Step 2: Write `src/render/Renderer.cpp`**
+- [x] **Step 2: Write `src/render/Renderer.cpp`**
 
 ```cpp
 #include "render/Renderer.h"
@@ -22473,7 +22473,7 @@ void Renderer::Shutdown()
 }
 ```
 
-- [ ] **Step 3: Edit `CMakeLists.txt` for the version**
+- [x] **Step 3: Edit `CMakeLists.txt` for the version**
 
 ```cmake
 project(BlockRender VERSION 0.6.0 LANGUAGES C CXX)
@@ -22482,7 +22482,7 @@ project(BlockRender VERSION 0.6.0 LANGUAGES C CXX)
 project(BlockRender VERSION 0.7.0 LANGUAGES C CXX)
 ```
 
-- [ ] **Step 4: Edit `src/Plugin.cpp` for the version**
+- [x] **Step 4: Edit `src/Plugin.cpp` for the version**
 
 ```cpp
 constexpr const char* kVersion = "0.6.0";
@@ -22497,7 +22497,7 @@ constexpr const char* kVersion = "0.7.0";
 	aInfo->version = RED4EXT_V1_SEMVER(0, 7, 0);
 ```
 
-- [ ] **Step 5: Build; it must compile without warnings, and the tests still pass**
+- [x] **Step 5: Build; it must compile without warnings, and the tests still pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -22507,7 +22507,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `111 test(s), 0 failure(s)`.
 
-- [ ] **Step 6: Check the DLL's exports and imports**
+- [x] **Step 6: Check the DLL's exports and imports**
 
 ```bash
 DUMPBIN="/c/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/dumpbin.exe"
@@ -22517,7 +22517,7 @@ B=/d/Cyberpunk-Minecraft/spikes/block-render/build/RelWithDebInfo/BlockRender.dl
 ```
 Expected: exactly `Main`, `Query` and `Supports`, then `D3DCOMPILER_47.dll` and `d3d12.dll`.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \

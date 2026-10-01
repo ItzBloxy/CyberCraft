@@ -9,6 +9,7 @@
 #include <dxgi1_4.h>
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 #include <format>
 #include <fstream>
@@ -22,6 +23,21 @@ constexpr uint64_t kConstantsStride = 512;  // a frame's constants, rounded up t
 static_assert(sizeof(FrameConstants) <= kConstantsStride && kConstantsStride % 256 == 0);
 constexpr uint32_t kSkipsBeforeOff = 30;     // the spec's "Checks before every draw"
 constexpr int64_t  kTrackedFramesAgo = 3;    // a DLSS list tracked longer ago than this was recorded again untracked
+
+// Our descriptors, by their index in our CPU-only heaps.
+constexpr uint32_t kBackBufferRtv = 0;
+constexpr uint32_t kPredlssRtvs = 1;  // the colour, then the motion vectors
+constexpr uint32_t kGbufferRtvs = 3;  // the base colour, normals, material values and motion vectors
+constexpr uint32_t kRtvs = 7;
+constexpr uint32_t kOwnDepthDsv = 0;
+constexpr uint32_t kPredlssDsv = 1;
+constexpr uint32_t kGbufferDsv = 2;
+constexpr uint32_t kTaggedDepthDsv = 3;
+constexpr uint32_t kDsvs = 4;
+
+// The G-buffer's render targets in order, as step 1 found them (MainGbuffer checks the game's views have them).
+constexpr DXGI_FORMAT kGbufferFormats[4] = { DXGI_FORMAT_R10G10B10A2_UNORM, DXGI_FORMAT_R10G10B10A2_UNORM, DXGI_FORMAT_R8G8B8A8_UNORM,
+	                                         DXGI_FORMAT_R16G16_FLOAT };
 
 // The slot of the list ListBefore handed to this thread's ExecuteCommandLists call, for OnSubmitted to signal: the
 // same thread makes both calls, while the main thread may change the mode in between.
@@ -84,6 +100,13 @@ D3D12_CPU_DESCRIPTOR_HANDLE Offset(D3D12_CPU_DESCRIPTOR_HANDLE aHandle, uint32_t
 {
 	return { aHandle.ptr + size_t(aIndex) * aIncrement };
 }
+
+// Where the tagged depth's image lies in its buffer: the tag's extent, or the whole buffer without one.
+sl::Extent DepthExtent(const SlTag& aDepth, const D3D12_RESOURCE_DESC& aDesc)
+{
+	const bool wholeResource = aDepth.extent.width == 0 || aDepth.extent.height == 0;
+	return wholeResource ? sl::Extent{ 0, 0, uint32_t(aDesc.Width), aDesc.Height } : aDepth.extent;
+}
 }
 
 Renderer::Renderer(LogQueue& aLog, std::filesystem::path aFolder)
@@ -94,7 +117,13 @@ Renderer::Renderer(LogQueue& aLog, std::filesystem::path aFolder)
 
 bool Renderer::SetMode(std::string_view aMode, std::string& aError)
 {
-	if (aMode == "present" || aMode == "predlss")
+	const bool drawing = aMode == "present" || aMode == "predlss" || aMode == "gbuffer";
+	if (!drawing && aMode != "off")
+	{
+		aError = std::format("there's no mode called \"{}\"", aMode);
+		return false;
+	}
+	if (drawing)
 	{
 		if (!AtlasData() && !LoadAtlas(aError))
 		{
@@ -110,26 +139,31 @@ bool Renderer::SetMode(std::string_view aMode, std::string& aError)
 			return false;
 		}
 	}
-	else if (aMode != "off")
-	{
-		aError = std::format("mode {} isn't in this build: it comes with step 4", aMode);
-		return false;
-	}
 	std::lock_guard lock(mutex_);
 	recorded_ = {};
 	recordedList_ = nullptr;
 	submitted_ = {};
 	predlss_ = {};
 	predlssList_ = nullptr;
+	latest_ = {};
+	latestSubmitted_ = false;
+	gbufferFrame_ = {};
+	gbufferEnd_ = nullptr;
+	knownStates_.Forget();
 	lastDrawnFrame_.reset();
 	consecutiveSkips_ = 0;
-	const Mode mode = aMode == "present" ? Mode::Present : aMode == "predlss" ? Mode::Predlss : Mode::Off;
-	if (mode == Mode::Predlss && !trackingRequested_)
+	const Mode mode = aMode == "present"   ? Mode::Present
+	                  : aMode == "predlss" ? Mode::Predlss
+	                  : aMode == "gbuffer" ? Mode::Gbuffer
+	                                       : Mode::Off;
+	const bool tracks = mode == Mode::Predlss || mode == Mode::Gbuffer;  // both start their barriers from tracked lists
+	if (tracks && !trackingRequested_)
 	{
-		d3d::RequestTracking();  // our barriers start from the DLSS list's first transitions
+		d3d::RequestTracking();
 		trackingRequested_ = true;
+		trackedSince_ = d3d::CurrentFrame() + 1;  // lists reset from the next frame on are tracked
 	}
-	else if (mode != Mode::Predlss)
+	else if (!tracks)
 	{
 		ReleaseTracking();
 	}
@@ -143,6 +177,7 @@ std::string Renderer::ModeName() const
 	{
 	case Mode::Present: return "present";
 	case Mode::Predlss: return "predlss";
+	case Mode::Gbuffer: return "gbuffer";
 	default: return "off";
 	}
 }
@@ -191,6 +226,8 @@ bool Renderer::ReloadShaders(std::string& aError)
 	shaders_ = std::move(*shaders);
 	pipeline_.Reset();  // rebuilt with the new shaders at the next draw
 	predlssPipeline_.Reset();
+	gbufferPipeline_.Reset();
+	depthPipeline_.Reset();
 	return true;
 }
 
@@ -230,6 +267,36 @@ bool Renderer::Set(std::string_view aName, double aValue, std::string& aError)
 	if (aName == "origin.x" || aName == "origin.y" || aName == "origin.z")
 	{
 		(aName == "origin.x" ? renderOrigin_.x : aName == "origin.y" ? renderOrigin_.y : renderOrigin_.z) = aValue;
+		return true;
+	}
+	if (aName == "stencil")
+	{
+		if (aValue < 0.0 || aValue > 255.0 || aValue != std::floor(aValue))
+		{
+			aError = "stencil is a whole number from 0 to 255";
+			return false;
+		}
+		stencil_ = uint8_t(aValue);
+		return true;
+	}
+	if (aName == "metalness" || aName == "roughness" || aName == "materialb")
+	{
+		if (aValue < 0.0 || aValue > 1.0)
+		{
+			aError = std::format("{} is from 0 to 1", aName);
+			return false;
+		}
+		(aName == "metalness" ? metalness_ : aName == "roughness" ? roughness_ : materialB_) = float(aValue);
+		return true;
+	}
+	if (aName == "gbmotion" || aName == "gbdepth")
+	{
+		if (aValue != 0.0 && aValue != 1.0)
+		{
+			aError = std::format("{} is 1, or 0 to leave the game's", aName);
+			return false;
+		}
+		(aName == "gbmotion" ? gbufferMotion_ : gbufferDepth_) = aValue == 1.0;
 		return true;
 	}
 	aError = std::format("there's no setting called \"{}\"", aName);
@@ -279,8 +346,8 @@ bool Renderer::EnsureObjects()
 		Fail("couldn't create the root signature");
 		return false;
 	}
-	const D3D12_DESCRIPTOR_HEAP_DESC rtvHeapDesc{ D3D12_DESCRIPTOR_HEAP_TYPE_RTV, 3, D3D12_DESCRIPTOR_HEAP_FLAG_NONE, 0 };
-	const D3D12_DESCRIPTOR_HEAP_DESC dsvHeapDesc{ D3D12_DESCRIPTOR_HEAP_TYPE_DSV, 2, D3D12_DESCRIPTOR_HEAP_FLAG_NONE, 0 };
+	const D3D12_DESCRIPTOR_HEAP_DESC rtvHeapDesc{ D3D12_DESCRIPTOR_HEAP_TYPE_RTV, kRtvs, D3D12_DESCRIPTOR_HEAP_FLAG_NONE, 0 };
+	const D3D12_DESCRIPTOR_HEAP_DESC dsvHeapDesc{ D3D12_DESCRIPTOR_HEAP_TYPE_DSV, kDsvs, D3D12_DESCRIPTOR_HEAP_FLAG_NONE, 0 };
 	const D3D12_QUERY_HEAP_DESC      queryDesc{ D3D12_QUERY_HEAP_TYPE_TIMESTAMP, kSlots * 2, 0 };
 	constants_ = gpu::MakeBuffer(device_, kSlots * kConstantsStride, D3D12_HEAP_TYPE_UPLOAD, D3D12_RESOURCE_STATE_GENERIC_READ);
 	timings_ = gpu::MakeBuffer(device_, kSlots * 2 * sizeof(uint64_t), D3D12_HEAP_TYPE_READBACK, D3D12_RESOURCE_STATE_COPY_DEST);
@@ -407,6 +474,99 @@ bool Renderer::EnsurePredlssPipeline(bool aReversed)
 	return true;
 }
 
+bool Renderer::EnsureGbufferPipeline(bool aReversed)
+{
+	if (gbufferPipeline_ && gbufferCull_ == cull_ && gbufferReversed_ == aReversed && gbufferMotionWrites_ == gbufferMotion_)
+	{
+		return true;
+	}
+	if (!shaders_)
+	{
+		Fail("there are no shaders");
+		return false;
+	}
+	D3D12_GRAPHICS_PIPELINE_STATE_DESC desc{};
+	desc.pRootSignature = rootSignature_.Get();
+	desc.VS = { shaders_->vertex.data(), shaders_->vertex.size() };
+	desc.PS = { shaders_->gbuffer.data(), shaders_->gbuffer.size() };
+	desc.BlendState.IndependentBlendEnable = TRUE;  // so the motion vectors alone can be left alone
+	for (UINT i = 0; i < 4; ++i)
+	{
+		desc.BlendState.RenderTarget[i].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
+		desc.RTVFormats[i] = kGbufferFormats[i];
+	}
+	if (!gbufferMotion_)
+	{
+		desc.BlendState.RenderTarget[3].RenderTargetWriteMask = 0;
+	}
+	desc.SampleMask = UINT_MAX;
+	desc.RasterizerState = BlockRasterizer(cull_);
+	desc.DepthStencilState.DepthEnable = TRUE;
+	desc.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL;
+	desc.DepthStencilState.DepthFunc = aReversed ? D3D12_COMPARISON_FUNC_GREATER : D3D12_COMPARISON_FUNC_LESS;
+	// Every pixel drawn takes the stencil class: OMSetStencilRef sets it.
+	desc.DepthStencilState.StencilEnable = TRUE;
+	desc.DepthStencilState.StencilReadMask = D3D12_DEFAULT_STENCIL_READ_MASK;
+	desc.DepthStencilState.StencilWriteMask = D3D12_DEFAULT_STENCIL_WRITE_MASK;
+	const D3D12_DEPTH_STENCILOP_DESC replace{ D3D12_STENCIL_OP_KEEP, D3D12_STENCIL_OP_KEEP, D3D12_STENCIL_OP_REPLACE,
+		                                      D3D12_COMPARISON_FUNC_ALWAYS };
+	desc.DepthStencilState.FrontFace = replace;
+	desc.DepthStencilState.BackFace = replace;
+	desc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+	desc.NumRenderTargets = 4;
+	desc.DSVFormat = DXGI_FORMAT_D32_FLOAT_S8X24_UINT;
+	desc.SampleDesc.Count = 1;
+	gpu::ComPtr<ID3D12PipelineState> pipeline;
+	if (FAILED(device_->CreateGraphicsPipelineState(&desc, IID_PPV_ARGS(&pipeline))))
+	{
+		Fail("couldn't create the pipeline for drawing into the G-buffer");
+		return false;
+	}
+	pipeline->SetName(L"BlockRender gbuffer pipeline");
+	gbufferPipeline_ = pipeline;
+	gbufferCull_ = cull_;
+	gbufferReversed_ = aReversed;
+	gbufferMotionWrites_ = gbufferMotion_;
+	return true;
+}
+
+bool Renderer::EnsureDepthPipeline(bool aReversed)
+{
+	if (depthPipeline_ && depthCull_ == cull_ && depthReversed_ == aReversed)
+	{
+		return true;
+	}
+	if (!shaders_)
+	{
+		Fail("there are no shaders");
+		return false;
+	}
+	D3D12_GRAPHICS_PIPELINE_STATE_DESC desc{};
+	desc.pRootSignature = rootSignature_.Get();
+	desc.VS = { shaders_->vertex.data(), shaders_->vertex.size() };
+	desc.PS = { shaders_->depth.data(), shaders_->depth.size() };  // only to cut out what the atlas cuts out
+	desc.SampleMask = UINT_MAX;
+	desc.RasterizerState = BlockRasterizer(cull_);
+	desc.DepthStencilState.DepthEnable = TRUE;
+	desc.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL;
+	desc.DepthStencilState.DepthFunc = aReversed ? D3D12_COMPARISON_FUNC_GREATER : D3D12_COMPARISON_FUNC_LESS;
+	desc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+	desc.NumRenderTargets = 0;
+	desc.DSVFormat = DXGI_FORMAT_D32_FLOAT;
+	desc.SampleDesc.Count = 1;
+	gpu::ComPtr<ID3D12PipelineState> pipeline;
+	if (FAILED(device_->CreateGraphicsPipelineState(&desc, IID_PPV_ARGS(&pipeline))))
+	{
+		Fail("couldn't create the pipeline for the tagged depth");
+		return false;
+	}
+	pipeline->SetName(L"BlockRender depth pipeline");
+	depthPipeline_ = pipeline;
+	depthCull_ = cull_;
+	depthReversed_ = aReversed;
+	return true;
+}
+
 bool Renderer::EnsureDepthTarget(uint32_t aWidth, uint32_t aHeight)
 {
 	if (depthTarget_ && depthWidth_ == aWidth && depthHeight_ == aHeight)
@@ -438,7 +598,7 @@ bool Renderer::EnsureDepthTarget(uint32_t aWidth, uint32_t aHeight)
 		return false;
 	}
 	depthTarget_->SetName(L"BlockRender depth");
-	d3d::Original().createDsv(device_, depthTarget_.Get(), nullptr, dsvHeap_->GetCPUDescriptorHandleForHeapStart());
+	d3d::Original().createDsv(device_, depthTarget_.Get(), nullptr, Offset(dsvHeap_->GetCPUDescriptorHandleForHeapStart(), kOwnDepthDsv, dsvIncrement_));
 	depthWidth_ = aWidth;
 	depthHeight_ = aHeight;
 	return true;
@@ -623,6 +783,26 @@ FrameConstants Renderer::BaseConstants(const CameraFrame& aCamera) const
 	constants.tuning[1] = tolerance_;
 	constants.tuning[2] = exposure_;
 	constants.tuning[3] = mvSign_;
+	constants.material[0] = metalness_;
+	constants.material[1] = roughness_;
+	constants.material[2] = materialB_;
+	return constants;
+}
+
+FrameConstants Renderer::JitteredConstants(const CameraFrame& aCamera, const SlConstants& aGame, const sl::Extent& aExtent) const
+{
+	FrameConstants constants = BaseConstants(aCamera);
+	constants.target[0] = float(aExtent.width);
+	constants.target[1] = float(aExtent.height);
+	constants.target[2] = 1.0f / float(aExtent.width);
+	constants.target[3] = 1.0f / float(aExtent.height);
+	for (size_t i = 0; i < 16; ++i)
+	{
+		constants.clipToPrevClip[i] = aGame.clipToPrevClip[i];
+	}
+	const std::array<double, 2> jitter = ClipJitter(aGame.jitter[0], aGame.jitter[1], aExtent.width, aExtent.height, jitterSign_);
+	constants.jitter[0] = float(jitter[0]);
+	constants.jitter[1] = float(jitter[1]);
 	return constants;
 }
 
@@ -651,28 +831,44 @@ void Renderer::DrawSections(ID3D12GraphicsCommandList* aList, const CameraFrame&
 void Renderer::OnEvaluate(const EvaluateCall& aCall)
 {
 	const Mode mode = mode_.load();
-	if (mode == Mode::Predlss)
+	if (mode == Mode::Predlss || mode == Mode::Gbuffer)
 	{
-		std::lock_guard lock(mutex_);
-		predlss_ = {};
-		predlss_.list = aCall.list;
-		predlss_.constants = aCall.constants;
+		Evaluate evaluate;
+		evaluate.list = aCall.list;
+		evaluate.constants = aCall.constants;
 		for (const SlTag& tag : aCall.tags)
 		{
 			if (tag.type == sl::kBufferTypeScalingInputColor)
 			{
-				predlss_.colour = tag;
+				evaluate.colour = tag;
 			}
 			else if (tag.type == sl::kBufferTypeMotionVectors)
 			{
-				predlss_.motion = tag;
+				evaluate.motion = tag;
 			}
 			else if (tag.type == sl::kBufferTypeDepth)
 			{
-				predlss_.depth = tag;
+				evaluate.depth = tag;
 			}
 		}
-		predlssList_ = aCall.list;
+		std::lock_guard lock(mutex_);
+		if (mode_.load() == Mode::Predlss)
+		{
+			predlss_ = evaluate;
+			predlssList_ = aCall.list;
+		}
+		else if (mode_.load() == Mode::Gbuffer)
+		{
+			latest_ = evaluate;
+			latestSubmitted_ = false;
+			if (auto* depth = static_cast<ID3D12Resource*>(evaluate.depth.resource))
+			{
+				const D3D12_RESOURCE_DESC desc = depth->GetDesc();
+				renderWidth_ = desc.Width;
+				renderHeight_ = desc.Height;
+			}
+			WatchGbuffer();
+		}
 		return;
 	}
 	if (mode != Mode::Present)
@@ -734,12 +930,23 @@ void Renderer::OnEvaluate(const EvaluateCall& aCall)
 	}
 	recorded_.depth = true;
 	recorded_.rowFloats = footprint.layout.Footprint.RowPitch / 4;
-	const bool wholeResource = depth->extent.width == 0 || depth->extent.height == 0;
-	recorded_.extent = wholeResource ? sl::Extent{ 0, 0, uint32_t(desc.Width), desc.Height } : depth->extent;
+	recorded_.extent = DepthExtent(*depth, desc);
 }
 
-void Renderer::OnSubmit(ID3D12CommandQueue*, UINT aCount, ID3D12CommandList* const* aLists)
+void Renderer::OnSubmit(ID3D12CommandQueue* aQueue, UINT aCount, ID3D12CommandList* const* aLists)
 {
+	if (mode_.load() == Mode::Gbuffer)
+	{
+		if (aQueue == d3d::MainQueue())
+		{
+			std::lock_guard lock(mutex_);
+			if (mode_.load() == Mode::Gbuffer)
+			{
+				SeeGbufferSubmission(aCount, aLists);
+			}
+		}
+		return;
+	}
 	const void* recorded = recordedList_.load();
 	if (!recorded)
 	{
@@ -761,21 +968,105 @@ void Renderer::OnSubmit(ID3D12CommandQueue*, UINT aCount, ID3D12CommandList* con
 	}
 }
 
+void Renderer::WatchGbuffer()
+{
+	std::vector<void*> watched;
+	if (gbuffer_)
+	{
+		watched = { gbuffer_->base, gbuffer_->normals, gbuffer_->material, gbuffer_->depth, latest_.motion.resource,
+			        latest_.depth.resource };
+	}
+	if (watched != watched_)
+	{
+		watched_ = watched;
+		knownStates_.Watch(watched_);  // all unknown until the lists show them again
+	}
+}
+
+void Renderer::SeeGbufferSubmission(UINT aCount, ID3D12CommandList* const* aLists)
+{
+	const uint32_t frame = d3d::CurrentFrame();
+	if (frame != gbufferFrame_.frame)
+	{
+		gbufferFrame_ = {};
+		gbufferFrame_.frame = frame;
+		gbufferEnd_ = nullptr;
+		knownStates_.Forget();  // only lists submitted in this frame say where things are
+	}
+	for (UINT i = 0; i < aCount; ++i)
+	{
+		const void* list = aLists[i];
+		if (list == latest_.list && !latestSubmitted_)
+		{
+			// The frame's DLSS list: the G-buffer is long done, and the next frame's evaluate is the next camera.
+			latestSubmitted_ = true;
+			if (!gbufferFrame_.decided)
+			{
+				gbufferFrame_.decided = true;
+				Skip(gbufferFrame_.seen ? "the G-buffer's end wasn't found" : "no G-buffer list was seen in this frame");
+			}
+			continue;
+		}
+		const ListState* state = d3d::Tracker().Find(aLists[i]);
+		if (!state || state->Recording() || state->Frame() < trackedSince_)
+		{
+			knownStates_.Forget();  // a list we can't see into could move anything
+			continue;
+		}
+		for (const Targets& targets : state->WideTargets())
+		{
+			const std::optional<GbufferTargets> found = MainGbuffer(targets, renderWidth_, renderHeight_);
+			if (found)
+			{
+				gbufferFrame_.seen = true;
+				if (found != gbuffer_)
+				{
+					gbuffer_ = found;
+					WatchGbuffer();
+				}
+			}
+		}
+		if (gbufferFrame_.seen && !gbufferFrame_.decided && !gbufferFrame_.end && EndsGbuffer(*state, *gbuffer_))
+		{
+			gbufferFrame_.end = list;
+			for (size_t k = 0; k < watched_.size() && k < kWatched; ++k)
+			{
+				gbufferFrame_.before[k] = knownStates_.Before(*state, watched_[k]);
+			}
+			gbufferEnd_ = list;
+		}
+		knownStates_.Apply(*state);
+	}
+}
+
 ID3D12CommandList* Renderer::ListBefore(ID3D12CommandQueue* aQueue, ID3D12CommandList* aList)
 {
-	if (static_cast<const void*>(aList) != predlssList_.load())
+	const void* list = aList;
+	if (list == predlssList_.load())
+	{
+		std::lock_guard lock(mutex_);
+		if (mode_.load() != Mode::Predlss || predlss_.list != aList)
+		{
+			return nullptr;
+		}
+		ID3D12CommandList* ours = RecordPredlss(aQueue, static_cast<ID3D12GraphicsCommandList*>(aList));
+		predlss_ = {};  // each evaluate draws once
+		predlssList_ = nullptr;
+		return ours;
+	}
+	if (list != gbufferEnd_.load())
 	{
 		return nullptr;  // most lists: no lock taken
 	}
 	std::lock_guard lock(mutex_);
-	if (mode_.load() != Mode::Predlss || predlss_.list != aList)
+	if (mode_.load() != Mode::Gbuffer || gbufferFrame_.end != list || gbufferFrame_.decided)
 	{
 		return nullptr;
 	}
-	ID3D12CommandList* ours = RecordPredlss(aQueue, static_cast<ID3D12GraphicsCommandList*>(aList));
-	predlss_ = {};  // each evaluate draws once
-	predlssList_ = nullptr;
-	return ours;
+	gbufferFrame_.end = nullptr;
+	gbufferFrame_.decided = true;  // each frame draws once
+	gbufferEnd_ = nullptr;
+	return RecordGbuffer(aQueue);
 }
 
 ID3D12CommandList* Renderer::RecordPredlss(ID3D12CommandQueue* aQueue, ID3D12GraphicsCommandList* aDlssList)
@@ -858,21 +1149,8 @@ ID3D12CommandList* Renderer::RecordPredlss(ID3D12CommandQueue* aQueue, ID3D12Gra
 		ReadTimings(slot);
 	}
 
-	const bool        wholeResource = predlss_.depth.extent.width == 0 || predlss_.depth.extent.height == 0;
-	const sl::Extent  extent = wholeResource ? sl::Extent{ 0, 0, uint32_t(depthDesc.Width), depthDesc.Height } : predlss_.depth.extent;
-	const SlConstants& game = *predlss_.constants;
-	FrameConstants     constants = BaseConstants(*camera);
-	constants.target[0] = float(extent.width);
-	constants.target[1] = float(extent.height);
-	constants.target[2] = 1.0f / float(extent.width);
-	constants.target[3] = 1.0f / float(extent.height);
-	for (size_t i = 0; i < 16; ++i)
-	{
-		constants.clipToPrevClip[i] = game.clipToPrevClip[i];
-	}
-	const std::array<double, 2> jitter = ClipJitter(game.jitter[0], game.jitter[1], extent.width, extent.height, jitterSign_);
-	constants.jitter[0] = float(jitter[0]);
-	constants.jitter[1] = float(jitter[1]);
+	const sl::Extent     extent = DepthExtent(predlss_.depth, depthDesc);
+	const FrameConstants constants = JitteredConstants(*camera, *predlss_.constants, extent);
 	std::memcpy(constantsMapped_ + slot * kConstantsStride, &constants, sizeof(constants));
 
 	// Our own list: calls the hooks watch go through their originals, so nothing of ours reaches the tracker.
@@ -892,9 +1170,9 @@ ID3D12CommandList* Renderer::RecordPredlss(ID3D12CommandQueue* aQueue, ID3D12Gra
 	{
 		original.resourceBarrier(list, UINT(toTargets.size()), toTargets.data());
 	}
-	const D3D12_CPU_DESCRIPTOR_HANDLE rtvs[2] = { Offset(rtvHeap_->GetCPUDescriptorHandleForHeapStart(), 1, rtvIncrement_),
-		                                          Offset(rtvHeap_->GetCPUDescriptorHandleForHeapStart(), 2, rtvIncrement_) };
-	const D3D12_CPU_DESCRIPTOR_HANDLE dsv = Offset(dsvHeap_->GetCPUDescriptorHandleForHeapStart(), 1, dsvIncrement_);
+	const D3D12_CPU_DESCRIPTOR_HANDLE rtvs[2] = { Offset(rtvHeap_->GetCPUDescriptorHandleForHeapStart(), kPredlssRtvs, rtvIncrement_),
+		                                          Offset(rtvHeap_->GetCPUDescriptorHandleForHeapStart(), kPredlssRtvs + 1, rtvIncrement_) };
+	const D3D12_CPU_DESCRIPTOR_HANDLE dsv = Offset(dsvHeap_->GetCPUDescriptorHandleForHeapStart(), kPredlssDsv, dsvIncrement_);
 	D3D12_RENDER_TARGET_VIEW_DESC     colourView{};
 	colourView.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
 	colourView.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;
@@ -917,6 +1195,177 @@ ID3D12CommandList* Renderer::RecordPredlss(ID3D12CommandQueue* aQueue, ID3D12Gra
 	list->SetGraphicsRootShaderResourceView(3, atlasBuffer_->GetGPUVirtualAddress());
 	list->SetGraphicsRootShaderResourceView(4, atlasBuffer_->GetGPUVirtualAddress());  // t2: only step 2's shader reads it
 	DrawSections(list, *camera, completed);
+	const std::vector<D3D12_RESOURCE_BARRIER> back = Barriers(MovesBack(into));
+	if (!back.empty())
+	{
+		original.resourceBarrier(list, UINT(back.size()), back.data());
+	}
+	list->EndQuery(queries_.Get(), D3D12_QUERY_TYPE_TIMESTAMP, slot * 2 + 1);
+	list->ResolveQueryData(queries_.Get(), D3D12_QUERY_TYPE_TIMESTAMP, slot * 2, 2, timings_.Get(), slot * 2 * sizeof(uint64_t));
+	if (FAILED(original.close(list)))
+	{
+		Fail("couldn't close a command list");
+		return nullptr;
+	}
+	++recordings_;
+	t_insertedSlot = slot;
+	return list;
+}
+
+ID3D12CommandList* Renderer::RecordGbuffer(ID3D12CommandQueue* aQueue)
+{
+	if (!EnsureObjects())
+	{
+		Skip("not ready: the main queue isn't known yet");
+		return nullptr;
+	}
+	const uint64_t completed = fence_->GetCompletedValue();
+	if (completed == UINT64_MAX)
+	{
+		Fail(std::format("the device was removed (0x{:08x})", uint32_t(device_->GetDeviceRemovedReason())));
+		return nullptr;
+	}
+	if (aQueue != queue_)
+	{
+		Skip("the G-buffer ended on another queue than the main one");
+		return nullptr;
+	}
+	if (!latest_.list || latestSubmitted_)
+	{
+		++stats_.lateCamera;  // this frame's evaluate, which brings its camera, hasn't come yet
+		Skip("the frame's camera came after its G-buffer");
+		return nullptr;
+	}
+	if (!latest_.constants)
+	{
+		Skip("the DLSS frame came without constants");
+		return nullptr;
+	}
+	auto* colour = static_cast<ID3D12Resource*>(latest_.colour.resource);
+	auto* motion = static_cast<ID3D12Resource*>(latest_.motion.resource);
+	auto* taggedDepth = static_cast<ID3D12Resource*>(latest_.depth.resource);
+	if (!colour || !motion || !taggedDepth)
+	{
+		Skip("the scaling input colour, motion vectors and depth aren't all tagged");
+		return nullptr;
+	}
+	const D3D12_RESOURCE_DESC depthDesc = taggedDepth->GetDesc();
+	std::string               why;
+	if (!CheckPredlssTargets(colour->GetDesc(), motion->GetDesc(), depthDesc, why))
+	{
+		Skip(why);
+		return nullptr;
+	}
+	if (!gbuffer_ || watched_.size() != kWatched || watched_[kMotion] != motion || watched_[kTaggedDepth] != taggedDepth)
+	{
+		Skip("the G-buffer and the tagged buffers aren't the ones watched");
+		return nullptr;
+	}
+	static constexpr const char* kNames[kWatched] = { "base colour", "normals", "material values", "G-buffer's depth",
+		                                              "motion vectors", "tagged depth" };
+	for (size_t k = 0; k < kWatched; ++k)
+	{
+		if (!gbufferFrame_.before[k] && (k != kTaggedDepth || gbufferDepth_))
+		{
+			Skip(std::format("the state of the {} before the G-buffer's end isn't known", kNames[k]));
+			return nullptr;
+		}
+	}
+	if (!atlasBuffer_ || completed < atlasReady_)
+	{
+		Skip("the atlas isn't on the GPU yet");
+		return nullptr;
+	}
+	const std::optional<CameraFrame> camera = MakeCameraFrame(*latest_.constants, renderOrigin_);
+	if (!camera)
+	{
+		Skip("the camera isn't understood");
+		return nullptr;
+	}
+	if (!EnsureGbufferPipeline(camera->reversedDepth) || (gbufferDepth_ && !EnsureDepthPipeline(camera->reversedDepth)))
+	{
+		return nullptr;
+	}
+	const uint32_t slot = uint32_t(recordings_ % kSlots);
+	if (completed < slotFence_[slot])
+	{
+		Skip("the GPU is still busy with an earlier frame");
+		return nullptr;
+	}
+	if (slotFence_[slot] != 0)
+	{
+		ReadTimings(slot);
+	}
+
+	const sl::Extent     extent = DepthExtent(latest_.depth, depthDesc);
+	const FrameConstants constants = JitteredConstants(*camera, *latest_.constants, extent);
+	std::memcpy(constantsMapped_ + slot * kConstantsStride, &constants, sizeof(constants));
+
+	// Our own list: calls the hooks watch go through their originals, so nothing of ours reaches the tracker.
+	const d3d::Originals&      original = d3d::Original();
+	ID3D12GraphicsCommandList* list = lists_[slot].Get();
+	if (FAILED(allocators_[slot]->Reset()) || FAILED(original.reset(list, allocators_[slot].Get(), gbufferPipeline_.Get())))
+	{
+		Fail("couldn't reset a command list");
+		return nullptr;
+	}
+	list->EndQuery(queries_.Get(), D3D12_QUERY_TYPE_TIMESTAMP, slot * 2);
+	ID3D12Resource* targets[4] = { static_cast<ID3D12Resource*>(gbuffer_->base), static_cast<ID3D12Resource*>(gbuffer_->normals),
+		                           static_cast<ID3D12Resource*>(gbuffer_->material), motion };
+	auto* gbufferDepth = static_cast<ID3D12Resource*>(gbuffer_->depth);
+	std::vector<Move> wanted = { { targets[0], *gbufferFrame_.before[kBase], D3D12_RESOURCE_STATE_RENDER_TARGET },
+		                         { targets[1], *gbufferFrame_.before[kNormals], D3D12_RESOURCE_STATE_RENDER_TARGET },
+		                         { targets[2], *gbufferFrame_.before[kMaterial], D3D12_RESOURCE_STATE_RENDER_TARGET },
+		                         { motion, *gbufferFrame_.before[kMotion], D3D12_RESOURCE_STATE_RENDER_TARGET },
+		                         { gbufferDepth, *gbufferFrame_.before[kGbufferDepth], D3D12_RESOURCE_STATE_DEPTH_WRITE } };
+	if (gbufferDepth_)
+	{
+		wanted.push_back({ taggedDepth, *gbufferFrame_.before[kTaggedDepth], D3D12_RESOURCE_STATE_DEPTH_WRITE });
+	}
+	const std::vector<Move>                   into = MovesInto(wanted);
+	const std::vector<D3D12_RESOURCE_BARRIER> toTargets = Barriers(into);
+	if (!toTargets.empty())
+	{
+		original.resourceBarrier(list, UINT(toTargets.size()), toTargets.data());
+	}
+	D3D12_CPU_DESCRIPTOR_HANDLE rtvs[4]{};
+	for (uint32_t i = 0; i < 4; ++i)
+	{
+		rtvs[i] = Offset(rtvHeap_->GetCPUDescriptorHandleForHeapStart(), kGbufferRtvs + i, rtvIncrement_);
+		D3D12_RENDER_TARGET_VIEW_DESC view{};
+		view.Format = kGbufferFormats[i];
+		view.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;  // mip 0, as the game's views
+		original.createRtv(device_, targets[i], &view, rtvs[i]);
+	}
+	const D3D12_CPU_DESCRIPTOR_HANDLE gbufferDsv = Offset(dsvHeap_->GetCPUDescriptorHandleForHeapStart(), kGbufferDsv, dsvIncrement_);
+	D3D12_DEPTH_STENCIL_VIEW_DESC     gbufferDepthView{};
+	gbufferDepthView.Format = DXGI_FORMAT_D32_FLOAT_S8X24_UINT;
+	gbufferDepthView.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
+	original.createDsv(device_, gbufferDepth, &gbufferDepthView, gbufferDsv);
+	original.omSetRenderTargets(list, 4, rtvs, FALSE, &gbufferDsv);
+	list->OMSetStencilRef(stencil_);
+	const D3D12_VIEWPORT viewport{ float(extent.left), float(extent.top), float(extent.width), float(extent.height), 0.0f, 1.0f };
+	const D3D12_RECT     scissor{ LONG(extent.left), LONG(extent.top), LONG(extent.left + extent.width), LONG(extent.top + extent.height) };
+	list->RSSetViewports(1, &viewport);
+	list->RSSetScissorRects(1, &scissor);
+	list->SetGraphicsRootSignature(rootSignature_.Get());
+	list->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+	list->SetGraphicsRootConstantBufferView(0, constants_->GetGPUVirtualAddress() + slot * kConstantsStride);
+	list->SetGraphicsRootShaderResourceView(3, atlasBuffer_->GetGPUVirtualAddress());
+	list->SetGraphicsRootShaderResourceView(4, atlasBuffer_->GetGPUVirtualAddress());  // t2: only step 2's shader reads it
+	DrawSections(list, *camera, completed);
+	if (gbufferDepth_)
+	{
+		// The game copied the G-buffer's depth into the tagged depth before our list, so the blocks go in there too.
+		const D3D12_CPU_DESCRIPTOR_HANDLE taggedDsv = Offset(dsvHeap_->GetCPUDescriptorHandleForHeapStart(), kTaggedDepthDsv, dsvIncrement_);
+		D3D12_DEPTH_STENCIL_VIEW_DESC     taggedView{};
+		taggedView.Format = DepthViewFormat(depthDesc.Format);
+		taggedView.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
+		original.createDsv(device_, taggedDepth, &taggedView, taggedDsv);
+		list->SetPipelineState(depthPipeline_.Get());
+		original.omSetRenderTargets(list, 0, nullptr, FALSE, &taggedDsv);
+		DrawSections(list, *camera, completed);
+	}
 	const std::vector<D3D12_RESOURCE_BARRIER> back = Barriers(MovesBack(into));
 	if (!back.empty())
 	{
@@ -1047,8 +1496,8 @@ void Renderer::OnPresent(IDXGISwapChain* aSwapChain)
 	list->EndQuery(queries_.Get(), D3D12_QUERY_TYPE_TIMESTAMP, slot * 2);
 	const D3D12_RESOURCE_BARRIER toTarget = Transition(backBuffer.Get(), D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET);
 	original.resourceBarrier(list, 1, &toTarget);
-	const D3D12_CPU_DESCRIPTOR_HANDLE rtv = rtvHeap_->GetCPUDescriptorHandleForHeapStart();
-	const D3D12_CPU_DESCRIPTOR_HANDLE dsv = dsvHeap_->GetCPUDescriptorHandleForHeapStart();
+	const D3D12_CPU_DESCRIPTOR_HANDLE rtv = Offset(rtvHeap_->GetCPUDescriptorHandleForHeapStart(), kBackBufferRtv, rtvIncrement_);
+	const D3D12_CPU_DESCRIPTOR_HANDLE dsv = Offset(dsvHeap_->GetCPUDescriptorHandleForHeapStart(), kOwnDepthDsv, dsvIncrement_);
 	original.createRtv(device_, backBuffer.Get(), nullptr, rtv);
 	original.clearDsv(list, dsv, D3D12_CLEAR_FLAG_DEPTH, camera->reversedDepth ? 0.0f : 1.0f, 0, 0, nullptr);
 	original.omSetRenderTargets(list, 1, &rtv, FALSE, &dsv);
@@ -1122,6 +1571,8 @@ void Renderer::Shutdown()
 	depthTarget_.Reset();
 	pipeline_.Reset();
 	predlssPipeline_.Reset();
+	gbufferPipeline_.Reset();
+	depthPipeline_.Reset();
 	rootSignature_.Reset();
 	rtvHeap_.Reset();
 	dsvHeap_.Reset();
