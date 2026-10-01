@@ -41,6 +41,14 @@ def test_hidden_groups():
     assert not rd.is_hidden("s0_static_trimesh")
 
 
+def test_character_controllers_are_hidden():
+    # Kinematic capsules are character controllers. The camera sits inside V's own, so they'd hide the whole view.
+    assert rd.is_hidden("kinematic_capsule")
+    assert rd.is_hidden("s0_kinematic_capsule")
+    assert not rd.is_hidden("kinematic_box")
+    assert not rd.is_hidden("s0_dynamic_capsule")
+
+
 def test_mc_from_world():
     assert rd.mc_from_world([1.0, 2.0, 3.0]).tolist() == [1.0, 3.0, -2.0]
 

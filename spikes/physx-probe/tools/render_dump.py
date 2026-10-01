@@ -20,13 +20,15 @@ import numpy as np
 from PIL import Image
 
 HIDDEN_KINDS = ("trigger_", "queryonly_")
+HIDDEN_GROUPS = ("kinematic_capsule",)  # character controllers; the camera sits inside V's own
 NEAR = 0.05
 SKY = (22, 24, 30)
 
 
 def is_hidden(group: str) -> bool:
-    """trigger_* and queryonly_* groups, with or without a scene prefix such as s1_."""
-    return re.sub(r"^s\d+_", "", group).startswith(HIDDEN_KINDS)
+    """trigger_* and queryonly_* groups and kinematic capsules, with or without a scene prefix such as s1_."""
+    name = re.sub(r"^s\d+_", "", group)
+    return name.startswith(HIDDEN_KINDS) or name in HIDDEN_GROUPS
 
 
 def load_mtl(path: Path) -> dict[str, tuple[float, float, float]]:
@@ -189,7 +191,7 @@ def render_eye(groups, colors, eye, forward, fov_deg: float, fov_axis: str = "v"
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("dump", type=Path, help="a dumps/<timestamp> folder")
-    parser.add_argument("--all", action="store_true", help="include trigger_* and queryonly_* groups")
+    parser.add_argument("--all", action="store_true", help="include trigger_*, queryonly_* and kinematic_capsule groups")
     parser.add_argument("--fov", type=float, help="field of view in degrees (default: the report's camera, else 80)")
     parser.add_argument("--fov-axis", choices=("v", "h"), default="v", help="whether the field of view is vertical or horizontal")
     args = parser.parse_args()
