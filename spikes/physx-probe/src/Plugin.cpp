@@ -1,5 +1,6 @@
-// PhysXProbe: a read-only RED4ext plugin that checks whether Cyberpunk's PhysX 3.4.2 can be read through
-// NVIDIA's public headers and dumps the collision around V. See docs/superpowers/specs/2026-10-01-physx-probe-design.md.
+// PhysXProbe: a read-only RED4ext plugin that checks whether Cyberpunk's PhysX 3.4.2 can be read through NVIDIA's
+// headers, corrected where the game's build differs, and dumps the collision around V. F10 or a request file starts a
+// dump; there is no automatic one. See docs/superpowers/specs/2026-10-01-physx-probe-design.md.
 #include <RED4ext/RED4ext.hpp>
 
 #include "DumpWriter.h"
@@ -11,7 +12,6 @@
 #include <chrono>
 #include <filesystem>
 #include <format>
-#include <optional>
 #include <string>
 
 namespace
@@ -29,8 +29,6 @@ std::string                 g_runtime;
 bool                        g_f10WasDown = false;
 Clock::time_point           g_lastDump{};
 Clock::time_point           g_lastSecondlyCheck{};
-std::optional<Clock::time_point> g_firstSeenPlayer;
-bool                        g_autoDone = false;
 
 template<class... Args>
 void Log(std::format_string<Args...> aFormat, Args&&... aArgs)
@@ -147,18 +145,6 @@ bool OnUpdate(RED4ext::CGameApplication*)
 			std::filesystem::remove(request, error);
 			trigger = "request";
 		}
-		if (!g_autoDone)
-		{
-			if (!g_firstSeenPlayer && cpmc::LocatePlayer())
-			{
-				g_firstSeenPlayer = now;
-			}
-			if (trigger.empty() && g_firstSeenPlayer && now - *g_firstSeenPlayer >= 10s)
-			{
-				g_autoDone = true;
-				trigger = "auto";
-			}
-		}
 	}
 
 	if (trigger.empty() || now - g_lastDump < 2s)
@@ -189,7 +175,7 @@ RED4EXT_C_EXPORT bool RED4EXT_CALL Main(RED4ext::v1::PluginHandle aHandle, RED4e
 		g_runtime = std::format("{}.{}.{}", unsigned(aSdk->runtime->major), aSdk->runtime->minor, aSdk->runtime->patch);
 		static RED4ext::v1::GameState running{ &OnEnter, &OnUpdate, &OnExit };
 		aSdk->gameStates->Add(aHandle, RED4ext::EGameStateType::Running, &running);
-		Log("PhysXProbe 0.1.0 loaded (game {}); F10 or {} triggers a dump", g_runtime, (g_pluginDir / "dump.request").string());
+		Log("PhysXProbe 0.2.0 loaded (game {}); F10 or {} triggers a dump", g_runtime, (g_pluginDir / "dump.request").string());
 		break;
 	}
 	case RED4ext::v1::EMainReason::Unload:
@@ -203,7 +189,7 @@ RED4EXT_C_EXPORT void RED4EXT_CALL Query(RED4ext::v1::PluginInfo* aInfo)
 {
 	aInfo->name = L"PhysXProbe";
 	aInfo->author = L"Cyberpunk-Minecraft";
-	aInfo->version = RED4EXT_V1_SEMVER(0, 1, 0);
+	aInfo->version = RED4EXT_V1_SEMVER(0, 2, 0);
 	aInfo->runtime = RED4EXT_V1_RUNTIME_VERSION_LATEST;
 	aInfo->sdk = RED4EXT_V1_SDK_VERSION_CURRENT;
 }
