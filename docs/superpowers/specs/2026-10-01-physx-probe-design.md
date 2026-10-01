@@ -1,30 +1,37 @@
 # PhysX Probe: design (spike 1)
 
-Date: 2026-10-01. Status: design approved. The spec was revised after a deep review against the RED4ext SDK and
-the PhysX 3.4.2 sources.
+Date: 2026-10-01. Status: revision 2, awaiting review. Revision 1 was approved after a deep review against the
+RED4ext SDK and the PhysX 3.4.2 sources. Revision 2 follows the first in-game runs:
+- **The ABI audit:** `docs/spikes/2026-10-01-physx-abi-audit.md` found that the game's PhysX differs from NVIDIA's
+  public headers in one class.
+- **The crash:** a fault guard can't protect the game, because the game's crash handler fires first.
 
 ## Purpose
 
 This is the first of three spikes that de-risk a SkyCraft-style "play Cyberpunk 2077 as a Minecraft player" mod.
 The mod's collision exporter plays the part of SkyCraft's `skse/src/Collision.cpp`, and it depends on reading
 Cyberpunk's physics world. Cyberpunk ships NVIDIA PhysX 3.4.2 as separate DLLs, and `PhysX3_x64.dll` exports
-`PxGetPhysics`. The probe finds out whether that physics world can be read through NVIDIA's public 3.4.2 headers.
+`PxGetPhysics`. The probe finds out whether that physics world can be read through NVIDIA's 3.4.2 headers,
+corrected where the game's build differs.
 
 It answers three questions:
 
-1. **Compatibility:** do calls made through the public 3.4.2 headers reach the right functions in the game's
-   PhysX build?
+1. **Compatibility:** with the headers corrected by the audit, is the running game the audited PhysX build, and does
+   every object the probe meets belong to a class whose functions the audit verified?
 2. **Coordinates:** are PhysX scene coordinates the game's world coordinates (metres, Z up), with no origin shift?
 3. **Content and cost:** what does the collision around V contain (shape types, collision-filter values,
    triangle counts), and how long does it take to extract?
 
-A clear "no" to question 1 also counts as a result. The collision plan would then switch to ray casts through the
-game's script API, as in SkyCraft's own first stage.
+A "no" to question 1 also counts as a result:
+- **Unaudited classes** in the live world would need auditing too.
+- **A world that can't be read without racing the game's own threads** would move the collision plan to ray casts
+  through the game's script API, as in SkyCraft's own first stage.
 
 ## Non-goals
 
 - No Minecraft side, shared memory, streaming, or per-frame export.
 - No hooks into game functions, and no writes to game or physics state.
+- No automatic dumps. A dump runs only when the user presses F10 or the agent creates the request file.
 - No rendering inside the game.
 - Only game version 2.31 is supported.
 
@@ -36,6 +43,29 @@ game's script API, as in SkyCraft's own first stage.
   so only the string tells 3.4.1 and 3.4.2 apart. It exports `PxGetPhysics`, `PxRegisterCloth` and
   `PxRegisterParticles`. The last two show that `PX_USE_CLOTH_API` and `PX_USE_PARTICLE_SYSTEM_API` are 1. Those
   are also the header defaults, and they matter because they change `PxScene`'s virtual function table.
+- The game's PhysX is a modified 3.4.2. `docs/spikes/2026-10-01-physx-abi-audit.md` compares every class, function
+  and struct the probe uses with the game's DLLs.
+  - **The mismatch:** `PxShape` has one virtual function more than NVIDIA's public headers, a reference-count getter
+    at slot 6, so every later `PxShape` slot is one higher.
+  - **Everything else matches** for the calls the probe makes.
+  - **Scope:** the audit holds for exactly these builds:
+
+  | DLL | PE timestamp | Image size |
+  |---|---|---|
+  | `PhysX3_x64.dll` | 0x64c978b4 | 0x281000 |
+  | `PhysX3Common_x64.dll` | 0x64c978a8 | 0x1f9000 |
+
+- The game's crash handler sees an access violation before any `__try/__except` in a plugin. It writes a crash
+  dump, suspends every other thread and starts `REDEngineErrorReporter`. A plugin that catches the fault and carries
+  on freezes the game; a fault that isn't caught ends in an ordinary crash with a report.
+- `PlayerSystem.GetLocalPlayerMainGameObject` returns a stand-in player from the startup legal screen on, before any
+  save is loaded.
+  - **The stand-in:** at about (0, 3.6, 0), facing −Y, with a camera field of view of 60.
+  - **The physics world then:** one scene with 8 actors.
+  - **No usable "save loaded" signal:** no script function a plugin can reach says whether a save is loaded.
+    `IsPreGame` belongs to `inkISystemRequestsHandler`, which UI game controllers hand out. No game system a plugin
+    can call does. The executable registers `GetSystemRequestsHandler` among the controllers' methods.
+- RED4ext reports the runtime version 2.31 as the SemVer 2.3.1.
 - The game's scripts include every function the probe calls:
   - `PlayerSystem.GetLocalPlayerMainGameObject`;
   - `GetWorldPosition` and `GetWorldForward`;
@@ -48,9 +78,11 @@ game's script API, as in SkyCraft's own first stage.
 ```
 D:\Cyberpunk-Minecraft\
   docs/superpowers/specs/2026-10-01-physx-probe-design.md   this file
+  docs/spikes/2026-10-01-physx-abi-audit.md                 the audit of the game's PhysX DLLs
   extern/RED4ext.SDK/        git submodule (WopsS/RED4ext.SDK), used header-only
   extern/physx-3.4.2/        NVIDIA PhysX 3.4.2 public headers, BSD-3 licence text kept
-                             (PhysX_3.4/Include and PxShared/include only)
+                             (PhysX_3.4/Include and PxShared/include only), with one local change
+                             to match the game (see Build)
   spikes/physx-probe/
     CMakeLists.txt
     CMakePresets.json
@@ -65,6 +97,8 @@ D:\Cyberpunk-Minecraft\
     src/DumpWriter.h, .cpp   the background writer
     src/physx/PxHeaders.h    the PhysX headers in use
     src/physx/Checks.h, .cpp the pure parts of the compatibility check
+    src/physx/GameAbi.h, .cpp the audited build: DLL identities and vtable addresses
+    src/physx/Readable.h, .cpp readable-memory checks
     src/physx/PhysxSession.h, .cpp
     src/physx/ShapeTriangles.h, .cpp
     tests/                   unit tests (a small test program run by ctest)
@@ -88,6 +122,10 @@ small files, each with one job.
     `PxConvexMesh` and other classes, but the probe only calls those through their virtual tables, which needs no
     import. `PX_PHYSX_COMMON_EXPORTS` must not be defined.
   - The built DLL must not import anything from `PhysX3*.dll`, and `dumpbin /imports` is the check for this.
+- `extern/physx-3.4.2/PhysX_3.4/Include/PxShape.h` carries one local change, marked with a comment that cites the
+  audit: `virtual PxU32 getReferenceCount() const = 0;` right after `acquireReference()`. It puts every later
+  `PxShape` method on the game's slot. Any new PhysX call the probe makes must first be checked against the game's
+  DLLs, recorded in the audit, and added to the slot test (see Testing).
 - `CP2077_DIR` is a CMake cache variable, set when configuring (for example `-DCP2077_DIR=E:/Cyberpunk2077`) and
   never committed. When it is set, a post-build step copies `PhysXProbe.dll` to
   `<CP2077_DIR>\red4ext\plugins\PhysXProbe\`.
@@ -103,10 +141,12 @@ small files, each with one job.
 - On load, it registers a `GameState` for `EGameStateType::Running`. RED4ext calls its `OnUpdate` every frame on the
   game's main thread, and ignores its return value in the Running state.
 - `OnUpdate` checks the triggers and runs at most one dump per frame, with dumps at least 2 seconds apart.
-- There are three triggers:
+- There are two triggers:
   - **F10:** edge-detected with `GetAsyncKeyState`, and only while the foreground window belongs to the game's process.
   - **Request file:** `dump.request` in the plugin folder, checked once a second and deleted when the dump starts.
-  - **Automatic:** one dump 10 seconds after V is first found, once per game launch.
+- There is no automatic trigger. Revision 1 had one, 10 seconds after V was first found, but it fired on the
+  stand-in player during the startup legal screen. No signal a plugin can reach would hold it back until a save is
+  loaded (see Environment), and a timed dump could also land mid-load, while the world is changing fastest.
 - A trigger that fires while the previous dump's files are still being written is ignored, and a log line says so.
 - The plugin finds its own folder from its module handle.
 - Only the main thread writes log lines, through RED4ext's logger.
@@ -122,41 +162,99 @@ small files, each with one job.
     The main object is always V, whereas the "controlled" object can be a car or a hacked camera.
   - **The camera:** `CameraSystem.GetActiveCameraWorldTransform()` gives the position,
     `GetActiveCameraForward()` the view direction, and `GetActiveCameraFOV()` the field of view.
-- It returns nothing when the engine, the game instance, the player system or V isn't available, as on the main
-  menu or during loading. The camera part is optional; without it, the render falls back to a point 1.7 m above V's
-  feet, looking along V's forward.
+- It returns nothing when the engine, the game instance, the player system or V isn't available, which happens
+  only very early in startup. From the legal screen on, it finds the stand-in player (see Environment), and the probe
+  doesn't try to tell the stand-in from V: a dump at the main menu reads the small startup world, which is harmless
+  and makes a good first test. The camera part is optional; without it, the render falls back to a point 1.7 m above
+  V's feet, looking along V's forward.
 - `PlayerPose { Vec3d feet; Vec3f forward; std::optional<CameraPose> camera; }`, with
   `CameraPose { Vec3d position; Vec3f forward; float fov; }`. All of these are in world coordinates (metres, Z up).
 
 ### `physx/PhysxSession` (reusable)
 
-This is the only code that touches PhysX. Every PhysX call goes through a small `__try`/`__except` helper, kept in
-functions that own no C++ objects needing unwinding. A fault ends the current operation with an error and never
-reaches the game. All scene reads during a dump happen between `lockRead` and `unlockRead` on that scene.
+This is the only code that touches PhysX. It doesn't catch faults, because in this game catching one freezes the
+game (see Environment). It avoids them instead, with three rules:
+
+1. **Check before use:** before it calls anything on a PhysX object, it checks two things:
+   - The bytes it reads straight from the object are readable (`Readable`). That's the vtable pointer, plus for
+     `PxBase` objects the type ID, and for actors `userData`: at most the first 24 bytes.
+   - The vtable pointer is one of the audited tables for the class it expects (`GameAbi`).
+
+   An object that fails either check is skipped and counted, and nothing is ever called on it.
+2. **Audited calls only:** it calls only the methods listed in the audit. Because the object's table is known,
+   each call reaches the function the audit verified.
+3. **Range-check raw memory:** every raw array it reads is checked for readability over its whole length first:
+   mesh vertices and indices, convex index buffers, heightfield samples and actor names.
+
+All scene reads during a dump happen between `lockRead` and `unlockRead` on that scene.
 
 - `Open()`:
-  1. Calls `GetModuleHandleW(L"PhysX3_x64.dll")`.
-  2. Reads the module's version resource: both the binary FILEVERSION field and the "FileVersion" string.
+  1. Finds `PhysX3_x64.dll` and `PhysX3Common_x64.dll` with `GetModuleHandleW`.
+  2. Reads each one's PE identity (`GameAbi::ModuleIdentity`) and version resource (both the binary FILEVERSION
+     field and the "FileVersion" string).
   3. Calls `GetProcAddress("PxGetPhysics")`.
   4. Runs the compatibility check below.
 
-  The result is cached for the session.
+  Steps 1–3 of the check describe the build and are cached for the session. Steps 4–7 describe the world, so they
+  run again on every dump: the first dump may read the startup world and a later one the city.
 - `Scenes()` returns the scene pointers.
-- `Census(scene)` walks `getActors(eRIGID_STATIC | eRIGID_DYNAMIC)` and each actor's shapes. It returns counts and
-  tallies without reading any geometry:
+- `Census(scene)` walks `getActors(eRIGID_STATIC | eRIGID_DYNAMIC)`, each actor's shapes, and the mesh each shape
+  references. It returns counts and tallies without reading any vertices:
   - actors by concrete type and by kind, and shapes by geometry type and by flags;
   - tallies of query and simulation filter data, keeping the 64 most common combinations and an "other" count;
   - aggregates (`getNbAggregates`/`getAggregates`), the number of actors inside them, and the number of
     articulations (`getNbArticulations`), since `getActors` never returns articulation links;
-  - how many actors have a name and how many have user data, plus up to 32 distinct actor names. Names are
-    read under the crash guard, cut to 128 characters, and have non-printable bytes replaced.
-  - It also re-checks the concrete type (name and ID) of every object it visits and counts mismatches.
+  - how many actors have a name and how many have user data, plus up to 32 distinct actor names. Names are copied
+    only as far as readable memory goes, cut to 128 characters, and have non-printable bytes replaced.
+  - It checks every object it visits as above, and counts the objects it skips: unreadable ones, and ones whose
+    vtable isn't an audited table. It also checks that each object's type ID, a plain data member, agrees with its
+    audited class, and counts any disagreements as mismatches. After 100 skipped objects it stops reading that scene.
 - `SelectByBounds(scene, box)` keeps the actors whose `PxActor::getWorldBounds()` overlaps the region box.
 - `QueryBox(scene, box)` runs `PxScene::overlap` with a box geometry and the flags
   `eSTATIC | eDYNAMIC | eNO_BLOCK`. It uses a heap-allocated touch buffer of 8192 hits and reports when that buffer
   overflows. The report compares its result with `SelectByBounds`, because the overlap query only sees scene-query
   shapes.
 - `RaycastDown(scene, from, maxDistance)` runs `PxScene::raycast` against static geometry only.
+
+### `physx/GameAbi` (reusable)
+
+- Holds the audited build as data:
+  - for `PhysX3_x64.dll` and `PhysX3Common_x64.dll`, the PE timestamp and image size the audit covers;
+  - the audited concrete vtables, each as a DLL, an RVA, an audited class and, for `PxBase` objects, the
+    `PxConcreteType` ID that class must report:
+
+  | Class | DLL | Vtable RVA | Type ID |
+  |---|---|---|---|
+  | `NpPhysics` | `PhysX3_x64.dll` | 0x20a310 | none |
+  | `NpScene` | `PhysX3_x64.dll` | 0x20caf0 | none |
+  | `NpRigidStatic` | `PhysX3_x64.dll` | 0x20b980 | `eRIGID_STATIC` |
+  | `NpRigidDynamic` | `PhysX3_x64.dll` | 0x20b2e8 | `eRIGID_DYNAMIC` |
+  | `NpAggregate` | `PhysX3_x64.dll` | 0x206e68 | `eAGGREGATE` |
+  | `NpShape` | `PhysX3_x64.dll` | 0x20e9a8 | `eSHAPE` |
+  | `Gu::ConvexMesh` | `PhysX3Common_x64.dll` | 0x1b5200 | `eCONVEX_MESH` |
+  | BV33 triangle mesh | `PhysX3Common_x64.dll` | 0x1b6978 | `eTRIANGLE_MESH_BVH33` |
+  | BV34 triangle mesh | `PhysX3Common_x64.dll` | 0x1b6868 | `eTRIANGLE_MESH_BVH34` |
+  | `Gu::HeightField` | `PhysX3Common_x64.dll` | 0x1b6b18 | `eHEIGHTFIELD` |
+
+- `ModuleIdentity(module)` reads the timestamp and image size from a loaded module's PE header.
+- `AuditedClass(vtablePointer, moduleBases)` returns the audited class a vtable pointer belongs to, or nothing. It
+  only compares numbers, so it's unit-tested without the game.
+- Each place in the probe that receives an object says which classes it accepts:
+  - **the physics object:** `NpPhysics`;
+  - **a scene:** `NpScene`;
+  - **an actor:** `NpRigidStatic` or `NpRigidDynamic`;
+  - **an aggregate:** `NpAggregate`;
+  - **a shape:** `NpShape`;
+  - **a mesh:** one of the four mesh classes, and one that matches the shape's geometry type: a BV33 or BV34 mesh
+    for a triangle mesh, `Gu::ConvexMesh` for a convex mesh, `Gu::HeightField` for a heightfield.
+
+### `physx/Readable` (reusable)
+
+- `Readable(address, size)` is true when every byte of the range is committed memory whose protection allows
+  reading and that isn't a guard page. It asks `VirtualQuery` region by region, so a range may span regions. A null
+  or wrapping range is never readable.
+- The regions it has seen are cached for one dump. That keeps checking hundreds of thousands of objects cheap, and
+  the cache is cleared at the start of every dump.
 
 ### `physx/ShapeTriangles` (reusable)
 
@@ -232,8 +330,8 @@ reaches the game. All scene reads during a dump happen between `lockRead` and `u
 ## One dump, step by step
 
 1. `PlayerLocator::Locate()`. If there's no player, it logs "no player" and stops.
-2. `PhysxSession::Open()`. This runs the compatibility check on the first dump only. On a failure it writes the
-   report and stops, without reading any geometry.
+2. The compatibility check: steps 1–3 on the first dump only, steps 4–7 on every dump (see `Open()`). On a failure
+   it writes the report and stops, without reading any geometry.
 3. For each scene, under its read lock:
    1. `Census`.
    2. The region work. The region box is centred on V's feet plus (0, 0, 8), with half-extents (32, 32, 24) m,
@@ -250,29 +348,32 @@ The census, region selection, overlap query, triangle extraction and the whole m
 
 The steps run in order and stop at the first failure, which the report names.
 
-1. `PhysX3_x64.dll` is loaded, and the "FileVersion" string of its version resource is 3.4.2.x. The binary field
-   can't decide this (see Environment), so the step reports it but doesn't check it.
-2. The `PxGetPhysics` export exists. It returns a non-null pointer to committed, readable memory, checked with
-   `VirtualQuery`.
-3. `PxPhysics::getTolerancesScale()` returns a length between 0.01 and 100 and a speed between 0.1 and 1000.
-4. `getNbScenes()` is between 1 and 16, and `getScenes()` fills that many non-null pointers.
-5. Every scene's gravity is finite with a magnitude of at most 100, and every scene has at most 10,000,000 actors
-   (`getNbActors(static | dynamic)`). At least one scene has a gravity magnitude between 1 and 30, and −Z is the
-   expected direction. Gravity is recorded for every scene.
-6. This is the decisive step. In each scene, it checks the first 64 actors. It then keeps going, up to 10,000 actors
-   per scene, until it has also checked at least one triangle mesh, one heightfield and one convex mesh, or runs
-   out of actors. For every actor, shape and referenced mesh it checks, two things must hold:
-   - `getConcreteTypeName()` returns one of the 3.4.2 names: `PxRigidStatic`, `PxRigidDynamic`, `PxArticulation`,
-     `PxArticulationLink`, `PxShape`, `PxMaterial`, `PxConvexMesh`, `PxHeightField`, `PxBVH33TriangleMesh`,
-     `PxBVH34TriangleMesh`, `PxAggregate`, `PxConstraint`, `PxCloth`, `PxClothFabric`, `PxParticleSystem`,
-     `PxParticleFluid` or `PxPruningStructure`.
-   - `getConcreteType()` agrees with the name. That is a non-virtual read of a data member, so it checks the object
-     layout as well as the virtual table.
-7. For the shapes checked in step 6, each shape's `getGeometryType()` matches the concrete type of the mesh it
-   references. For example, a triangle-mesh geometry must reference a `PxBVH33TriangleMesh` or
-   `PxBVH34TriangleMesh`.
+Revision 1 checked type names instead. That check passed while, because of the `PxShape` slot shift, the probe was
+calling setters. Names can't reveal a shifted vtable; the identity of the build and of each object's vtable can.
 
-After that, the census re-checks every object it visits (see `Census`). Any mismatch there also fails compatibility.
+1. **The build.** `PhysX3_x64.dll` and `PhysX3Common_x64.dll` are both loaded, and each one's PE timestamp and image
+   size match the audited build (see Environment). Both version-resource fields are recorded but not checked.
+2. **The physics object.** The `PxGetPhysics` export exists. It returns a pointer whose first 8 bytes are readable,
+   and whose vtable is the audited `NpPhysics` table. `PxGetPhysics` itself is the only function the probe calls
+   before this check.
+3. **Tolerances.** `PxPhysics::getTolerancesScale()` returns a length between 0.01 and 100 and a speed between 0.1
+   and 1000.
+4. **Scenes.** `getNbScenes()` is between 1 and 16, and `getScenes()` fills that many pointers, each readable and
+   with the audited `NpScene` vtable.
+5. **Gravity and counts.** Every scene's gravity is finite with a magnitude of at most 100, and every scene has at
+   most 10,000,000 actors (`getNbActors(static | dynamic)`). At least one scene has a gravity magnitude between 1 and
+   30, and −Z is the expected direction. Gravity is recorded for every scene.
+6. **Objects.** In each scene, it checks the first 64 actors. It then keeps going, up to 10,000 actors per scene,
+   until it has also checked at least one triangle mesh, one heightfield and one convex mesh, or runs out of actors.
+   For every actor, shape and referenced mesh, two things must hold:
+   - the object is readable and its vtable is an audited table of an accepted class (see `GameAbi`);
+   - `getConcreteType()`, a non-virtual read of a data member, returns that class's type ID. This checks the object's
+     data layout as well as its vtable.
+7. **Geometry and meshes.** For the shapes checked in step 6, each shape's `getGeometryType()` matches the class of
+   the mesh it references. For example, a triangle-mesh geometry must reference a BV33 or BV34 triangle mesh.
+
+After that, the census checks every object it visits (see `Census`). Every skip and every mismatch there is counted
+and reported, and the in-game pass criteria require both counts to be zero.
 
 ## Coordinate check
 
@@ -289,10 +390,17 @@ After that, the census re-checks every object it visits (see `Census`). Any mism
 
 ```json
 {
-  "probeVersion": "0.1.0",
+  "probeVersion": "0.2.0",
   "time": "2026-10-01T12:34:56",
-  "trigger": "auto | hotkey | request",
-  "game": { "runtime": "2.31.0", "physxFileVersion": "3.4.2.0" },
+  "trigger": "hotkey | request",
+  "game": {
+    "runtime": "2.3.1",
+    "physxFileVersion": "3.4.2.0",
+    "modules": [
+      { "name": "PhysX3_x64.dll", "timestamp": "0x64c978b4", "imageSize": "0x281000", "audited": true },
+      { "name": "PhysX3Common_x64.dll", "timestamp": "0x64c978a8", "imageSize": "0x1f9000", "audited": true }
+    ]
+  },
   "player": {
     "feet": [0.0, 0.0, 0.0],
     "forward": [0.0, 1.0, 0.0],
@@ -300,7 +408,8 @@ After that, the census re-checks every object it visits (see `Census`). Any mism
   },
   "compatibility": {
     "pass": true,
-    "steps": [ { "step": 1, "name": "module", "pass": true, "detail": "..." } ],
+    "steps": [ { "step": 1, "name": "build", "pass": true, "detail": "..." } ],
+    "censusSkipped": 0,
     "censusMismatches": 0
   },
   "scenes": [ {
@@ -316,6 +425,8 @@ After that, the census re-checks every object it visits (see `Census`). Any mism
     "queryFilter": { "w0:w1:w2:w3": 0, "other": 0 },
     "simulationFilter": { "w0:w1:w2:w3": 0, "other": 0 },
     "namedActors": 0, "actorsWithUserData": 0, "actorNameSamples": [ "..." ],
+    "skipped": { "unreadable": 0, "unauditedVtable": 0 },
+    "mismatches": 0,
     "censusMs": 0.0
   } ],
   "region": {
@@ -323,23 +434,31 @@ After that, the census re-checks every object it visits (see `Census`). Any mism
     "boundsSelectedActors": 0, "overlapHits": 0, "overlapOverflow": false,
     "selectMs": 0.0, "overlapMs": 0.0, "extractMs": 0.0,
     "triangles": 0, "trianglesByCategory": { "static_trimesh": 0 },
-    "skipped": { "plane": 0 }, "triangleCapHit": false
+    "skipped": { "plane": 0, "unknownGeometry": 0, "badTriangles": 0, "unreadable": 0 }, "triangleCapHit": false
   },
   "coordinateCheck": { "rayHit": true, "hitDistance": 1.8, "pass": true, "nearestCapsule": null },
   "mainThreadPauseMs": 0.0,
-  "faults": 0,
   "files": { "obj": "collision.obj", "mtl": "collision.mtl" }
 }
 ```
 
-`player.camera` is `null` when the camera couldn't be read.
+- `player.camera` is `null` when the camera couldn't be read.
+- The census's skips are split into objects whose memory wasn't readable and objects whose vtable isn't an audited
+  table; `compatibility.censusSkipped` and `censusMismatches` sum them over the scenes.
+- In the region, `skipped.unreadable` counts shapes whose mesh data failed the range check.
+- Revision 1's `faults` count is gone, because nothing is caught any more. `probeVersion` is 0.2.0 from revision 2
+  on, and the load log line shows the same version.
 
 ## Error handling
 
 - **No player:** log and skip.
 - **Compatibility failure:** the report is written with the failing step. No geometry is read and no OBJ is written.
-- **Fault during the census or extraction:** that operation stops, partial results are kept, the fault is counted,
-  and the report is still written.
+- **An object fails its check** (unreadable, or a vtable that isn't audited): the object is skipped and counted,
+  nothing is called on it, and the dump carries on. After 100 skipped objects in a scene, the probe stops reading
+  that scene.
+- **Mesh data fails its range check:** that shape's triangles are skipped and counted.
+- **A fault anyway:** the probe has no guard, so a fault would crash the game with the game's own crash report. That
+  is better than revision 1's guard, which turned a fault into a frozen game.
 - **Overlap buffer overflow:** recorded. Extraction uses the bounds selection either way.
 - **Triangle cap reached:** recorded in the report.
 - **Previous dump still being written:** the trigger is ignored and logged.
@@ -347,7 +466,19 @@ After that, the census re-checks every object it visits (see `Census`). Any mism
 
 ## Safety
 
-- The probe is read-only: it never writes to PhysX or game state.
+- **The probe is read-only, and the design makes that hold:**
+  - it calls only getters whose slots the audit verified in the game's DLLs;
+  - it calls them only on objects whose vtables are audited tables;
+  - it makes no calls at all unless the running DLLs are the audited build.
+
+  Revision 1 broke this without knowing. Its `PxShape` calls landed one slot late, so four of its "getters" were
+  setters: `setLocalPose`, `setSimulationFilterData`, `setQueryFilterData` and `setFlags`.
+- **New calls:** a PhysX call is added only after it has been checked against the game's DLLs, recorded in the
+  audit, and added to the slot test.
+- **No guard:** the probe doesn't catch faults, because the game's crash handler makes catching them worse than
+  crashing (see Environment).
+- **When it runs:** a dump runs only when the user presses F10 or the agent creates the request file. Neither should
+  happen during a loading screen, while the world is changing fastest.
 - Between dumps it costs one key check per frame and one file check per second.
 - During a dump, holding a scene's read lock briefly pauses any game thread that wants to change that scene.
 - Installing it means one folder, `E:\Cyberpunk2077\red4ext\plugins\PhysXProbe\`, and deleting that folder removes
@@ -373,37 +504,56 @@ After that, the census re-checks every object it visits (see `Census`). Any mism
 - `KeepIfTouches` region culling;
 - the OBJ writer's exact output for a small input, including shared vertices;
 - string escaping in the JSON writer;
-- the crash guard, which must survive an access violation and a thrown exception.
+- **the slot test:** for every PhysX call the probe makes, the build calls the slot the audit verified in the game's
+  DLLs. For example, `PxShape::getGeometryType` must go through slot 7 and `getQueryFilterData` through slot 23.
+  - **How it works:** the test builds a fake object whose vtable entries each record their own slot number. It then
+    makes each call through the real headers and checks the recorded number.
+  - **What it catches:** a header change, or a revert of the local `PxShape.h` fix, fails it.
+- `GameAbi`:
+  - the timestamp and image size read from a hand-built PE header;
+  - `AuditedClass` for every audited table, for an address one slot off, and for a module loaded at a different base;
+- `Readable`, on real memory:
+  - a readable buffer;
+  - a `PAGE_NOACCESS` page and a reserved but uncommitted page;
+  - a range that starts readable and runs into an unreadable page;
+  - null and wrapping ranges.
 
 **Renderer tests** (`pytest`): OBJ loading, hidden groups, near-plane clipping, and a wall correctly hiding the floor
 behind it.
 
 **In-game pass criteria:**
-1. All seven compatibility steps pass, and the census finds no mismatches.
+1. All seven compatibility steps pass, and the census skips nothing and finds no mismatches.
 2. The coordinate check passes.
 3. `eye.png` visibly matches a screenshot taken from the same camera pose.
 4. The report contains the census, overlap, extraction and main-thread pause timings.
 
-Triggering on the main menu must log "no player" and do nothing.
-
 **How it's run:**
-1. The user launches the game and loads a save, standing in free roam on the ground somewhere with varied geometry.
-2. The user stands still and leaves the mouse alone, then presses F10 or waits for the automatic dump 10 seconds
-   after loading. Right after the dump, still without moving, the user takes a screenshot.
-3. Further dumps are triggered by creating `dump.request` from the development shell, or with F10.
+1. **The startup world first.** The user launches the game and waits at the main menu. The agent creates
+   `dump.request`. The dump reads the stand-in's small world. It must meet three checks:
+   - every compatibility step passes;
+   - the census skips nothing and finds no mismatches;
+   - the shape flag and filter tallies, empty in revision 1's report, are filled in.
+
+   This tests every new check on a small, stable world before the city.
+2. **Free roam.** The user loads a save and stands in free roam on the ground somewhere with varied geometry. Standing
+   still with the mouse left alone, the user presses F10, then takes a screenshot without moving.
+3. **More dumps.** Further dumps are triggered by creating `dump.request` from the development shell, or with F10,
+   never during a loading screen.
 
 ## Risks
 
-- **CDPR may have modified PhysX:** the check would stop at one of its steps, most likely 6 or 7. That would be a
-  decisive negative result, and collision would move to ray casts through the game's `SpatialQueriesSystem`.
+- **CDPR modified PhysX:** this has happened. The audit found one changed class and corrected the headers for it.
+  Any other build, such as a game patch that touches either PhysX DLL, fails compatibility step 1. The probe then
+  reads nothing until the audit is redone for the new DLLs.
 - **The world may be split:** it could span several scenes, or keep static collision in aggregates. The census
   reports both.
 - **Threading:** reads happen on the main thread while physics may be simulating on worker threads. None of the
   `PxScene` methods the probe uses is marked "not during simulation" in the 3.4.2 headers.
   - If the game doesn't use the read-write lock, a streaming thread could change the actor list mid-read. The
-    crash guards contain this, and the fault and mismatch counts show whether it happens.
+    startup scene doesn't use it (its flags lack `eREQUIRE_RW_LOCK`). The per-object checks catch an object that
+    has been freed and reused, and the skip counts show whether that happens. A fault would now crash the game.
   - If the game does use the lock, and ever holds a write lock while waiting on the main thread, `lockRead` would
     freeze the game. That's unlikely. If a dump ever freezes, the next version reads without the lock.
 - **Streaming:** right after a save loads, collision near V may still be streaming in. Repeated dumps show whether
   the counts settle.
-- **Hotkey clashes:** F10 may be bound by another mod. The request file and the automatic dump don't depend on it.
+- **Hotkey clashes:** F10 may be bound by another mod. The request file doesn't depend on it.
