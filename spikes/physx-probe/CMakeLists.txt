@@ -22,6 +22,7 @@ add_library(probe_core STATIC
 	src/Json.cpp
 	src/physx/ShapeTriangles.cpp
 	src/physx/Checks.cpp
+	src/physx/Readable.cpp
 	src/ObjWriter.cpp
 	src/ReportJson.cpp
 	src/DumpWriter.cpp
@@ -64,6 +65,7 @@ add_executable(probe_tests
 	tests/TestGuard.cpp
 	tests/TestFileVersions.cpp
 	tests/TestAudit.cpp
+	tests/TestReadable.cpp
 )
 target_link_libraries(probe_tests PRIVATE probe_core)
 add_test(NAME probe_tests COMMAND probe_tests)
