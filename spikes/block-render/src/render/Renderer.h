@@ -30,8 +30,8 @@ namespace cpmc
 //   on the same queue, hidden where the copied depth says the game drew something nearer;
 // - predlss (step 3): a list of ours goes into the submission holding the DLSS evaluate's list, just before it. It draws
 //   into the tagged colour, motion vectors and depth, with the frame's jitter, so DLSS takes the blocks for the game's
-//   own. Its barriers start from the state the DLSS list found each buffer in (its first transitions), so the DLSS
-//   lists are watched: tracked from their Reset, while every other list goes untracked.
+//   own. Its barriers start from the state the DLSS list found each buffer in (its first transitions), so every
+//   command list is tracked while this mode is on: the game rotates through too many DLSS lists to watch only those.
 class Renderer : public HookEvents
 {
 public:
@@ -117,6 +117,7 @@ private:
 	void               DrawSections(ID3D12GraphicsCommandList* aList, const CameraFrame& aCamera, uint64_t aCompleted);
 	void               Skip(const std::string& aWhy);
 	void               Fail(const std::string& aWhy);  // logs, and switches drawing off
+	void               ReleaseTracking();               // if predlss asked for it
 	uint64_t           Signal();
 	void               Retire(gpu::ComPtr<ID3D12Resource> aResource);
 	void               ReadTimings(uint32_t aSlot);
@@ -125,6 +126,7 @@ private:
 	std::filesystem::path folder_;
 	mutable std::mutex    mutex_;
 	std::atomic<Mode>     mode_{ Mode::Off };
+	bool                  trackingRequested_ = false;
 
 	float brightness_ = 1.0f;
 	float tolerance_ = 0.0001f;

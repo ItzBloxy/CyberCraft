@@ -71,16 +71,12 @@ bool InstallDetours(const RED4ext::v1::Sdk* aSdk, RED4ext::v1::PluginHandle aHan
 // Listeners, in the order they're called. At most 4; add them all at load.
 void AddListener(HookEvents* aListener);
 
-// Command lists are tracked from their next Reset while any feature asks for it: a frame log or a dump. Tracking costs
-// frame time, so each feature releases its request when it's done.
+// Command lists are tracked from their next Reset while any feature asks for it: a frame log, a dump, or drawing before
+// DLSS. Each feature releases its request when it's done. A list is tracked whole: from a Reset while tracking is on,
+// to its Close.
 void RequestTracking();
 void ReleaseTracking();
 bool Tracking();
-
-// A list to track from its next Reset even while tracking is off: drawing before DLSS names each evaluate's list, the
-// only lists it needs. The last few named stay watched until UnwatchLists.
-void WatchList(const void* aList);
-void UnwatchLists();
 
 // Lists reset while this is on record their passes for the frame log.
 void SetLogging(bool aLogging);

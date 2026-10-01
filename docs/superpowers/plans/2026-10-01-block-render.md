@@ -19284,7 +19284,7 @@ watch's own test goes with it, so there's one test fewer. The version goes to 0.
 - Modify: `src/render/Renderer.h`, `src/render/Renderer.cpp`, `src/hooks/D3D12Hooks.h`, `src/hooks/D3D12Hooks.cpp`,
   `CMakeLists.txt`, `src/Plugin.cpp`
 
-- [ ] **Step 1: Edit `src/render/Renderer.h` to ask for tracking again**
+- [x] **Step 1: Edit `src/render/Renderer.h` to ask for tracking again**
 
 ```cpp
 //   own. Its barriers start from the state the DLSS list found each buffer in (its first transitions), so the DLSS
@@ -19309,7 +19309,7 @@ watch's own test goes with it, so there's one test fewer. The version goes to 0.
 	bool                  trackingRequested_ = false;
 ```
 
-- [ ] **Step 2: Edit `src/render/Renderer.cpp` to ask for tracking in predlss, and stop watching lists**
+- [x] **Step 2: Edit `src/render/Renderer.cpp` to ask for tracking in predlss, and stop watching lists**
 
 ```cpp
 	const Mode mode = aMode == "present" ? Mode::Present : aMode == "predlss" ? Mode::Predlss : Mode::Off;
@@ -19369,7 +19369,7 @@ void Renderer::ReleaseTracking()
 	ReleaseTracking();
 ```
 
-- [ ] **Step 3: Edit `src/hooks/D3D12Hooks.h` to drop the watch**
+- [x] **Step 3: Edit `src/hooks/D3D12Hooks.h` to drop the watch**
 
 ```cpp
 // Command lists are tracked from their next Reset while any feature asks for it: a frame log or a dump. Tracking costs
@@ -19392,7 +19392,7 @@ void ReleaseTracking();
 bool Tracking();
 ```
 
-- [ ] **Step 4: Edit `src/hooks/D3D12Hooks.cpp` to drop the watch**
+- [x] **Step 4: Edit `src/hooks/D3D12Hooks.cpp` to drop the watch**
 
 ```cpp
 #include "log/EventNames.h"
@@ -19491,13 +19491,13 @@ void SetLogging(bool aLogging)
 	                   g_tracking.load() ? "on" : "off");
 ```
 
-- [ ] **Step 5: Delete `src/track/ListWatch.h`**
+- [x] **Step 5: Delete `src/track/ListWatch.h`**
 
-- [ ] **Step 6: Delete `src/track/ListWatch.cpp`**
+- [x] **Step 6: Delete `src/track/ListWatch.cpp`**
 
-- [ ] **Step 7: Delete `tests/TestListWatch.cpp`**
+- [x] **Step 7: Delete `tests/TestListWatch.cpp`**
 
-- [ ] **Step 8: Edit `CMakeLists.txt` to drop the watch, and for the version**
+- [x] **Step 8: Edit `CMakeLists.txt` to drop the watch, and for the version**
 
 ```cmake
 project(BlockRender VERSION 0.5.0 LANGUAGES C CXX)
@@ -19524,7 +19524,7 @@ project(BlockRender VERSION 0.6.0 LANGUAGES C CXX)
 )
 ```
 
-- [ ] **Step 9: Edit `src/Plugin.cpp` for the version**
+- [x] **Step 9: Edit `src/Plugin.cpp` for the version**
 
 ```cpp
 constexpr const char* kVersion = "0.5.0";
@@ -19539,7 +19539,7 @@ constexpr const char* kVersion = "0.6.0";
 	aInfo->version = RED4EXT_V1_SEMVER(0, 6, 0);
 ```
 
-- [ ] **Step 10: Build; it must compile without warnings, and the tests still pass**
+- [x] **Step 10: Build; it must compile without warnings, and the tests still pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -19549,7 +19549,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `104 test(s), 0 failure(s)`: the watch's test is gone.
 
-- [ ] **Step 11: Check the DLL's exports and imports**
+- [x] **Step 11: Check the DLL's exports and imports**
 
 ```bash
 DUMPBIN="/c/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/dumpbin.exe"
@@ -19559,7 +19559,7 @@ B=/d/Cyberpunk-Minecraft/spikes/block-render/build/RelWithDebInfo/BlockRender.dl
 ```
 Expected: exactly `Main`, `Query` and `Supports`, then `D3DCOMPILER_47.dll` and `d3d12.dll`.
 
-- [ ] **Step 12: Commit**
+- [x] **Step 12: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \

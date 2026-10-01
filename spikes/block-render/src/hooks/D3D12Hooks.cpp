@@ -6,7 +6,6 @@
 #include "hooks/Submission.h"
 #include "hooks/VtablePatch.h"
 #include "log/EventNames.h"
-#include "track/ListWatch.h"
 
 #include <d3d12sdklayers.h>
 #include <wrl/client.h>
@@ -35,7 +34,6 @@ Originals                    g_original;
 VtablePatcher                g_patcher;
 ViewRegistry                 g_views;
 StateTracker                 g_tracker;
-ListWatch                    g_watch;                // lists tracked even while tracking is off
 std::atomic<int>             g_listsRecording{ 0 };  // tracked lists between their Reset and their Close
 std::array<HookEvents*, 4>   g_listeners{};
 size_t                       g_listenerCount = 0;
@@ -89,11 +87,11 @@ ListState* Tracked(void* aList)
 	return state && state->Recording() ? state : nullptr;
 }
 
-// The list's state, if the list hooks are on and the list is tracked: every list while tracking is on, and the
-// watched ones while it's off.
+// The list's state, if the list hooks are on and the list is tracked: lists Reset while tracking is on, until their
+// Close.
 ListState* Recording(void* aList)
 {
-	if (!HookGroupOn(HookGroup::Lists) || (!g_tracking.load(std::memory_order_relaxed) && !g_watch.Contains(aList)))
+	if (!HookGroupOn(HookGroup::Lists))
 	{
 		return nullptr;
 	}
@@ -279,7 +277,7 @@ void STDMETHODCALLTYPE ExecuteCommandLists(ID3D12CommandQueue* aQueue, UINT aCou
 HRESULT STDMETHODCALLTYPE Reset(ID3D12GraphicsCommandList* aList, ID3D12CommandAllocator* aAllocator, ID3D12PipelineState* aState)
 {
 	const HRESULT result = g_original.reset(aList, aAllocator, aState);
-	if (SUCCEEDED(result) && HookGroupOn(HookGroup::Lists) && (g_tracking.load(std::memory_order_relaxed) || g_watch.Contains(aList)))
+	if (SUCCEEDED(result) && HookGroupOn(HookGroup::Lists) && g_tracking.load(std::memory_order_relaxed))
 	{
 		ListState& state = g_tracker.ForReset(aList);
 		if (!state.Recording())
@@ -293,11 +291,11 @@ HRESULT STDMETHODCALLTYPE Reset(ID3D12GraphicsCommandList* aList, ID3D12CommandA
 
 HRESULT STDMETHODCALLTYPE Close(ID3D12GraphicsCommandList* aList)
 {
-	// Every tracked list ends here, even one that tracking or the list hooks have let go of since its Reset, so the
-	// count of lists recording stays right.
+	// Every tracked list ends here, even one the list hooks have let go of since its Reset, so the count of lists
+	// recording stays right.
 	if (ListState* state = Tracked(aList))
 	{
-		if (Recording(aList))
+		if (HookGroupOn(HookGroup::Lists))
 		{
 			Each([&](HookEvents& aListener) { aListener.OnPassEnd(aList, *state, true); });
 			Each([&](HookEvents& aListener) { aListener.OnClose(aList, *state); });
@@ -838,16 +836,6 @@ void SetLogging(bool aLogging)
 	g_logging = aLogging;
 }
 
-void WatchList(const void* aList)
-{
-	g_watch.Add(aList);
-}
-
-void UnwatchLists()
-{
-	g_watch.Clear();
-}
-
 void PatchLateDevice(ID3D12Device* aDevice)
 {
 	if (aDevice && !g_device.load())
@@ -1040,10 +1028,10 @@ std::vector<std::string> DebugMessages()
 
 std::string Summary()
 {
-	return std::format("device {}, {} vtable entries, present {}, main queue {}, tracking {}, {} lists watched",
+	return std::format("device {}, {} vtable entries, present {}, main queue {}, tracking {}",
 	                   g_device.load() ? (g_seenAtCreation.load() ? "seen at creation" : "patched late") : "not seen",
 	                   g_patcher.Count(), g_original.present ? "patched" : "not patched", g_mainQueue.load() ? "known" : "unknown",
-	                   g_tracking.load() ? "on" : "off", g_watch.Count());
+	                   g_tracking.load() ? "on" : "off");
 }
 
 size_t PatchedEntries()
