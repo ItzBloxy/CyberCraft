@@ -19630,7 +19630,7 @@ cd /d/Cyberpunk-Minecraft && git add docs/spikes \
 **Files:**
 - Modify: `docs/superpowers/plans/2026-10-01-block-render.md` (this plan)
 
-- [ ] **Step 1: Add "How Part 2 went" to this plan**
+- [x] **Step 1: Add "How Part 2 went" to this plan**
 
 Add a section after Task 52, as Part 1's closed it. Cover:
 - what Tasks 44, 47, 49 and 51 found, and Tasks 45, 46, 48 and 50's fixes;
@@ -19642,7 +19642,7 @@ Add a section after Task 52, as Part 1's closed it. Cover:
   - the stencil value, and whether blocks must write motion vectors;
   - what the hooks cost now, and what tracking costs, for the tracking step 4 needs.
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add docs/superpowers/plans \
@@ -19655,3 +19655,58 @@ cd /d/Cyberpunk-Minecraft && git add docs/superpowers/plans \
 Use superpowers:writing-plans to write Part 3's tasks (spec step 4) from what steps 1 to 3 found, as Tasks 53 on in
 this plan. As in Parts 1 and 2, compile and test their code in a scratch clone first, and replay the tasks before
 committing.
+
+### How Part 2 went (2026-10-02)
+
+`docs/spikes/2026-10-01-block-render-results.md` has the results. In short:
+- **Tasks 35 to 43** ran as written, offline (0.3.0): 101 C++ tests and 22 Python tests, no warnings, and the same
+  three exports.
+- **Run 4 (Task 44) passed step 3:**
+  - before the DLSS list, every tagged buffer was in a plain state: the colour in 0x8, the motion vectors and the
+    depth in 0xC0. So `predlss` always knew where to start, and the fallback (drawing inside the DLSS list, then
+    `StateTracker::Restore`) wasn't needed;
+  - `exposure` 2.5, `jittersign` 1 and `mvsign` 1 were settled live;
+  - the blocks sat under the HUD and the menus, steady and without trails, hiding and hidden both ways, and 100,000
+    of them cost 0.03 ms of GPU time.
+
+  But BlockRender doubled the frame time, even with drawing off: 26.5 ms against 13.6 ms without it.
+- **Finding that cost:** Tasks 45 and 46 (0.4.0) added a switch for each group of hooks, and made tracking free while
+  it's off. Run 5 (Task 47) switched the groups off in turn, and the Streamline hooks held the cost: their
+  readability checks asked `VirtualQuery`, which walks the game's heaps of gigabytes, 12 ms a frame. Task 48 (0.5.0)
+  answers pages in the working set with `QueryWorkingSetEx` instead.
+- **Run 6 (Task 49):** 13.5 ms idle, against 13.6 ms without BlockRender. But Task 46 had also made `predlss` watch
+  only the last four DLSS lists, and the game rotates through more: turning fast skipped 0 to 2 frames a second, a
+  flicker. Task 50 (0.6.0) tracks every list again, which costs about 0.1 ms.
+- **Run 7 (Task 51):** three minutes of fast turns skipped no frame, and the user saw no flicker. Four frame logs then
+  showed when the camera arrives, and where the G-buffer ends (below).
+
+**Amendments along the way:**
+- **New tasks:** Tasks 45 to 51 were added after runs 4, 5 and 6, as above. Closing Part 2 moved from Task 45 to
+  Task 52.
+- **Skipped steps:** run 5 skipped Task 47's steps 6 and 7, drawing before DLSS and 10,000 blocks, because the cost
+  it had just found would have swamped them. Task 49 measured both after the fix.
+- **A change undone:** Task 46's watch of the DLSS lists, which Task 50 removed.
+
+**What step 3's runs decide for step 4:**
+- **Where blocks go into the G-buffer:** just before the one-list submission that ends it. Two submissions (10 and 7
+  lists) draw the G-buffer; then that list moves the normals, material values, motion and depth to 0x40. A second
+  queue submits within 0.12 ms of that move, likely reading the G-buffer, so blocks must be in before it.
+- **The states there:** every target is a render target (0x4), and the depth is writable (0x10), so our list needs no
+  barriers. It goes into that submission before the game's list, as step 3's goes before the DLSS list.
+- **Finding that list:** every list is tracked, so its transitions are known when it's submitted. It's the first list
+  after the G-buffer's draws to move the normals from 0x4 to 0x40.
+- **The camera:** with the fixed hooks, Streamline's constants came about 2 ms before the G-buffer's first submission
+  in every frame logged. The game doesn't wait for them, so step 4 counts the frames where they come late, and skips
+  those.
+- **The encoding:**
+  - **base colour:** sRGB-encoded, as the atlas already is;
+  - **normals:** world space, as n × 0.5 + 0.5, with z up;
+  - **material values:** what run 3's dump found for dirt is metalness 0, roughness about 0.85, B 0.33 and A 0.
+- **The stencil:** a class for each kind of surface, with buildings at 0x00. Which class blocks get, step 4's run
+  settles live, as step 3's run settled `exposure`.
+- **Motion vectors:** only some G-buffer lists draw into the motion target, likely the moving objects, so the game
+  likely fills in the camera's motion for the rest. If it does, static blocks need none. Step 4's run checks for
+  trails.
+- **Light:** the game lights sunlit ground at about 9 times its linear base colour, so lit blocks will look brighter
+  than step 3's.
+- **Tracking:** step 4 needs every list tracked, as `predlss` does, at about 0.1 ms.
