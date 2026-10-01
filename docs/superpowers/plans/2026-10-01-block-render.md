@@ -16294,7 +16294,7 @@ in run 2's log taken while turning, it matches to within 3e-8, and its transpose
 **Files:**
 - Rewrite: `src/render/Renderer.h`, `src/render/Renderer.cpp`
 
-- [ ] **Step 1: Write `src/render/Renderer.h`**
+- [x] **Step 1: Write `src/render/Renderer.h`**
 
 ```cpp
 #pragma once
@@ -16501,7 +16501,7 @@ private:
 }
 ```
 
-- [ ] **Step 2: Write `src/render/Renderer.cpp`**
+- [x] **Step 2: Write `src/render/Renderer.cpp`**
 
 ```cpp
 #include "render/Renderer.h"
@@ -17640,7 +17640,7 @@ void Renderer::Shutdown()
 }
 ```
 
-- [ ] **Step 3: Build; it must compile without warnings, and the tests still pass**
+- [x] **Step 3: Build; it must compile without warnings, and the tests still pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -17650,7 +17650,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `101 test(s), 0 failure(s)`.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
