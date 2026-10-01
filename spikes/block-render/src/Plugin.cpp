@@ -9,6 +9,7 @@
 #include "Requests.h"
 #include "Status.h"
 #include "hooks/D3D12Hooks.h"
+#include "hooks/HookGroups.h"
 #include "hooks/StreamlineHooks.h"
 #include "log/Dumps.h"
 #include "log/FrameLog.h"
@@ -158,6 +159,17 @@ void Set(const cpmc::Request& aRequest)
 		g_world.MarkAllDirty();
 		return Report(std::format("set ao {}", g_meshOptions.ambientOcclusion ? 1 : 0));
 	}
+	if (aRequest.what.starts_with("hooks."))
+	{
+		const std::string_view               name = std::string_view(aRequest.what).substr(6);
+		const std::optional<cpmc::HookGroup> group = cpmc::HookGroupNamed(name);
+		if (!group)
+		{
+			return Report(std::format("set: there's no hook group called \"{}\": they're lists, views, submit, present and sl", name));
+		}
+		cpmc::SetHookGroup(*group, aRequest.number != 0.0);
+		return Report(std::format("set {} {}: {}", aRequest.what, aRequest.number != 0.0 ? 1 : 0, cpmc::HookGroupsSummary()));
+	}
 	if (aRequest.what == "tracking")
 	{
 		const bool hold = aRequest.number != 0.0;
@@ -291,8 +303,8 @@ void WriteStatus()
 	const uint64_t tokens = cpmc::slhooks::FrameTokens();
 	report.streamlineFrames = uint32_t(tokens - g_lastFrameTokens);
 	g_lastFrameTokens = tokens;
-	report.hooks = g_hooked ? std::format("{}; {}; log {}; dump {}", cpmc::slhooks::Summary(), cpmc::d3d::Summary(), g_frameLog->State(),
-	                                      g_dumps->State())
+	report.hooks = g_hooked ? std::format("{}; {}; {}; log {}; dump {}", cpmc::slhooks::Summary(), cpmc::d3d::Summary(),
+	                                      cpmc::HookGroupsSummary(), g_frameLog->State(), g_dumps->State())
 	                        : "not installed (see red4ext\\logs)";
 	report.lastRequest = g_lastRequest;
 	report.structures = g_structures;

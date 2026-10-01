@@ -17990,7 +17990,7 @@ are for measuring, not for leaving off.
 - Create: `src/hooks/HookGroups.h`, `src/hooks/HookGroups.cpp`, `tests/TestHookGroups.cpp`
 - Modify: `CMakeLists.txt`, `src/hooks/D3D12Hooks.cpp`, `src/hooks/StreamlineHooks.cpp`, `src/Plugin.cpp`
 
-- [ ] **Step 1: Write the failing test, `tests/TestHookGroups.cpp`**
+- [x] **Step 1: Write the failing test, `tests/TestHookGroups.cpp`**
 
 ```cpp
 #include "Harness.h"
@@ -18023,7 +18023,7 @@ TEST(HookGroupsSwitchOffAndOnAgain)
 }
 ```
 
-- [ ] **Step 2: Edit `CMakeLists.txt` to add the test**
+- [x] **Step 2: Edit `CMakeLists.txt` to add the test**
 
 ```cmake
 	tests/TestPredlss.cpp
@@ -18035,7 +18035,7 @@ TEST(HookGroupsSwitchOffAndOnAgain)
 )
 ```
 
-- [ ] **Step 3: Build; it must fail**
+- [x] **Step 3: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -18044,7 +18044,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `error C1083: Cannot open include file: 'hooks/HookGroups.h'`.
 
-- [ ] **Step 4: Write `src/hooks/HookGroups.h`**
+- [x] **Step 4: Write `src/hooks/HookGroups.h`**
 
 ```cpp
 #pragma once
@@ -18074,7 +18074,7 @@ std::string              HookGroupsSummary();             // "all hooks on", or 
 }
 ```
 
-- [ ] **Step 5: Write `src/hooks/HookGroups.cpp`**
+- [x] **Step 5: Write `src/hooks/HookGroups.cpp`**
 
 ```cpp
 #include "hooks/HookGroups.h"
@@ -18127,7 +18127,7 @@ std::string HookGroupsSummary()
 }
 ```
 
-- [ ] **Step 6: Edit `CMakeLists.txt` to add the source**
+- [x] **Step 6: Edit `CMakeLists.txt` to add the source**
 
 ```cmake
 	src/render/Predlss.cpp
@@ -18139,7 +18139,7 @@ std::string HookGroupsSummary()
 )
 ```
 
-- [ ] **Step 7: Build and run the tests; they must pass**
+- [x] **Step 7: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -18149,7 +18149,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `103 test(s), 0 failure(s)`.
 
-- [ ] **Step 8: Edit `src/hooks/D3D12Hooks.cpp` to let each group pass straight through**
+- [x] **Step 8: Edit `src/hooks/D3D12Hooks.cpp` to let each group pass straight through**
 
 ```cpp
 #include "hooks/D3D12Hooks.h"
@@ -18263,7 +18263,7 @@ HRESULT STDMETHODCALLTYPE Present1(IDXGISwapChain1* aSwapChain, UINT aSyncInterv
 	if ((aFlags & DXGI_PRESENT_TEST) == 0 && HookGroupOn(HookGroup::Present))
 ```
 
-- [ ] **Step 9: Edit `src/hooks/StreamlineHooks.cpp` the same way**
+- [x] **Step 9: Edit `src/hooks/StreamlineHooks.cpp` the same way**
 
 ```cpp
 #include "hooks/D3D12Hooks.h"
@@ -18321,7 +18321,7 @@ sl::Result SetTag(const sl::ViewportHandle& aViewport, const sl::ResourceTag* aT
 		++g_evaluates;
 ```
 
-- [ ] **Step 10: Edit `src/Plugin.cpp` for `set hooks.<group>`, and the status**
+- [x] **Step 10: Edit `src/Plugin.cpp` for `set hooks.<group>`, and the status**
 
 ```cpp
 #include "hooks/D3D12Hooks.h"
@@ -18362,7 +18362,7 @@ sl::Result SetTag(const sl::ViewportHandle& aViewport, const sl::ResourceTag* aT
 	                        : "not installed (see red4ext\\logs)";
 ```
 
-- [ ] **Step 11: Build; it must compile without warnings, and the tests still pass**
+- [x] **Step 11: Build; it must compile without warnings, and the tests still pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -18372,7 +18372,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `103 test(s), 0 failure(s)`.
 
-- [ ] **Step 12: Commit**
+- [x] **Step 12: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \

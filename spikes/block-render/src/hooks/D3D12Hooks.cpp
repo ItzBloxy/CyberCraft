@@ -1,5 +1,6 @@
 #include "hooks/D3D12Hooks.h"
 
+#include "hooks/HookGroups.h"
 #include "hooks/Slots.h"
 #include "hooks/StreamlineHooks.h"
 #include "hooks/Submission.h"
@@ -73,9 +74,13 @@ void Each(Fn&& aFn)
 	}
 }
 
-// The list's state, if it's being tracked and is recording.
+// The list's state, if it's being tracked and is recording, and the list hooks are on.
 ListState* Recording(void* aList)
 {
+	if (!HookGroupOn(HookGroup::Lists))
+	{
+		return nullptr;
+	}
 	ListState* state = g_tracker.Find(aList);
 	return state && state->Recording() ? state : nullptr;
 }
@@ -109,6 +114,10 @@ void STDMETHODCALLTYPE CreateRtv(ID3D12Device* aDevice, ID3D12Resource* aResourc
                                  D3D12_CPU_DESCRIPTOR_HANDLE aHandle)
 {
 	g_original.createRtv(aDevice, aResource, aDesc, aHandle);
+	if (!HookGroupOn(HookGroup::Views))
+	{
+		return;
+	}
 	uint32_t mip = 0, plane = 0, slice = 0;
 	if (aDesc)
 	{
@@ -134,6 +143,10 @@ void STDMETHODCALLTYPE CreateDsv(ID3D12Device* aDevice, ID3D12Resource* aResourc
                                  D3D12_CPU_DESCRIPTOR_HANDLE aHandle)
 {
 	g_original.createDsv(aDevice, aResource, aDesc, aHandle);
+	if (!HookGroupOn(HookGroup::Views))
+	{
+		return;
+	}
 	uint32_t mip = 0, slice = 0;
 	if (aDesc)
 	{
@@ -172,7 +185,7 @@ void STDMETHODCALLTYPE CopyDescriptors(ID3D12Device* aDevice, UINT aDestRanges, 
 {
 	g_original.copyDescriptors(aDevice, aDestRanges, aDestStarts, aDestSizes, aSourceRanges, aSourceStarts, aSourceSizes, aType);
 	const auto kind = KindOf(aType);
-	if (!kind)
+	if (!kind || !HookGroupOn(HookGroup::Views))
 	{
 		return;
 	}
@@ -189,7 +202,7 @@ void STDMETHODCALLTYPE CopyDescriptorsSimple(ID3D12Device* aDevice, UINT aCount,
                                              D3D12_CPU_DESCRIPTOR_HANDLE aSource, D3D12_DESCRIPTOR_HEAP_TYPE aType)
 {
 	g_original.copyDescriptorsSimple(aDevice, aCount, aDest, aSource, aType);
-	if (const auto kind = KindOf(aType))
+	if (const auto kind = KindOf(aType); kind && HookGroupOn(HookGroup::Views))
 	{
 		g_views.Copy(*kind, aDest.ptr, aSource.ptr, aCount);
 	}
@@ -199,6 +212,10 @@ void STDMETHODCALLTYPE CopyDescriptorsSimple(ID3D12Device* aDevice, UINT aCount,
 
 void STDMETHODCALLTYPE ExecuteCommandLists(ID3D12CommandQueue* aQueue, UINT aCount, ID3D12CommandList* const* aLists)
 {
+	if (!HookGroupOn(HookGroup::Submit))
+	{
+		return g_original.executeCommandLists(aQueue, aCount, aLists);
+	}
 	if (ID3D12GraphicsCommandList* evaluate = g_evaluateList.load())
 	{
 		for (UINT i = 0; i < aCount; ++i)
@@ -247,7 +264,7 @@ void STDMETHODCALLTYPE ExecuteCommandLists(ID3D12CommandQueue* aQueue, UINT aCou
 HRESULT STDMETHODCALLTYPE Reset(ID3D12GraphicsCommandList* aList, ID3D12CommandAllocator* aAllocator, ID3D12PipelineState* aState)
 {
 	const HRESULT result = g_original.reset(aList, aAllocator, aState);
-	if (SUCCEEDED(result) && g_tracking.load(std::memory_order_relaxed))
+	if (SUCCEEDED(result) && g_tracking.load(std::memory_order_relaxed) && HookGroupOn(HookGroup::Lists))
 	{
 		g_tracker.ForReset(aList).Begin(g_frame.load(std::memory_order_relaxed), g_logging.load(std::memory_order_relaxed));
 	}
@@ -439,7 +456,7 @@ void STDMETHODCALLTYPE Barrier(ID3D12GraphicsCommandList7* aList, UINT32 aGroups
 
 HRESULT STDMETHODCALLTYPE Present(IDXGISwapChain* aSwapChain, UINT aSyncInterval, UINT aFlags)
 {
-	if ((aFlags & DXGI_PRESENT_TEST) == 0)
+	if ((aFlags & DXGI_PRESENT_TEST) == 0 && HookGroupOn(HookGroup::Present))
 	{
 		Each([&](HookEvents& aListener) { aListener.OnPresent(aSwapChain); });
 	}
@@ -448,7 +465,7 @@ HRESULT STDMETHODCALLTYPE Present(IDXGISwapChain* aSwapChain, UINT aSyncInterval
 
 HRESULT STDMETHODCALLTYPE Present1(IDXGISwapChain1* aSwapChain, UINT aSyncInterval, UINT aFlags, const DXGI_PRESENT_PARAMETERS* aParameters)
 {
-	if ((aFlags & DXGI_PRESENT_TEST) == 0)
+	if ((aFlags & DXGI_PRESENT_TEST) == 0 && HookGroupOn(HookGroup::Present))
 	{
 		Each([&](HookEvents& aListener) { aListener.OnPresent(aSwapChain); });
 	}

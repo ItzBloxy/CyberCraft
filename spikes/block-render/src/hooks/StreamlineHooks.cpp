@@ -1,6 +1,7 @@
 #include "hooks/StreamlineHooks.h"
 
 #include "hooks/D3D12Hooks.h"
+#include "hooks/HookGroups.h"
 #include "hooks/ImportPatch.h"
 
 #include <Windows.h>
@@ -69,7 +70,7 @@ uint32_t FrameOf(const sl::FrameToken& aToken)
 sl::Result GetNewFrameToken(sl::FrameToken*& aToken, const uint32_t* aFrameIndex)
 {
 	const sl::Result result = g_getNewFrameToken(aToken, aFrameIndex);
-	if (result == sl::Result::eOk && aToken)
+	if (result == sl::Result::eOk && aToken && HookGroupOn(HookGroup::Streamline))
 	{
 		++g_tokenCalls;
 		const uint32_t frame = FrameOf(*aToken);
@@ -85,6 +86,10 @@ sl::Result GetNewFrameToken(sl::FrameToken*& aToken, const uint32_t* aFrameIndex
 
 sl::Result SetConstants(const sl::Constants& aValues, const sl::FrameToken& aFrame, const sl::ViewportHandle& aViewport)
 {
+	if (!HookGroupOn(HookGroup::Streamline))
+	{
+		return g_setConstants(aValues, aFrame, aViewport);
+	}
 	ReadableMemory memory;
 	const auto     constants = ReadConstants(memory, &aValues);
 	const auto     viewport = ReadViewport(memory, &aViewport);
@@ -107,6 +112,10 @@ sl::Result SetConstants(const sl::Constants& aValues, const sl::FrameToken& aFra
 
 sl::Result SetTag(const sl::ViewportHandle& aViewport, const sl::ResourceTag* aTags, uint32_t aCount, sl::CommandBuffer* aList)
 {
+	if (!HookGroupOn(HookGroup::Streamline))
+	{
+		return g_setTag(aViewport, aTags, aCount, aList);
+	}
 	ReadableMemory     memory;
 	const auto         viewport = ReadViewport(memory, &aViewport);
 	std::vector<SlTag> tags;
@@ -143,7 +152,7 @@ sl::Result SetTag(const sl::ViewportHandle& aViewport, const sl::ResourceTag* aT
 sl::Result EvaluateFeature(sl::Feature aFeature, const sl::FrameToken& aFrame, const sl::BaseStructure** aInputs, uint32_t aCount,
                            sl::CommandBuffer* aList)
 {
-	if (aFeature == sl::kFeatureDLSS)
+	if (aFeature == sl::kFeatureDLSS && HookGroupOn(HookGroup::Streamline))
 	{
 		++g_evaluates;
 		ReadableMemory     memory;
