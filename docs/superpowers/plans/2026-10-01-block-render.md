@@ -14221,7 +14221,7 @@ cd /d/Cyberpunk-Minecraft && git add spikes/block-render/tools \
 **Files:**
 - Modify: `docs/superpowers/plans/2026-10-01-block-render.md` (this plan)
 
-- [ ] **Step 1: Add "How Part 1 went" to this plan**
+- [x] **Step 1: Add "How Part 1 went" to this plan**
 
 Add a section after Task 34, as spike 1's plan did after its in-game task. Cover:
 - what Tasks 29, 30 and 32 found, and Tasks 28, 31 and 33's fixes;
@@ -14232,7 +14232,7 @@ Add a section after Task 34, as spike 1's plan did after its in-game task. Cover
   - where the G-buffer pass is, and its encoding;
   - the barrier API.
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add docs/superpowers/plans \
@@ -14244,3 +14244,59 @@ cd /d/Cyberpunk-Minecraft && git add docs/superpowers/plans \
 
 Use superpowers:writing-plans to write Part 2's tasks (spec steps 3 and 4) from what step 1 found, as Tasks 35 on in
 this plan. As in Part 1, compile and test their code in a scratch clone first, and replay the tasks before committing.
+
+### How Part 1 went (2026-10-01)
+
+`docs/spikes/2026-10-01-block-render-results.md` has the results. In short:
+- **Tasks 1 to 27** ran as written, offline: 83 C++ tests and 20 Python tests, no warnings, and a DLL exporting
+  exactly `Main`, `Query` and `Supports`.
+- **Run 1, at the main menu,** found two problems, which Task 28 fixed:
+  - the game asks for frame tokens about 8 times a frame, from three threads, so a frame now starts only with a newer
+    frame index;
+  - the swap chain doesn't say which queue it presents on, so the hooks note it when the swap chain is made.
+- **Run 2 (Tasks 29 and 30)** passed step 1, except the G-buffer dump, and passed step 2 once the culling was
+  flipped live. Task 31 (0.2.0) fixed:
+  - **front faces:** the pipeline takes counter-clockwise triangles as front faces, as Minecraft's meshes wind them;
+  - **the G-buffer candidates:** the tagged depth isn't the G-buffer's depth, so they are found by the render size,
+    and each set of targets keeps one copy, recorded again after every pass that draws into it;
+  - **tracking:** it runs only while a log or dump runs, or on request.
+- **Run 3 (Task 32):**
+  - it confirmed the culling fix;
+  - tracking every command list costs nothing measurable;
+  - the G-buffer was dumped and decoded. The viewer crashed on the dump's one-channel targets, which Task 33 fixed.
+
+**Amendments along the way:**
+- **New tasks:** Tasks 28 and 31 to 33 were added after the runs, as above.
+- **The file blocks:** from Task 28 on, the plan's generator put each file's latest version into every task. So Tasks 1
+  to 27 showed code from Tasks 28 and 31 until Task 33 was added. Each task now shows its files as they were when it
+  ran, and the whole plan was replayed again, from scratch.
+- **The expected build failures** in Tasks 2 to 20 said `fatal error C1083`. MSBuild prints `error C1083`, so they now
+  say that. The replay had checked only the header's name until Task 31.
+
+**What step 1's findings decide for steps 3 and 4:**
+- **Where blocks can be drawn before DLSS (step 3):** the DLSS evaluate has a short list of its own, the 4th of 9 in
+  the frame's last main-queue submission. A list of ours can go in just before it, in the same
+  `ExecuteCommandLists`, with nothing recorded into the game's lists. The open question is the state each tagged
+  buffer is in at that point. The frame log counts barriers but doesn't keep them, and the DLSS list records 33 to
+  45 of its own. Part 2 settles it before drawing there. The fallback is drawing inside the DLSS list, at the
+  evaluate, where the tags give the states, followed by `StateTracker::Restore`.
+- **Whether the tagged buffers can be render targets:** yes. All three are 1707×960 and can be bound directly:
+  - the scaling input colour, `R16G16B16A16_FLOAT`, is a render target and a UAV (state 0x8 at the evaluate);
+  - the motion vectors, `R16G16_FLOAT`, are a render target (0xC0);
+  - the depth, `R32_TYPELESS` with a D32 view, allows depth-stencil (0xC0).
+- **Where the G-buffer pass is (step 4):**
+  - **The targets:** `R10G10B10A2_UNORM`, `R10G10B10A2_UNORM` and `R8G8B8A8_UNORM`, with the
+    `D32_FLOAT_S8X24_UINT` depth and its stencil.
+  - **The lists:** the pass is recorded as 12 parallel lists, sent in 3 main-queue submissions (10, 7 and 2 lists)
+    within about 1 ms, long before the DLSS submission. Some passes also draw a fourth target, `R16G16_FLOAT` motion.
+  - **The same open question:** what state these targets are in at a list boundary after the pass.
+- **Its encoding:**
+  - **target 0:** base colour, which looks gamma-encoded;
+  - **target 1:** world-space normals as n × 0.5 + 0.5, with z up;
+  - **target 2:** material values, likely metalness, roughness, a translucency amount and emission;
+  - **the stencil:** a class for each kind of surface, with buildings at 0x00;
+  - **the alphas:** 0 on ordinary surfaces in all three targets. Screens, signs and windows set some of them.
+
+  Run 3's results have the details.
+- **The barrier API:** legacy `ResourceBarrier` only, and no render passes. So our lists use legacy barriers, and the
+  spec's rule for render passes isn't needed.
