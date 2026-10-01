@@ -80,7 +80,7 @@ bool FrameLog::Arm()
 	tokens_ = 0;
 	names_ = std::make_unique<gpuapi::ListNames>();
 	phase_ = Phase::Armed;
-	d3d::EnableTracking();
+	d3d::RequestTracking();
 	return true;
 }
 
@@ -264,6 +264,7 @@ std::optional<FrameLogData> FrameLog::TakeFinished(const std::string& aVersion, 
 	data_ = {};
 	names_.reset();
 	phase_ = Phase::Idle;
+	d3d::ReleaseTracking();
 
 	data.pluginVersion = aVersion;
 	data.time = aTime;
@@ -281,13 +282,15 @@ std::optional<FrameLogData> FrameLog::TakeFinished(const std::string& aVersion, 
 	device.vtableEntries = d3d::PatchedEntries();
 	device.imports = 4;
 
-	// The G-buffer candidates, against the log's latest depth tag.
-	const void* depth = nullptr;
+	// The G-buffer candidates, at the render size: the log's latest depth tag's.
+	uint64_t width = 0;
+	uint32_t height = 0;
 	for (const LogTag& tag : data.tags)
 	{
-		if (tag.tag.type == sl::kBufferTypeDepth && tag.tag.resource)
+		if (tag.tag.type == sl::kBufferTypeDepth && tag.resource.known)
 		{
-			depth = tag.tag.resource;
+			width = tag.resource.width;
+			height = tag.resource.height;
 		}
 	}
 	for (const LogList& list : data.lists)
@@ -300,7 +303,7 @@ std::optional<FrameLogData> FrameLog::TakeFinished(const std::string& aVersion, 
 				device.unknownHandles += target.view ? 0 : 1;
 			}
 			device.unknownHandles += targets.dsv && !targets.dsv->view ? 1 : 0;
-			if (IsGbufferCandidate(targets, depth))
+			if (IsGbufferCandidate(targets, width, height))
 			{
 				data.gbufferCandidates.push_back({ list.list, pass });
 			}

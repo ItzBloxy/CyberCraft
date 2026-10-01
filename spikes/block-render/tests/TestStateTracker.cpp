@@ -102,21 +102,29 @@ TEST(ListStateFollowsTransitionsAndSplitBarriers)
 	CHECK(!state.StateOf(&resource));  // a new recording forgets
 }
 
-TEST(GbufferCandidatesNeedTheTaggedDepthAndMatchingTargets)
+TEST(GbufferCandidatesNeedThreeTargetsAndADepthAtRenderSize)
 {
-	CHECK(cpmc::IsGbufferCandidate(Gbuffer(9), reinterpret_cast<void*>(9)));
-	CHECK(!cpmc::IsGbufferCandidate(Gbuffer(9), reinterpret_cast<void*>(8)));  // another depth buffer (a mirror)
-	CHECK(!cpmc::IsGbufferCandidate(Gbuffer(9), nullptr));
+	CHECK(cpmc::IsGbufferCandidate(Gbuffer(9), 1707, 960));
+	CHECK(!cpmc::IsGbufferCandidate(Gbuffer(9), 2560, 1440));  // not the render size
+	CHECK(!cpmc::IsGbufferCandidate(Gbuffer(9), 0, 0));        // no depth tag yet
 
 	Targets two = Gbuffer(9);
 	two.rtvs.pop_back();
-	CHECK(!cpmc::IsGbufferCandidate(two, reinterpret_cast<void*>(9)));
+	CHECK(!cpmc::IsGbufferCandidate(two, 1707, 960));
 
 	Targets small = Gbuffer(9);
 	small.rtvs[1] = Target(2, 853, 480);
-	CHECK(!cpmc::IsGbufferCandidate(small, reinterpret_cast<void*>(9)));
+	CHECK(!cpmc::IsGbufferCandidate(small, 1707, 960));
 
 	Targets unknown = Gbuffer(9);
 	unknown.rtvs[2].view.reset();
-	CHECK(!cpmc::IsGbufferCandidate(unknown, reinterpret_cast<void*>(9)));
+	CHECK(!cpmc::IsGbufferCandidate(unknown, 1707, 960));
+
+	Targets noDepth = Gbuffer(9);
+	noDepth.dsv.reset();
+	CHECK(!cpmc::IsGbufferCandidate(noDepth, 1707, 960));
+
+	Targets nullTarget = Gbuffer(9);  // the game's forward passes bind a null target, which has no size
+	nullTarget.rtvs[1] = Target(0, 0, 0);
+	CHECK(!cpmc::IsGbufferCandidate(nullTarget, 1707, 960));
 }

@@ -104,7 +104,8 @@ private:
 	std::unordered_map<void*, std::unique_ptr<ListState>> lists_;
 };
 
-// True when aTargets look like a G-buffer: three or more known render targets the size of the tagged depth, with
-// the tagged depth bound as the depth buffer.
-bool IsGbufferCandidate(const Targets& aTargets, const void* aTaggedDepth);
+// True when aTargets look like a G-buffer: three or more known render targets and a known depth buffer, all
+// aWidth x aHeight, the render size (the tagged depth's). The depth buffer isn't the tagged depth: the game tags a
+// copy of its own.
+bool IsGbufferCandidate(const Targets& aTargets, uint64_t aWidth, uint32_t aHeight);
 }

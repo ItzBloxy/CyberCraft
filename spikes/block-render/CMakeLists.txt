@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.25)
 
-project(BlockRender VERSION 0.1.0 LANGUAGES C CXX)
+project(BlockRender VERSION 0.2.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -40,6 +40,7 @@ add_library(render_core STATIC
 	src/render/Shaders.cpp
 	src/Status.cpp
 	src/log/EventNames.cpp
+	src/render/Pipeline.cpp
 )
 target_link_libraries(render_core PUBLIC render_settings d3dcompiler dxguid)
 

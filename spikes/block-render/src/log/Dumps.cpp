@@ -5,6 +5,7 @@
 #include "log/DdsWriter.h"
 #include "log/FrameLogData.h"
 
+#include <algorithm>
 #include <format>
 #include <fstream>
 
@@ -12,7 +13,7 @@ namespace cpmc
 {
 namespace
 {
-constexpr int kMaxCandidates = 4;
+constexpr size_t kMaxGroups = 4;
 
 bool WriteFile(const std::filesystem::path& aPath, const void* aData, size_t aSize)
 {
@@ -45,12 +46,11 @@ bool Dumps::Arm(std::string_view aWhat, std::string& aError)
 	{
 		what_.insert(std::string(aWhat));
 	}
+	groups_.clear();
 	copies_.clear();
-	lists_.clear();
 	errors_.clear();
-	candidates_ = 0;
 	phase_ = Phase::Armed;
-	d3d::EnableTracking();
+	d3d::RequestTracking();
 	return true;
 }
 
@@ -84,30 +84,34 @@ void Dumps::OnFrameToken(uint32_t aFrame)
 
 void Dumps::OnTags(uint32_t, uint32_t, const std::vector<SlTag>& aTags, void*)
 {
-	std::lock_guard lock(mutex_);
 	for (const SlTag& tag : aTags)
 	{
 		if (tag.type == sl::kBufferTypeDepth && tag.resource)
 		{
-			taggedDepth_ = tag.resource;
+			// Kept from every frame: a frame's tags come after the G-buffer passes they give the size of.
+			const D3D12_RESOURCE_DESC desc = static_cast<ID3D12Resource*>(tag.resource)->GetDesc();
+			std::lock_guard lock(mutex_);
+			renderWidth_ = desc.Width;
+			renderHeight_ = desc.Height;
 		}
 	}
 }
 
-void Dumps::CopyResource(ID3D12GraphicsCommandList* aList, ID3D12Resource* aResource, uint32_t aState, const std::string& aName,
-                         const std::string& aNote, int aOnlyPlane)
+std::vector<size_t> Dumps::CopyResource(ID3D12GraphicsCommandList* aList, ID3D12Resource* aResource, uint32_t aState,
+                                        const std::string& aName, const std::string& aNote, int aOnlyPlane)
 {
+	std::vector<size_t>       made;
 	gpu::ComPtr<ID3D12Device> owner;
 	if (!aResource || FAILED(aResource->GetDevice(IID_PPV_ARGS(&owner))))
 	{
-		return;
+		return made;
 	}
 	ID3D12Device* const       device = owner.Get();
 	const D3D12_RESOURCE_DESC desc = aResource->GetDesc();
 	if (desc.Dimension != D3D12_RESOURCE_DIMENSION_TEXTURE2D)
 	{
 		errors_.push_back(aName + ": not a 2D texture");
-		return;
+		return made;
 	}
 	const uint32_t planes = gpu::PlaneCount(device, desc.Format);
 	for (uint32_t plane = 0; plane < planes; ++plane)
@@ -125,7 +129,8 @@ void Dumps::CopyResource(ID3D12GraphicsCommandList* aList, ID3D12Resource* aReso
 		Copy copy;
 		copy.name = planes > 1 ? std::format("{}-plane{}", aName, plane) : aName;
 		copy.note = aNote;
-		copy.footprint = gpu::FootprintOf(device, desc, gpu::PlaneSubresource(desc, plane));
+		copy.subresource = gpu::PlaneSubresource(desc, plane);
+		copy.footprint = gpu::FootprintOf(device, desc, copy.subresource);
 		copy.readback = gpu::MakeBuffer(device, copy.footprint.totalBytes, D3D12_HEAP_TYPE_READBACK, D3D12_RESOURCE_STATE_COPY_DEST);
 		if (!copy.readback)
 		{
@@ -135,15 +140,22 @@ void Dumps::CopyResource(ID3D12GraphicsCommandList* aList, ID3D12Resource* aReso
 		copy.format = format;
 		copy.width = copy.footprint.layout.Footprint.Width;
 		copy.height = copy.footprint.layout.Footprint.Height;
-		copy.list = aList;
-		if (!gpu::RecordCopy(aList, aResource, gpu::PlaneSubresource(desc, plane), aState, copy.readback.Get(), copy.footprint))
-		{
-			errors_.push_back(std::format("{}: its list isn't a direct list, which can't move it out of state 0x{:x}", copy.name, aState));
-			continue;
-		}
 		copies_.push_back(std::move(copy));
+		made.push_back(copies_.size() - 1);
+		CopyAgain(aList, aResource, aState, copies_.back());
 	}
-	lists_.insert(aList);
+	return made;
+}
+
+void Dumps::CopyAgain(ID3D12GraphicsCommandList* aList, ID3D12Resource* aResource, uint32_t aState, Copy& aCopy)
+{
+	if (!gpu::RecordCopy(aList, aResource, aCopy.subresource, aState, aCopy.readback.Get(), aCopy.footprint))
+	{
+		errors_.push_back(std::format("{}: its list isn't a direct list, which can't move it out of state 0x{:x}", aCopy.name, aState));
+		return;
+	}
+	++aCopy.recordings;
+	aCopy.unsubmitted.insert(aList);
 }
 
 void Dumps::OnEvaluate(const EvaluateCall& aCall)
@@ -184,53 +196,73 @@ void Dumps::OnEvaluate(const EvaluateCall& aCall)
 void Dumps::OnPassEnd(ID3D12GraphicsCommandList* aList, ListState& aState, bool)
 {
 	std::lock_guard lock(mutex_);
-	if (phase_ != Phase::Copying || !what_.contains("gbuffer") || candidates_ >= kMaxCandidates ||
-	    !IsGbufferCandidate(aState.CurrentTargets(), taggedDepth_))
-	{
-		return;
-	}
-	const int      index = candidates_++;
 	const Targets& targets = aState.CurrentTargets();
-	for (size_t i = 0; i < targets.rtvs.size(); ++i)
+	if (phase_ != Phase::Copying || !what_.contains("gbuffer") || !IsGbufferCandidate(targets, renderWidth_, renderHeight_))
 	{
-		const ViewInfo& view = *targets.rtvs[i].view;
-		auto*           resource = static_cast<ID3D12Resource*>(view.resource);
-		const uint32_t  state = aState.StateOf(resource).value_or(D3D12_RESOURCE_STATE_RENDER_TARGET);
-		const std::string note = std::format("G-buffer candidate {}, target {} ({}), list 0x{:x}, frame {}, state 0x{:x}", index, i,
-		                                     DxgiFormatName(view.viewFormat), reinterpret_cast<uintptr_t>(aList), frame_, state);
-		CopyResource(aList, resource, state, std::format("gbuffer{}-target{}", index, i), note, int(view.plane));
-	}
-	const ViewInfo& depth = *targets.dsv->view;
-	const auto      known = aState.StateOf(depth.resource);
-	if (!known && depth.readOnlyDepth)
-	{
-		errors_.push_back(std::format("gbuffer{}-depth: read-only and its state is unknown, so it isn't copied", index));
 		return;
 	}
-	const uint32_t    state = known.value_or(D3D12_RESOURCE_STATE_DEPTH_WRITE);
-	const std::string note = std::format("G-buffer candidate {}, depth ({}), list 0x{:x}, frame {}, state 0x{:x}", index,
-	                                     DxgiFormatName(depth.viewFormat), reinterpret_cast<uintptr_t>(aList), frame_, state);
-	CopyResource(aList, static_cast<ID3D12Resource*>(depth.resource), state, std::format("gbuffer{}-depth", index), note);
+	std::vector<void*> resources;
+	for (const BoundTarget& target : targets.rtvs)
+	{
+		resources.push_back(target.view->resource);
+	}
+	resources.push_back(targets.dsv->view->resource);
+	auto group = std::find_if(groups_.begin(), groups_.end(), [&](const Group& aGroup) { return aGroup.resources == resources; });
+	if (group == groups_.end())
+	{
+		if (groups_.size() >= kMaxGroups)
+		{
+			return;
+		}
+		groups_.push_back({ resources, std::vector<std::vector<size_t>>(resources.size()), 0 });
+		group = groups_.end() - 1;
+	}
+	const size_t index = size_t(group - groups_.begin());
+	++group->passes;
+	for (size_t i = 0; i < resources.size(); ++i)
+	{
+		const bool      isDepth = i == targets.rtvs.size();
+		const ViewInfo& view = isDepth ? *targets.dsv->view : *targets.rtvs[i].view;
+		auto*           resource = static_cast<ID3D12Resource*>(view.resource);
+		const auto      known = aState.StateOf(resource);
+		if (isDepth && !known && view.readOnlyDepth)
+		{
+			continue;  // a read-only depth in an unknown state: its earlier copy stands
+		}
+		const uint32_t state = known.value_or(isDepth ? D3D12_RESOURCE_STATE_DEPTH_WRITE : D3D12_RESOURCE_STATE_RENDER_TARGET);
+		if (group->copies[i].empty())
+		{
+			const std::string name = isDepth ? std::format("gbuffer{}-depth", index) : std::format("gbuffer{}-target{}", index, i);
+			const std::string note = std::format("G-buffer candidate {}, {} ({}), first copied in list 0x{:x}, frame {}, state 0x{:x}",
+			                                     index, isDepth ? std::string("depth") : std::format("target {}", i),
+			                                     DxgiFormatName(view.viewFormat), reinterpret_cast<uintptr_t>(aList), frame_, state);
+			group->copies[i] = CopyResource(aList, resource, state, name, note, isDepth ? -1 : int(view.plane));
+		}
+		else
+		{
+			for (const size_t copy : group->copies[i])
+			{
+				CopyAgain(aList, resource, state, copies_[copy]);
+			}
+		}
+	}
 }
 
 void Dumps::OnSubmit(ID3D12CommandQueue* aQueue, UINT aCount, ID3D12CommandList* const* aLists)
 {
 	std::lock_guard lock(mutex_);
-	if (lists_.empty())
+	if (phase_ != Phase::Copying && phase_ != Phase::Waiting)
 	{
 		return;
 	}
-	for (UINT i = 0; i < aCount; ++i)
+	for (Copy& copy : copies_)
 	{
-		if (lists_.erase(aLists[i]) == 0)
+		for (UINT i = 0; i < aCount; ++i)
 		{
-			continue;
-		}
-		for (Copy& copy : copies_)
-		{
-			if (copy.list == aLists[i])
+			if (copy.unsubmitted.erase(aLists[i]) > 0)
 			{
 				copy.queue = aQueue;
+				copy.signalDue = true;
 			}
 		}
 	}
@@ -239,12 +271,12 @@ void Dumps::OnSubmit(ID3D12CommandQueue* aQueue, UINT aCount, ID3D12CommandList*
 void Dumps::OnSubmitted(ID3D12CommandQueue* aQueue, UINT, ID3D12CommandList* const*)
 {
 	std::lock_guard lock(mutex_);
-	bool            signal = false;
+	bool            due = false;
 	for (const Copy& copy : copies_)
 	{
-		signal = signal || (copy.queue == aQueue && copy.fence == 0);
+		due = due || (copy.signalDue && copy.queue == aQueue);
 	}
-	if (!signal)
+	if (!due)
 	{
 		return;
 	}
@@ -258,9 +290,10 @@ void Dumps::OnSubmitted(ID3D12CommandQueue* aQueue, UINT, ID3D12CommandList* con
 	aQueue->Signal(fence_.Get(), ++fenceValue_);
 	for (Copy& copy : copies_)
 	{
-		if (copy.queue == aQueue && copy.fence == 0)
+		if (copy.signalDue && copy.queue == aQueue)
 		{
 			copy.fence = fenceValue_;
+			copy.signalDue = false;
 		}
 	}
 }
@@ -275,9 +308,10 @@ void Dumps::Update(const std::string& aFolderName)
 	// Wait until the GPU has run every copy, or 10 seconds: a list the game never submitted won't finish.
 	const uint64_t completed = fence_ ? fence_->GetCompletedValue() : 0;
 	const bool     timedOut = std::chrono::steady_clock::now() - waitingSince_ > std::chrono::seconds(10);
+	const auto     done = [&](const Copy& aCopy) { return aCopy.unsubmitted.empty() && aCopy.fence != 0 && completed >= aCopy.fence; };
 	for (const Copy& copy : copies_)
 	{
-		if ((copy.fence == 0 || completed < copy.fence) && !timedOut)
+		if (copy.recordings > 0 && !done(copy) && !timedOut)
 		{
 			return;
 		}
@@ -290,7 +324,11 @@ void Dumps::Update(const std::string& aFolderName)
 	size_t written = 0;
 	for (Copy& copy : copies_)
 	{
-		if (copy.fence == 0 || completed < copy.fence)
+		if (copy.recordings == 0)
+		{
+			continue;  // errors_ says why
+		}
+		if (!done(copy))
 		{
 			errors_.push_back(copy.name + ": the GPU never ran its copy");
 			continue;
@@ -317,6 +355,7 @@ void Dumps::Update(const std::string& aFolderName)
 		json.Key("format").String(DxgiFormatName(copy.format));
 		json.Key("size").BeginArray().UInt(copy.width).UInt(copy.height).EndArray();
 		json.Key("note").String(copy.note);
+		json.Key("recordings").UInt(uint64_t(copy.recordings));
 		json.EndObject();
 	}
 	json.EndArray().Key("errors").BeginArray();
@@ -329,8 +368,10 @@ void Dumps::Update(const std::string& aFolderName)
 	WriteFile(folder / "dump.json", text.data(), text.size());
 	log_.Push(std::format("dump: {} files written to {}{}", written, folder.string(),
 	                      errors_.empty() ? "" : std::format(", {} problems (see dump.json)", errors_.size())));
+	groups_.clear();
 	copies_.clear();
 	errors_.clear();
 	phase_ = Phase::Idle;
+	d3d::ReleaseTracking();
 }
 }

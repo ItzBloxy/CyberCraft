@@ -36,7 +36,7 @@ namespace
 using Clock = std::chrono::steady_clock;
 using namespace std::chrono_literals;
 
-constexpr const char* kVersion = "0.1.0";
+constexpr const char* kVersion = "0.2.0";
 
 RED4ext::v1::PluginHandle g_handle = nullptr;
 const RED4ext::v1::Sdk*   g_sdk = nullptr;
@@ -58,6 +58,7 @@ Clock::time_point                          g_lastSecond{};
 uint64_t                                   g_lastFrameTokens = 0;
 bool                                       g_removalReported = false;
 bool                                       g_hudMissingReported = false;
+bool                                       g_trackingHeld = false;  // set tracking 1: to measure what tracking costs
 
 template<class... Args>
 void Log(std::format_string<Args...> aFormat, Args&&... aArgs)
@@ -153,6 +154,16 @@ void Set(const cpmc::Request& aRequest)
 		g_meshOptions.ambientOcclusion = aRequest.number != 0.0;
 		g_world.MarkAllDirty();
 		return Report(std::format("set ao {}", g_meshOptions.ambientOcclusion ? 1 : 0));
+	}
+	if (aRequest.what == "tracking")
+	{
+		const bool hold = aRequest.number != 0.0;
+		if (hold != g_trackingHeld)
+		{
+			hold ? cpmc::d3d::RequestTracking() : cpmc::d3d::ReleaseTracking();
+			g_trackingHeld = hold;
+		}
+		return Report(std::format("set tracking {}: command lists are {}tracked", hold ? 1 : 0, cpmc::d3d::Tracking() ? "" : "not "));
 	}
 	std::string error;
 	Report(g_renderer->Set(aRequest.what, aRequest.number, error) ? std::format("set {} {}", aRequest.what, aRequest.number)
@@ -415,7 +426,7 @@ RED4EXT_C_EXPORT void RED4EXT_CALL Query(RED4ext::v1::PluginInfo* aInfo)
 {
 	aInfo->name = L"BlockRender";
 	aInfo->author = L"Cyberpunk-Minecraft";
-	aInfo->version = RED4EXT_V1_SEMVER(0, 1, 0);
+	aInfo->version = RED4EXT_V1_SEMVER(0, 2, 0);
 	aInfo->runtime = RED4EXT_V1_RUNTIME_VERSION_LATEST;
 	aInfo->sdk = RED4EXT_V1_SDK_VERSION_CURRENT;
 }

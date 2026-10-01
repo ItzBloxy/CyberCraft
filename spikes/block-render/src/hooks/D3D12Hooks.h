@@ -71,8 +71,10 @@ bool InstallDetours(const RED4ext::v1::Sdk* aSdk, RED4ext::v1::PluginHandle aHan
 // Listeners, in the order they're called. At most 4; add them all at load.
 void AddListener(HookEvents* aListener);
 
-// From now on, command lists are tracked from their next Reset. Off until a feature first needs it.
-void EnableTracking();
+// Command lists are tracked from their next Reset while any feature asks for it: a frame log or a dump. Tracking costs
+// frame time, so each feature releases its request when it's done.
+void RequestTracking();
+void ReleaseTracking();
 bool Tracking();
 
 // Lists reset while this is on record their passes for the frame log.

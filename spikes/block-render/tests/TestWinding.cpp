@@ -2,10 +2,13 @@
 
 #include "AtlasFixture.h"
 #include "render/Camera.h"
+#include "render/Pipeline.h"
 #include "world/Mesher.h"
 
-// The mesher's faces, through the camera, must wind counter-clockwise in clip space (x right, y up) when they face
-// the camera. On screen, with y down, that's clockwise: Direct3D's default front face, so back-face culling keeps them.
+// The mesher's faces, through the camera, wind counter-clockwise in clip space (x right, y up) when they face the
+// camera, as Minecraft's do. Flipping y for the render target doesn't change how a triangle winds on screen, so
+// Direct3D takes such a triangle as a front face only when the rasterizer says FrontCounterClockwise. Its default is
+// the opposite: the first run in the game showed a cube seen from the inside.
 namespace
 {
 double SignedArea(const std::array<double, 3>& aA, const std::array<double, 3>& aB, const std::array<double, 3>& aC)
@@ -46,13 +49,17 @@ void CheckWinding(const std::array<float, 16>& aViewToClip)
 		}
 		const auto face = cpmc::Face(((vertices[first].flags >> 4) & 15) - 1);
 		const double area = SignedArea(ndc[0], ndc[1], ndc[2]);
+		// Direct3D's rule: a front face winds clockwise on screen, or counter-clockwise with FrontCounterClockwise.
+		const bool front = cpmc::BlockRasterizer(1).FrontCounterClockwise ? area > 0.0 : area < 0.0;
 		if (face == cpmc::Face::South)  // world -y: towards the camera
 		{
 			CHECK(area > 0.0);
+			CHECK(front);
 		}
 		if (face == cpmc::Face::North)  // away from the camera
 		{
 			CHECK(area < 0.0);
+			CHECK(!front);
 		}
 	}
 }
@@ -66,4 +73,13 @@ TEST(WindingFacesTheCameraWithALeftHandedProjection)
 TEST(WindingFacesTheCameraWithARightHandedColumnProjection)
 {
 	CheckWinding({ 0.8f, 0, 0, 0, 0, 1.4f, 0, 0, 0, 0, 0, 0.1f, 0, 0, -1, 0 });
+}
+
+TEST(WindingCullSettingsPickTheirFaces)
+{
+	CHECK(cpmc::BlockRasterizer(0).CullMode == D3D12_CULL_MODE_NONE);
+	CHECK(cpmc::BlockRasterizer(1).CullMode == D3D12_CULL_MODE_BACK);
+	CHECK(cpmc::BlockRasterizer(2).CullMode == D3D12_CULL_MODE_FRONT);
+	CHECK(cpmc::BlockRasterizer(1).FrontCounterClockwise == TRUE);
+	CHECK(cpmc::BlockRasterizer(1).DepthClipEnable == TRUE);
 }

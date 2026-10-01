@@ -4,6 +4,7 @@
 #include "log/DdsWriter.h"
 #include "log/FrameLogData.h"
 #include "render/FrameConstants.h"
+#include "render/Pipeline.h"
 
 #include <dxgi1_4.h>
 
@@ -302,9 +303,7 @@ bool Renderer::EnsurePipeline(DXGI_FORMAT aFormat, bool aReversed)
 	desc.PS = { shaders_->present.data(), shaders_->present.size() };
 	desc.BlendState.RenderTarget[0].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
 	desc.SampleMask = UINT_MAX;
-	desc.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
-	desc.RasterizerState.CullMode = cull_ == 0 ? D3D12_CULL_MODE_NONE : cull_ == 1 ? D3D12_CULL_MODE_BACK : D3D12_CULL_MODE_FRONT;
-	desc.RasterizerState.DepthClipEnable = TRUE;
+	desc.RasterizerState = BlockRasterizer(cull_);
 	desc.DepthStencilState.DepthEnable = TRUE;
 	desc.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL;
 	desc.DepthStencilState.DepthFunc = aReversed ? D3D12_COMPARISON_FUNC_GREATER : D3D12_COMPARISON_FUNC_LESS;

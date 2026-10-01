@@ -13353,7 +13353,7 @@ The version goes to 0.2.0.
 - Modify: `src/log/FrameLog.cpp`, `src/Plugin.cpp`
 - Rewrite: `src/log/Dumps.h`, `src/log/Dumps.cpp`
 
-- [ ] **Step 1: Edit `tests/TestWinding.cpp` to check Direct3D's front-face rule**
+- [x] **Step 1: Edit `tests/TestWinding.cpp` to check Direct3D's front-face rule**
 
 ```cpp
 #include "render/Camera.h"
@@ -13420,7 +13420,7 @@ TEST(WindingCullSettingsPickTheirFaces)
 }
 ```
 
-- [ ] **Step 2: Build; it must fail**
+- [x] **Step 2: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -13429,7 +13429,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `Cannot open include file: 'render/Pipeline.h'`.
 
-- [ ] **Step 3: Write `src/render/Pipeline.h`**
+- [x] **Step 3: Write `src/render/Pipeline.h`**
 
 ```cpp
 #pragma once
@@ -13445,7 +13445,7 @@ D3D12_RASTERIZER_DESC BlockRasterizer(int aCull);
 }
 ```
 
-- [ ] **Step 4: Write `src/render/Pipeline.cpp`**
+- [x] **Step 4: Write `src/render/Pipeline.cpp`**
 
 ```cpp
 #include "render/Pipeline.h"
@@ -13464,7 +13464,7 @@ D3D12_RASTERIZER_DESC BlockRasterizer(int aCull)
 }
 ```
 
-- [ ] **Step 5: Edit `CMakeLists.txt` to add the source, and the version**
+- [x] **Step 5: Edit `CMakeLists.txt` to add the source, and the version**
 
 ```cmake
 project(BlockRender VERSION 0.1.0 LANGUAGES C CXX)
@@ -13482,7 +13482,7 @@ project(BlockRender VERSION 0.2.0 LANGUAGES C CXX)
 )
 ```
 
-- [ ] **Step 6: Build and run the tests; they must pass**
+- [x] **Step 6: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -13492,7 +13492,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `85 test(s), 0 failure(s)`.
 
-- [ ] **Step 7: Edit `src/render/Renderer.cpp` to draw with it**
+- [x] **Step 7: Edit `src/render/Renderer.cpp` to draw with it**
 
 ```cpp
 #include "render/FrameConstants.h"
@@ -13514,7 +13514,7 @@ Expected: no error or warning lines, then `85 test(s), 0 failure(s)`.
 	desc.RasterizerState = BlockRasterizer(cull_);
 ```
 
-- [ ] **Step 8: Edit `tests/TestStateTracker.cpp` for the new candidate rule**
+- [x] **Step 8: Edit `tests/TestStateTracker.cpp` for the new candidate rule**
 
 ```cpp
 TEST(GbufferCandidatesNeedTheTaggedDepthAndMatchingTargets)
@@ -13565,7 +13565,7 @@ TEST(GbufferCandidatesNeedThreeTargetsAndADepthAtRenderSize)
 }
 ```
 
-- [ ] **Step 9: Build; it must fail**
+- [x] **Step 9: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -13574,7 +13574,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `'cpmc::IsGbufferCandidate': function does not take 3 arguments`.
 
-- [ ] **Step 10: Edit `src/track/StateTracker.h` for the new rule**
+- [x] **Step 10: Edit `src/track/StateTracker.h` for the new rule**
 
 ```cpp
 // True when aTargets look like a G-buffer: three or more known render targets the size of the tagged depth, with
@@ -13588,7 +13588,7 @@ bool IsGbufferCandidate(const Targets& aTargets, const void* aTaggedDepth);
 bool IsGbufferCandidate(const Targets& aTargets, uint64_t aWidth, uint32_t aHeight);
 ```
 
-- [ ] **Step 11: Edit `src/track/StateTracker.cpp` for the new rule**
+- [x] **Step 11: Edit `src/track/StateTracker.cpp` for the new rule**
 
 ```cpp
 bool IsGbufferCandidate(const Targets& aTargets, const void* aTaggedDepth)
@@ -13630,7 +13630,7 @@ bool IsGbufferCandidate(const Targets& aTargets, uint64_t aWidth, uint32_t aHeig
 }
 ```
 
-- [ ] **Step 12: Edit `src/hooks/D3D12Hooks.h` to track only on request**
+- [x] **Step 12: Edit `src/hooks/D3D12Hooks.h` to track only on request**
 
 ```cpp
 // From now on, command lists are tracked from their next Reset. Off until a feature first needs it.
@@ -13643,7 +13643,7 @@ void RequestTracking();
 void ReleaseTracking();
 ```
 
-- [ ] **Step 13: Edit `src/hooks/D3D12Hooks.cpp` to count the requests**
+- [x] **Step 13: Edit `src/hooks/D3D12Hooks.cpp` to count the requests**
 
 ```cpp
 std::atomic<bool>            g_tracking{ false };
@@ -13670,7 +13670,7 @@ void ReleaseTracking()
 }
 ```
 
-- [ ] **Step 14: Edit `src/log/FrameLog.cpp` for tracking and the new rule**
+- [x] **Step 14: Edit `src/log/FrameLog.cpp` for tracking and the new rule**
 
 ```cpp
 	d3d::EnableTracking();
@@ -13718,7 +13718,7 @@ void ReleaseTracking()
 			if (IsGbufferCandidate(targets, width, height))
 ```
 
-- [ ] **Step 15: Write `src/log/Dumps.h`**
+- [x] **Step 15: Write `src/log/Dumps.h`**
 
 ```cpp
 #pragma once
@@ -13819,7 +13819,7 @@ private:
 }
 ```
 
-- [ ] **Step 16: Write `src/log/Dumps.cpp`**
+- [x] **Step 16: Write `src/log/Dumps.cpp`**
 
 ```cpp
 #include "log/Dumps.h"
@@ -14201,7 +14201,7 @@ void Dumps::Update(const std::string& aFolderName)
 }
 ```
 
-- [ ] **Step 17: Edit `src/Plugin.cpp` for `set tracking`, and the version**
+- [x] **Step 17: Edit `src/Plugin.cpp` for `set tracking`, and the version**
 
 ```cpp
 constexpr const char* kVersion = "0.1.0";
@@ -14243,7 +14243,7 @@ bool                                       g_trackingHeld = false;  // set track
 	aInfo->version = RED4EXT_V1_SEMVER(0, 2, 0);
 ```
 
-- [ ] **Step 18: Build; it must compile without warnings, and the tests still pass**
+- [x] **Step 18: Build; it must compile without warnings, and the tests still pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -14253,7 +14253,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `85 test(s), 0 failure(s)`.
 
-- [ ] **Step 19: Commit**
+- [x] **Step 19: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \

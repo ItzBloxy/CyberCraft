@@ -35,6 +35,7 @@ StateTracker                 g_tracker;
 std::array<HookEvents*, 4>   g_listeners{};
 size_t                       g_listenerCount = 0;
 std::atomic<bool>            g_tracking{ false };
+std::atomic<int>             g_trackingRequests{ 0 };
 std::atomic<bool>            g_logging{ false };
 std::atomic<uint32_t>        g_frame{ 0 };
 std::atomic<ID3D12Device*>   g_device{ nullptr };      // the latest device the detour or a late patch saw
@@ -758,9 +759,14 @@ void AddListener(HookEvents* aListener)
 	}
 }
 
-void EnableTracking()
+void RequestTracking()
 {
-	g_tracking = true;
+	g_tracking = ++g_trackingRequests > 0;
+}
+
+void ReleaseTracking()
+{
+	g_tracking = --g_trackingRequests > 0;
 }
 
 bool Tracking()

@@ -139,17 +139,18 @@ ListState* StateTracker::Find(void* aList)
 	return found->second.get();
 }
 
-bool IsGbufferCandidate(const Targets& aTargets, const void* aTaggedDepth)
+bool IsGbufferCandidate(const Targets& aTargets, uint64_t aWidth, uint32_t aHeight)
 {
-	if (!aTaggedDepth || !aTargets.dsv || !aTargets.dsv->view || aTargets.dsv->view->resource != aTaggedDepth ||
-	    aTargets.rtvs.size() < 3)
+	const auto renderSized = [&](const std::optional<ViewInfo>& aView) {
+		return aView && aView->width == aWidth && aView->height == aHeight;
+	};
+	if (aWidth == 0 || aHeight == 0 || !aTargets.dsv || !renderSized(aTargets.dsv->view) || aTargets.rtvs.size() < 3)
 	{
 		return false;
 	}
-	const ViewInfo& depth = *aTargets.dsv->view;
 	for (const BoundTarget& target : aTargets.rtvs)
 	{
-		if (!target.view || target.view->width != depth.width || target.view->height != depth.height)
+		if (!renderSized(target.view))
 		{
 			return false;
 		}
