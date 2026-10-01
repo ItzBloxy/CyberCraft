@@ -151,7 +151,7 @@ From its declarations in `E:\Cyberpunk2077\red4ext\plugins\Codeware\Scripts\Code
 - **WolvenKit isn't installed:** it's neither in the usual places nor on `PATH`. Custom meshes, materials and textures
   need it, and installing it is a download, so ask the user first.
 - **Custom resources are proven here:** ArchiveXL 1.26.3 and TweakXL 1.11.3 are installed, and `archive\pc\mod` holds
-  about a hundred archive mods and their `.xl` files, which load fine.
+  51 `.archive` mods at its top level (with their `.xl` files and a few folders), which load fine.
 
 ### Iteration speed
 
