@@ -55,6 +55,16 @@ struct SceneDump
 	bool                                    triangleCapHit = false;
 };
 
+// V's character controller as the origin watch read it.
+struct ControllerSample
+{
+	const void* actor = nullptr;  // the controller's actor, which identifies it
+	Vec3d       centre;           // the capsule's centre, in PhysX coordinates
+	float       radius = 0.0f;
+	float       halfHeight = 0.0f;
+	bool        searched = false;  // the remembered controller didn't check out, so the scenes were searched
+};
+
 class PhysxSession
 {
 public:
@@ -72,7 +82,19 @@ public:
 	// A ray straight down against static geometry. The distance to the nearest hit, if any.
 	std::optional<float> RaycastDown(physx::PxScene* aScene, const physx::PxVec3& aFrom, float aMaxDistance);
 
+	// For the origin watch, once a frame: V's character controller, given V's feet in world coordinates. It re-reads
+	// the remembered controller while that is still a dynamic actor of its scene and still fits under V (see
+	// FitsController). Otherwise it searches every scene's kinematic actors for the capsule that fits best. Nothing if
+	// PhysX can't be read or no capsule fits.
+	std::optional<ControllerSample> ReadController(const Vec3d& aFeet);
+
 private:
+	struct ControllerRef
+	{
+		physx::PxScene*       scene = nullptr;
+		const physx::PxActor* actor = nullptr;
+	};
+
 	struct Build
 	{
 		bool                      pass = false;
@@ -86,7 +108,8 @@ private:
 	// Steps 1-3.
 	Build CheckBuild();
 
-	std::optional<Build> build_;
-	ReadableMemory       memory_;
+	std::optional<Build>         build_;
+	ReadableMemory               memory_;
+	std::optional<ControllerRef> controller_;
 };
 }

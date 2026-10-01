@@ -133,7 +133,7 @@ struct CoordinateCheck
 
 struct DumpReport
 {
-	std::string probeVersion = "0.3.0";
+	std::string probeVersion = "0.4.0";
 	std::string time;
 	std::string trigger;
 	std::string runtime;

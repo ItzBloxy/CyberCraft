@@ -22,6 +22,17 @@ TEST(RequestCanSayWherePhysxsOriginIs)
 	}
 }
 
+TEST(RequestCanStartAndStopTheOriginWatch)
+{
+	const auto dump = cpmc::ParseDumpRequest("");
+	CHECK(dump && dump->action == cpmc::DumpRequest::Action::Dump);
+	const auto watch = cpmc::ParseDumpRequest("watch\r\n");
+	CHECK(watch && watch->action == cpmc::DumpRequest::Action::StartWatch && !watch->physxOrigin);
+	const auto stop = cpmc::ParseDumpRequest("stop");
+	CHECK(stop && stop->action == cpmc::DumpRequest::Action::StopWatch);
+	CHECK(!cpmc::ParseDumpRequest("watch now"));
+}
+
 TEST(MalformedRequestsAreRejected)
 {
 	CHECK(!cpmc::ParseDumpRequest("origin 1 2"));

@@ -21,7 +21,7 @@ TEST(ReportWithoutGeometryHasNulls)
 	report.modules.push_back({ "PhysX3Common_x64.dll", 0, 0, false });
 	report.steps.push_back({ 1, "build", false, "PhysX3Common_x64.dll is not loaded" });
 	const std::string json = cpmc::ReportToJson(report);
-	CHECK(Contains(json, "\"probeVersion\": \"0.3.0\""));
+	CHECK(Contains(json, "\"probeVersion\": \"0.4.0\""));
 	CHECK(Contains(json, "\"physxOrigin\": null"));
 	CHECK(Contains(json, "\"trigger\": \"request\""));
 	CHECK(Contains(json, "\"runtime\": \"2.3.1\""));

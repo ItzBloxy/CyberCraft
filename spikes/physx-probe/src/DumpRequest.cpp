@@ -57,6 +57,10 @@ std::optional<DumpRequest> ParseDumpRequest(std::string_view aText)
 	{
 		return DumpRequest{};
 	}
+	if (words.size() == 1 && (words[0] == "watch" || words[0] == "stop"))
+	{
+		return DumpRequest{ words[0] == "watch" ? DumpRequest::Action::StartWatch : DumpRequest::Action::StopWatch };
+	}
 	if (words.size() != 4 || words[0] != "origin")
 	{
 		return std::nullopt;
@@ -68,6 +72,6 @@ std::optional<DumpRequest> ParseDumpRequest(std::string_view aText)
 	{
 		return std::nullopt;
 	}
-	return DumpRequest{ Vec3d{ *x, *y, *z } };
+	return DumpRequest{ DumpRequest::Action::Dump, Vec3d{ *x, *y, *z } };
 }
 }

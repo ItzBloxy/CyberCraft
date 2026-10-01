@@ -5,13 +5,16 @@
 
 #include "DumpRequest.h"
 #include "DumpWriter.h"
+#include "OriginWatch.h"
 #include "PlayerLocator.h"
 #include "Probe.h"
 #include "physx/Checks.h"
 
 #include <Windows.h>
 
+#include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <filesystem>
 #include <format>
 #include <fstream>
@@ -119,6 +122,97 @@ void RunOne(const std::string& aTrigger, const std::optional<cpmc::Vec3d>& aPhys
 	g_writer.Start(std::move(job));
 }
 
+// The origin watch: while it's on, V's controller tells where PhysX's origin is, every frame. Each change is logged
+// with V's position in the frames before and after, plus a status line every 2 seconds.
+struct OriginWatch
+{
+	bool                       on = false;
+	uint64_t                   frame = 0;
+	std::optional<cpmc::Vec3d> origin;
+	std::optional<cpmc::Vec3d> lastFeet;
+	const void*                controller = nullptr;
+	cpmc::Vec3d                residual;
+	double                     largestAcross = 0.0;  // since the last status line
+	uint64_t                   framesSinceStatus = 0;
+	uint64_t                   searchesSinceStatus = 0;
+	Clock::time_point          lastStatus{};
+};
+
+OriginWatch g_watch;
+
+std::string Point(const cpmc::Vec3d& aPoint)
+{
+	return std::format("({:.3f}, {:.3f}, {:.3f})", aPoint.x, aPoint.y, aPoint.z);
+}
+
+std::string Origin(const cpmc::Vec3d& aOrigin)
+{
+	return std::format("({:.0f}, {:.0f}, {:.0f})", aOrigin.x, aOrigin.y, aOrigin.z);
+}
+
+void WatchFrame(Clock::time_point aNow)
+{
+	++g_watch.frame;
+	++g_watch.framesSinceStatus;
+	const auto pose = cpmc::LocatePlayer();
+	if (!pose)
+	{
+		return;
+	}
+	// A search costs a millisecond or two, so while V's controller is lost (in a vehicle, say) look only every 10th frame.
+	const cpmc::Vec3d                               feet = pose->feet;
+	const bool                                      look = g_watch.controller != nullptr || g_watch.frame % 10 == 0;
+	const std::optional<cpmc::px::ControllerSample> sample = look ? g_session.ReadController(feet) : std::nullopt;
+	if (!sample)
+	{
+		if (g_watch.controller)
+		{
+			Log("watch: lost V's controller at V {}, frame {}", Point(feet), g_watch.frame);
+			g_watch.controller = nullptr;
+		}
+	}
+	else
+	{
+		if (sample->searched)
+		{
+			++g_watch.searchesSinceStatus;
+			if (sample->actor != g_watch.controller)
+			{
+				Log("watch: V's controller is {} (radius {:.2f}, half-height {:.2f}), frame {}", sample->actor, sample->radius,
+				    sample->halfHeight, g_watch.frame);
+			}
+		}
+		g_watch.controller = sample->actor;
+		const cpmc::OriginReading reading = cpmc::OriginFromController(feet, sample->centre);
+		g_watch.residual = reading.residual;
+		g_watch.largestAcross = std::max(g_watch.largestAcross, std::hypot(reading.residual.x, reading.residual.y));
+		const cpmc::Vec3d& origin = reading.origin;
+		if (!g_watch.origin)
+		{
+			Log("watch: origin {} at V {}, frame {}", Origin(origin), Point(feet), g_watch.frame);
+		}
+		else if (origin.x != g_watch.origin->x || origin.y != g_watch.origin->y || origin.z != g_watch.origin->z)
+		{
+			Log("watch: origin {} -> {} between V {} and V {}, frame {}, residual {}", Origin(*g_watch.origin), Origin(origin),
+			    g_watch.lastFeet ? Point(*g_watch.lastFeet) : std::string("(unknown)"), Point(feet), g_watch.frame,
+			    Point(reading.residual));
+		}
+		g_watch.origin = origin;
+	}
+	g_watch.lastFeet = feet;
+	if (aNow - g_watch.lastStatus >= 2s)
+	{
+		g_watch.lastStatus = aNow;
+		Log("watch: V {}, origin {}, residual {}, largest across {:.3f} m, {} frames, {} searches", Point(feet),
+		    g_watch.origin ? Origin(*g_watch.origin) : std::string("unknown"),
+		    g_watch.controller ? Point(g_watch.residual) : std::string("(no controller)"), g_watch.largestAcross,
+		    g_watch.framesSinceStatus, g_watch.searchesSinceStatus);
+		g_watch.largestAcross = 0.0;
+		g_watch.framesSinceStatus = 0;
+		g_watch.searchesSinceStatus = 0;
+	}
+}
+
 bool OnEnter(RED4ext::CGameApplication*)
 {
 	return true;
@@ -166,15 +260,35 @@ bool OnUpdate(RED4ext::CGameApplication*)
 			std::filesystem::remove(request, error);
 			if (const std::optional<cpmc::DumpRequest> parsed = cpmc::ParseDumpRequest(text))
 			{
-				trigger = "request";
-				physxOrigin = parsed->physxOrigin;
+				switch (parsed->action)
+				{
+				case cpmc::DumpRequest::Action::Dump:
+					trigger = "request";
+					physxOrigin = parsed->physxOrigin;
+					break;
+				case cpmc::DumpRequest::Action::StartWatch:
+					g_watch = OriginWatch{};
+					g_watch.on = true;
+					g_watch.lastStatus = now;
+					Log("watch: started");
+					break;
+				case cpmc::DumpRequest::Action::StopWatch:
+					Log("watch: stopped after {} frames", g_watch.frame);
+					g_watch.on = false;
+					break;
+				}
 			}
 			else
 			{
-				Log("dump.request ignored: expected nothing or \"origin <x> <y> <z>\", got \"{}\"",
+				Log("dump.request ignored: expected nothing, \"origin <x> <y> <z>\", \"watch\" or \"stop\", got \"{}\"",
 				    cpmc::px::SanitizeName(text.c_str(), 200));
 			}
 		}
+	}
+
+	if (g_watch.on)
+	{
+		WatchFrame(now);
 	}
 
 	if (trigger.empty() || now - g_lastDump < 2s)
@@ -205,7 +319,9 @@ RED4EXT_C_EXPORT bool RED4EXT_CALL Main(RED4ext::v1::PluginHandle aHandle, RED4e
 		g_runtime = std::format("{}.{}.{}", unsigned(aSdk->runtime->major), aSdk->runtime->minor, aSdk->runtime->patch);
 		static RED4ext::v1::GameState running{ &OnEnter, &OnUpdate, &OnExit };
 		aSdk->gameStates->Add(aHandle, RED4ext::EGameStateType::Running, &running);
-		Log("PhysXProbe 0.3.0 loaded (game {}); F10 or {} triggers a dump", g_runtime, (g_pluginDir / "dump.request").string());
+		Log("PhysXProbe 0.4.0 loaded (game {}); F10 or {} triggers a dump, and \"watch\" or \"stop\" in that file starts or "
+		    "stops the origin watch",
+		    g_runtime, (g_pluginDir / "dump.request").string());
 		break;
 	}
 	case RED4ext::v1::EMainReason::Unload:
@@ -219,7 +335,7 @@ RED4EXT_C_EXPORT void RED4EXT_CALL Query(RED4ext::v1::PluginInfo* aInfo)
 {
 	aInfo->name = L"PhysXProbe";
 	aInfo->author = L"Cyberpunk-Minecraft";
-	aInfo->version = RED4EXT_V1_SEMVER(0, 3, 0);
+	aInfo->version = RED4EXT_V1_SEMVER(0, 4, 0);
 	aInfo->runtime = RED4EXT_V1_RUNTIME_VERSION_LATEST;
 	aInfo->sdk = RED4EXT_V1_SDK_VERSION_CURRENT;
 }

@@ -1,10 +1,12 @@
 #include "physx/PhysxSession.h"
 
+#include "OriginWatch.h"
 #include "physx/Checks.h"
 
 #include <Windows.h>
 
 #include <algorithm>
+#include <cmath>
 #include <format>
 #include <initializer_list>
 #include <set>
@@ -379,6 +381,45 @@ void TrimToBudget(std::map<std::string, std::vector<Tri>>& aTriangles, uint64_t 
 		excess -= drop;
 	}
 }
+
+// A capsule that could be V's controller, and how far it sits from under V, across.
+struct Candidate
+{
+	ControllerSample sample;
+	PxScene*         scene = nullptr;
+	double           across = 0.0;
+};
+
+// Keeps the best fit for V's controller among one actor's capsules, if it beats aBest. Only kinematic actors count.
+void MeasureController(const Checker& aChecker, PxScene* aScene, const PxActor* aActor, const Vec3d& aFeet,
+                       std::optional<Candidate>& aBest)
+{
+	Findings findings;  // the watch only needs the checks, not their tallies
+	if (!aChecker.Accept(aActor, { AuditedClass::RigidDynamic }, "an actor", findings, kActorBytes) ||
+	    !static_cast<const PxRigidBody&>(*aActor).getRigidBodyFlags().isSet(PxRigidBodyFlag::eKINEMATIC))
+	{
+		return;
+	}
+	const auto&       rigid = static_cast<const PxRigidActor&>(*aActor);
+	const PxTransform pose = rigid.getGlobalPose();
+	for (const PxShape* shape : ShapesOf(rigid))
+	{
+		PxCapsuleGeometry geometry;
+		if (!aChecker.Accept(shape, { AuditedClass::Shape }, "a shape", findings) ||
+		    shape->getGeometryType() != PxGeometryType::eCAPSULE || !shape->getCapsuleGeometry(geometry))
+		{
+			continue;
+		}
+		const PxVec3        p = (pose * shape->getLocalPose()).p;
+		const Vec3d         centre{ p.x, p.y, p.z };
+		const OriginReading reading = OriginFromController(aFeet, centre);
+		const double        across = std::hypot(reading.residual.x, reading.residual.y);
+		if (FitsController(reading, geometry.radius) && (!aBest || across < aBest->across))
+		{
+			aBest = Candidate{ { aActor, centre, geometry.radius, geometry.halfHeight, false }, aScene, across };
+		}
+	}
+}
 }
 
 PhysxSession::Build PhysxSession::CheckBuild()
@@ -725,5 +766,70 @@ std::optional<float> PhysxSession::RaycastDown(PxScene* aScene, const PxVec3& aF
 	                PxQueryFilterData(PxQueryFlag::eSTATIC));
 	aScene->unlockRead();
 	return buffer.hasBlock ? std::optional<float>(buffer.block.distance) : std::nullopt;
+}
+
+std::optional<ControllerSample> PhysxSession::ReadController(const Vec3d& aFeet)
+{
+	memory_.Clear();  // memory changes from frame to frame
+	if (!build_)
+	{
+		build_ = CheckBuild();
+	}
+	if (!build_->pass)
+	{
+		return std::nullopt;
+	}
+	const Checker checker{ memory_, build_->bases };
+
+	// The scenes, each checked.
+	PxPhysics&            physics = *build_->physics;
+	std::vector<PxScene*> scenes(std::min<PxU32>(physics.getNbScenes(), kMaxScenes));
+	scenes.resize(physics.getScenes(scenes.data(), PxU32(scenes.size())));
+	std::erase_if(scenes, [&](PxScene* aScene) {
+		const ObjectCheck check = CheckObject(memory_, build_->bases, aScene);
+		return check.verdict != ObjectVerdict::Ok || check.cls != AuditedClass::Scene;
+	});
+
+	// One scene's dynamic actors, or only aOnly if it is still one of them.
+	const auto search = [&](PxScene* aScene, const PxActor* aOnly) {
+		std::optional<Candidate> best;
+		aScene->lockRead();
+		std::vector<PxActor*> actors(std::min<PxU32>(aScene->getNbActors(PxActorTypeFlag::eRIGID_DYNAMIC), kMaxActorsPerScene));
+		actors.resize(aScene->getActors(PxActorTypeFlag::eRIGID_DYNAMIC, actors.data(), PxU32(actors.size())));
+		for (const PxActor* actor : actors)
+		{
+			if (!aOnly || actor == aOnly)
+			{
+				MeasureController(checker, aScene, actor, aFeet, best);
+			}
+		}
+		aScene->unlockRead();
+		return best;
+	};
+
+	if (controller_ && std::find(scenes.begin(), scenes.end(), controller_->scene) != scenes.end())
+	{
+		if (const std::optional<Candidate> again = search(controller_->scene, controller_->actor))
+		{
+			return again->sample;
+		}
+	}
+	controller_.reset();
+	std::optional<Candidate> best;
+	for (PxScene* scene : scenes)
+	{
+		const std::optional<Candidate> found = search(scene, nullptr);
+		if (found && (!best || found->across < best->across))
+		{
+			best = found;
+		}
+	}
+	if (!best)
+	{
+		return std::nullopt;
+	}
+	controller_ = ControllerRef{ best->scene, static_cast<const PxActor*>(best->sample.actor) };
+	best->sample.searched = true;
+	return best->sample;
 }
 }
