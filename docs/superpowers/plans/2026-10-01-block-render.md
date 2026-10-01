@@ -18860,30 +18860,30 @@ The commands are Task 44's.
 **Files:**
 - Modify: `docs/spikes/2026-10-01-block-render-results.md`
 
-- [ ] **Step 1: Deploy (the game must not be running)**
+- [x] **Step 1: Deploy (the game must not be running)**
 
 Run Task 44 Step 1's two commands. Expected: `0`, then the plugin's folder with `BlockRender.dll`, `BlockRender.pdb`,
 `shaders`, `atlas.bin` and `atlas.json`, the overlay's folder with `init.lua`, and `installed`.
 
-- [ ] **Step 2: Load, at the corner**
+- [x] **Step 2: Load, at the corner**
 
 Ask the user to launch the game, load the free-roam save, go to the corner, face south-west, and stand still. Then
 read the log's first lines, the status and `frames.txt`. Expected:
 - `BlockRender 0.4.0 loaded`;
 - in the status, `mode=off`, `tracking off, 0 lists watched` and `all hooks on`.
 
-- [ ] **Step 3: What the hooks cost, idle**
+- [x] **Step 3: What the hooks cost, idle**
 
 Read the status's `frame=` line and `frames.txt` five times each, a second apart, as in Task 44 Step 3. Expected:
 about the 13.6 ms run 4 measured without BlockRender. If so, the lookups were the cost.
 
-- [ ] **Step 4: If it isn't, which group costs it**
+- [x] **Step 4: If it isn't, which group costs it**
 
 Only if Step 3 is well above 13.6 ms: switch each group off in turn, with `set hooks.lists 0`, then `views`,
 `submit`, `present` and `sl`, five readings each, and back on with `1` before the next. The group whose switch brings
 the frame time down holds the cost. Note each group's readings.
 
-- [ ] **Step 5: Tracking on**
+- [x] **Step 5: Tracking on**
 
 Send `set tracking 1`, read five times, then `set tracking 0`. That's what tracking every list costs, which frame logs
 and dumps still do while they run.
@@ -18901,11 +18901,11 @@ screenshot.
 
 Send `clear`, then `place field 10000`, and read five times.
 
-- [ ] **Step 8: Clean up**
+- [x] **Step 8: Clean up**
 
 Send `clear`, then `mode off`, two seconds apart. Expected: `mode=off`, `tracking off, 0 lists watched`.
 
-- [ ] **Step 9: Record the results, and commit**
+- [x] **Step 9: Record the results, and commit**
 
 In `docs/spikes/2026-10-01-block-render-results.md`, add what run 5 found:
 - the hooks' cost, idle;

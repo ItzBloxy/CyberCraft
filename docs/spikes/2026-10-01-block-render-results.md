@@ -29,7 +29,8 @@ logs and the dumps. Plan: [2026-10-01-block-render.md](../superpowers/plans/2026
   steady standing still and leave no trails moving, and 100,000 of them cost 0.03 ms of GPU time.
 - **But BlockRender's hooks double the frame time, even with drawing off:** 26.5 ms with the plugin against 13.6 ms
   without it, at run 3's corner (run 4). Run 3's finding that tracking costs nothing compared two states that both
-  paid this. The hooks have to be fixed before the spike can say its frame rate is acceptable.
+  paid this. Run 5 found the cause: the Streamline hooks' readability checks, where `VirtualQuery` walks gigabytes of
+  the game's heaps. Tracking itself costs about 0.3 ms.
 
 ## Runs
 
@@ -330,10 +331,44 @@ CET's own frame time, at the corner, standing still, five readings each:
 - **It explains earlier runs:** run 2's free roam at 30 to 38 fps, below the usual 40 to 80. It also means run 3's
   comparison of tracking on and off compared two states that both paid it, so tracking's own cost is unknown.
 
-The likeliest cause: every hooked command list call, about 10,000 a frame from up to 12 recording threads, looks its
-list up under a shared lock, even with tracking off. A list that was never tracked misses every time, so the lookup
-never uses its per-thread cache. That alone may not add up to 13 ms, and the device's view hooks run often too, so
-the next step measures each group of hooks before fixing.
+The likeliest cause looked like this: every hooked command list call, about 10,000 a frame from up to 12 recording
+threads, looks its list up under a shared lock, even with tracking off. A list that was never tracked misses every
+time, so the lookup never uses its per-thread cache. That alone might not add up to 13 ms, and the device's view hooks
+run often too, so Tasks 45 and 46 added a switch for each group of hooks, and removed the lookup while nothing is
+tracked.
+
+### Run 5: where the cost was
+
+BlockRender 0.4.0, at the same corner, with the same save. Idle, it still took 26.1 ms, so the lookup wasn't the cost.
+Switching each group off in turn, five readings each (CET's frame time):
+
+| Group switched off | Frame time |
+|---|---|
+| `lists` (command lists) | 25.1 to 26.4 ms |
+| `views` (view creation and copies) | 25.3 to 26.3 ms |
+| `submit` (`ExecuteCommandLists`) | 26.2 to 35.3 ms |
+| `present` | 25.8 to 26.9 ms |
+| **`sl` (the four Streamline imports)** | **14.2 to 14.6 ms** |
+
+**The cause is the Streamline hooks' readability checks.**
+- **What they do:** before reading a struct the game hands Streamline, `ReadableMemory` asks `VirtualQuery` whether
+  its memory can be read.
+- **Why that's slow:** `VirtualQuery` reports the size of the region an address lies in, and finds it by walking the
+  region's pages. Measured here, an address in the middle of a committed, touched region takes 0.27 ms in 256 MB,
+  and 1.54 ms in 1 GB. `QueryWorkingSetEx` answers for one page in 0.0013 ms, whatever the region's size.
+- **Where it adds up:** the game's `sl::Resource` structs live in heaps of gigabytes. The frame logs show its five
+  `slSetTag` calls a frame about 2.3 ms apart, on the thread that records the DLSS evaluate. That's about 12 ms on
+  the frame's critical path.
+
+**Tracking's own cost, measured with `sl` off:**
+- tracking off: 14.1 ms;
+- on: 14.4 ms;
+- off again: 14.6 ms.
+
+So tracking every list costs about 0.3 ms, within the noise.
+
+Run 5 skipped its measurements of drawing before DLSS and of 10,000 blocks, since the Streamline hooks' cost would
+have swamped them. The next task fixes the checks, and run 6 measures again.
 
 ### For step 4
 
