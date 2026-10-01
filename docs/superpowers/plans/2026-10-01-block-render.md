@@ -19577,24 +19577,24 @@ fixes: while turning fast, 0 to 2 frames a second were skipped. The commands are
 **Files:**
 - Modify: `docs/spikes/2026-10-01-block-render-results.md`
 
-- [ ] **Step 1: Deploy (the game must not be running)**
+- [x] **Step 1: Deploy (the game must not be running)**
 
 Run Task 44 Step 1's two commands. Expected: `0`, then the plugin's folder with `BlockRender.dll`, `BlockRender.pdb`,
 `shaders`, `atlas.bin` and `atlas.json`, the overlay's folder with `init.lua`, and `installed`.
 
-- [ ] **Step 2: Load, at the corner**
+- [x] **Step 2: Load, at the corner**
 
 Ask the user to launch the game, load the free-roam save, go to the corner, face south-west, and stand still. Then
 read the log's first lines and the status. Expected:
 - `BlockRender 0.6.0 loaded`;
 - in the status, `mode=off`, `tracking off` and `all hooks on`.
 
-- [ ] **Step 3: Idle**
+- [x] **Step 3: Idle**
 
 Read the status's `frame=` line and `frames.txt` five times each, a second apart. Expected: about 13.5 ms, as run 6
 found.
 
-- [ ] **Step 4: Drawing before DLSS**
+- [x] **Step 4: Drawing before DLSS**
 
 Ask the user to face open ground. Send `mode predlss` and `place cube`, wait three seconds, and read the status.
 Expected:
@@ -19603,17 +19603,17 @@ Expected:
 
 Read five times.
 
-- [ ] **Step 5: Turning fast**
+- [x] **Step 5: Turning fast**
 
 Ask the user to turn fast, and to move, for about 15 seconds, while the status is read every half second. Expected:
 the skipped count doesn't move. Then ask the user whether the cube flickered, and to check it's steady standing still
 and leaves no trails strafing, with a screenshot.
 
-- [ ] **Step 6: Clean up**
+- [x] **Step 6: Clean up**
 
 Send `clear`, then `mode off`, two seconds apart. Expected: `mode=off` and `tracking off`.
 
-- [ ] **Step 7: Record the results, and commit**
+- [x] **Step 7: Record the results, and commit**
 
 In `docs/spikes/2026-10-01-block-render-results.md`, add what run 7 found: the frame time idle and drawing before DLSS,
 the skips while turning fast, and what the user saw. Then commit:

@@ -4,7 +4,10 @@ Date: 2026-10-01. Game: Cyberpunk 2077 2.31 (Epic), DLSS Quality at 2560×1440 (
 ray tracing, HDR and VSync off, Reflex on, on a 239 Hz display. The builds:
 - **BlockRender 0.1.0** for runs 1 and 2: the plan's Tasks 1 to 27, then Task 28's fixes from the first run;
 - **0.2.0** for run 3: plus Task 31's fixes from the second;
-- **0.3.0** for run 4: Part 2's Tasks 35 to 43, for step 3.
+- **0.3.0** for run 4: Part 2's Tasks 35 to 43, for step 3;
+- **0.4.0** for run 5: plus Tasks 45 and 46, to find what the hooks cost;
+- **0.5.0** for run 6: plus Task 48's fix;
+- **0.6.0** for run 7: plus Task 50, which tracks every list again while drawing before DLSS.
 
 The user played; the agent sent requests through `blockrender.request` and read the logs, `status.txt`, the frame
 logs and the dumps. Plan: [2026-10-01-block-render.md](../superpowers/plans/2026-10-01-block-render.md).
@@ -26,7 +29,8 @@ logs and the dumps. Plan: [2026-10-01-block-render.md](../superpowers/plans/2026
   - all 50 blocks look like Minecraft's;
   - drawing costs about 0.01 ms of GPU time.
 - **Step 3, blocks before DLSS: pass.** They sit under the HUD and the menus, tone mapped with the scene. They're
-  steady standing still and leave no trails moving, and 100,000 of them cost 0.03 ms of GPU time.
+  steady standing still, leave no trails moving, and don't flicker turning fast (run 7). 100,000 of them cost
+  0.03 ms of GPU time.
 - **BlockRender costs nothing measurable, after a fix.**
   - **Run 4:** the hooks doubled the frame time with drawing off: 26.5 ms against 13.6 ms without BlockRender.
   - **Run 5 found the cause:** the Streamline hooks' readability checks, whose `VirtualQuery` walked gigabytes of the
@@ -41,6 +45,11 @@ logs and the dumps. Plan: [2026-10-01-block-render.md](../superpowers/plans/2026
 | 2 | 20:50 | plus Task 28 | Step 1 at the main menu and in free roam, the tag dumps, then step 2 |
 | 3 | 21:33 | 0.2.0: plus Task 31 | At run 2's corner: what tracking costs, a frame log, the G-buffer dump, the cube with the default culling |
 | 4 | 23:29 | 0.3.0: Tasks 35 to 43 | Step 3 at the same corner and in the Badlands, then the game without the plugin |
+| 5 | 00:18 | 0.4.0: plus Tasks 45 and 46 | At the same corner: the hook groups switched off in turn found the Streamline hooks' cost |
+| 6 | 00:30 | 0.5.0: plus Task 48 | At the same corner: what BlockRender costs after the fix, step 3 again up to 100,000 blocks, and a flicker turning fast |
+| 7 | 00:56 | 0.6.0: plus Task 50 | At the same corner: drawing before DLSS with every list tracked, turning fast |
+
+Runs 5 to 7 were just after midnight, on 2026-10-02.
 
 **Run 1's two problems,** which Task 28 fixed:
 - **Frame tokens:** the game calls `slGetNewFrameToken` about 8 times a frame (720 a second at 90 fps), from three
@@ -407,6 +416,26 @@ Drawing before DLSS with every list tracked costs about 0.1 to 0.2 ms in all.
 **Blocks before DLSS,** with every list tracked: the GPU time is 0.009 ms for the cube, 0.028 ms for 10,003 blocks,
 and 0.030 ms for 100,001 blocks (81 sections, 267,432 vertices). The frame time stays at 14.5 to 15.0 ms throughout.
 Every frame was drawn, and none skipped.
+
+### Run 7: every list tracked
+
+BlockRender 0.6.0 (Task 50: drawing before DLSS tracks every list again, and the watch is gone), at the same corner,
+with the same save.
+
+| State | Frame time (CET's) |
+|---|---|
+| idle | 14.5 to 15.1 ms |
+| the cube before DLSS, every list tracked | 14.4 to 14.8 ms, 68 to 70 frames drawn a second, none skipped |
+
+The game's own time was already at run 6's later level, so drawing is compared with this run's idle: it costs
+nothing measurable. The cube's GPU time is 0.007 ms.
+
+**Turning fast, no flicker.**
+- **What the status showed:** recorded twice a second for three minutes (269 readings) while the user turned fast,
+  sprinted and strafed. No frame was skipped, and none had a late camera. Frames took 11 to 16 ms averaged over a
+  second, and single frames up to 31 ms.
+- **What the user saw:** no flicker at all. The cube was steady with no trails, its edges sharp and clean, and the
+  pistol in V's hand drew over it.
 
 ### For step 4
 
