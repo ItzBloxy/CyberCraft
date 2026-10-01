@@ -1,25 +1,28 @@
 # Block render: in-game results, Part 1 (steps 1 and 2)
 
 Date: 2026-10-01. Game: Cyberpunk 2077 2.31 (Epic), DLSS Quality at 2560×1440 (render 1707×960), frame generation,
-ray tracing and HDR off. BlockRender 0.1.0: the plan's Tasks 1 to 27, then Task 28's fixes from the first run. The
-user played; the agent sent requests through `blockrender.request` and read the logs, `status.txt`, the frame logs
-and the dumps. Plan: [2026-10-01-block-render.md](../superpowers/plans/2026-10-01-block-render.md).
+ray tracing and HDR off. BlockRender 0.1.0 for runs 1 and 2: the plan's Tasks 1 to 27, then Task 28's fixes from the
+first run. BlockRender 0.2.0 for run 3: plus Task 31's fixes from the second. The user played; the agent sent
+requests through `blockrender.request` and read the logs, `status.txt`, the frame logs and the dumps. Plan:
+[2026-10-01-block-render.md](../superpowers/plans/2026-10-01-block-render.md).
 
 ## Verdict
 
-- **Step 1, the frame map: pass, except the G-buffer dump, which is still to come.**
+- **Step 1, the frame map: pass.**
   - The plugin sees the game's device and swap chain being made.
   - Streamline's camera is the game's camera, in world coordinates.
   - The tags are the render-resolution buffers DLSS reads.
   - The frame's order is clear, and every assumption step 2 makes held.
-  - The G-buffer pass is found and its layout is known, but the candidate rule missed it: the tagged depth is not
-    the G-buffer's depth. The dump of its contents waits for that fix.
-- **Step 2, a cube on the finished frame: pass, once one setting is fixed.** The pipeline treated Minecraft's
-  counter-clockwise front faces as back faces. With the culling flipped live (`set cull 2`), every criterion passed:
+  - The G-buffer pass is found, and its contents are dumped: base colour, world-space normals and material values,
+    with a stencil that sorts the scene into classes. Its depth is not the tagged depth.
+- **Step 2, a cube on the finished frame: pass.** The pipeline first treated Minecraft's counter-clockwise front
+  faces as back faces. With the culling flipped live (`set cull 2`), every criterion passed, and run 3 confirmed the
+  fix with the default culling:
   - the cube stays on its spot of ground while V moves and turns, with no lag;
   - anything nearer hides it, from V's hand to a parked car;
   - all 50 blocks look like Minecraft's;
   - drawing costs about 0.01 ms of GPU time.
+- **Tracking every command list costs nothing measurable.**
 
 ## Runs
 
@@ -27,6 +30,7 @@ and the dumps. Plan: [2026-10-01-block-render.md](../superpowers/plans/2026-10-0
 |---|---|---|---|
 | 1 | 20:35 | Tasks 1 to 27 | Loading checks passed. The main menu's frame log found two problems; the game was closed |
 | 2 | 20:50 | plus Task 28 | Step 1 at the main menu and in free roam, the tag dumps, then step 2 |
+| 3 | 21:33 | 0.2.0: plus Task 31 | At run 2's corner: what tracking costs, a frame log, the G-buffer dump, the cube with the default culling |
 
 **Run 1's two problems,** which Task 28 fixed:
 - **Frame tokens:** the game calls `slGetNewFrameToken` about 8 times a frame (720 a second at 90 fps), from three
@@ -35,6 +39,11 @@ and the dumps. Plan: [2026-10-01-block-render.md](../superpowers/plans/2026-10-0
   only with a newer frame index: 29,355 calls made 3,594 frames at the menu.
 - **The present queue:** the game's swap chain doesn't say which queue it presents on (`GetDevice` fails), so the
   hooks now note it when the swap chain is made.
+
+**Run 2's fixes,** made by Task 31:
+- the pipeline's culling (see step 2);
+- the G-buffer candidate rule (see the G-buffer);
+- tracking runs only while a log or dump runs, or on request.
 
 ## Loading
 
@@ -121,8 +130,45 @@ Over two frames of free roam:
 - **Why no candidates:** the candidate rule required the tagged depth, so it found none.
 - **What the dump needs:** a dump that keeps the first 4 pieces would also miss most of the pass.
 
-The next fix finds the pass by its targets and depth at render resolution, and keeps one copy per set of targets,
-overwritten by each piece, so the dump holds the complete G-buffer.
+Task 31 changed the rule: it finds the pass by its targets and depth at render resolution. The dump now keeps one copy
+per set of targets, recorded again after each piece, so the last copy holds the complete G-buffer.
+
+## The G-buffer's contents
+
+**Run 3's frame log** (`logs\2026-10-01_21-37-08`) found 36 candidate lists over two frames. Each frame sends them to
+the main queue in 3 submissions (10, 7 and 2 lists), within about 1 ms, long before the DLSS submission.
+
+**The dump** (`dumps\2026-10-01_21-37-20`): 14 files, no errors, V standing still.
+- **The copies:** the dumped frame recorded them after 13 passes that draw the three targets, 4 that also draw a
+  motion target, and 1 that draws the second decal set.
+- **Complete:** the three-target set and the four-target set are the same resources, and their last copies came out
+  byte for byte the same. So the copies ran after the last write, and no target is partly drawn.
+- **The second decal set** (`R16G16_SNORM`, `R8_UNORM`, `R8_UNORM`) was all zero in this view.
+
+| Target | Format | Holds | Where nothing is drawn (the sky) |
+|---|---|---|---|
+| 0 | `R10G10B10A2_UNORM` | Base colour in RGB. It looks gamma-encoded: shown as it is, it looks right, and the asphalt reads 0.34 (0.09 in linear terms, about real asphalt's albedo). A is 0 everywhere drawn | RGB 0, A 1 |
+| 1 | `R10G10B10A2_UNORM` | The normal, in world space, as n × 0.5 + 0.5: x east, y north, z up. The ground reads (−0.02, 0.00, 1.00), and the median length is 1.00. A is 1 on screens and signs (3,540 px), 0 elsewhere | (0.5, 0.5, 1): straight up; A 0 |
+| 2 | `R8G8B8A8_UNORM` | Material values. R is likely metalness: 0 on ground, plants and people, 0.26 on the car. G is likely roughness: 0.85 on dirt, 0.72 on the road, 0.37 on car paint. B is 0.33 on most surfaces, but higher on plants (0.63 to 0.86) and skin (1.0): likely a translucency or subsurface amount. A is above 0 only on windows and signs (up to 0.93): likely emission | all 0 |
+| 3 (four-target set only) | `R16G16_FLOAT` | Motion: the walking pedestrian's own, and a small, smooth motion everywhere else, sky included (under 6e−5) | |
+| depth | `D32_FLOAT_S8X24_UINT` | Reversed: 1.5e−6 to 0.009 where drawn, so 13.5 km to 2.2 m away | 0 |
+
+**The stencil** sorts the scene into classes:
+
+| Value | Pixels | What it covers |
+|---|---|---|
+| 0x00 | 378,884, plus the sky | buildings, billboards and most props |
+| 0x01 | 29,234 | bare dirt and sand beside the roads |
+| 0x02 | 674,947 | the roads, and the overpass |
+| 0x14 | 21,098 | poles, street lamps and bollards |
+| 0x15 | 1,867 | people |
+| 0x18 | 1,766 | vehicles |
+| 0x95 | 37 | small parts of people, with material B at 1: likely skin |
+| 0xA0 | 189 | small plants |
+| 0xB6 | 23,844 | trees and bushes |
+
+The three values with the top bit set (0x95, 0xA0, 0xB6) are the ones with a high material B: skin and plants. So
+the top bit likely marks translucent or subsurface shading.
 
 ## The gates for step 2
 
@@ -147,6 +193,8 @@ ones drawn.
   front face (clockwise). Flipping a coordinate axis doesn't change how a triangle winds on screen.
 - **The proof:** `set cull 2` culls the other side, and showed a solid block at once.
 - **The fix:** the pipeline needs `FrontCounterClockwise = TRUE`.
+- **Confirmed in run 3:** with the fix and the default culling (`cull 1`), the cube looked solid from two sides
+  (headings 220° and 137°), at 0.008 to 0.010 ms of GPU time.
 
 | Criterion | Seen |
 |---|---|
@@ -168,9 +216,13 @@ ones drawn.
 - **GPU time:** 0.004 ms with nothing to draw, 0.01 ms for the cube, and 0.01 to 0.02 ms for 151 blocks (8 sections,
   3,660 vertices).
 - **Frame time:** 26 to 33 ms with drawing on, and 27 to 31 ms with it off, so our drawing costs nothing measurable.
-- **The hooks' tracking** has been on since the first frame log, and free roam sat at 30 to 38 fps, below the usual
-  40 to 80 in the city. The next fix turns tracking on only while a log or dump runs, so the next run can
-  measure what it costs.
+- **The hooks' tracking** was on from the first frame log to the end of run 2, and free roam sat at 30 to 38 fps,
+  below the usual 40 to 80 in the city. Run 3 measured it at the same corner, five readings a second apart each:
+  - tracking off: 26.5 ms;
+  - on: 26.4 ms;
+  - off again: 25.9 ms.
+
+  That is about 38 fps throughout, so tracking costs nothing measurable, and it isn't why this spot runs slowly.
 
 **As step 2 expects,** blocks drawn at `Present` cover the HUD, the menus, the weapon wheel and CET's windows. Step 3
 draws them before DLSS, under the UI.
@@ -192,3 +244,11 @@ draws them before DLSS, under the UI.
   slot in just before it.
 - **The scaling input colour and the motion vectors are render targets** (the colour is also a UAV), at the same
   1707×960 as the tagged depth. Step 3 can draw into them directly, so risk 11 doesn't happen.
+- **The G-buffer's normals are in world space, z up.** Step 4's blocks can write their face normals as they are, with
+  no view transform.
+- **The base colour looks gamma-encoded.** Step 4 confirms it by putting a block of known colour beside the game's
+  own surfaces.
+- **The stencil sorts the scene into classes,** which the lighting likely reads. Step 4 picks a class for blocks,
+  starting with 0x00, the buildings' class.
+- **Motion seems filled in for the whole screen,** sky included, so step 4's static blocks may need no motion of
+  their own. Step 4 checks.

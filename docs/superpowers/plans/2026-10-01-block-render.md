@@ -14270,19 +14270,19 @@ A short session. The commands are Task 29's. Stand at the same spot as in Task 2
 **Files:**
 - Modify: `docs/spikes/2026-10-01-block-render-results.md`
 
-- [ ] **Step 1: Deploy (the game must not be running)**
+- [x] **Step 1: Deploy (the game must not be running)**
 
 Run Task 29 Step 1's two commands. Expected: `0`, then the plugin's folder with `BlockRender.dll`, `BlockRender.pdb`,
 `shaders`, `atlas.bin` and `atlas.json`, the overlay's folder with `init.lua`, and `installed`.
 
-- [ ] **Step 2: Load, at the same spot**
+- [x] **Step 2: Load, at the same spot**
 
 Ask the user to launch the game, load the free-roam save, stand where Task 29's logs were taken, and stand still.
 Then read the log's first lines and the status. Expected:
 - `BlockRender 0.2.0 loaded`;
 - in the status, `tracking off`.
 
-- [ ] **Step 3: What tracking costs**
+- [x] **Step 3: What tracking costs**
 
 With the user standing still and the mouse left alone, read the status's `frame=` line five times, a second apart.
 Then send `set tracking 1` and read it five times more. Then send `set tracking 0` and read it five times more:
@@ -14292,14 +14292,14 @@ ST=/e/Cyberpunk2077/bin/x64/plugins/cyber_engine_tweaks/mods/blockrender_hud/sta
 Note the three averages. Their difference is what tracking every command list costs. Step 3 of the spec weighs that
 when deciding how much to track.
 
-- [ ] **Step 4: A frame log**
+- [x] **Step 4: A frame log**
 
 Send `log`, wait 3 seconds, and run the summary. Expected:
 - the G-buffer candidates now list the G-buffer pass's lists (12 in Task 29's log), the passes that also write
   motion, and the decals;
 - the status says `tracking off` again once the log is written.
 
-- [ ] **Step 5: The G-buffer dump**
+- [x] **Step 5: The G-buffer dump**
 
 With the user still standing still, send `dump gbuffer`. Wait 5 seconds, then read `dump.json` and view the dump, as
 in Task 29 Step 6. Expected:
@@ -14315,16 +14315,16 @@ Look at each PNG, and note:
 
 If a target looks only partly drawn, note which parts: that would mean the copies of different lists overlapped.
 
-- [ ] **Step 6: The cube, with the default culling**
+- [x] **Step 6: The cube, with the default culling**
 
 Ask the user to face open ground and stand still. Send `mode present`, then `place cube`. With `cull` at its default
 (1), the cube must look solid. Ask for a screenshot.
 
-- [ ] **Step 7: Clean up**
+- [x] **Step 7: Clean up**
 
 Send `clear`, then `mode off`, two seconds apart.
 
-- [ ] **Step 8: Record the results, and commit**
+- [x] **Step 8: Record the results, and commit**
 
 In `docs/spikes/2026-10-01-block-render-results.md`, add what this run found:
 - the culling fix confirmed;
