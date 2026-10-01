@@ -1,10 +1,13 @@
-# Block render: in-game results, Part 1 (steps 1 and 2)
+# Block render: in-game results, steps 1 to 3
 
 Date: 2026-10-01. Game: Cyberpunk 2077 2.31 (Epic), DLSS Quality at 2560×1440 (render 1707×960), frame generation,
-ray tracing and HDR off. BlockRender 0.1.0 for runs 1 and 2: the plan's Tasks 1 to 27, then Task 28's fixes from the
-first run. BlockRender 0.2.0 for run 3: plus Task 31's fixes from the second. The user played; the agent sent
-requests through `blockrender.request` and read the logs, `status.txt`, the frame logs and the dumps. Plan:
-[2026-10-01-block-render.md](../superpowers/plans/2026-10-01-block-render.md).
+ray tracing, HDR and VSync off, Reflex on, on a 239 Hz display. The builds:
+- **BlockRender 0.1.0** for runs 1 and 2: the plan's Tasks 1 to 27, then Task 28's fixes from the first run;
+- **0.2.0** for run 3: plus Task 31's fixes from the second;
+- **0.3.0** for run 4: Part 2's Tasks 35 to 43, for step 3.
+
+The user played; the agent sent requests through `blockrender.request` and read the logs, `status.txt`, the frame
+logs and the dumps. Plan: [2026-10-01-block-render.md](../superpowers/plans/2026-10-01-block-render.md).
 
 ## Verdict
 
@@ -22,7 +25,11 @@ requests through `blockrender.request` and read the logs, `status.txt`, the fram
   - anything nearer hides it, from V's hand to a parked car;
   - all 50 blocks look like Minecraft's;
   - drawing costs about 0.01 ms of GPU time.
-- **Tracking every command list costs nothing measurable.**
+- **Step 3, blocks before DLSS: pass.** They sit under the HUD and the menus, tone mapped with the scene. They're
+  steady standing still and leave no trails moving, and 100,000 of them cost 0.03 ms of GPU time.
+- **But BlockRender's hooks double the frame time, even with drawing off:** 26.5 ms with the plugin against 13.6 ms
+  without it, at run 3's corner (run 4). Run 3's finding that tracking costs nothing compared two states that both
+  paid this. The hooks have to be fixed before the spike can say its frame rate is acceptable.
 
 ## Runs
 
@@ -31,6 +38,7 @@ requests through `blockrender.request` and read the logs, `status.txt`, the fram
 | 1 | 20:35 | Tasks 1 to 27 | Loading checks passed. The main menu's frame log found two problems; the game was closed |
 | 2 | 20:50 | plus Task 28 | Step 1 at the main menu and in free roam, the tag dumps, then step 2 |
 | 3 | 21:33 | 0.2.0: plus Task 31 | At run 2's corner: what tracking costs, a frame log, the G-buffer dump, the cube with the default culling |
+| 4 | 23:29 | 0.3.0: Tasks 35 to 43 | Step 3 at the same corner and in the Badlands, then the game without the plugin |
 
 **Run 1's two problems,** which Task 28 fixed:
 - **Frame tokens:** the game calls `slGetNewFrameToken` about 8 times a frame (720 a second at 90 fps), from three
@@ -222,7 +230,9 @@ ones drawn.
   - on: 26.4 ms;
   - off again: 25.9 ms.
 
-  That is about 38 fps throughout, so tracking costs nothing measurable, and it isn't why this spot runs slowly.
+  That is about 38 fps throughout, so turning tracking on adds nothing measurable on top. But run 4 found that it
+  isn't the whole story: without BlockRender, the same spot runs at 13.6 ms (73.5 fps). The hooks cost about 13 ms
+  even with tracking off, and that is why this spot ran slowly (see "What the hooks cost").
 
 **As step 2 expects,** blocks drawn at `Present` cover the HUD, the menus, the weapon wheel and CET's windows. Step 3
 draws them before DLSS, under the UI.
@@ -246,9 +256,101 @@ draws them before DLSS, under the UI.
   1707×960 as the tagged depth. Step 3 can draw into them directly, so risk 11 doesn't happen.
 - **The G-buffer's normals are in world space, z up.** Step 4's blocks can write their face normals as they are, with
   no view transform.
-- **The base colour looks gamma-encoded.** Step 4 confirms it by putting a block of known colour beside the game's
-  own surfaces.
+- **The base colour is sRGB-encoded,** which run 4's dump confirmed (see step 3's results). Step 4 can write
+  Minecraft's texture colours as they are.
 - **The stencil sorts the scene into classes,** which the lighting likely reads. Step 4 picks a class for blocks,
   starting with 0x00, the buildings' class.
 - **Motion seems filled in for the whole screen,** sky included, so step 4's static blocks may need no motion of
-  their own. Step 4 checks.
+  their own. Run 4 found that the G-buffer passes with a fourth target draw into the tagged motion vector buffer
+  itself. Step 4 checks.
+
+## Step 3: blocks before DLSS (run 4)
+
+BlockRender 0.3.0, at run 3's corner (x −116.6, y −2005.2, facing south-west), then in the Badlands, by day and at
+night. `predlss` puts a list of ours into the game's submission just before the DLSS list. It draws into the tagged
+colour, motion vectors and depth, with the frame's jitter.
+
+**The states before the DLSS list,** from the first frame log, in both frames' DLSS lists:
+
+| Tagged buffer | Before the DLSS list | Where that comes from |
+|---|---|---|
+| Scaling input colour | 0x8 (unordered access) | the DLSS list's first transition starts there |
+| Motion vectors | 0xC0 (shader resource) | the list never moves it: its tagged state |
+| Depth | 0xC0 (shader resource) | the first transition starts there; the list ends it in 0x40 |
+| Bias colour hint | 0x8 | the first transition starts there |
+
+All are plain states, with no subresource or split barriers, so `predlss` always knew where to start. It drew every
+frame DLSS ran, and skipped none.
+
+**What the game settled live:**
+- **`exposure` 2.5:** the user compared 1.5, 2, 2.5, 3, 6 and 12 against the sunlit pavement. 3 was close, and 2.5
+  looked the most natural.
+- **`jittersign` 1,** as built: its edges were the smoothest, standing still.
+- **`mvsign` 1,** as built: no trails while strafing past the cube. The other signs left them.
+
+| Criterion | Seen |
+|---|---|
+| Under the HUD and the menus | ✅ the HUD's icons and the minimap draw over the blocks; the weapon wheel and the pause menu sit on top, and the pause menu's blur blurs the blocks with the scene |
+| Tone mapped with the scene | ✅ at `exposure` 2.5 |
+| Steady standing still, no trails moving | ✅ with both signs at 1 |
+| Hiding and hidden | ✅ grass and bushes hide the base row, V hides it in third person, and a car driven over the row hides the blocks under it |
+| Cut-outs | ✅ glass shows the desert through its frame, and the leaves have clean holes |
+| The house | ✅ log corners, plank walls, windows on every side, the doorway, the floor, the roof and the bush; placed onto the sampler row, it replaced the blocks it overlapped |
+| Full-screen menus | the game runs no DLSS behind them, so nothing is drawn, and nothing counts as skipped |
+
+**Not part of step 3:**
+- **No lighting:** the blocks have no shadows, and at night they keep their daytime brightness.
+- **No fog:** they're drawn after it.
+
+Step 4's G-buffer drawing is what lets the game light them.
+
+**The timings** (`predlss` on, the same view, five readings a second apart each):
+
+| Blocks | Sections | Vertices | Our GPU time | Frame time (the plugin's / CET's) |
+|---|---|---|---|---|
+| none | 0 | 0 | about 0 ms | 26.6 / 26.5 ms |
+| 10,003 | 12 | 31,116 | 0.028 to 0.029 ms | 26.1 / 26.1 ms |
+| 100,001 | 81 | 267,432 | 0.031 to 0.033 ms | 26.1 / 25.9 ms |
+
+The measured view had a stone face of the field filling most of the screen, a near worst case for fill. Drawing even
+100,000 blocks costs nothing measurable in frame time: the mesher drops hidden faces, and whole sections outside the
+view are culled.
+
+### What the hooks cost
+
+CET's own frame time, at the corner, standing still, five readings each:
+
+| BlockRender | Frame time |
+|---|---|
+| loaded, drawing off, tracking off | 26.5 ms (37.7 fps) |
+| removed (its DLL renamed) | **13.6 ms (73.5 fps)** |
+
+- **Not an artefact:** VSync is off, and the display runs at 239 Hz, so this is no frame-rate quantisation.
+- **It roughly doubles the frame time,** even with drawing off.
+- **It explains earlier runs:** run 2's free roam at 30 to 38 fps, below the usual 40 to 80. It also means run 3's
+  comparison of tracking on and off compared two states that both paid it, so tracking's own cost is unknown.
+
+The likeliest cause: every hooked command list call, about 10,000 a frame from up to 12 recording threads, looks its
+list up under a shared lock, even with tracking off. A list that was never tracked misses every time, so the lookup
+never uses its per-thread cache. That alone may not add up to 13 ms, and the device's view hooks run often too, so
+the next step measures each group of hooks before fixing.
+
+### For step 4
+
+- **The base colour is sRGB-encoded.** Sunlit ground facing up gets the same light in every pixel. Its pre-DLSS colour
+  divided by its base colour varies least when the base colour is sRGB-decoded:
+
+  | Decoding | Spread (std of log) | Slope of colour against base colour |
+  |---|---|---|
+  | as stored | 0.156 | 1.44 |
+  | sRGB-decoded | 0.099 | 0.91 |
+  | gamma 2.2 | 0.107 | 0.86 |
+
+- **The game's light on that ground is about 9 times its linear base colour** (through its exposure). Step 3's blocks
+  use 2.5, so blocks the game lights in step 4 will be brighter than step 3's, as Minecraft's colours are bright for
+  real surfaces.
+- **The G-buffer lists' states:**
+  - most lists don't move their targets at all;
+  - the G-buffer depth goes between 0xE0 (read) and 0x10 (write);
+  - the second target (normals) moves one subresource at a time, so it likely has mip levels;
+  - the motion vector buffer goes from 0x40 to a render target in the list that first draws into it.

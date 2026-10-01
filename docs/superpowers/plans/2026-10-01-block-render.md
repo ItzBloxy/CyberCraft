@@ -17824,7 +17824,7 @@ If drawing skips frames, the status says why: stop there, and fix it in a new ta
 **Files:**
 - Modify: `docs/spikes/2026-10-01-block-render-results.md`
 
-- [ ] **Step 1: Deploy (the game must not be running)**
+- [x] **Step 1: Deploy (the game must not be running)**
 
 ```bash
 tasklist | grep -i -c "cyberpunk2077.exe"
@@ -17841,7 +17841,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default -DCP2
 Expected: the plugin's folder holds `BlockRender.dll`, `BlockRender.pdb`, `shaders`, `atlas.bin` and `atlas.json`, the
 overlay's folder holds `init.lua`, then `installed`.
 
-- [ ] **Step 2: Load, at the corner**
+- [x] **Step 2: Load, at the corner**
 
 Ask the user to launch the game, load the free-roam save, go to run 3's corner, face south-west, and stand still.
 Then read the log's first lines, the status and `frames.txt`. Expected:
@@ -17849,7 +17849,7 @@ Then read the log's first lines, the status and `frames.txt`. Expected:
 - in the status, `mode=off` and `tracking off`;
 - in `frames.txt`, CET's frame time.
 
-- [ ] **Step 3: What the hooks cost, with the plugin**
+- [x] **Step 3: What the hooks cost, with the plugin**
 
 With the user standing still and the mouse left alone, read the status's `frame=` line and `frames.txt` five times
 each, a second apart:
@@ -17859,7 +17859,7 @@ for i in 1 2 3 4 5; do sed -n '5p' $H/status.txt; cat $H/frames.txt; sleep 1.1; 
 ```
 Note both averages. Step 13 repeats CET's without the plugin.
 
-- [ ] **Step 4: The states before the DLSS list**
+- [x] **Step 4: The states before the DLSS list**
 
 Send `log`, wait 3 seconds, and summarise the newest frame log. In "States in the DLSS and G-buffer lists", note each
 tagged buffer's states in the DLSS lists. Expected:
@@ -17871,7 +17871,7 @@ tagged buffer's states in the DLSS lists. Expected:
 
 Note the G-buffer lists' states too, for Part 3.
 
-- [ ] **Step 5: Everything in one dump**
+- [x] **Step 5: Everything in one dump**
 
 Send `dump all`, wait 5 seconds, then read `dump.json` and convert the dump, as in Task 32 Step 5:
 ```bash
@@ -17881,7 +17881,7 @@ D=$(ls -td /e/Cyberpunk2077/red4ext/plugins/BlockRender/dumps/*/ | head -1); cat
 Expected: the three tags and the G-buffer's groups, from one frame, and no errors. Part 3 compares the colour with the
 G-buffer's base colour, pixel by pixel, to settle whether the base colour is gamma-encoded.
 
-- [ ] **Step 6: The cube, before DLSS**
+- [x] **Step 6: The cube, before DLSS**
 
 Ask the user to face open ground and stand still. Send `mode predlss`, then `place cube`, and read the status twice, a
 second apart. Expected:
@@ -17892,12 +17892,12 @@ second apart. Expected:
 Ask for a screenshot. Expected: the cube sits under the HUD and CET's windows, with its faces' shading, and tone mapped
 with the scene.
 
-- [ ] **Step 7: The exposure**
+- [x] **Step 7: The exposure**
 
 Ask the user to compare the cube's top with the sunlit pavement. Try `set exposure` at 1.5, 3, 6 and 12, two seconds
 apart, and ask which looks closest. Narrow it down, and note the value.
 
-- [ ] **Step 8: The jitter's sign**
+- [x] **Step 8: The jitter's sign**
 
 Ask the user to stand still and watch the cube's edges for a few seconds at each of `set jittersign 1`, `-1` and `0`.
 Expected:
@@ -17907,7 +17907,7 @@ Expected:
 
 Note which is right, and leave it set.
 
-- [ ] **Step 9: The motion vectors' sign**
+- [x] **Step 9: The motion vectors' sign**
 
 Ask the user to strafe left and right past the cube, at each of `set mvsign 1`, `-1` and `0`. Expected:
 - the right sign: no trails or smears behind its edges;
@@ -17915,7 +17915,7 @@ Ask the user to strafe left and right past the cube, at each of `set mvsign 1`, 
 
 Note which is right, and leave it set.
 
-- [ ] **Step 10: More blocks, and the UI**
+- [x] **Step 10: More blocks, and the UI**
 
 Ask the user to move to an open spot for each, and to say when they're ready. Then:
 - `place sampler`: leaves and glass are cut out;
@@ -17925,18 +17925,18 @@ Ask the user to walk around them, then open the map and the pause menu, with scr
 - the blocks are under every menu;
 - they hide what's behind them, and nearer things hide them.
 
-- [ ] **Step 11: The timings**
+- [x] **Step 11: The timings**
 
 Back at the corner, with the same view and `predlss` still on, send `clear` and read the status five times, a
 second apart: drawing with no blocks. Then `place field 10000` and read it five times, then `clear`, `place field
 100000`, and five times again. Note the blocks, the sections, the vertices, the GPU time and the frame time of
 each.
 
-- [ ] **Step 12: Clean up**
+- [x] **Step 12: Clean up**
 
 Send `clear`, then `mode off`, two seconds apart. Expected in the status: `mode=off`, and `tracking off`.
 
-- [ ] **Step 13: The game without the plugin**
+- [x] **Step 13: The game without the plugin**
 
 Ask the user to quit the game. Once `tasklist | grep -i -c "cyberpunk2077.exe"` prints `0`, take the plugin out, and
 remove its stale status file:
@@ -17952,7 +17952,7 @@ P=/e/Cyberpunk2077/red4ext/plugins/BlockRender; mv "$P/BlockRender.dll.off" "$P/
 ```
 The difference from Step 3's CET time is what the hooks cost.
 
-- [ ] **Step 14: Record the results, and commit**
+- [x] **Step 14: Record the results, and commit**
 
 In `docs/spikes/2026-10-01-block-render-results.md`, add step 3:
 - the states before the DLSS list;
