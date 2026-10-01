@@ -1520,7 +1520,7 @@ back.
   `tests/TestPatches.cpp`
 - Modify: `CMakeLists.txt`
 
-- [ ] **Step 1: Write the failing test, `tests/TestPatches.cpp`**
+- [x] **Step 1: Write the failing test, `tests/TestPatches.cpp`**
 
 ```cpp
 #include "Harness.h"
@@ -1618,7 +1618,7 @@ TEST(VtablePatchSwapsOneEntryAndRestoresIt)
 }
 ```
 
-- [ ] **Step 2: Edit `CMakeLists.txt` to add the test**
+- [x] **Step 2: Edit `CMakeLists.txt` to add the test**
 
 ```cmake
 	tests/TestSl.cpp
@@ -1630,7 +1630,7 @@ TEST(VtablePatchSwapsOneEntryAndRestoresIt)
 )
 ```
 
-- [ ] **Step 3: Build; it must fail**
+- [x] **Step 3: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -1639,7 +1639,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `fatal error C1083: Cannot open include file: 'hooks/ImportPatch.h'`.
 
-- [ ] **Step 4: Write `src/hooks/ImportPatch.h`**
+- [x] **Step 4: Write `src/hooks/ImportPatch.h`**
 
 ```cpp
 #pragma once
@@ -1672,7 +1672,7 @@ bool RestoreImport(const ImportPatch& aPatch);
 }
 ```
 
-- [ ] **Step 5: Write `src/hooks/ImportPatch.cpp`**
+- [x] **Step 5: Write `src/hooks/ImportPatch.cpp`**
 
 ```cpp
 #include "hooks/ImportPatch.h"
@@ -1770,7 +1770,7 @@ bool RestoreImport(const ImportPatch& aPatch)
 }
 ```
 
-- [ ] **Step 6: Write `src/hooks/VtablePatch.h`**
+- [x] **Step 6: Write `src/hooks/VtablePatch.h`**
 
 ```cpp
 #pragma once
@@ -1814,7 +1814,7 @@ private:
 }
 ```
 
-- [ ] **Step 7: Write `src/hooks/VtablePatch.cpp`**
+- [x] **Step 7: Write `src/hooks/VtablePatch.cpp`**
 
 ```cpp
 #include "hooks/VtablePatch.h"
@@ -1888,7 +1888,7 @@ size_t VtablePatcher::Count() const
 }
 ```
 
-- [ ] **Step 8: Edit `CMakeLists.txt` to add the sources**
+- [x] **Step 8: Edit `CMakeLists.txt` to add the sources**
 
 ```cmake
 	src/sl/Sl.cpp
@@ -1901,7 +1901,7 @@ size_t VtablePatcher::Count() const
 )
 ```
 
-- [ ] **Step 9: Build and run the tests; they must pass**
+- [x] **Step 9: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -1911,7 +1911,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `28 test(s), 0 failure(s)`.
 
-- [ ] **Step 10: Commit**
+- [x] **Step 10: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \

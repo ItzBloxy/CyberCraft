@@ -26,6 +26,8 @@ add_library(render_core STATIC
 	src/Requests.cpp
 	src/LogQueue.cpp
 	src/sl/Sl.cpp
+	src/hooks/ImportPatch.cpp
+	src/hooks/VtablePatch.cpp
 )
 target_link_libraries(render_core PUBLIC render_settings d3dcompiler dxguid)
 
@@ -39,6 +41,7 @@ add_executable(render_tests
 	tests/TestRequests.cpp
 	tests/TestLogQueue.cpp
 	tests/TestSl.cpp
+	tests/TestPatches.cpp
 )
 target_link_libraries(render_tests PRIVATE render_core)
 add_test(NAME render_tests COMMAND render_tests WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
