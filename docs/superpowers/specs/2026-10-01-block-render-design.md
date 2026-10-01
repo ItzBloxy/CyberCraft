@@ -500,8 +500,8 @@ starts, and again on `reload`. A compile error is logged, and the previous pipel
   the block layer that holds V's feet, so it sits partly sunk into the ground.
   - `cube`: one stone block.
   - `sampler`: every block in the atlas list, in a row with a gap between each, on a stone base.
-  - `house` (with step 3): 7×7 and 5 high. A cobblestone floor, oak plank walls, oak log corners, a glass window in each side, a
-    doorway, a plank roof, and an oak-leaves bush beside it.
+  - `house` (with step 3): 7×7 and 5 high. A cobblestone floor, oak plank walls, oak log corners, a glass window in
+    each side, a doorway, a plank roof, and an oak-leaves bush beside it.
   - `field <n>` (with step 3): rolling terrain of grass over dirt over stone, sized to hold about n blocks.
 - **Uploads:** new and changed sections are meshed on the main thread. Our own list uploads them, submitted on the main
   queue from the main thread, and old buffers are freed once the fence passes.
