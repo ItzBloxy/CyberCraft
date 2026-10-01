@@ -7123,7 +7123,7 @@ cd /d/Cyberpunk-Minecraft && git add spikes/block-render/tools \
 **Files:**
 - Create: `tools/view_dump.py`, `tools/test_view_dump.py`, `tools/frame_summary.py`, `tools/test_frame_summary.py`
 
-- [ ] **Step 1: Write the failing test, `tools/test_view_dump.py`**
+- [x] **Step 1: Write the failing test, `tools/test_view_dump.py`**
 
 ```python
 """Tests for view_dump.py, with DDS files laid out as the plugin's DdsWriter writes them.
@@ -7232,14 +7232,14 @@ def test_unknown_formats_are_named(tmp_path):
         vd.read_dds(junk)
 ```
 
-- [ ] **Step 2: Run it; it must fail**
+- [x] **Step 2: Run it; it must fail**
 
 ```bash
 cd /d/Cyberpunk-Minecraft/spikes/block-render/tools && uv run --no-project -q --with numpy --with pillow --with pytest pytest -q test_view_dump.py 2>&1 | grep -E "^E |error in"
 ```
 Expected: `E   ModuleNotFoundError: No module named 'view_dump'`, then `1 error in ...`.
 
-- [ ] **Step 3: Write `tools/view_dump.py`**
+- [x] **Step 3: Write `tools/view_dump.py`**
 
 ```python
 """Turns BlockRender's dumped buffers (.dds files) into PNGs you can look at.
@@ -7424,7 +7424,7 @@ if __name__ == "__main__":
     main()
 ```
 
-- [ ] **Step 4: Write the failing test, `tools/test_frame_summary.py`**
+- [x] **Step 4: Write the failing test, `tools/test_frame_summary.py`**
 
 ```python
 import copy
@@ -7552,14 +7552,14 @@ def test_summary_without_a_script_camera_or_candidates():
     assert summary.endswith("== G-buffer candidates\nnone")
 ```
 
-- [ ] **Step 5: Run both; the summary's must fail**
+- [x] **Step 5: Run both; the summary's must fail**
 
 ```bash
 cd /d/Cyberpunk-Minecraft/spikes/block-render/tools && uv run --no-project -q --with numpy --with pillow --with pytest pytest -q test_view_dump.py test_frame_summary.py 2>&1 | grep -E "^E |error in"
 ```
 Expected: `E   ModuleNotFoundError: No module named 'frame_summary'`, then `1 error in ...`.
 
-- [ ] **Step 6: Write `tools/frame_summary.py`**
+- [x] **Step 6: Write `tools/frame_summary.py`**
 
 ```python
 """Summarise a BlockRender frame log (frame.json) against step 1 of spike 3: the device, the camera, the tags, the
@@ -7795,14 +7795,14 @@ if __name__ == "__main__":
     main(sys.argv)
 ```
 
-- [ ] **Step 7: Run all the tools' tests; they must pass**
+- [x] **Step 7: Run all the tools' tests; they must pass**
 
 ```bash
 cd /d/Cyberpunk-Minecraft/spikes/block-render/tools && uv run --no-project -q --with numpy --with pillow --with pytest pytest -q 2>&1 | tail -1
 ```
 Expected: `20 passed`.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render/tools \
