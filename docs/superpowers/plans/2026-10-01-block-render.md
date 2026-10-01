@@ -433,7 +433,7 @@ turns on DRED or the D3D12 debug layer at load (the spec's "Safety").
 - Create: `src/Requests.h`, `src/Requests.cpp`, `tests/TestRequests.cpp`
 - Modify: `CMakeLists.txt`
 
-- [ ] **Step 1: Write the failing test, `tests/TestRequests.cpp`**
+- [x] **Step 1: Write the failing test, `tests/TestRequests.cpp`**
 
 ```cpp
 #include "Harness.h"
@@ -535,7 +535,7 @@ TEST(SettingsReadDredAndDebugLayer)
 }
 ```
 
-- [ ] **Step 2: Edit `CMakeLists.txt` to add the test**
+- [x] **Step 2: Edit `CMakeLists.txt` to add the test**
 
 ```cmake
 	tests/TestReadable.cpp
@@ -547,7 +547,7 @@ TEST(SettingsReadDredAndDebugLayer)
 )
 ```
 
-- [ ] **Step 3: Build; it must fail**
+- [x] **Step 3: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -556,7 +556,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `fatal error C1083: Cannot open include file: 'Requests.h'`.
 
-- [ ] **Step 4: Write `src/Requests.h`**
+- [x] **Step 4: Write `src/Requests.h`**
 
 ```cpp
 #pragma once
@@ -610,7 +610,7 @@ PluginSettings ParseSettings(std::string_view aText);
 }
 ```
 
-- [ ] **Step 5: Write `src/Requests.cpp`**
+- [x] **Step 5: Write `src/Requests.cpp`**
 
 ```cpp
 #include "Requests.h"
@@ -786,7 +786,7 @@ PluginSettings ParseSettings(std::string_view aText)
 }
 ```
 
-- [ ] **Step 6: Edit `CMakeLists.txt` to add the source**
+- [x] **Step 6: Edit `CMakeLists.txt` to add the source**
 
 ```cmake
 	src/Readable.cpp
@@ -798,7 +798,7 @@ PluginSettings ParseSettings(std::string_view aText)
 )
 ```
 
-- [ ] **Step 7: Build and run the tests; they must pass**
+- [x] **Step 7: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -808,7 +808,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `16 test(s), 0 failure(s)`.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
