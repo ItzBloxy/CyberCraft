@@ -1,7 +1,7 @@
 // BlockRender: spike 3's RED4ext plugin. It hooks the game's Streamline calls and D3D12 to map Cyberpunk's frame
-// (step 1: the frame log and the dumps), and draws Minecraft blocks into it (step 2: on the finished frame). Commands
-// come through blockrender.request in its folder, and status.txt in the overlay's folder says what it's doing. See
-// docs/superpowers/specs/2026-10-01-block-render-design.md.
+// (step 1: the frame log and the dumps), and draws Minecraft blocks into it (step 2: on the finished frame; step 3:
+// before DLSS). Commands come through blockrender.request in its folder, and status.txt in the overlay's folder says
+// what it's doing. See docs/superpowers/specs/2026-10-01-block-render-design.md.
 #include <RED4ext/RED4ext.hpp>
 
 #include "LogQueue.h"
@@ -36,7 +36,7 @@ namespace
 using Clock = std::chrono::steady_clock;
 using namespace std::chrono_literals;
 
-constexpr const char* kVersion = "0.2.0";
+constexpr const char* kVersion = "0.3.0";
 
 RED4ext::v1::PluginHandle g_handle = nullptr;
 const RED4ext::v1::Sdk*   g_sdk = nullptr;
@@ -429,7 +429,7 @@ RED4EXT_C_EXPORT void RED4EXT_CALL Query(RED4ext::v1::PluginInfo* aInfo)
 {
 	aInfo->name = L"BlockRender";
 	aInfo->author = L"Cyberpunk-Minecraft";
-	aInfo->version = RED4EXT_V1_SEMVER(0, 2, 0);
+	aInfo->version = RED4EXT_V1_SEMVER(0, 3, 0);
 	aInfo->runtime = RED4EXT_V1_RUNTIME_VERSION_LATEST;
 	aInfo->sdk = RED4EXT_V1_SDK_VERSION_CURRENT;
 }

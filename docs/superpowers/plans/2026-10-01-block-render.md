@@ -17673,7 +17673,7 @@ straight to the renderer, and `place house` and `place field` came with Task 40.
 **Files:**
 - Modify: `CMakeLists.txt`, `src/Plugin.cpp`, `tools/blockrender_hud/init.lua`
 
-- [ ] **Step 1: Edit `CMakeLists.txt` for the version**
+- [x] **Step 1: Edit `CMakeLists.txt` for the version**
 
 ```cmake
 project(BlockRender VERSION 0.2.0 LANGUAGES C CXX)
@@ -17682,7 +17682,7 @@ project(BlockRender VERSION 0.2.0 LANGUAGES C CXX)
 project(BlockRender VERSION 0.3.0 LANGUAGES C CXX)
 ```
 
-- [ ] **Step 2: Edit `src/Plugin.cpp` for the version**
+- [x] **Step 2: Edit `src/Plugin.cpp` for the version**
 
 ```cpp
 // (step 1: the frame log and the dumps), and draws Minecraft blocks into it (step 2: on the finished frame). Commands
@@ -17707,7 +17707,7 @@ constexpr const char* kVersion = "0.3.0";
 	aInfo->version = RED4EXT_V1_SEMVER(0, 3, 0);
 ```
 
-- [ ] **Step 3: Edit `tools/blockrender_hud/init.lua` to time frames**
+- [x] **Step 3: Edit `tools/blockrender_hud/init.lua` to time frames**
 
 ```lua
 -- this folder once a second, plus V's position, heading and Minecraft block, and the nearest structure. Read-only.
@@ -17770,7 +17770,7 @@ registerForEvent("onUpdate", function(delta)
         end
 ```
 
-- [ ] **Step 4: Build; it must compile without warnings, and the tests still pass**
+- [x] **Step 4: Build; it must compile without warnings, and the tests still pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -17780,7 +17780,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `101 test(s), 0 failure(s)`.
 
-- [ ] **Step 5: Check the DLL's exports and imports**
+- [x] **Step 5: Check the DLL's exports and imports**
 
 ```bash
 DUMPBIN="/c/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/dumpbin.exe"
@@ -17790,14 +17790,14 @@ B=/d/Cyberpunk-Minecraft/spikes/block-render/build/RelWithDebInfo/BlockRender.dl
 ```
 Expected: exactly `Main`, `Query` and `Supports`, then `D3DCOMPILER_47.dll` and `d3d12.dll`.
 
-- [ ] **Step 6: Check the overlay's Lua**
+- [x] **Step 6: Check the overlay's Lua**
 
 ```bash
 luac -p /d/Cyberpunk-Minecraft/spikes/block-render/tools/blockrender_hud/init.lua && echo "syntax ok"
 ```
 Expected: `syntax ok`.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \

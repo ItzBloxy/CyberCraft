@@ -1,10 +1,13 @@
 -- BlockRender HUD: what BlockRender (spike 3 of D:\Cyberpunk-Minecraft) is doing, from the status.txt it writes into
--- this folder once a second, plus V's position, heading and Minecraft block, and the nearest structure. Read-only.
--- Delete this folder to remove it.
+-- this folder once a second, plus V's position, heading and Minecraft block, and the nearest structure, and the frame
+-- time as CET sees it, which works without BlockRender too and goes into frames.txt here as well. Delete this folder
+-- to remove it.
 local status = nil       -- status.txt's lines, except the structures
 local structures = {}    -- { name, min = { x, y, z }, max = { x, y, z } }, in world coordinates
 local player = nil       -- the lines about V
 local sinceRead = 1.0
+local frames = { sum = 0.0, count = 0, worst = 0.0 }  -- this second's frame times, from onUpdate
+local frameLine = nil                                  -- the last whole second's
 local fontScale = 0.8    -- the window's text, against CET's own size
 
 local atan2 = math.atan2 or function(y, x) return math.atan(y, x) end
@@ -56,10 +59,22 @@ local function distanceToBox(p, box)
 end
 
 registerForEvent("onUpdate", function(delta)
+    frames.sum = frames.sum + delta
+    frames.count = frames.count + 1
+    frames.worst = math.max(frames.worst, delta)
     sinceRead = sinceRead + delta
     if sinceRead >= 1.0 then
         sinceRead = 0.0
         readStatus()
+        local average = frames.sum / frames.count
+        frameLine = string.format("CET's frame time: %.1f ms average (%.1f fps), %.1f ms worst", average * 1000.0,
+            1.0 / average, frames.worst * 1000.0)
+        frames = { sum = 0.0, count = 0, worst = 0.0 }
+        local out = io.open("frames.txt", "w")
+        if out ~= nil then
+            out:write(frameLine, "\n")
+            out:close()
+        end
     end
     local v = Game.GetPlayer()
     if v == nil then
@@ -100,6 +115,9 @@ registerForEvent("onDraw", function()
                     ImGui.Text(part)
                 end
             end
+        end
+        if frameLine ~= nil then
+            ImGui.Text(frameLine)
         end
         if player ~= nil then
             ImGui.Separator()
