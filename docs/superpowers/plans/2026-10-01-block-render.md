@@ -5874,7 +5874,7 @@ handles, so back-face culling keeps the right faces.
   `tests/TestShaders.cpp`, `tests/TestWinding.cpp`
 - Modify: `CMakeLists.txt`
 
-- [ ] **Step 1: Write the failing test, `tests/TestShaders.cpp`**
+- [x] **Step 1: Write the failing test, `tests/TestShaders.cpp`**
 
 ```cpp
 #include "Harness.h"
@@ -5945,7 +5945,7 @@ TEST(ShadersReportCompileErrors)
 }
 ```
 
-- [ ] **Step 2: Write `tests/TestWinding.cpp`**
+- [x] **Step 2: Write `tests/TestWinding.cpp`**
 
 ```cpp
 #include "Harness.h"
@@ -6019,7 +6019,7 @@ TEST(WindingFacesTheCameraWithARightHandedColumnProjection)
 }
 ```
 
-- [ ] **Step 3: Edit `CMakeLists.txt` to add both**
+- [x] **Step 3: Edit `CMakeLists.txt` to add both**
 
 ```cmake
 	tests/TestFrameLogJson.cpp
@@ -6032,7 +6032,7 @@ TEST(WindingFacesTheCameraWithARightHandedColumnProjection)
 )
 ```
 
-- [ ] **Step 4: Build; it must fail**
+- [x] **Step 4: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -6041,7 +6041,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `fatal error C1083: Cannot open include file: 'render/FrameConstants.h'`.
 
-- [ ] **Step 5: Write `src/render/FrameConstants.h`**
+- [x] **Step 5: Write `src/render/FrameConstants.h`**
 
 ```cpp
 #pragma once
@@ -6073,7 +6073,7 @@ static_assert(sizeof(SectionConstants) == 16);
 }
 ```
 
-- [ ] **Step 6: Write `src/render/Shaders.h`**
+- [x] **Step 6: Write `src/render/Shaders.h`**
 
 ```cpp
 #pragma once
@@ -6104,7 +6104,7 @@ std::optional<BlockShaders> CompileBlockShaders(std::string_view aSource, std::s
 }
 ```
 
-- [ ] **Step 7: Write `src/render/Shaders.cpp`**
+- [x] **Step 7: Write `src/render/Shaders.cpp`**
 
 ```cpp
 #include "render/Shaders.h"
@@ -6153,7 +6153,7 @@ std::optional<BlockShaders> CompileBlockShaders(std::string_view aSource, std::s
 }
 ```
 
-- [ ] **Step 8: Write `shaders/blocks.hlsl`**
+- [x] **Step 8: Write `shaders/blocks.hlsl`**
 
 ```hlsl
 // BlockRender's shaders: Minecraft section vertices (SkyCraft's 32-byte format), read from a buffer and drawn into
@@ -6254,7 +6254,7 @@ float4 PresentPS(VSOut i) : SV_Target0
 }
 ```
 
-- [ ] **Step 9: Edit `CMakeLists.txt` to add the source**
+- [x] **Step 9: Edit `CMakeLists.txt` to add the source**
 
 ```cmake
 	src/log/FrameLogJson.cpp
@@ -6266,7 +6266,7 @@ float4 PresentPS(VSOut i) : SV_Target0
 )
 ```
 
-- [ ] **Step 10: Build and run the tests; they must pass**
+- [x] **Step 10: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -6276,7 +6276,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `79 test(s), 0 failure(s)`.
 
-- [ ] **Step 11: Commit**
+- [x] **Step 11: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \

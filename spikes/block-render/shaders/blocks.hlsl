@@ -1,0 +1,96 @@
+// BlockRender's shaders: Minecraft section vertices (SkyCraft's 32-byte format), read from a buffer and drawn into
+// the game's frame. The plugin compiles this file in the game with D3DCompile (shader model 5.1); "reload" in
+// blockrender.request compiles it again. src/render/FrameConstants.h mirrors the constant buffers.
+
+struct Vertex
+{
+    float3 position;  // from the section's minimum corner, in Minecraft axes (x east, y up, z south)
+    float2 uv;        // atlas coordinates
+    uint   colour;    // RGBA8, red in the low byte: tint and ambient occlusion
+    uint   light;     // block light in bits 0-7, sky light in bits 8-15
+    uint   flags;     // bit 0 alpha-tested, bit 1 translucent, bits 4-7 the face's direction + 1
+};
+
+cbuffer Frame : register(b0)
+{
+    row_major float4x4 cameraToClip;  // camera-relative world position to clip
+    float4 target;                    // width, height, 1 / width, 1 / height of the image drawn into
+    float4 depthExtent;               // left, top, width, height of the depth image within its buffer
+    uint4  depthInfo;                 // floats per row of the depth copy; 1 if there is a copy; 1 if depth is reversed
+    uint4  atlasInfo;                 // width, height, levels
+    uint4  atlasLevels[2];            // where each level's texels start
+    float4 tuning;                    // brightness; depth tolerance
+};
+
+cbuffer Section : register(b1)
+{
+    float3 sectionOffset;  // the section's minimum corner: camera-relative, world axes
+    float  sectionUnused;
+};
+
+StructuredBuffer<Vertex> vertices : register(t0);
+StructuredBuffer<uint>   atlas    : register(t1);
+StructuredBuffer<float>  depthCopy : register(t2);
+
+struct VSOut
+{
+    float4 position : SV_Position;
+    float2 uv       : TEXCOORD0;
+    float4 colour   : COLOR0;
+    nointerpolation uint face : TEXCOORD1;
+};
+
+VSOut BlocksVS(uint id : SV_VertexID)
+{
+    const Vertex v = vertices[id];
+    VSOut o;
+    // Minecraft (x, y, z) is world (x, -z, y).
+    const float3 world = sectionOffset + float3(v.position.x, -v.position.z, v.position.y);
+    o.position = mul(float4(world, 1.0), cameraToClip);
+    o.uv = v.uv;
+    o.colour = float4(v.colour & 0xFF, (v.colour >> 8) & 0xFF, (v.colour >> 16) & 0xFF, v.colour >> 24) / 255.0;
+    o.face = (v.flags >> 4) & 15;
+    return o;
+}
+
+// The atlas texel nearest uv, in the mip level that uv's rate of change across the screen picks.
+float4 SampleAtlas(float2 uv)
+{
+    const float2 size = float2(atlasInfo.x, atlasInfo.y);
+    const float2 dx = ddx(uv * size);
+    const float2 dy = ddy(uv * size);
+    const float  lod = 0.5 * log2(max(max(dot(dx, dx), dot(dy, dy)), 1e-8));
+    const uint   level = (uint)clamp(floor(lod + 0.5), 0.0, (float)atlasInfo.z - 1.0);
+    const uint2  levelSize = max(uint2(atlasInfo.x >> level, atlasInfo.y >> level), uint2(1, 1));
+    const uint2  texel = min((uint2)(uv * float2(levelSize)), levelSize - 1);
+    const uint   start = atlasLevels[level / 4][level % 4];
+    const uint   packed = atlas[start + texel.y * levelSize.x + texel.x];
+    return float4(packed & 0xFF, (packed >> 8) & 0xFF, (packed >> 16) & 0xFF, packed >> 24) / 255.0;
+}
+
+// Minecraft's brightness per face, by the flags' direction + 1: none, down, up, north, south, west, east.
+static const float kFaceShade[7] = { 1.0, 0.5, 1.0, 0.8, 0.8, 0.6, 0.6 };
+
+// Step 2: on the finished frame, before Present. Hidden where the game's depth (copied at the DLSS evaluate) says
+// something nearer is there; blocks sort among themselves through a depth buffer of the plugin's own.
+float4 PresentPS(VSOut i) : SV_Target0
+{
+    const float4 texel = SampleAtlas(i.uv);
+    if (texel.a < 0.5)
+    {
+        discard;
+    }
+    if (depthInfo.y != 0)
+    {
+        const float2 at = depthExtent.xy + i.position.xy * target.zw * depthExtent.zw;
+        const uint2  last = (uint2)(depthExtent.xy + depthExtent.zw) - 1;
+        const uint2  where = min((uint2)at, last);
+        const float  scene = depthCopy[where.y * depthInfo.x + where.x];
+        const bool   hidden = depthInfo.z != 0 ? scene > i.position.z + tuning.y : scene < i.position.z - tuning.y;
+        if (hidden)
+        {
+            discard;
+        }
+    }
+    return float4(texel.rgb * i.colour.rgb * kFaceShade[min(i.face, 6)] * tuning.x, 1.0);
+}
