@@ -164,11 +164,25 @@ std::optional<CameraFrame> MakeCameraFrame(const SlConstants& aConstants, const 
 
 Mat4 AddJitter(const Mat4& aCameraToClip, double aJitterX, double aJitterY, uint32_t aWidth, uint32_t aHeight, double aSign)
 {
+	const std::array<double, 2> offset = ClipJitter(aJitterX, aJitterY, aWidth, aHeight, aSign);
 	Mat4 jitter{};
 	jitter[0] = jitter[5] = jitter[10] = jitter[15] = 1.0;
-	jitter[12] = aSign * 2.0 * aJitterX / aWidth;   // clip x += this * clip w
-	jitter[13] = -aSign * 2.0 * aJitterY / aHeight;  // clip y: pixel rows run down, clip y up
+	jitter[12] = offset[0];  // clip x += this * clip w
+	jitter[13] = offset[1];
 	return Multiply(aCameraToClip, jitter);
+}
+
+std::array<double, 2> ClipJitter(double aJitterX, double aJitterY, uint32_t aWidth, uint32_t aHeight, double aSign)
+{
+	return { aSign * 2.0 * aJitterX / aWidth, -aSign * 2.0 * aJitterY / aHeight };  // pixel rows run down, clip y up
+}
+
+std::array<double, 2> MotionVector(const std::array<double, 4>& aClip, const Mat4& aClipToPrevClip, double aSign)
+{
+	const std::array<double, 4> before = Transform(aClip, aClipToPrevClip);
+	// Normalised device coordinates span 2 across the screen, and run up where the screen's y runs down.
+	return { aSign * (before[0] / before[3] - aClip[0] / aClip[3]) * 0.5,
+	         -aSign * (before[1] / before[3] - aClip[1] / aClip[3]) * 0.5 };
 }
 
 std::pair<uint32_t, uint32_t> DepthTexelFor(uint32_t aX, uint32_t aY, uint32_t aWidth, uint32_t aHeight, const sl::Extent& aExtent)

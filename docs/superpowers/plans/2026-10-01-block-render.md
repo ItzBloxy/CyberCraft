@@ -15135,7 +15135,7 @@ trails:
 **Files:**
 - Modify: `tests/TestCamera.cpp`, `src/render/Camera.h`, `src/render/Camera.cpp`
 
-- [ ] **Step 1: Edit `tests/TestCamera.cpp` to test the jitter offset and motion vectors**
+- [x] **Step 1: Edit `tests/TestCamera.cpp` to test the jitter offset and motion vectors**
 
 ```cpp
 	CHECK(frame->reversedDepth);
@@ -15253,7 +15253,7 @@ TEST(CameraMotionVectorsPointToWhereThePointWas)
 }
 ```
 
-- [ ] **Step 2: Build; it must fail**
+- [x] **Step 2: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -15262,7 +15262,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `'ClipJitter': is not a member of 'cpmc'`.
 
-- [ ] **Step 3: Edit `src/render/Camera.h` to declare them**
+- [x] **Step 3: Edit `src/render/Camera.h` to declare them**
 
 ```cpp
 Mat4 AddJitter(const Mat4& aCameraToClip, double aJitterX, double aJitterY, uint32_t aWidth, uint32_t aHeight, double aSign);
@@ -15279,7 +15279,7 @@ std::array<double, 2> ClipJitter(double aJitterX, double aJitterY, uint32_t aWid
 std::array<double, 2> MotionVector(const std::array<double, 4>& aClip, const Mat4& aClipToPrevClip, double aSign);
 ```
 
-- [ ] **Step 4: Edit `src/render/Camera.cpp` to define them**
+- [x] **Step 4: Edit `src/render/Camera.cpp` to define them**
 
 ```cpp
 Mat4 AddJitter(const Mat4& aCameraToClip, double aJitterX, double aJitterY, uint32_t aWidth, uint32_t aHeight, double aSign)
@@ -15316,7 +15316,7 @@ std::array<double, 2> MotionVector(const std::array<double, 4>& aClip, const Mat
 }
 ```
 
-- [ ] **Step 5: Build and run the tests; they must pass**
+- [x] **Step 5: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -15326,7 +15326,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `96 test(s), 0 failure(s)`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \

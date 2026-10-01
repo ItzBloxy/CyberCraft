@@ -70,6 +70,55 @@ void ChecksOut(const std::array<float, 16>& aViewToClip)
 	CHECK_NEAR(offset[1], kYs * 2.0 / 10.0, 1e-6);
 	CHECK(frame->reversedDepth);
 }
+
+Mat4 Inverse(const Mat4& aMatrix)  // Gauss-Jordan, for the well-conditioned matrices here
+{
+	double work[4][8]{};
+	for (int row = 0; row < 4; ++row)
+	{
+		for (int column = 0; column < 4; ++column)
+		{
+			work[row][column] = aMatrix[size_t(row * 4 + column)];
+		}
+		work[row][4 + row] = 1.0;
+	}
+	for (int column = 0; column < 4; ++column)
+	{
+		int pivot = column;
+		for (int row = column + 1; row < 4; ++row)
+		{
+			pivot = std::fabs(work[row][column]) > std::fabs(work[pivot][column]) ? row : pivot;
+		}
+		std::swap(work[column], work[pivot]);
+		const double scale = work[column][column];
+		for (double& value : work[column])
+		{
+			value /= scale;
+		}
+		for (int row = 0; row < 4; ++row)
+		{
+			const double factor = row == column ? 0.0 : work[row][column];
+			for (int k = 0; k < 8; ++k)
+			{
+				work[row][k] -= factor * work[column][k];
+			}
+		}
+	}
+	Mat4 inverse{};
+	for (int row = 0; row < 4; ++row)
+	{
+		for (int column = 0; column < 4; ++column)
+		{
+			inverse[size_t(row * 4 + column)] = work[row][4 + column];
+		}
+	}
+	return inverse;
+}
+
+Mat4 Translation(double aX, double aY, double aZ)  // for row vectors
+{
+	return { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, aX, aY, aZ, 1 };
+}
 }
 
 TEST(CameraHandlesALeftHandedRowVectorProjection)
@@ -143,4 +192,52 @@ TEST(CameraMapsOutputPixelsIntoTheDepthExtent)
 	const sl::Extent part{ 10, 20, 100, 50 };  // top, left, width, height
 	CHECK(cpmc::DepthTexelFor(0, 0, 200, 100, part) == std::make_pair(20u, 10u));
 	CHECK(cpmc::DepthTexelFor(199, 99, 200, 100, part) == std::make_pair(119u, 59u));
+}
+
+TEST(CameraClipJitterIsWhatAddJitterAdds)
+{
+	const auto frame = cpmc::MakeCameraFrame(Camera(LeftHanded()), {});
+	const Mat4 jittered = cpmc::AddJitter(frame->cameraToClip, 0.5, 0.25, 1000, 500, -1.0);
+	const auto offset = cpmc::ClipJitter(0.5, 0.25, 1000, 500, -1.0);
+	CHECK_NEAR(offset[0], -0.001, 1e-12);
+	CHECK_NEAR(offset[1], 0.001, 1e-12);
+	const std::array<double, 4> point{ 1.0, 10.0, 2.0, 1.0 };
+	const auto plain = cpmc::Transform(point, frame->cameraToClip);
+	const auto moved = cpmc::Transform(point, jittered);
+	CHECK_NEAR(moved[0], plain[0] + offset[0] * plain[3], 1e-12);
+	CHECK_NEAR(moved[1], plain[1] + offset[1] * plain[3], 1e-12);
+}
+
+TEST(CameraMotionVectorsAreZeroForAStillCamera)
+{
+	const auto motion = cpmc::MotionVector({ 0.3, -0.2, 0.01, 5.0 }, Translation(0.0, 0.0, 0.0), 1.0);
+	CHECK_NEAR(motion[0], 0.0, 1e-12);
+	CHECK_NEAR(motion[1], 0.0, 1e-12);
+}
+
+TEST(CameraMotionVectorsPointToWhereThePointWas)
+{
+	const auto now = cpmc::MakeCameraFrame(Camera(LeftHanded()), {});
+	const auto clip = cpmc::Transform({ 0.0, 10.0, 0.0, 1.0 }, now->cameraToClip);  // 10 m ahead
+	// Streamline's clipToPrevClip after the camera moved by (aX, 0, aZ) since the frame before: from clip space back to
+	// the camera-relative world, across to where the earlier camera was, then into its clip space.
+	const auto clipToPrevClip = [&](double aX, double aZ) {
+		SlConstants earlier = Camera(LeftHanded());
+		earlier.position[0] -= float(aX);
+		earlier.position[2] -= float(aZ);
+		const auto then = cpmc::MakeCameraFrame(earlier, {});
+		return cpmc::Multiply(cpmc::Multiply(Inverse(now->cameraToClip), Translation(aX, 0.0, aZ)), then->cameraToClip);
+	};
+	// The camera moved 1 m to its right (+x, since it faces north). The point was then 1 m to the camera's right:
+	// further right on screen, by half its normalised x of kXs / 10, and that's where its motion vector points. (The
+	// projection holds floats, hence 1e-6.)
+	const auto right = cpmc::MotionVector(clip, clipToPrevClip(1.0, 0.0), 1.0);
+	CHECK_NEAR(right[0], kXs / 20.0, 1e-6);
+	CHECK_NEAR(right[1], 0.0, 1e-9);
+	CHECK_NEAR(cpmc::MotionVector(clip, clipToPrevClip(1.0, 0.0), -1.0)[0], -kXs / 20.0, 1e-6);
+	// The camera rose 1 m. The point was then 1 m above the camera: higher on screen, which is negative in screen
+	// units, since they run down.
+	const auto up = cpmc::MotionVector(clip, clipToPrevClip(0.0, 1.0), 1.0);
+	CHECK_NEAR(up[0], 0.0, 1e-9);
+	CHECK_NEAR(up[1], -kYs / 20.0, 1e-6);
 }

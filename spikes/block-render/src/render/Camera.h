@@ -51,6 +51,14 @@ std::optional<CameraFrame> MakeCameraFrame(const SlConstants& aConstants, const 
 // aCameraToClip with a jitter of (aJitterX, aJitterY) pixels added, for a render of aWidth x aHeight pixels: clip x
 // moves by aSign * 2 * jitterX / width and clip y by -aSign * 2 * jitterY / height, times clip w.
 Mat4 AddJitter(const Mat4& aCameraToClip, double aJitterX, double aJitterY, uint32_t aWidth, uint32_t aHeight, double aSign);
+// The same jitter as an offset per unit of clip w: (aSign * 2 * jitterX / width, -aSign * 2 * jitterY / height). The
+// vertex shader adds it to clip x and y, times clip w.
+std::array<double, 2> ClipJitter(double aJitterX, double aJitterY, uint32_t aWidth, uint32_t aHeight, double aSign);
+
+// A static point's motion vector, in the game's units (mvecScale 1, 1): from where the point is on screen to where it
+// was a frame before, as a fraction of the screen (x right, y down), times aSign. aClip is the point's clip position
+// without jitter, and aClipToPrevClip is Streamline's clipToPrevClip, for row vectors. The pixel shader does the same.
+std::array<double, 2> MotionVector(const std::array<double, 4>& aClip, const Mat4& aClipToPrevClip, double aSign);
 
 // The texel of a depth buffer under output pixel (aX, aY) of an aWidth x aHeight image, when the depth image fills
 // aExtent of its buffer.
