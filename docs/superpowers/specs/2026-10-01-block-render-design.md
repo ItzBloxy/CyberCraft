@@ -311,8 +311,9 @@ spikes/block-render/
     queue is known, the device the plugin uses is that queue's.
   - **The command queue:** `ExecuteCommandLists` records every submission, on every queue, for the frame log. It also
     finds the main queue: the one the DLSS evaluate's list is submitted on. Step 2 submits our own lists on that queue
-    separately: uploads from the main thread, and drawing at `Present`. Putting our lists into the game's submissions
-    (uploads at the front, drawing straight after the list it follows) comes with step 3.
+    separately: uploads from the main thread, and drawing at `Present`. From step 3, it also asks each feature, for
+    each list submitted, whether it has a list of its own to put just before that one: step 3's drawing goes in just
+    before the DLSS list. Uploads stay a submission of their own, from the main thread.
   - **The command lists:** the calls that the tracker and the log need:
     - `Reset` and `Close`;
     - `OMSetRenderTargets`, `BeginRenderPass` and `EndRenderPass`;
@@ -321,10 +322,8 @@ spikes/block-render/
     - the draw and dispatch calls, `ExecuteIndirect` and `ExecuteBundle`;
     - `BeginEvent` and `SetMarker`.
 
-    Step 3 adds the calls that `StateTracker::Restore` needs:
-    - `SetPipelineState`, `SetPipelineState1`, `SetGraphicsRootSignature`, and the calls that set graphics root
-      arguments;
-    - `RSSetViewports`, `RSSetScissorRects`, `IASetPrimitiveTopology` and `OMSetStencilRef`.
+    Step 3 draws with lists of its own, so it doesn't need `StateTracker::Restore`, or the state calls Restore would
+    have needed hooking.
   - **The swap chain:** `Present` and `Present1`, patched when the swap chain is created.
     - Detours on the three `CreateDXGIFactory` functions, set at load, patch the factory's swap-chain creation calls
       (`CreateSwapChain` and `CreateSwapChainForHwnd`). Those then patch the new swap chain.
@@ -356,18 +355,20 @@ spikes/block-render/
 
 - **Which lists:** it follows each command list from `Reset` to `Close`. A list whose `Reset` came before tracking
   started is marked untracked, and nothing is ever drawn into it.
-- **When:** tracking costs frame time, so it runs only while a log or a dump needs it, or `set tracking 1` holds it.
+- **When:** it runs only while a log or a dump needs it, step 3's drawing is on, or `set tracking 1` holds it. Run 3
+  measured no cost from it, but it stays off when nothing needs it.
 - **What it keeps:**
-  - everything our drawing may change: the bound render targets and depth (with their resources), the pipeline
-    state, the graphics root signature and every root argument set since it, the viewports, scissors, topology and
-    stencil reference;
+  - the bound render targets and depth, with their resources;
   - each resource's state after the last barrier recorded in the list. A resource in the middle of a split barrier
-    (begun but not yet ended) counts as unknown.
-- **`Restore(list)`** sets all of that on the list again, after our draws. After changing the root signature, every
-  root argument has to be set again, which is why the tracker keeps them all. `Restore` comes with step 3, the first
-  step that draws into the game's lists. Until then, the tracker keeps only what the frame log and the dumps need.
+    (begun but not yet ended), or last moved one subresource at a time, counts as unknown;
+  - each resource's first transition in the list: its state before, subresource and flags. The state before is the
+    state the list found the resource in, which is where step 3's barriers start.
+- **No `Restore`:** step 3 draws with lists of its own, so the tracker doesn't keep the pipeline state and root
+  arguments that putting a game list back would need. If a later step has to draw into the game's lists, `Restore`
+  comes back with it.
 - **For the frame log,** when a log is armed, it splits each list into passes, with each change of render targets
-  starting one. It counts each pass's draws, indirect draws, dispatches and clears, and keeps any event names.
+  starting one. It counts each pass's draws, indirect draws, dispatches and clears, and keeps any event names. The
+  frame log also keeps each list's transitions: the first one's state before, and the state after the last.
 
 ### `GpuApi`
 
@@ -422,12 +423,18 @@ Every read is range-checked with `Readable`.
       tag's extent.
     - The back buffer is taken from the swap chain each frame, and no reference to it is kept, so resizing the window
       or changing resolution still works.
-  - **`predlss` (step 3):** at the DLSS evaluate, draws into the tagged scaling-input colour. It tests and writes the
-    tagged depth, and writes the tagged motion vectors. Shading is forward: the atlas, times the vertex colour, times
-    Minecraft's face brightness (up 1.0, down 0.5, north and south 0.8, east and west 0.6), brought to the scene's
-    brightness by its exposure.
-    - **The exposure:** if the game tags an exposure texture, it's copied into a small buffer of ours each frame, and
-      the shader reads it. Otherwise it's `set exposure`. Whether the value multiplies or divides is settled in step 3.
+  - **`predlss` (step 3):** our own list goes into the submission holding the DLSS evaluate's list, just before it.
+    It draws into the tagged scaling-input colour, tests and writes the tagged depth, and writes the tagged motion
+    vectors. Shading is forward: the atlas, times the vertex colour, made linear, times Minecraft's face brightness
+    (up 1.0, down 0.5, north and south 0.8, east and west 0.6), times `exposure`.
+    - **The exposure:** the game tags no exposure texture, and the scene before DLSS has its exposure applied already
+      (run 2's dump put sunlit ground at 0.6 to 1.0). So `set exposure` multiplies, and step 3 finds its value.
+    - **The barriers** start from the state the DLSS list found each tagged buffer in: the state before its first
+      transition there, or its tagged state if the list never moves it. So command lists are tracked while `predlss`
+      is on, and a DLSS list that wasn't tracked from its `Reset` is skipped.
+    - **The jitter and motion vectors:** the vertices move by the frame's jitter, and the motion vectors come from
+      Streamline's `clipToPrevClip`, which is for row vectors (checked against two cameras from run 2's log). Step 3
+      settles both signs with `set jittersign` and `set mvsign`.
   - **`gbuffer` (step 4):** draws into the G-buffer targets and depth that the frame log found. It writes albedo,
     normal, material values, motion vectors and the stencil value, in the encoding the dumps show. The stencil value
     is the one the game's own static surfaces carry.
@@ -438,10 +445,9 @@ Every read is range-checked with `Readable`.
       because depth testing sorts out which is in front.
     - **Render passes:** if the game draws the G-buffer inside a render pass (`BeginRenderPass`), our draws go in after
       `EndRenderPass`, never inside the pass.
-- **Where the commands go:** our own command list, in `ExecuteCommandLists`, when the frame log shows a list boundary
-  at the right point. Otherwise they're recorded into the game's list, followed by `StateTracker::Restore`. At the
-  DLSS evaluate, the state that's restored after the evaluate (see "Streamline and DLSS") doesn't include graphics
-  state, so the tracker's restore is still needed there.
+- **Where the commands go:** our own command list, in the game's `ExecuteCommandLists`, at a list boundary the frame
+  log shows. For step 3 that's just before the DLSS list, which the evaluate has to itself. Nothing is recorded into
+  the game's lists, so nothing has to be put back.
 - **The camera:** written into the constant buffer as late as possible, just before the list that holds our draws is
   submitted, from Streamline's constants for that frame. That's in `ExecuteCommandLists` in steps 3 and 4, and in
   `Present` in step 2, where the frame is the latest DLSS frame whose list has been submitted. If the frame's
@@ -516,6 +522,8 @@ starts, and again on `reload`. A compile error is logged, and the previous pipel
   - the last request's result, and where each structure is.
 - **`blockrender_hud`** (CET Lua) shows that, plus V's position and heading, the block V stands on in Minecraft
   coordinates, and the distance to the nearest structure.
+- **CET's own frame time:** the overlay also times frames itself, from CET's `onUpdate`, and writes the average and
+  the worst into `frames.txt` once a second. That works without BlockRender, for measuring what the hooks cost.
 
 ### Tools
 
@@ -739,11 +747,15 @@ checked once a second. Each file holds one command. Unknown commands are logged 
   - it follows the lists it saw reset, from any thread;
   - it records passes only while a log runs;
   - it follows transitions, and a split barrier leaves its resource's state unknown;
+  - it keeps each resource's first transition in a list;
   - the G-buffer candidate rule.
-
-  Its restore sequence, with every root argument set again after a root signature change, is tested with step 3.
-- **The shaders** compile, their constant buffers match `FrameConstants.h` by reflection, and faces toward the camera
-  wind so that back-face culling keeps them.
+- **Drawing before DLSS (step 3):**
+  - the checks on the tagged buffers;
+  - each buffer's state before the DLSS list, from its first transition there or its tag;
+  - the barriers in and back, leaving out a buffer already in the state wanted;
+  - our list going into a submission just before the list it precedes.
+- **The shaders** compile, their constant buffers match `FrameConstants.h` by reflection, the step 3 shader writes
+  the colour and the motion vectors, and faces toward the camera wind so that back-face culling keeps them.
 - **The rest:**
   - the request and settings parsers, and the log queue;
   - the atlas reader, the DDS writer and the event names;
@@ -753,7 +765,8 @@ checked once a second. Each file holds one command. Unknown commands are logged 
 
 - **The atlas builder:** packing, UVs, mip levels and a missing texture.
 - **The dump viewer:** decoding of each format the dumps use.
-- **The frame log summary:** the projection's layout, the camera comparison, and the lists it marks.
+- **The frame log summary:** the projection's layout, the camera comparison, the lists it marks, and the states in
+  the DLSS and G-buffer lists.
 
 ### In the game
 
@@ -853,3 +866,19 @@ The second run, steps 1 and 2, led to Task 31:
 - **Tracking:** it runs only while a log or a dump needs it.
 
 What else the runs found goes in the results, `docs/spikes/2026-10-01-block-render-results.md`.
+
+## Changes while planning Part 2
+
+Planning step 3 (the plan's Part 2) from steps 1 and 2's results changed these details, which the sections above
+include:
+- **Our own list, not `Restore`:** the frame log showed the DLSS evaluate in a list of its own, so step 3's list goes
+  into the game's submission just before it. Nothing is recorded into the game's lists, so `StateTracker::Restore`
+  and the state hooks it needed aren't built.
+- **Barrier states:** they start from the DLSS list's first transitions, which the tracker now keeps, so tracking is
+  on while `predlss` draws. The frame log keeps each list's transitions too.
+- **Uploads** stay a submission of their own, from the main thread.
+- **The exposure multiplies:** there's no exposure tag, and the colour before DLSS already has its exposure applied.
+- **`clipToPrevClip`** is for row vectors, checked offline against two cameras from run 2's log.
+- **CET's own frame time,** in `frames.txt`, measures what the hooks cost without BlockRender.
+- **Step 4 is planned after step 3's run,** as the plan's Part 3: it reuses step 3's machinery, which the game should
+  test first.

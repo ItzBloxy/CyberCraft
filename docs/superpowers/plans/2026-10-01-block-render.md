@@ -1,4 +1,4 @@
-# Block Render Implementation Plan, Part 1 (steps 1 and 2)
+# Block Render Implementation Plan, Parts 1 and 2 (steps 1 to 3)
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 >
@@ -6,7 +6,7 @@
 
 **Goal:** Build BlockRender, a RED4ext plugin that maps Cyberpunk 2077's frame through its Streamline calls and draws
 Minecraft blocks on the finished frame. Then run spike 3's first two steps in the game with the user: the frame log
-(step 1) and a cube on the finished frame (step 2).
+(step 1) and a cube on the finished frame (step 2). Part 2 then draws the blocks into the frame before DLSS (step 3).
 
 **Architecture:** A C++20 RED4ext plugin, built like spike 1's.
 - **`render_core`** holds everything that can be tested without the game, with unit tests:
@@ -31,8 +31,8 @@ Minecraft blocks on the finished frame. Then run spike 3's first two steps in th
 
 **Spec:** [docs/superpowers/specs/2026-10-01-block-render-design.md](../specs/2026-10-01-block-render-design.md)
 
-**Part 2:** steps 3 and 4 (blocks before DLSS, and blocks in the G-buffer) get their own tasks once step 1's frame log
-has shown where they can draw. Task 34 ends Part 1 by planning them.
+**Parts 2 and 3:** Part 2 is step 3 (blocks before DLSS): Tasks 35 to 45, which Task 34 planned from step 1's
+findings. Part 3 is step 4 (blocks in the G-buffer), which Task 45 plans once step 3 has run in the game.
 
 ---
 
@@ -14240,7 +14240,7 @@ cd /d/Cyberpunk-Minecraft && git add docs/superpowers/plans \
   && git log --oneline -1
 ```
 
-- [ ] **Step 3: Plan Part 2**
+- [x] **Step 3: Plan Part 2**
 
 Use superpowers:writing-plans to write Part 2's tasks (spec steps 3 and 4) from what step 1 found, as Tasks 35 on in
 this plan. As in Part 1, compile and test their code in a scratch clone first, and replay the tasks before committing.
@@ -14300,3 +14300,3703 @@ this plan. As in Part 1, compile and test their code in a scratch clone first, a
   Run 3's results have the details.
 - **The barrier API:** legacy `ResourceBarrier` only, and no render passes. So our lists use legacy barriers, and the
   spec's rule for render passes isn't needed.
+
+---
+
+## Part 2: step 3, blocks before DLSS
+
+Tasks 35 to 45, planned after Part 1 closed (see "How Part 1 went").
+
+**Goal:** draw the blocks into the frame before DLSS. DLSS then upscales them, and the game tone maps, blooms and
+grades them with the scene, under the HUD and the menus. Then run step 3 in the game with the user.
+
+**How it works:**
+- **Our list goes into the game's submission,** just before the DLSS evaluate's list (Task 36). So the GPU runs it
+  after everything the scene draws before DLSS, and nothing is recorded into the game's lists. The spec's
+  `StateTracker::Restore` isn't needed.
+- **Its barriers start where the game left each tagged buffer:** at the state before the DLSS list's first
+  transition of it, which the tracker now keeps (Tasks 35 and 37). The frame log records the same states, so the game
+  run shows them before anything is drawn (Task 41).
+- **It draws into the tagged colour, motion vectors and depth** (Tasks 38, 39 and 42):
+  - the colour is the atlas's, made linear, times `exposure`;
+  - the vertices move with the frame's jitter;
+  - the motion vectors come from Streamline's `clipToPrevClip`.
+- **The game run settles three values live** (Task 44), as Part 1 settled the culling: `exposure`, `jittersign` and
+  `mvsign`.
+- **Part 3 (step 4, the G-buffer) is planned after the run,** because it reuses this part's machinery, which the game
+  should test first.
+
+**Already verified:** as in Part 1, all the code was compiled and tested in the scratch clone first. Tasks 35 to 43
+were then replayed in a fresh clone from the end of Part 1, applying every step as written and checking every
+expected result:
+- zero compiler warnings;
+- 101 C++ tests and 22 Python tests passing;
+- the DLL exporting exactly `Main`, `Query` and `Supports`;
+- the replayed files identical to the scratch clone's.
+
+**Test counts:** the C++ count goes 86, 88, 93, 96, 97, 100, then 101 from Task 41 on. The Python count is 22 from
+Task 41 on.
+
+**The commands and rules** in "Before you start" apply here too: the game and the user, deploying, and no faults.
+
+---
+
+### Task 35: The tracker keeps each resource's first transition in a list
+
+Step 3 puts a list of ours just before the game's DLSS list. Our barriers must start from the state each tagged buffer
+is in at that point: the state before the DLSS list's first transition of it. So `ListState` now keeps each
+resource's first transition, with its state before, its subresource and its flags. The hook passes the whole barrier.
+
+**Files:**
+- Modify: `tests/TestStateTracker.cpp`, `src/track/StateTracker.h`, `src/track/StateTracker.cpp`,
+  `src/hooks/D3D12Hooks.cpp`
+
+- [ ] **Step 1: Edit `tests/TestStateTracker.cpp` to test first transitions**
+
+```cpp
+TEST(ListStateFollowsTransitionsAndSplitBarriers)
+{
+	ListState state;
+	state.Begin(1, false);
+	int resource = 0;
+	CHECK(!state.StateOf(&resource));
+	state.Transition(&resource, 0x4, false);  // render target
+	CHECK_EQ(*state.StateOf(&resource), 0x4u);
+	state.Transition(&resource, 0x800, true);  // begun, not ended
+	CHECK(!state.StateOf(&resource));
+	state.Transition(&resource, 0x800, false);  // ended
+	CHECK_EQ(*state.StateOf(&resource), 0x800u);
+	state.Begin(2, false);
+	CHECK(!state.StateOf(&resource));  // a new recording forgets
+}
+```
+```cpp
+TEST(ListStateFollowsTransitionsAndSplitBarriers)
+{
+	constexpr uint32_t all = ListState::kAllSubresources;
+	ListState state;
+	state.Begin(1, false);
+	int resource = 0;
+	CHECK(!state.StateOf(&resource));
+	state.Transition(&resource, 0x0, 0x4, all, 0);  // common to render target
+	CHECK_EQ(*state.StateOf(&resource), 0x4u);
+	state.Transition(&resource, 0x4, 0x800, all, ListState::kBeginOnly);  // begun, not ended
+	CHECK(!state.StateOf(&resource));
+	state.Transition(&resource, 0x4, 0x800, all, ListState::kEndOnly);  // ended
+	CHECK_EQ(*state.StateOf(&resource), 0x800u);
+	state.Transition(&resource, 0x800, 0x8, 0, 0);  // one subresource: the whole resource's state is unknown
+	CHECK(!state.StateOf(&resource));
+	state.Begin(2, false);
+	CHECK(!state.StateOf(&resource));  // a new recording forgets
+}
+
+TEST(ListStateKeepsEachResourcesFirstTransition)
+{
+	constexpr uint32_t all = ListState::kAllSubresources;
+	ListState state;
+	state.Begin(1, false);
+	int colour = 0, depth = 0, untouched = 0;
+	state.Transition(&colour, 0x4, 0x8, all, 0);   // render target to unordered access
+	state.Transition(&colour, 0x8, 0xC0, all, 0);  // a later transition doesn't change the first
+	state.Transition(&depth, 0x10, 0xC0, 0, ListState::kBeginOnly);
+	const auto colourFirst = state.FirstTransitionOf(&colour);
+	CHECK(colourFirst.has_value());
+	CHECK_EQ(colourFirst->before, 0x4u);
+	CHECK_EQ(colourFirst->subresource, all);
+	CHECK_EQ(colourFirst->flags, 0u);
+	const auto depthFirst = state.FirstTransitionOf(&depth);
+	CHECK(depthFirst.has_value());
+	CHECK_EQ(depthFirst->before, 0x10u);
+	CHECK_EQ(depthFirst->subresource, 0u);
+	CHECK_EQ(depthFirst->flags, ListState::kBeginOnly);
+	CHECK(!state.FirstTransitionOf(&untouched));
+	CHECK_EQ(state.FirstTransitions().size(), size_t(2));
+	state.Begin(2, false);
+	CHECK(!state.FirstTransitionOf(&colour));  // a new recording forgets
+}
+```
+
+- [ ] **Step 2: Build; it must fail**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C" | sort -u | head -3
+```
+Expected: `'kAllSubresources': is not a member of 'cpmc::ListState'`.
+
+- [ ] **Step 3: Edit `src/track/StateTracker.h` for first transitions**
+
+```cpp
+	// A transition barrier. A begin-only half leaves the state unknown until its end-only half.
+	void Transition(void* aResource, uint32_t aAfter, bool aBeginOnly);
+	std::optional<uint32_t> StateOf(void* aResource) const;
+```
+```cpp
+	// D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, and the two D3D12_RESOURCE_BARRIER_FLAGS.
+	static constexpr uint32_t kAllSubresources = 0xFFFFFFFF;
+	static constexpr uint32_t kBeginOnly = 0x1;
+	static constexpr uint32_t kEndOnly = 0x2;
+
+	// A resource's first transition in the list. Its state before is the state the list found the resource in.
+	struct FirstTransition
+	{
+		uint32_t before = 0;
+		uint32_t subresource = kAllSubresources;
+		uint32_t flags = 0;
+	};
+
+	// A transition barrier. Afterwards the resource's state is known, unless the barrier is a begin-only half (until
+	// its end-only half) or covers a single subresource.
+	void Transition(void* aResource, uint32_t aBefore, uint32_t aAfter, uint32_t aSubresource, uint32_t aFlags);
+	std::optional<uint32_t> StateOf(void* aResource) const;
+	std::optional<FirstTransition> FirstTransitionOf(void* aResource) const;
+	const std::unordered_map<void*, FirstTransition>& FirstTransitions() const { return firsts_; }
+```
+```cpp
+	bool                                   recording_ = false;
+	bool                                   logging_ = false;
+	uint32_t                               frame_ = 0;
+	Targets                                targets_;
+	std::unordered_map<void*, uint32_t>    states_;
+	std::vector<PassRecord>                passes_;
+```
+```cpp
+	bool                                       recording_ = false;
+	bool                                       logging_ = false;
+	uint32_t                                   frame_ = 0;
+	Targets                                    targets_;
+	std::unordered_map<void*, uint32_t>        states_;
+	std::unordered_map<void*, FirstTransition> firsts_;
+	std::vector<PassRecord>                    passes_;
+```
+
+- [ ] **Step 4: Edit `src/track/StateTracker.cpp` for first transitions**
+
+```cpp
+	states_.clear();
+	passes_.clear();
+}
+```
+```cpp
+	states_.clear();
+	firsts_.clear();
+	passes_.clear();
+}
+```
+```cpp
+void ListState::Transition(void* aResource, uint32_t aAfter, bool aBeginOnly)
+{
+	states_[aResource] = aBeginOnly ? kUnknownState : aAfter;
+}
+```
+```cpp
+void ListState::Transition(void* aResource, uint32_t aBefore, uint32_t aAfter, uint32_t aSubresource, uint32_t aFlags)
+{
+	firsts_.try_emplace(aResource, FirstTransition{ aBefore, aSubresource, aFlags });
+	const bool known = aSubresource == kAllSubresources && (aFlags & kBeginOnly) == 0;
+	states_[aResource] = known ? aAfter : kUnknownState;
+}
+```
+```cpp
+	return found->second;
+}
+
+StateTracker::StateTracker()
+```
+```cpp
+	return found->second;
+}
+
+std::optional<ListState::FirstTransition> ListState::FirstTransitionOf(void* aResource) const
+{
+	const auto found = firsts_.find(aResource);
+	if (found == firsts_.end())
+	{
+		return std::nullopt;
+	}
+	return found->second;
+}
+
+StateTracker::StateTracker()
+```
+
+- [ ] **Step 5: Edit `src/hooks/D3D12Hooks.cpp` to pass the whole barrier**
+
+```cpp
+			// Only whole-resource transitions say what state the whole resource is in.
+			const bool whole = barrier.Transition.Subresource == D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+			const bool beginOnly = (barrier.Flags & D3D12_RESOURCE_BARRIER_FLAG_BEGIN_ONLY) != 0;
+			state->Transition(barrier.Transition.pResource, barrier.Transition.StateAfter, beginOnly || !whole);
+```
+```cpp
+			state->Transition(barrier.Transition.pResource, barrier.Transition.StateBefore, barrier.Transition.StateAfter,
+			                  barrier.Transition.Subresource, barrier.Flags);
+```
+
+- [ ] **Step 6: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `86 test(s), 0 failure(s)`.
+
+- [ ] **Step 7: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "block-render: the tracker keeps each resource's first transition in a list" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 36: Lists of ours in the game's submissions
+
+Step 3's list goes into the game's own `ExecuteCommandLists` call, just before the DLSS list, so the GPU runs it after
+everything that list's submission puts ahead of it, and nothing of ours is recorded into the game's lists. The hook now
+asks each listener, for each list submitted, whether it has a list to put before that one.
+
+**Files:**
+- Create: `src/hooks/Submission.h`, `src/hooks/Submission.cpp`, `tests/TestSubmission.cpp`
+- Modify: `CMakeLists.txt`, `src/hooks/HookEvents.h`, `src/hooks/D3D12Hooks.cpp`
+
+- [ ] **Step 1: Write the failing test, `tests/TestSubmission.cpp`**
+
+```cpp
+#include "Harness.h"
+
+#include "hooks/Submission.h"
+
+namespace
+{
+// Lists are only compared here, never called, so any address will do.
+ID3D12CommandList* Fake(uintptr_t aAddress)
+{
+	return reinterpret_cast<ID3D12CommandList*>(aAddress);
+}
+}
+
+TEST(SubmissionsGoThroughUntouchedWithNothingToPutIn)
+{
+	ID3D12CommandList* lists[] = { Fake(0x10), Fake(0x20), Fake(0x30) };
+	CHECK(cpmc::WithListsBefore(3, lists, [](ID3D12CommandList*) -> ID3D12CommandList* { return nullptr; }).empty());
+	CHECK(cpmc::WithListsBefore(0, nullptr, [](ID3D12CommandList*) { return Fake(0x99); }).empty());
+}
+
+TEST(SubmissionsGetAListJustBeforeTheOneItGoesBefore)
+{
+	ID3D12CommandList* lists[] = { Fake(0x10), Fake(0x20), Fake(0x30), Fake(0x40) };
+	// Ours goes before the third, as step 3's goes before the DLSS evaluate's list.
+	const auto withOurs = cpmc::WithListsBefore(4, lists, [](ID3D12CommandList* aList) {
+		return aList == Fake(0x30) ? Fake(0x99) : nullptr;
+	});
+	CHECK(withOurs == (std::vector<ID3D12CommandList*>{ Fake(0x10), Fake(0x20), Fake(0x99), Fake(0x30), Fake(0x40) }));
+	// Before the first, and before more than one.
+	const auto twice = cpmc::WithListsBefore(4, lists, [](ID3D12CommandList* aList) {
+		return aList == Fake(0x10) || aList == Fake(0x40) ? Fake(0x99) : nullptr;
+	});
+	CHECK(twice == (std::vector<ID3D12CommandList*>{ Fake(0x99), Fake(0x10), Fake(0x20), Fake(0x30), Fake(0x99), Fake(0x40) }));
+}
+```
+
+- [ ] **Step 2: Edit `CMakeLists.txt` to add the test**
+
+```cmake
+	tests/TestEventNames.cpp
+)
+```
+```cmake
+	tests/TestEventNames.cpp
+	tests/TestSubmission.cpp
+)
+```
+
+- [ ] **Step 3: Build; it must fail**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C" | sort -u | head -3
+```
+Expected: `error C1083: Cannot open include file: 'hooks/Submission.h'`.
+
+- [ ] **Step 4: Write `src/hooks/Submission.h`**
+
+```cpp
+#pragma once
+
+#include <d3d12.h>
+
+#include <functional>
+#include <vector>
+
+namespace cpmc
+{
+// A submission's command lists with lists of ours put in: aBefore(list) names one to go just before that list, or
+// gives null. Empty when nothing is put in, so the submission can go through untouched.
+std::vector<ID3D12CommandList*> WithListsBefore(UINT aCount, ID3D12CommandList* const* aLists,
+                                                const std::function<ID3D12CommandList*(ID3D12CommandList*)>& aBefore);
+}
+```
+
+- [ ] **Step 5: Write `src/hooks/Submission.cpp`**
+
+```cpp
+#include "hooks/Submission.h"
+
+namespace cpmc
+{
+std::vector<ID3D12CommandList*> WithListsBefore(UINT aCount, ID3D12CommandList* const* aLists,
+                                                const std::function<ID3D12CommandList*(ID3D12CommandList*)>& aBefore)
+{
+	std::vector<ID3D12CommandList*> lists;
+	for (UINT i = 0; i < aCount; ++i)
+	{
+		if (ID3D12CommandList* before = aBefore(aLists[i]))
+		{
+			if (lists.empty())
+			{
+				lists.assign(aLists, aLists + i);  // the lists ahead of it, as they were
+			}
+			lists.push_back(before);
+		}
+		if (!lists.empty())
+		{
+			lists.push_back(aLists[i]);
+		}
+	}
+	return lists;
+}
+}
+```
+
+- [ ] **Step 6: Edit `CMakeLists.txt` to add the source**
+
+```cmake
+	src/render/Pipeline.cpp
+)
+```
+```cmake
+	src/render/Pipeline.cpp
+	src/hooks/Submission.cpp
+)
+```
+
+- [ ] **Step 7: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `88 test(s), 0 failure(s)`.
+
+- [ ] **Step 8: Edit `src/hooks/HookEvents.h` to ask for lists to put in**
+
+```cpp
+	virtual void OnSubmit(ID3D12CommandQueue* /*aQueue*/, UINT /*aCount*/, ID3D12CommandList* const* /*aLists*/) {}
+```
+```cpp
+	virtual void OnSubmit(ID3D12CommandQueue* /*aQueue*/, UINT /*aCount*/, ID3D12CommandList* const* /*aLists*/) {}
+	// Asked for each list of a submission, after OnSubmit: a list of the feature's own to submit just before aList, or
+	// null. The first listener to name one wins. OnSubmitted sees only the game's lists, as OnSubmit does.
+	virtual ID3D12CommandList* ListBefore(ID3D12CommandQueue* /*aQueue*/, ID3D12CommandList* /*aList*/) { return nullptr; }
+```
+
+- [ ] **Step 9: Edit `src/hooks/D3D12Hooks.cpp` to put them in**
+
+```cpp
+#include "hooks/StreamlineHooks.h"
+#include "hooks/VtablePatch.h"
+```
+```cpp
+#include "hooks/StreamlineHooks.h"
+#include "hooks/Submission.h"
+#include "hooks/VtablePatch.h"
+```
+```cpp
+	Each([&](HookEvents& aListener) { aListener.OnSubmit(aQueue, aCount, aLists); });
+	g_original.executeCommandLists(aQueue, aCount, aLists);
+	Each([&](HookEvents& aListener) { aListener.OnSubmitted(aQueue, aCount, aLists); });
+```
+```cpp
+	Each([&](HookEvents& aListener) { aListener.OnSubmit(aQueue, aCount, aLists); });
+	const std::vector<ID3D12CommandList*> lists = WithListsBefore(aCount, aLists, [&](ID3D12CommandList* aList) {
+		ID3D12CommandList* before = nullptr;
+		Each([&](HookEvents& aListener) {
+			if (!before)
+			{
+				before = aListener.ListBefore(aQueue, aList);
+			}
+		});
+		return before;
+	});
+	if (lists.empty())
+	{
+		g_original.executeCommandLists(aQueue, aCount, aLists);
+	}
+	else
+	{
+		g_original.executeCommandLists(aQueue, UINT(lists.size()), lists.data());
+	}
+	Each([&](HookEvents& aListener) { aListener.OnSubmitted(aQueue, aCount, aLists); });
+```
+
+- [ ] **Step 10: Build; it must compile without warnings, and the tests still pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `88 test(s), 0 failure(s)`.
+
+- [ ] **Step 11: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "block-render: lists of ours in the game's submissions" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 37: Drawing before DLSS: the checks, the starting states and the barriers
+
+The parts of step 3's drawing that need no GPU:
+- **The checks before every draw:** the tagged buffers must be as step 1 found them.
+- **The starting states:** the state each tagged buffer is in just before the DLSS list, from that list's first
+  transition of it (Task 35), or its tagged state if the list never moves it.
+- **The barriers:** the moves into render target and depth write, leaving out a buffer already there, and back.
+
+**Files:**
+- Create: `src/render/Predlss.h`, `src/render/Predlss.cpp`, `tests/TestPredlss.cpp`
+- Modify: `CMakeLists.txt`
+
+- [ ] **Step 1: Write the failing test, `tests/TestPredlss.cpp`**
+
+```cpp
+#include "Harness.h"
+
+#include "render/Predlss.h"
+
+#include <string>
+
+using cpmc::ListState;
+using cpmc::Move;
+
+namespace
+{
+D3D12_RESOURCE_DESC Texture(DXGI_FORMAT aFormat, D3D12_RESOURCE_FLAGS aFlags)
+{
+	D3D12_RESOURCE_DESC desc{};
+	desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+	desc.Width = 1707;
+	desc.Height = 960;
+	desc.DepthOrArraySize = 1;
+	desc.MipLevels = 1;
+	desc.Format = aFormat;
+	desc.SampleDesc.Count = 1;
+	desc.Flags = aFlags;
+	return desc;
+}
+
+// The tags step 1 found.
+const D3D12_RESOURCE_DESC kColour = Texture(DXGI_FORMAT_R16G16B16A16_FLOAT,
+                                            D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET | D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+const D3D12_RESOURCE_DESC kMotion = Texture(DXGI_FORMAT_R16G16_FLOAT, D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET);
+const D3D12_RESOURCE_DESC kDepth = Texture(DXGI_FORMAT_R32_TYPELESS, D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL);
+
+bool Refused(const D3D12_RESOURCE_DESC& aColour, const D3D12_RESOURCE_DESC& aMotion, const D3D12_RESOURCE_DESC& aDepth,
+             const char* aWhy)
+{
+	std::string why;
+	return !cpmc::CheckPredlssTargets(aColour, aMotion, aDepth, why) && why.find(aWhy) != std::string::npos;
+}
+}
+
+TEST(PredlssTakesTheTagsStep1Found)
+{
+	std::string why;
+	CHECK(cpmc::CheckPredlssTargets(kColour, kMotion, kDepth, why));
+	CHECK_STR(why, "");
+	D3D12_RESOURCE_DESC typedDepth = kDepth;
+	typedDepth.Format = DXGI_FORMAT_D32_FLOAT;
+	CHECK(cpmc::CheckPredlssTargets(kColour, kMotion, typedDepth, why));
+}
+
+TEST(PredlssRefusesOtherTargets)
+{
+	D3D12_RESOURCE_DESC computeOnly = kColour;
+	computeOnly.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+	CHECK(Refused(computeOnly, kMotion, kDepth, "the colour isn't a render target"));
+	D3D12_RESOURCE_DESC otherFormat = kMotion;
+	otherFormat.Format = DXGI_FORMAT_R32G32_FLOAT;
+	CHECK(Refused(kColour, otherFormat, kDepth, "the motion vectors are R32G32_FLOAT"));
+	D3D12_RESOURCE_DESC noDepth = kDepth;
+	noDepth.Flags = D3D12_RESOURCE_FLAG_NONE;
+	CHECK(Refused(kColour, kMotion, noDepth, "the depth isn't a depth buffer"));
+	D3D12_RESOURCE_DESC smaller = kDepth;
+	smaller.Width = 853;
+	CHECK(Refused(kColour, kMotion, smaller, "sizes differ"));
+	D3D12_RESOURCE_DESC mipped = kColour;
+	mipped.MipLevels = 2;
+	CHECK(Refused(mipped, kMotion, kDepth, "the colour has more than one subresource"));
+}
+
+TEST(PredlssViewsTheDepthAsD32)
+{
+	CHECK(cpmc::DepthViewFormat(DXGI_FORMAT_R32_TYPELESS) == DXGI_FORMAT_D32_FLOAT);
+	CHECK(cpmc::DepthViewFormat(DXGI_FORMAT_D32_FLOAT) == DXGI_FORMAT_D32_FLOAT);
+	CHECK(cpmc::DepthViewFormat(DXGI_FORMAT_R32G8X24_TYPELESS) == DXGI_FORMAT_UNKNOWN);
+}
+
+TEST(PredlssFindsEachBuffersStateBeforeTheDlssList)
+{
+	constexpr uint32_t all = ListState::kAllSubresources;
+	ListState list;
+	list.Begin(1, false);
+	int colour = 0, depth = 0, motion = 0, part = 0, split = 0;
+	list.Transition(&colour, 0x4, 0x8, all, 0);  // render target, to unordered access for the evaluate
+	list.Transition(&depth, 0x10, 0xC0, 0, 0);   // subresource 0, the only one a tagged buffer has
+	list.Transition(&part, 0x4, 0x8, 1, 0);      // another subresource only
+	list.Transition(&split, 0x4, 0x8, all, ListState::kEndOnly);  // ends a split begun in an earlier list
+	CHECK_EQ(cpmc::StateBeforeList(list, &colour, 0x8).value_or(0), 0x4u);
+	CHECK_EQ(cpmc::StateBeforeList(list, &depth, 0xC0).value_or(0), 0x10u);
+	CHECK_EQ(cpmc::StateBeforeList(list, &motion, 0xC0).value_or(0), 0xC0u);  // never moved: as tagged
+	CHECK(!cpmc::StateBeforeList(list, &motion, 0xFFFFFFFF));               // never moved, and the tag didn't say
+	CHECK(!cpmc::StateBeforeList(list, &part, 0x8));
+	CHECK(!cpmc::StateBeforeList(list, &split, 0x8));
+}
+
+TEST(PredlssMovesOnlyWhatIsntThereAndPutsItBack)
+{
+	int colour = 0, motion = 0, depth = 0;
+	const std::vector<Move> into = cpmc::MovesInto({ { &colour, 0x8, 0x4 }, { &motion, 0x4, 0x4 }, { &depth, 0xC0, 0x10 } });
+	CHECK_EQ(into.size(), size_t(2));  // the motion vectors are already a render target
+	CHECK(into[0].resource == &colour && into[0].before == 0x8 && into[0].after == 0x4);
+	CHECK(into[1].resource == &depth && into[1].before == 0xC0 && into[1].after == 0x10);
+	const std::vector<Move> back = cpmc::MovesBack(into);
+	CHECK_EQ(back.size(), size_t(2));
+	CHECK(back[0].resource == &depth && back[0].before == 0x10 && back[0].after == 0xC0);
+	CHECK(back[1].resource == &colour && back[1].before == 0x4 && back[1].after == 0x8);
+	const std::vector<D3D12_RESOURCE_BARRIER> barriers = cpmc::Barriers(into);
+	CHECK_EQ(barriers.size(), size_t(2));
+	CHECK(barriers[1].Type == D3D12_RESOURCE_BARRIER_TYPE_TRANSITION);
+	CHECK(barriers[1].Transition.pResource == reinterpret_cast<ID3D12Resource*>(&depth));
+	CHECK(barriers[1].Transition.Subresource == D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES);
+	CHECK(barriers[1].Transition.StateBefore == D3D12_RESOURCE_STATES(0xC0));
+	CHECK(barriers[1].Transition.StateAfter == D3D12_RESOURCE_STATE_DEPTH_WRITE);
+}
+```
+
+- [ ] **Step 2: Edit `CMakeLists.txt` to add the test**
+
+```cmake
+	tests/TestSubmission.cpp
+)
+```
+```cmake
+	tests/TestSubmission.cpp
+	tests/TestPredlss.cpp
+)
+```
+
+- [ ] **Step 3: Build; it must fail**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C" | sort -u | head -3
+```
+Expected: `error C1083: Cannot open include file: 'render/Predlss.h'`.
+
+- [ ] **Step 4: Write `src/render/Predlss.h`**
+
+```cpp
+#pragma once
+
+#include "track/StateTracker.h"
+
+#include <d3d12.h>
+
+#include <cstdint>
+#include <optional>
+#include <string>
+#include <vector>
+
+// Drawing before DLSS (step 3): the parts that need no GPU. Our list goes just before the game's DLSS list, and draws
+// into the tagged scaling input colour, motion vectors and depth.
+namespace cpmc
+{
+// The checks before every draw (the spec's "Safety"): the colour must be an R16G16B16A16_FLOAT render target, the
+// motion vectors an R16G16_FLOAT render target, and the depth a 32-bit depth buffer, as step 1 found them. All three
+// must be the same size, and plain 2D textures with one subresource each. aWhy says what failed.
+bool CheckPredlssTargets(const D3D12_RESOURCE_DESC& aColour, const D3D12_RESOURCE_DESC& aMotion, const D3D12_RESOURCE_DESC& aDepth,
+                         std::string& aWhy);
+
+// The format of a depth-stencil view of a depth buffer in aFormat: D32_FLOAT for R32_TYPELESS or D32_FLOAT, UNKNOWN for
+// anything else.
+DXGI_FORMAT DepthViewFormat(DXGI_FORMAT aFormat);
+
+// A tagged buffer's state just before aList, the DLSS list: the state its first transition in aList starts from, or,
+// if aList never moves it, its state at the evaluate (aTaggedState). Nothing if that state is unknown, or if the
+// first transition ends a split barrier or covers another subresource than the buffer's only one.
+std::optional<uint32_t> StateBeforeList(const ListState& aList, void* aResource, uint32_t aTaggedState);
+
+// A resource moving from one state to another.
+struct Move
+{
+	void*    resource = nullptr;
+	uint32_t before = 0;
+	uint32_t after = 0;
+};
+
+// The moves that take each resource to the state wanted, leaving out those already in it: D3D12 refuses a transition
+// to the state a resource is in.
+std::vector<Move> MovesInto(const std::vector<Move>& aWanted);
+// The moves that put them back, in reverse order.
+std::vector<Move> MovesBack(const std::vector<Move>& aMoves);
+// Whole-resource transition barriers for aMoves.
+std::vector<D3D12_RESOURCE_BARRIER> Barriers(const std::vector<Move>& aMoves);
+}
+```
+
+- [ ] **Step 5: Write `src/render/Predlss.cpp`**
+
+```cpp
+#include "render/Predlss.h"
+
+#include "log/FrameLogData.h"
+
+#include <format>
+
+namespace cpmc
+{
+namespace
+{
+// Why aDesc isn't a plain 2D texture in aFormat that allows aFlag, or nothing if it is. aName takes aVerb: "is" or
+// "are".
+std::string Problem(const char* aName, const char* aVerb, const D3D12_RESOURCE_DESC& aDesc, DXGI_FORMAT aFormat,
+                    D3D12_RESOURCE_FLAGS aFlag, const char* aRole)
+{
+	const std::string_view verb = aVerb;
+	if (aDesc.Dimension != D3D12_RESOURCE_DIMENSION_TEXTURE2D)
+	{
+		return std::format("the {} {}n't a 2D texture", aName, verb);
+	}
+	if (aDesc.Format != aFormat && !(aFormat == DXGI_FORMAT_R32_TYPELESS && aDesc.Format == DXGI_FORMAT_D32_FLOAT))
+	{
+		return std::format("the {} {} {}", aName, verb, DxgiFormatName(aDesc.Format));
+	}
+	if ((aDesc.Flags & aFlag) == 0)
+	{
+		return std::format("the {} {}n't {}", aName, verb, aRole);
+	}
+	if (aDesc.MipLevels != 1 || aDesc.DepthOrArraySize != 1 || aDesc.SampleDesc.Count != 1)
+	{
+		return std::format("the {} {} more than one subresource", aName, verb == "is" ? "has" : "have");
+	}
+	return {};
+}
+}
+
+bool CheckPredlssTargets(const D3D12_RESOURCE_DESC& aColour, const D3D12_RESOURCE_DESC& aMotion, const D3D12_RESOURCE_DESC& aDepth,
+                         std::string& aWhy)
+{
+	aWhy = Problem("colour", "is", aColour, DXGI_FORMAT_R16G16B16A16_FLOAT, D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET, "a render target");
+	if (aWhy.empty())
+	{
+		aWhy = Problem("motion vectors", "are", aMotion, DXGI_FORMAT_R16G16_FLOAT, D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET,
+		               "a render target");
+	}
+	if (aWhy.empty())
+	{
+		aWhy = Problem("depth", "is", aDepth, DXGI_FORMAT_R32_TYPELESS, D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL, "a depth buffer");
+	}
+	if (aWhy.empty() && (aMotion.Width != aColour.Width || aMotion.Height != aColour.Height || aDepth.Width != aColour.Width ||
+	                     aDepth.Height != aColour.Height))
+	{
+		aWhy = std::format("the tagged buffers' sizes differ: colour {} x {}, motion vectors {} x {}, depth {} x {}", aColour.Width,
+		                   aColour.Height, aMotion.Width, aMotion.Height, aDepth.Width, aDepth.Height);
+	}
+	return aWhy.empty();
+}
+
+DXGI_FORMAT DepthViewFormat(DXGI_FORMAT aFormat)
+{
+	return aFormat == DXGI_FORMAT_R32_TYPELESS || aFormat == DXGI_FORMAT_D32_FLOAT ? DXGI_FORMAT_D32_FLOAT : DXGI_FORMAT_UNKNOWN;
+}
+
+std::optional<uint32_t> StateBeforeList(const ListState& aList, void* aResource, uint32_t aTaggedState)
+{
+	const std::optional<ListState::FirstTransition> first = aList.FirstTransitionOf(aResource);
+	if (!first)
+	{
+		return aTaggedState == ListState::kUnknownState ? std::nullopt : std::optional<uint32_t>(aTaggedState);
+	}
+	const bool wholeBuffer = first->subresource == ListState::kAllSubresources || first->subresource == 0;
+	if (!wholeBuffer || (first->flags & ListState::kEndOnly) != 0)
+	{
+		return std::nullopt;
+	}
+	return first->before;
+}
+
+std::vector<Move> MovesInto(const std::vector<Move>& aWanted)
+{
+	std::vector<Move> moves;
+	for (const Move& move : aWanted)
+	{
+		if (move.before != move.after)
+		{
+			moves.push_back(move);
+		}
+	}
+	return moves;
+}
+
+std::vector<Move> MovesBack(const std::vector<Move>& aMoves)
+{
+	std::vector<Move> back;
+	for (auto move = aMoves.rbegin(); move != aMoves.rend(); ++move)
+	{
+		back.push_back({ move->resource, move->after, move->before });
+	}
+	return back;
+}
+
+std::vector<D3D12_RESOURCE_BARRIER> Barriers(const std::vector<Move>& aMoves)
+{
+	std::vector<D3D12_RESOURCE_BARRIER> barriers;
+	for (const Move& move : aMoves)
+	{
+		D3D12_RESOURCE_BARRIER barrier{};
+		barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+		barrier.Transition.pResource = static_cast<ID3D12Resource*>(move.resource);
+		barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+		barrier.Transition.StateBefore = D3D12_RESOURCE_STATES(move.before);
+		barrier.Transition.StateAfter = D3D12_RESOURCE_STATES(move.after);
+		barriers.push_back(barrier);
+	}
+	return barriers;
+}
+}
+```
+
+- [ ] **Step 6: Edit `CMakeLists.txt` to add the source**
+
+```cmake
+	src/hooks/Submission.cpp
+)
+```
+```cmake
+	src/hooks/Submission.cpp
+	src/render/Predlss.cpp
+)
+```
+
+- [ ] **Step 7: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `93 test(s), 0 failure(s)`.
+
+- [ ] **Step 8: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "block-render: drawing before DLSS: the checks, the starting states and the barriers" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 38: The camera's jitter and motion vectors for drawing before DLSS
+
+Before DLSS, our blocks must move with the game's jitter and give DLSS motion vectors, or they shimmer and leave
+trails:
+- **`ClipJitter`:** the jitter `AddJitter` applies, as an offset per unit of clip w, which the vertex shader adds.
+- **`MotionVector`:** where a static point was on screen a frame before, from Streamline's `clipToPrevClip`, in the
+  game's units (`mvecScale` is 1, 1: a fraction of the screen).
+
+`jittersign` and `mvsign` settle both signs in the game.
+
+**Files:**
+- Modify: `tests/TestCamera.cpp`, `src/render/Camera.h`, `src/render/Camera.cpp`
+
+- [ ] **Step 1: Edit `tests/TestCamera.cpp` to test the jitter offset and motion vectors**
+
+```cpp
+	CHECK(frame->reversedDepth);
+}
+}
+```
+```cpp
+	CHECK(frame->reversedDepth);
+}
+
+Mat4 Inverse(const Mat4& aMatrix)  // Gauss-Jordan, for the well-conditioned matrices here
+{
+	double work[4][8]{};
+	for (int row = 0; row < 4; ++row)
+	{
+		for (int column = 0; column < 4; ++column)
+		{
+			work[row][column] = aMatrix[size_t(row * 4 + column)];
+		}
+		work[row][4 + row] = 1.0;
+	}
+	for (int column = 0; column < 4; ++column)
+	{
+		int pivot = column;
+		for (int row = column + 1; row < 4; ++row)
+		{
+			pivot = std::fabs(work[row][column]) > std::fabs(work[pivot][column]) ? row : pivot;
+		}
+		std::swap(work[column], work[pivot]);
+		const double scale = work[column][column];
+		for (double& value : work[column])
+		{
+			value /= scale;
+		}
+		for (int row = 0; row < 4; ++row)
+		{
+			const double factor = row == column ? 0.0 : work[row][column];
+			for (int k = 0; k < 8; ++k)
+			{
+				work[row][k] -= factor * work[column][k];
+			}
+		}
+	}
+	Mat4 inverse{};
+	for (int row = 0; row < 4; ++row)
+	{
+		for (int column = 0; column < 4; ++column)
+		{
+			inverse[size_t(row * 4 + column)] = work[row][4 + column];
+		}
+	}
+	return inverse;
+}
+
+Mat4 Translation(double aX, double aY, double aZ)  // for row vectors
+{
+	return { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, aX, aY, aZ, 1 };
+}
+}
+```
+```cpp
+	CHECK(cpmc::DepthTexelFor(199, 99, 200, 100, part) == std::make_pair(119u, 59u));
+}
+```
+```cpp
+	CHECK(cpmc::DepthTexelFor(199, 99, 200, 100, part) == std::make_pair(119u, 59u));
+}
+
+TEST(CameraClipJitterIsWhatAddJitterAdds)
+{
+	const auto frame = cpmc::MakeCameraFrame(Camera(LeftHanded()), {});
+	const Mat4 jittered = cpmc::AddJitter(frame->cameraToClip, 0.5, 0.25, 1000, 500, -1.0);
+	const auto offset = cpmc::ClipJitter(0.5, 0.25, 1000, 500, -1.0);
+	CHECK_NEAR(offset[0], -0.001, 1e-12);
+	CHECK_NEAR(offset[1], 0.001, 1e-12);
+	const std::array<double, 4> point{ 1.0, 10.0, 2.0, 1.0 };
+	const auto plain = cpmc::Transform(point, frame->cameraToClip);
+	const auto moved = cpmc::Transform(point, jittered);
+	CHECK_NEAR(moved[0], plain[0] + offset[0] * plain[3], 1e-12);
+	CHECK_NEAR(moved[1], plain[1] + offset[1] * plain[3], 1e-12);
+}
+
+TEST(CameraMotionVectorsAreZeroForAStillCamera)
+{
+	const auto motion = cpmc::MotionVector({ 0.3, -0.2, 0.01, 5.0 }, Translation(0.0, 0.0, 0.0), 1.0);
+	CHECK_NEAR(motion[0], 0.0, 1e-12);
+	CHECK_NEAR(motion[1], 0.0, 1e-12);
+}
+
+TEST(CameraMotionVectorsPointToWhereThePointWas)
+{
+	const auto now = cpmc::MakeCameraFrame(Camera(LeftHanded()), {});
+	const auto clip = cpmc::Transform({ 0.0, 10.0, 0.0, 1.0 }, now->cameraToClip);  // 10 m ahead
+	// Streamline's clipToPrevClip after the camera moved by (aX, 0, aZ) since the frame before: from clip space back to
+	// the camera-relative world, across to where the earlier camera was, then into its clip space.
+	const auto clipToPrevClip = [&](double aX, double aZ) {
+		SlConstants earlier = Camera(LeftHanded());
+		earlier.position[0] -= float(aX);
+		earlier.position[2] -= float(aZ);
+		const auto then = cpmc::MakeCameraFrame(earlier, {});
+		return cpmc::Multiply(cpmc::Multiply(Inverse(now->cameraToClip), Translation(aX, 0.0, aZ)), then->cameraToClip);
+	};
+	// The camera moved 1 m to its right (+x, since it faces north). The point was then 1 m to the camera's right:
+	// further right on screen, by half its normalised x of kXs / 10, and that's where its motion vector points. (The
+	// projection holds floats, hence 1e-6.)
+	const auto right = cpmc::MotionVector(clip, clipToPrevClip(1.0, 0.0), 1.0);
+	CHECK_NEAR(right[0], kXs / 20.0, 1e-6);
+	CHECK_NEAR(right[1], 0.0, 1e-9);
+	CHECK_NEAR(cpmc::MotionVector(clip, clipToPrevClip(1.0, 0.0), -1.0)[0], -kXs / 20.0, 1e-6);
+	// The camera rose 1 m. The point was then 1 m above the camera: higher on screen, which is negative in screen
+	// units, since they run down.
+	const auto up = cpmc::MotionVector(clip, clipToPrevClip(0.0, 1.0), 1.0);
+	CHECK_NEAR(up[0], 0.0, 1e-9);
+	CHECK_NEAR(up[1], -kYs / 20.0, 1e-6);
+}
+```
+
+- [ ] **Step 2: Build; it must fail**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C" | sort -u | head -3
+```
+Expected: `'ClipJitter': is not a member of 'cpmc'`.
+
+- [ ] **Step 3: Edit `src/render/Camera.h` to declare them**
+
+```cpp
+Mat4 AddJitter(const Mat4& aCameraToClip, double aJitterX, double aJitterY, uint32_t aWidth, uint32_t aHeight, double aSign);
+```
+```cpp
+Mat4 AddJitter(const Mat4& aCameraToClip, double aJitterX, double aJitterY, uint32_t aWidth, uint32_t aHeight, double aSign);
+// The same jitter as an offset per unit of clip w: (aSign * 2 * jitterX / width, -aSign * 2 * jitterY / height). The
+// vertex shader adds it to clip x and y, times clip w.
+std::array<double, 2> ClipJitter(double aJitterX, double aJitterY, uint32_t aWidth, uint32_t aHeight, double aSign);
+
+// A static point's motion vector, in the game's units (mvecScale 1, 1): from where the point is on screen to where it
+// was a frame before, as a fraction of the screen (x right, y down), times aSign. aClip is the point's clip position
+// without jitter, and aClipToPrevClip is Streamline's clipToPrevClip, for row vectors. The pixel shader does the same.
+std::array<double, 2> MotionVector(const std::array<double, 4>& aClip, const Mat4& aClipToPrevClip, double aSign);
+```
+
+- [ ] **Step 4: Edit `src/render/Camera.cpp` to define them**
+
+```cpp
+Mat4 AddJitter(const Mat4& aCameraToClip, double aJitterX, double aJitterY, uint32_t aWidth, uint32_t aHeight, double aSign)
+{
+	Mat4 jitter{};
+	jitter[0] = jitter[5] = jitter[10] = jitter[15] = 1.0;
+	jitter[12] = aSign * 2.0 * aJitterX / aWidth;   // clip x += this * clip w
+	jitter[13] = -aSign * 2.0 * aJitterY / aHeight;  // clip y: pixel rows run down, clip y up
+	return Multiply(aCameraToClip, jitter);
+}
+```
+```cpp
+Mat4 AddJitter(const Mat4& aCameraToClip, double aJitterX, double aJitterY, uint32_t aWidth, uint32_t aHeight, double aSign)
+{
+	const std::array<double, 2> offset = ClipJitter(aJitterX, aJitterY, aWidth, aHeight, aSign);
+	Mat4 jitter{};
+	jitter[0] = jitter[5] = jitter[10] = jitter[15] = 1.0;
+	jitter[12] = offset[0];  // clip x += this * clip w
+	jitter[13] = offset[1];
+	return Multiply(aCameraToClip, jitter);
+}
+
+std::array<double, 2> ClipJitter(double aJitterX, double aJitterY, uint32_t aWidth, uint32_t aHeight, double aSign)
+{
+	return { aSign * 2.0 * aJitterX / aWidth, -aSign * 2.0 * aJitterY / aHeight };  // pixel rows run down, clip y up
+}
+
+std::array<double, 2> MotionVector(const std::array<double, 4>& aClip, const Mat4& aClipToPrevClip, double aSign)
+{
+	const std::array<double, 4> before = Transform(aClip, aClipToPrevClip);
+	// Normalised device coordinates span 2 across the screen, and run up where the screen's y runs down.
+	return { aSign * (before[0] / before[3] - aClip[0] / aClip[3]) * 0.5,
+	         -aSign * (before[1] / before[3] - aClip[1] / aClip[3]) * 0.5 };
+}
+```
+
+- [ ] **Step 5: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `96 test(s), 0 failure(s)`.
+
+- [ ] **Step 6: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "block-render: the camera's jitter offset and motion vectors" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 39: The shaders for drawing before DLSS
+
+- **The vertex shader** adds the jitter (`ClipJitter`, as an offset per unit of clip w), and passes on the clip position
+  without jitter and where it was a frame before (`clipToPrevClip`), for the motion vectors. Drawing at `Present`
+  passes no jitter.
+- **`PredlssPS`** writes the scene's colour before DLSS and its motion vectors:
+  - **the colour:** the atlas's colour, linear (the scene before DLSS is linear HDR), times the face's shade and
+    `exposure`. Run 2's dump puts sunlit ground at about 0.6 to 1.0 there;
+  - **the motion vector:** as `MotionVector` computes it, times `mvsign`.
+- **`FrameConstants`** gains `clipToPrevClip` and the jitter, and `tuning` gains `exposure` and `mvsign`. That makes
+  it 256 bytes, the stride of the constant buffer ring.
+
+**Files:**
+- Modify: `tests/TestShaders.cpp`, `src/render/FrameConstants.h`, `shaders/blocks.hlsl`, `src/render/Shaders.h`,
+  `src/render/Shaders.cpp`
+
+- [ ] **Step 1: Edit `tests/TestShaders.cpp` to test `PredlssPS`**
+
+```cpp
+	return desc.Size;
+}
+}
+```
+```cpp
+	return desc.Size;
+}
+
+UINT Outputs(const std::vector<uint8_t>& aCode)
+{
+	Microsoft::WRL::ComPtr<ID3D12ShaderReflection> reflection;
+	D3D12_SHADER_DESC                              desc{};
+	if (FAILED(D3DReflect(aCode.data(), aCode.size(), IID_PPV_ARGS(&reflection))) || FAILED(reflection->GetDesc(&desc)))
+	{
+		return 0;
+	}
+	return desc.OutputParameters;
+}
+}
+```
+```cpp
+		CHECK(!shaders->vertex.empty());
+		CHECK(!shaders->present.empty());
+```
+```cpp
+		CHECK(!shaders->vertex.empty());
+		CHECK(!shaders->present.empty());
+		CHECK(!shaders->predlss.empty());
+```
+```cpp
+		CHECK_EQ(ConstantBufferSize(shaders->present, "Frame"), UINT(sizeof(cpmc::FrameConstants)));
+	}
+}
+```
+```cpp
+		CHECK_EQ(ConstantBufferSize(shaders->present, "Frame"), UINT(sizeof(cpmc::FrameConstants)));
+		CHECK_EQ(ConstantBufferSize(shaders->predlss, "Frame"), UINT(sizeof(cpmc::FrameConstants)));
+	}
+}
+
+TEST(ShadersWriteColourAndMotionBeforeDlss)
+{
+	std::string error;
+	const auto  shaders = cpmc::CompileBlockShaders(ShaderSource(), error);
+	CHECK(shaders.has_value());
+	if (shaders)
+	{
+		CHECK_EQ(Outputs(shaders->present), 1u);
+		CHECK_EQ(Outputs(shaders->predlss), 2u);  // the colour, and the motion vectors
+	}
+}
+```
+
+- [ ] **Step 2: Build; it must fail**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C" | sort -u | head -3
+```
+Expected: `'predlss': is not a member of 'cpmc::BlockShaders'`.
+
+- [ ] **Step 3: Edit `src/render/FrameConstants.h` to add the motion vectors' matrix and the jitter**
+
+```cpp
+struct FrameConstants
+{
+	float    cameraToClip[16];  // camera-relative world position to clip, for row vectors
+	float    target[4];         // width, height, 1 / width, 1 / height of the image drawn into
+	float    depthExtent[4];    // left, top, width, height of the depth image within its buffer
+	uint32_t depthInfo[4];      // floats per row of the depth copy; 1 if there is a copy; 1 if depth is reversed; 0
+	uint32_t atlasInfo[4];      // width, height, levels; 0
+	uint32_t atlasLevels[8];    // where each level's texels start
+	float    tuning[4];         // brightness; depth tolerance; 0; 0
+};
+static_assert(sizeof(FrameConstants) == 176);
+```
+```cpp
+struct FrameConstants
+{
+	float    cameraToClip[16];    // camera-relative world position to clip, for row vectors
+	float    target[4];           // width, height, 1 / width, 1 / height of the image drawn into
+	float    depthExtent[4];      // left, top, width, height of the depth image within its buffer
+	uint32_t depthInfo[4];        // floats per row of the depth copy; 1 if there is a copy; 1 if depth is reversed; 0
+	uint32_t atlasInfo[4];        // width, height, levels; 0
+	uint32_t atlasLevels[8];      // where each level's texels start
+	float    tuning[4];           // brightness; depth tolerance; exposure; the motion vectors' sign
+	float    clipToPrevClip[16];  // Streamline's, for row vectors: a clip position to where it was a frame before
+	float    jitter[4];           // the jitter as an offset per unit of clip w (ClipJitter): x, y; 0; 0
+};
+static_assert(sizeof(FrameConstants) == 256);
+```
+
+- [ ] **Step 4: Edit `shaders/blocks.hlsl` for the jitter, the motion vectors and `PredlssPS`**
+
+```hlsl
+    uint4  atlasLevels[2];            // where each level's texels start
+    float4 tuning;                    // brightness; depth tolerance
+};
+```
+```hlsl
+    uint4  atlasLevels[2];            // where each level's texels start
+    float4 tuning;                    // brightness; depth tolerance; exposure; the motion vectors' sign
+    row_major float4x4 clipToPrevClip;  // Streamline's: a clip position to where it was a frame before
+    float4 jitter;                    // the jitter as an offset per unit of clip w: x, y
+};
+```
+```hlsl
+    nointerpolation uint face : TEXCOORD1;
+};
+```
+```hlsl
+    nointerpolation uint face : TEXCOORD1;
+    float4 clip     : TEXCOORD2;  // without jitter
+    float4 prevClip : TEXCOORD3;  // where it was a frame before
+};
+```
+```hlsl
+    o.position = mul(float4(world, 1.0), cameraToClip);
+```
+```hlsl
+    const float4 clip = mul(float4(world, 1.0), cameraToClip);
+    o.position = float4(clip.xy + jitter.xy * clip.w, clip.zw);
+    o.clip = clip;
+    o.prevClip = mul(clip, clipToPrevClip);
+```
+```hlsl
+    return float4(texel.rgb * i.colour.rgb * kFaceShade[min(i.face, 6)] * tuning.x, 1.0);
+}
+```
+```hlsl
+    return float4(texel.rgb * i.colour.rgb * kFaceShade[min(i.face, 6)] * tuning.x, 1.0);
+}
+
+// The sRGB curve, undone: the atlas holds Minecraft's colours as they look, and the scene before DLSS is linear.
+float3 Linear(float3 aColour)
+{
+    return aColour <= 0.04045 ? aColour / 12.92 : pow(abs((aColour + 0.055) / 1.055), 2.4);
+}
+
+struct PredlssOut
+{
+    float4 colour : SV_Target0;
+    float2 motion : SV_Target1;
+};
+
+// Step 3: into the scene's colour before DLSS, which then tone maps, blooms and grades the blocks with the rest. The
+// game's own depth hides what's behind, and the motion vectors let DLSS follow the blocks as the camera moves.
+PredlssOut PredlssPS(VSOut i)
+{
+    const float4 texel = SampleAtlas(i.uv);
+    if (texel.a < 0.5)
+    {
+        discard;
+    }
+    PredlssOut o;
+    o.colour = float4(Linear(texel.rgb * i.colour.rgb) * kFaceShade[min(i.face, 6)] * tuning.z, 1.0);
+    // As Camera.cpp's MotionVector: a fraction of the screen, from where the point is to where it was.
+    const float2 now = i.clip.xy / i.clip.w;
+    const float2 before = i.prevClip.xy / i.prevClip.w;
+    o.motion = (before - now) * float2(0.5, -0.5) * tuning.w;
+    return o;
+}
+```
+
+- [ ] **Step 5: Edit `src/render/Shaders.h` to add `PredlssPS`**
+
+```cpp
+	std::vector<uint8_t> present;  // PresentPS
+```
+```cpp
+	std::vector<uint8_t> present;  // PresentPS
+	std::vector<uint8_t> predlss;  // PredlssPS
+```
+
+- [ ] **Step 6: Edit `src/render/Shaders.cpp` to compile it**
+
+```cpp
+	return BlockShaders{ std::move(*vertex), std::move(*present) };
+```
+```cpp
+	auto predlss = CompileShader(aSource, "blocks.hlsl", "PredlssPS", "ps_5_1", aError);
+	if (!predlss)
+	{
+		return std::nullopt;
+	}
+	return BlockShaders{ std::move(*vertex), std::move(*present), std::move(*predlss) };
+```
+
+- [ ] **Step 7: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `97 test(s), 0 failure(s)`.
+
+- [ ] **Step 8: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "block-render: shaders for drawing before DLSS: jitter, motion vectors and linear colour" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 40: The house and the field
+
+Step 3 places a `house` and fields of 10,000 and 100,000 blocks, for the timings (the spec's "Structures"):
+- **`house`:** 7 × 7 and 5 high. A cobblestone floor, oak plank walls with oak log corners, a glass window in each
+  wall, a doorway, a plank roof, and an oak leaves bush beside it.
+- **`field <n>`:** rolling ground of grass over three of dirt over stone, in rows of whole columns until it holds n
+  blocks.
+
+The test atlas lacks some of their blocks, so the tests build one with all of them.
+
+**Files:**
+- Modify: `tests/TestStructures.cpp`, `src/world/Structures.h`, `src/Plugin.cpp`
+- Rewrite: `src/world/Structures.cpp`
+
+- [ ] **Step 1: Edit `tests/TestStructures.cpp` to test the house and the field**
+
+```cpp
+using cpmc::BlockPos;
+using cpmc::BlockWorld;
+```
+```cpp
+using cpmc::BlockPos;
+using cpmc::BlockWorld;
+
+namespace
+{
+// An atlas with every block the structures use, each drawn with the same plain sprite.
+cpmc::Atlas BuildingAtlas()
+{
+	std::vector<uint8_t> out;
+	const char           magic[] = "CPMCATL1";
+	out.insert(out.end(), magic, magic + 8);
+	const char* names[] = { "stone", "cobblestone", "oak_planks", "oak_log", "glass", "oak_leaves", "grass_block", "dirt" };
+	for (const uint32_t value : { 16u, 16u, 1u, 1u, uint32_t(std::size(names)), 0u })  // size, levels, sprites, blocks
+	{
+		fixture::Put32(out, value);
+	}
+	for (const uint32_t value : { 0u, 0u, 16u, 16u })
+	{
+		fixture::Put32(out, value);
+	}
+	for (const char* name : names)
+	{
+		fixture::PutBlock(out, name, { 0, 0, 0, 0, 0, 0 }, { 255, 255, 255 }, 0, false);
+	}
+	for (int i = 0; i < 16 * 16; ++i)
+	{
+		fixture::Put32(out, 0xFF808080u);
+	}
+	std::string error;
+	return *cpmc::ParseAtlas(out, error);
+}
+
+bool Is(const BlockWorld& aWorld, const cpmc::Atlas& aAtlas, const BlockPos& aAt, const char* aName)
+{
+	return aWorld.Get(aAt) == aAtlas.BlockId(aName);
+}
+}
+```
+```cpp
+	CHECK(!cpmc::PlaceStructure(world, atlas, "castle", {}, error));
+	CHECK_STR(error, "no structure called \"castle\" in this build");
+}
+```
+```cpp
+	CHECK(!cpmc::PlaceStructure(world, atlas, "castle", {}, error));
+	CHECK_STR(error, "no structure called \"castle\" in this build");
+}
+
+TEST(StructuresPlaceAHouse)
+{
+	const cpmc::Atlas atlas = BuildingAtlas();
+	BlockWorld        world;
+	std::string       error;
+	const auto        placed = cpmc::PlaceStructure(world, atlas, "house", { 0, 64, 0 }, error);
+	CHECK(placed.has_value());
+	CHECK_EQ(placed->blocks, size_t(176));  // floor 49, roof 49, walls 72 less the doorway's 2, bush 8
+	CHECK_EQ(world.BlockCount(), size_t(176));
+	CHECK(placed->max == (BlockPos{ 9, 68, 6 }));
+	CHECK(Is(world, atlas, { 0, 64, 0 }, "cobblestone") && Is(world, atlas, { 6, 64, 6 }, "cobblestone"));  // the floor
+	CHECK(Is(world, atlas, { 0, 65, 0 }, "oak_log") && Is(world, atlas, { 6, 67, 6 }, "oak_log"));          // corners
+	CHECK(Is(world, atlas, { 1, 65, 0 }, "oak_planks"));                                                    // a wall
+	CHECK(Is(world, atlas, { 5, 66, 0 }, "glass") && Is(world, atlas, { 3, 66, 6 }, "glass"));              // windows
+	CHECK(Is(world, atlas, { 0, 66, 3 }, "glass") && Is(world, atlas, { 6, 66, 3 }, "glass"));
+	CHECK_EQ(world.Get({ 3, 65, 0 }), uint16_t(0));  // the doorway
+	CHECK_EQ(world.Get({ 3, 66, 0 }), uint16_t(0));
+	CHECK(Is(world, atlas, { 3, 67, 0 }, "oak_planks"));  // above it
+	CHECK_EQ(world.Get({ 3, 65, 3 }), uint16_t(0));       // inside
+	CHECK(Is(world, atlas, { 3, 68, 3 }, "oak_planks"));  // the roof
+	CHECK(Is(world, atlas, { 8, 64, 2 }, "oak_leaves") && Is(world, atlas, { 9, 65, 3 }, "oak_leaves"));  // the bush
+}
+
+TEST(StructuresPlaceAFieldOfAboutTheBlocksAskedFor)
+{
+	const cpmc::Atlas atlas = BuildingAtlas();
+	for (const size_t blocks : { size_t(1), size_t(1000), size_t(10000) })
+	{
+		BlockWorld  world;
+		std::string error;
+		const auto  placed = cpmc::PlaceField(world, atlas, { 0, 0, 0 }, blocks, error);
+		CHECK(placed.has_value());
+		CHECK(placed->blocks >= blocks && placed->blocks < blocks + 10);  // whole columns, of at most 10 blocks
+		CHECK_EQ(world.BlockCount(), placed->blocks);
+	}
+	BlockWorld  world;
+	std::string error;
+	cpmc::PlaceField(world, atlas, { 0, 0, 0 }, 1000, error);
+	// The first column is 6 + round(2 sin 0 + 2 cos 0) = 8 high: grass, three of dirt, then stone.
+	CHECK(Is(world, atlas, { 0, 7, 0 }, "grass_block"));
+	CHECK(Is(world, atlas, { 0, 6, 0 }, "dirt") && Is(world, atlas, { 0, 4, 0 }, "dirt"));
+	CHECK(Is(world, atlas, { 0, 3, 0 }, "stone") && Is(world, atlas, { 0, 0, 0 }, "stone"));
+	CHECK_EQ(world.Get({ 0, 8, 0 }), uint16_t(0));
+}
+
+TEST(StructuresNeedTheirBlocks)
+{
+	const cpmc::Atlas atlas = fixture::Atlas();  // no cobblestone, planks or dirt
+	BlockWorld        world;
+	std::string       error;
+	CHECK(!cpmc::PlaceStructure(world, atlas, "house", {}, error));
+	CHECK_STR(error, "the atlas has no cobblestone");
+	CHECK(!cpmc::PlaceField(world, atlas, {}, 100, error));
+	CHECK_STR(error, "the atlas has no dirt");
+	CHECK(!cpmc::PlaceField(world, BuildingAtlas(), {}, 0, error));
+	CHECK_STR(error, "a field needs at least one block");
+	CHECK_EQ(world.BlockCount(), size_t(0));
+}
+```
+
+- [ ] **Step 2: Build; it must fail**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C" | sort -u | head -3
+```
+Expected: `'PlaceField': is not a member of 'cpmc'`.
+
+- [ ] **Step 3: Edit `src/world/Structures.h` to add them**
+
+```cpp
+// Adds a structure with its minimum corner at aOrigin (see the spec's "Structures"):
+// - "cube": one stone block;
+// - "sampler": every block of the atlas, in a row along +x with a gap between each, on a stone base.
+// Nothing, with aError saying why, for another name or when the atlas lacks stone.
+std::optional<Placed> PlaceStructure(BlockWorld& aWorld, const Atlas& aAtlas, std::string_view aName, const BlockPos& aOrigin,
+                                     std::string& aError);
+```
+```cpp
+// Adds a structure with its minimum corner at aOrigin (see the spec's "Structures"):
+// - "cube": one stone block;
+// - "sampler": every block of the atlas, in a row along +x with a gap between each, on a stone base;
+// - "house": 7 x 7 and 5 high: a cobblestone floor, oak plank walls with oak log corners, a glass window in each wall,
+//   a doorway, a plank roof, and an oak leaves bush beside it.
+// Nothing, with aError saying why, for another name or when the atlas lacks a block it needs.
+std::optional<Placed> PlaceStructure(BlockWorld& aWorld, const Atlas& aAtlas, std::string_view aName, const BlockPos& aOrigin,
+                                     std::string& aError);
+
+// Adds rolling ground of grass over dirt over stone with its minimum corner at aOrigin, holding aBlocks blocks, or up to
+// 9 more, since it's made of whole columns. Nothing, with aError saying why, for no blocks or when the atlas lacks a
+// block it needs.
+std::optional<Placed> PlaceField(BlockWorld& aWorld, const Atlas& aAtlas, const BlockPos& aOrigin, size_t aBlocks, std::string& aError);
+```
+
+- [ ] **Step 4: Write `src/world/Structures.cpp`**
+
+```cpp
+#include "world/Structures.h"
+
+#include <algorithm>
+#include <cmath>
+#include <initializer_list>
+#include <vector>
+
+namespace cpmc
+{
+namespace
+{
+// The IDs of aNames in the atlas, in order. Nothing, with aError naming the first one missing.
+std::optional<std::vector<uint16_t>> BlockIds(const Atlas& aAtlas, std::initializer_list<const char*> aNames, std::string& aError)
+{
+	std::vector<uint16_t> ids;
+	for (const char* name : aNames)
+	{
+		const std::optional<uint16_t> id = aAtlas.BlockId(name);
+		if (!id)
+		{
+			aError = std::string("the atlas has no ") + name;
+			return std::nullopt;
+		}
+		ids.push_back(*id);
+	}
+	return ids;
+}
+
+// 7 x 7 and 5 high, with its doorway in the wall at the lowest z, and the bush beside the wall at the highest x.
+std::optional<Placed> PlaceHouse(BlockWorld& aWorld, const Atlas& aAtlas, const BlockPos& aOrigin, std::string& aError)
+{
+	const auto ids = BlockIds(aAtlas, { "cobblestone", "oak_planks", "oak_log", "glass", "oak_leaves" }, aError);
+	if (!ids)
+	{
+		return std::nullopt;
+	}
+	const uint16_t cobblestone = (*ids)[0], planks = (*ids)[1], log = (*ids)[2], glass = (*ids)[3], leaves = (*ids)[4];
+	Placed placed;
+	placed.min = aOrigin;
+	placed.max = { aOrigin.x + 9, aOrigin.y + 4, aOrigin.z + 6 };
+	const auto set = [&](int32_t aX, int32_t aY, int32_t aZ, uint16_t aBlock) {
+		aWorld.Set({ aOrigin.x + aX, aOrigin.y + aY, aOrigin.z + aZ }, aBlock);
+		++placed.blocks;
+	};
+	for (int32_t x = 0; x < 7; ++x)
+	{
+		for (int32_t z = 0; z < 7; ++z)
+		{
+			set(x, 0, z, cobblestone);  // the floor
+			set(x, 4, z, planks);       // the roof
+			const bool edgeX = x == 0 || x == 6;
+			const bool edgeZ = z == 0 || z == 6;
+			if (!edgeX && !edgeZ)
+			{
+				continue;  // inside
+			}
+			for (int32_t y = 1; y <= 3; ++y)
+			{
+				const bool doorway = z == 0 && x == 3 && y <= 2;
+				const bool window = y == 2 && ((z == 0 && x == 5) || (z == 6 && x == 3) || (edgeX && z == 3));
+				if (!doorway)
+				{
+					set(x, y, z, edgeX && edgeZ ? log : window ? glass : planks);
+				}
+			}
+		}
+	}
+	for (int32_t x = 8; x <= 9; ++x)
+	{
+		for (int32_t y = 0; y <= 1; ++y)
+		{
+			for (int32_t z = 2; z <= 3; ++z)
+			{
+				set(x, y, z, leaves);
+			}
+		}
+	}
+	return placed;
+}
+}
+
+BlockPos PlacementOrigin(const Vec3d& aFeet, const Vec3f& aForward)
+{
+	double       x = aForward.x, y = aForward.y;
+	const double length = std::sqrt(x * x + y * y);
+	if (length > 1e-6)
+	{
+		x /= length;
+		y /= length;
+	}
+	else
+	{
+		x = 0.0;
+		y = 1.0;  // looking straight up or down: place it to the north
+	}
+	const Vec3d ahead = McFromWorld({ aFeet.x + 3.0 * x, aFeet.y + 3.0 * y, aFeet.z });
+	return { int32_t(std::floor(ahead.x)), int32_t(std::floor(ahead.y)), int32_t(std::floor(ahead.z)) };
+}
+
+std::pair<Vec3d, Vec3d> WorldBox(const Placed& aPlaced)
+{
+	// Minecraft block (x, y, z) fills world x..x+1, -z-1..-z, y..y+1.
+	return { { double(aPlaced.min.x), double(-aPlaced.max.z - 1), double(aPlaced.min.y) },
+	         { double(aPlaced.max.x + 1), double(-aPlaced.min.z), double(aPlaced.max.y + 1) } };
+}
+
+std::optional<Placed> PlaceStructure(BlockWorld& aWorld, const Atlas& aAtlas, std::string_view aName, const BlockPos& aOrigin,
+                                     std::string& aError)
+{
+	const std::optional<uint16_t> stone = aAtlas.BlockId("stone");
+	if (!stone)
+	{
+		aError = "the atlas has no stone";
+		return std::nullopt;
+	}
+	Placed placed;
+	placed.min = aOrigin;
+	if (aName == "cube")
+	{
+		aWorld.Set(aOrigin, *stone);
+		placed.blocks = 1;
+		placed.max = aOrigin;
+		return placed;
+	}
+	if (aName == "sampler")
+	{
+		const auto count = int32_t(aAtlas.blocks.size());
+		for (int32_t i = 0; i < count; ++i)
+		{
+			aWorld.Set({ aOrigin.x + 2 * i, aOrigin.y, aOrigin.z }, *stone);
+			aWorld.Set({ aOrigin.x + 2 * i + 1, aOrigin.y, aOrigin.z }, *stone);
+			aWorld.Set({ aOrigin.x + 2 * i, aOrigin.y + 1, aOrigin.z }, uint16_t(i + 1));
+		}
+		placed.blocks = size_t(3 * count);
+		placed.max = { aOrigin.x + 2 * count - 1, aOrigin.y + 1, aOrigin.z };
+		return placed;
+	}
+	if (aName == "house")
+	{
+		return PlaceHouse(aWorld, aAtlas, aOrigin, aError);
+	}
+	aError = "no structure called \"" + std::string(aName) + "\" in this build";
+	return std::nullopt;
+}
+
+std::optional<Placed> PlaceField(BlockWorld& aWorld, const Atlas& aAtlas, const BlockPos& aOrigin, size_t aBlocks, std::string& aError)
+{
+	const auto ids = BlockIds(aAtlas, { "grass_block", "dirt", "stone" }, aError);
+	if (!ids)
+	{
+		return std::nullopt;
+	}
+	if (aBlocks == 0)
+	{
+		aError = "a field needs at least one block";
+		return std::nullopt;
+	}
+	const uint16_t grass = (*ids)[0], dirt = (*ids)[1], stone = (*ids)[2];
+	// Rows of columns along x, as many columns to a row as there would be rows if each column held its average of 6
+	// blocks, until the field holds aBlocks.
+	const auto width = int32_t(std::ceil(std::sqrt(double(aBlocks) / 6.0)));
+	Placed     placed;
+	placed.min = aOrigin;
+	placed.max = aOrigin;
+	for (int32_t z = 0; placed.blocks < aBlocks; ++z)
+	{
+		for (int32_t x = 0; x < width && placed.blocks < aBlocks; ++x)
+		{
+			// 2 to 10 blocks high, rolling: grass on top, then three of dirt, then stone.
+			const auto height = int32_t(6 + std::lround(2.0 * std::sin(x / 5.0) + 2.0 * std::cos(z / 7.0)));
+			for (int32_t y = 0; y < height; ++y)
+			{
+				aWorld.Set({ aOrigin.x + x, aOrigin.y + y, aOrigin.z + z }, y == height - 1 ? grass : y >= height - 4 ? dirt : stone);
+			}
+			placed.blocks += size_t(height);
+			placed.max = { std::max(placed.max.x, aOrigin.x + x), std::max(placed.max.y, aOrigin.y + height - 1), aOrigin.z + z };
+		}
+	}
+	return placed;
+}
+}
+```
+
+- [ ] **Step 5: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `100 test(s), 0 failure(s)`.
+
+- [ ] **Step 6: Edit `src/Plugin.cpp` to place fields**
+
+```cpp
+	const cpmc::BlockPos                origin = cpmc::PlacementOrigin(pose->feet, pose->forward);
+	const std::optional<cpmc::Placed>   placed = cpmc::PlaceStructure(g_world, *g_renderer->AtlasData(), aRequest.what, origin, error);
+```
+```cpp
+	const cpmc::BlockPos              origin = cpmc::PlacementOrigin(pose->feet, pose->forward);
+	const cpmc::Atlas&                atlas = *g_renderer->AtlasData();
+	const std::optional<cpmc::Placed> placed = aRequest.what == "field"
+	                                               ? cpmc::PlaceField(g_world, atlas, origin, size_t(aRequest.number), error)
+	                                               : cpmc::PlaceStructure(g_world, atlas, aRequest.what, origin, error);
+```
+
+- [ ] **Step 7: Build; it must compile without warnings, and the tests still pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `100 test(s), 0 failure(s)`.
+
+- [ ] **Step 8: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "block-render: the house and the field" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 41: The frame log keeps each list's transitions
+
+Part 1 couldn't say what state the tagged buffers are in just before the DLSS list: the frame log counted barriers but
+didn't keep them. Now each logged list keeps, for every resource it moved, the first transition's state before (with
+its subresource and flags) and the state after the last. `frame_summary.py` prints them for the DLSS lists and the
+G-buffer lists, so step 3's first log shows the states our list starts from, and step 4 sees where the G-buffer lists
+leave their targets.
+
+**Files:**
+- Modify: `tests/TestFrameLogJson.cpp`, `src/log/FrameLogData.h`, `src/log/FrameLogJson.cpp`, `src/log/FrameLog.cpp`,
+  `tools/test_frame_summary.py`, `tools/frame_summary.py`
+
+- [ ] **Step 1: Edit `tests/TestFrameLogJson.cpp` to test the transitions**
+
+```cpp
+	log.lists.push_back({ 0x7100, "Scene", 100, { gbuffer, unknown } });
+```
+```cpp
+	log.lists.push_back({ 0x7100, "Scene", 100, { gbuffer, unknown },
+	                      { { 0x1, 0x0, 0, cpmc::ListState::kBeginOnly, std::nullopt }, { 0x5000, 0x10, 0xFFFFFFFF, 0, 0x80 } } });
+```
+```cpp
+	CHECK(Has(json, "\"unknown\": true"));
+```
+```cpp
+	CHECK(Has(json, "\"unknown\": true"));
+	CHECK(Has(json, "\"resource\": \"0x1\",\n          \"firstBefore\": \"0x0\",\n          \"firstSubresource\": 0,\n"
+	                "          \"firstFlags\": 1,\n          \"after\": null"));
+	CHECK(Has(json, "\"firstSubresource\": \"all\""));
+	CHECK(Has(json, "\"after\": \"0x80\""));
+```
+```cpp
+TEST(FrameLogWritesNullWithoutAScriptCamera)
+```
+```cpp
+TEST(FrameLogTakesEachListsTransitionsByAddress)
+{
+	cpmc::ListState state;
+	state.Begin(1, true);
+	state.Transition(reinterpret_cast<void*>(0x20), 0x4, 0x8, cpmc::ListState::kAllSubresources, 0);
+	state.Transition(reinterpret_cast<void*>(0x10), 0x10, 0xC0, 0, cpmc::ListState::kBeginOnly);
+	const std::vector<cpmc::LogTransition> transitions = cpmc::TransitionsOf(state);
+	CHECK_EQ(transitions.size(), size_t(2));
+	CHECK_EQ(transitions[0].resource, uint64_t(0x10));
+	CHECK_EQ(transitions[0].firstFlags, cpmc::ListState::kBeginOnly);
+	CHECK(!transitions[0].after);  // begun, not ended
+	CHECK_EQ(transitions[1].firstBefore, 0x4u);
+	CHECK_EQ(transitions[1].after.value_or(0), 0x8u);
+}
+
+TEST(FrameLogWritesNullWithoutAScriptCamera)
+```
+
+- [ ] **Step 2: Build; it must fail**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C" | sort -u | head -3
+```
+Expected: `'LogTransition': is not a member of 'cpmc'`.
+
+- [ ] **Step 3: Edit `src/log/FrameLogData.h` to add the transitions**
+
+```cpp
+struct LogList
+{
+	uint64_t                list = 0;
+	std::string             name;  // the game's name for it, if found
+	uint32_t                frame = 0;
+	std::vector<PassRecord> passes;
+};
+```
+```cpp
+// A resource's transitions in one list: the first one's state before, subresource and flags (see
+// ListState::FirstTransition), and the state after the last, if that's known.
+struct LogTransition
+{
+	uint64_t                resource = 0;
+	uint32_t                firstBefore = 0;
+	uint32_t                firstSubresource = 0;
+	uint32_t                firstFlags = 0;
+	std::optional<uint32_t> after;
+};
+
+struct LogList
+{
+	uint64_t                   list = 0;
+	std::string                name;  // the game's name for it, if found
+	uint32_t                   frame = 0;
+	std::vector<PassRecord>    passes;
+	std::vector<LogTransition> transitions;  // by resource address
+};
+```
+```cpp
+// The name dxgiformat.h gives a format, without the DXGI_FORMAT_ prefix, or "format <n>".
+std::string DxgiFormatName(uint32_t aFormat);
+```
+```cpp
+// The name dxgiformat.h gives a format, without the DXGI_FORMAT_ prefix, or "format <n>".
+std::string DxgiFormatName(uint32_t aFormat);
+
+// The transitions a list recorded, by resource address.
+std::vector<LogTransition> TransitionsOf(const ListState& aState);
+```
+
+- [ ] **Step 4: Edit `src/log/FrameLogJson.cpp` to write them**
+
+```cpp
+#include "Json.h"
+
+#include <cmath>
+```
+```cpp
+#include "Json.h"
+
+#include <algorithm>
+#include <cmath>
+```
+```cpp
+std::string FrameLogJson(const FrameLogData& aLog)
+{
+```
+```cpp
+std::vector<LogTransition> TransitionsOf(const ListState& aState)
+{
+	std::vector<LogTransition> transitions;
+	for (const auto& [resource, first] : aState.FirstTransitions())
+	{
+		transitions.push_back({ reinterpret_cast<uintptr_t>(resource), first.before, first.subresource, first.flags,
+		                        aState.StateOf(resource) });
+	}
+	std::sort(transitions.begin(), transitions.end(),
+	          [](const LogTransition& aA, const LogTransition& aB) { return aA.resource < aB.resource; });
+	return transitions;
+}
+
+std::string FrameLogJson(const FrameLogData& aLog)
+{
+```
+```cpp
+		for (const PassRecord& pass : list.passes)
+		{
+			Pass(json, pass, taggedDepth);
+		}
+		json.EndArray();
+```
+```cpp
+		for (const PassRecord& pass : list.passes)
+		{
+			Pass(json, pass, taggedDepth);
+		}
+		json.EndArray();
+		json.Key("transitions").BeginArray();
+		for (const LogTransition& transition : list.transitions)
+		{
+			json.BeginObject();
+			json.Key("resource").String(Hex(transition.resource));
+			json.Key("firstBefore").String(Hex(transition.firstBefore));
+			json.Key("firstSubresource");
+			transition.firstSubresource == ListState::kAllSubresources ? json.String("all") : json.UInt(transition.firstSubresource);
+			json.Key("firstFlags").UInt(transition.firstFlags);
+			json.Key("after");
+			transition.after ? json.String(Hex(*transition.after)) : json.Null();
+			json.EndObject();
+		}
+		json.EndArray();
+```
+
+- [ ] **Step 5: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `101 test(s), 0 failure(s)`.
+
+- [ ] **Step 6: Edit `src/log/FrameLog.cpp` to keep each logged list's transitions**
+
+```cpp
+		data_.lists.push_back({ reinterpret_cast<uintptr_t>(aList), names_ ? names_->Find(aList) : std::string(), aState.Frame(),
+		                        aState.Passes() });
+```
+```cpp
+		data_.lists.push_back({ reinterpret_cast<uintptr_t>(aList), names_ ? names_->Find(aList) : std::string(), aState.Frame(),
+		                        aState.Passes(), TransitionsOf(aState) });
+```
+
+- [ ] **Step 7: Build; it must compile without warnings, and the tests still pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `101 test(s), 0 failure(s)`.
+
+- [ ] **Step 8: Edit `tools/test_frame_summary.py` to test the states**
+
+```python
+            "barriers": 4, "enhancedBarriers": 0, "events": ["GBuffer"],
+        }],
+    }],
+```
+```python
+            "barriers": 4, "enhancedBarriers": 0, "events": ["GBuffer"],
+        }],
+        "transitions": [
+            {"resource": "0x1", "firstBefore": "0x0", "firstSubresource": 0, "firstFlags": 1, "after": None},
+            {"resource": "0x5000", "firstBefore": "0x10", "firstSubresource": "all", "firstFlags": 0, "after": "0x80"},
+        ],
+    }],
+```
+```python
+def test_summary_without_a_script_camera_or_candidates():
+```
+```python
+def test_summary_shows_the_states_in_the_dlss_and_gbuffer_lists():
+    summary = text()
+    assert "0x7100 frame 100 [DLSS]\n  depth 0x5000: 0x10 -> 0x80; tagged 0x80" in summary
+    assert ("0x7100 frame 100 [G-buffer]: 0x1: 0x0 (subresource 0, flags 1) -> unknown, 0x2: not moved, "
+            "0x3: not moved, 0x5000: 0x10 -> 0x80") in summary
+    older = copy.deepcopy(LOG)
+    del older["lists"][0]["transitions"]  # logs from 0.2.0 and before
+    assert "  depth 0x5000: not logged; tagged 0x80" in text(older)
+
+
+def test_summary_without_a_script_camera_or_candidates():
+```
+
+- [ ] **Step 9: Run it; the new test must fail**
+
+```bash
+cd /d/Cyberpunk-Minecraft/spikes/block-render/tools && uv run --no-project -q --with numpy --with pillow --with pytest pytest -q test_frame_summary.py 2>&1 | grep -E "^E |passed|failed"
+```
+Expected: `AssertionError`, then `1 failed, 6 passed`.
+
+- [ ] **Step 10: Edit `tools/frame_summary.py` to print the states**
+
+```python
+def summarise(log):
+```
+```python
+def state_text(entry, resource):
+    """A resource's states in a logged list: its first transition's state before, and the state after its last."""
+    if "transitions" not in entry:
+        return "not logged"
+    for transition in entry["transitions"]:
+        if transition["resource"] == resource:
+            first = transition["firstBefore"]
+            notes = []
+            if transition["firstSubresource"] != "all":
+                notes.append(f"subresource {transition['firstSubresource']}")
+            if transition["firstFlags"]:
+                notes.append(f"flags {transition['firstFlags']}")
+            if notes:
+                first += f" ({', '.join(notes)})"
+            return f"{first} -> {transition['after'] or 'unknown'}"
+    return "not moved"
+
+
+def summarise(log):
+```
+```python
+    add(f"in all: {len(log['lists'])} lists; {totals}; {render_passes} render passes")
+```
+```python
+    add(f"in all: {len(log['lists'])} lists; {totals}; {render_passes} render passes")
+
+    add("")
+    add("== States in the DLSS and G-buffer lists (before the first transition -> after the last)")
+    tagged = {}
+    for tag in log["tags"]:
+        if tag["resource"] != "0x0":
+            tagged.setdefault(tag["resource"], (tag["name"], tag["state"]))
+    for entry in log["lists"]:
+        if entry["list"] in native_lists:
+            add(f"{entry['list']} frame {entry['frame']} [DLSS]")
+            for resource, (name, state) in tagged.items():
+                add(f"  {name} {resource}: {state_text(entry, resource)}; tagged {state}")
+        if entry["list"] in candidate_lists:
+            resources = []
+            for index, p in enumerate(entry["passes"]):
+                if (entry["list"], index) in candidates:
+                    for t in p["targets"] + [p["depth"]]:
+                        if t and not t.get("unknown") and t["resource"] not in resources:
+                            resources.append(t["resource"])
+            states = ", ".join(f"{resource}: {state_text(entry, resource)}" for resource in resources)
+            add(f"{entry['list']} frame {entry['frame']} [G-buffer]: {states}")
+```
+
+- [ ] **Step 11: Run all the tools' tests; they must pass**
+
+```bash
+cd /d/Cyberpunk-Minecraft/spikes/block-render/tools && uv run --no-project -q --with numpy --with pillow --with pytest pytest -q 2>&1 | tail -1
+```
+Expected: `22 passed`.
+
+- [ ] **Step 12: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "block-render: the frame log keeps each list's transitions" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 42: The renderer draws before DLSS
+
+`mode predlss` (step 3):
+- **At the evaluate:** the renderer keeps the frame's constants and its colour, motion vector and depth tags.
+- **Our list:** when the game submits the DLSS list, `ListBefore` (Task 36) records a list of ours and puts it just
+  before. It:
+  - checks the tagged buffers (Task 37);
+  - finds the state each was in, from the DLSS list's first transitions (Tasks 35 and 37);
+  - moves them to render target and depth write;
+  - draws every section with `PredlssPS` (Task 39), the jitter and `clipToPrevClip`;
+  - moves them back.
+- **Tracking:** `predlss` asks for command list tracking while it's on, since the first transitions come from the
+  tracker. A DLSS list that wasn't tracked from its `Reset` is skipped.
+- **The fence:** `OnSubmitted` signals the fence for the slot it used. The slot passes from `ListBefore` to
+  `OnSubmitted` through a thread-local, since both run on the same thread inside one `ExecuteCommandLists`, while the
+  main thread may change the mode in between. So the signal is never lost.
+- **Settings:** `exposure` (3 to start), `jittersign` and `mvsign` (1, -1, or 0 for none).
+- **Present mode** is unchanged. It now shares the constants and the section drawing with `predlss`.
+
+Streamline's `clipToPrevClip` is for row vectors, as the vertex shader uses it: rebuilt from the cameras of two frames
+in run 2's log taken while turning, it matches to within 3e-8, and its transpose doesn't.
+
+**Files:**
+- Rewrite: `src/render/Renderer.h`, `src/render/Renderer.cpp`
+
+- [ ] **Step 1: Write `src/render/Renderer.h`**
+
+```cpp
+#pragma once
+
+#include "Coords.h"
+#include "LogQueue.h"
+#include "hooks/HookEvents.h"
+#include "render/Atlas.h"
+#include "render/Camera.h"
+#include "render/FrameConstants.h"
+#include "render/Gpu.h"
+#include "render/Shaders.h"
+#include "world/BlockWorld.h"
+#include "world/Vertex.h"
+
+#include <array>
+#include <atomic>
+#include <filesystem>
+#include <map>
+#include <mutex>
+#include <optional>
+#include <string>
+#include <string_view>
+#include <vector>
+
+namespace cpmc
+{
+// The plugin's own drawing (the spec's "Renderer"). The modes:
+// - off;
+// - present (step 2): at each DLSS evaluate the tagged depth's depth plane is copied into a buffer of ours, inside the
+//   game's list. Once that list is submitted, the next Present draws the blocks into the back buffer with our own list,
+//   on the same queue, hidden where the copied depth says the game drew something nearer;
+// - predlss (step 3): a list of ours goes into the submission holding the DLSS evaluate's list, just before it. It draws
+//   into the tagged colour, motion vectors and depth, with the frame's jitter, so DLSS takes the blocks for the game's
+//   own. Its barriers start from the state the DLSS list found each buffer in (its first transitions), so command lists
+//   are tracked while this mode is on.
+class Renderer : public HookEvents
+{
+public:
+	Renderer(LogQueue& aLog, std::filesystem::path aFolder);
+
+	// Main thread.
+	bool         SetMode(std::string_view aMode, std::string& aError);
+	std::string  ModeName() const;
+	bool         LoadAtlas(std::string& aError);  // atlas.bin, from the plugin's folder
+	const Atlas* AtlasData() const;               // null until loaded; it stays valid, since the atlas is loaded once
+	bool         ReloadShaders(std::string& aError);
+	// brightness, tolerance, cull, origin.x/y/z; for predlss, exposure, jittersign and mvsign
+	bool         Set(std::string_view aName, double aValue, std::string& aError);
+	void         UploadSection(const SectionPos& aSection, std::vector<Vertex> aVertices);  // no vertices: remove it
+	void         Update();  // uploads, and frees what the GPU has finished with
+
+	struct Stats
+	{
+		uint64_t    drawn = 0;
+		uint64_t    skipped = 0;
+		uint64_t    lateCamera = 0;  // present: drawn with the same DLSS frame as the draw before
+		std::string lastSkip;
+		double      gpuMsAverage = -1.0;
+		double      gpuMsWorst = -1.0;
+		double      frameMsAverage = -1.0;
+		double      frameMsWorst = -1.0;
+		size_t      sections = 0;
+		size_t      vertices = 0;
+	};
+	Stats TakeStats();  // since the last call
+	void  Shutdown();   // waits for the GPU, then releases everything
+
+	void               OnEvaluate(const EvaluateCall& aCall) override;
+	void               OnSubmit(ID3D12CommandQueue* aQueue, UINT aCount, ID3D12CommandList* const* aLists) override;
+	ID3D12CommandList* ListBefore(ID3D12CommandQueue* aQueue, ID3D12CommandList* aList) override;
+	void               OnSubmitted(ID3D12CommandQueue* aQueue, UINT aCount, ID3D12CommandList* const* aLists) override;
+	void               OnPresent(IDXGISwapChain* aSwapChain) override;
+
+private:
+	enum class Mode
+	{
+		Off,
+		Present,
+		Predlss,
+	};
+
+	static constexpr uint32_t kSlots = 8;  // frames in flight: more than Streamline's 6
+
+	struct SectionGpu
+	{
+		gpu::ComPtr<ID3D12Resource> buffer;
+		uint32_t                    vertices = 0;
+		uint64_t                    ready = 0;  // the fence value its upload signals
+	};
+
+	struct Frame  // present: one DLSS evaluate's
+	{
+		const void* list = nullptr;  // the game's list holding the depth copy; compared, never used
+		uint32_t    frame = 0;
+		bool        valid = false;  // its constants were found
+		SlConstants constants;
+		bool        depth = false;  // the depth copy holds its depth
+		uint32_t    rowFloats = 0;
+		sl::Extent  extent{};
+	};
+
+	struct PredlssFrame  // predlss: one DLSS evaluate's
+	{
+		const void*                list = nullptr;  // the DLSS list; compared, never used
+		std::optional<SlConstants> constants;
+		SlTag                      colour;  // the scaling input colour
+		SlTag                      motion;
+		SlTag                      depth;
+	};
+
+	// All with the mutex held.
+	bool               EnsureObjects();  // false until the main queue is known, or if creating them failed
+	bool               EnsurePipeline(DXGI_FORMAT aFormat, bool aReversed);
+	bool               EnsurePredlssPipeline(bool aReversed);
+	bool               EnsureDepthTarget(uint32_t aWidth, uint32_t aHeight);
+	ID3D12CommandList* RecordPredlss(ID3D12CommandQueue* aQueue, ID3D12GraphicsCommandList* aDlssList);  // null: skipped
+	FrameConstants     BaseConstants(const CameraFrame& aCamera) const;  // the camera, the atlas and the tuning values
+	void               DrawSections(ID3D12GraphicsCommandList* aList, const CameraFrame& aCamera, uint64_t aCompleted);
+	void               Skip(const std::string& aWhy);
+	void               Fail(const std::string& aWhy);  // logs, and switches drawing off
+	void               ReleaseTracking();               // if predlss asked for it
+	uint64_t           Signal();
+	void               Retire(gpu::ComPtr<ID3D12Resource> aResource);
+	void               ReadTimings(uint32_t aSlot);
+
+	LogQueue&             log_;
+	std::filesystem::path folder_;
+	mutable std::mutex    mutex_;
+	std::atomic<Mode>     mode_{ Mode::Off };
+	bool                  trackingRequested_ = false;
+
+	float brightness_ = 1.0f;
+	float tolerance_ = 0.0001f;
+	int   cull_ = 1;  // 0 none, 1 back faces, 2 front faces
+	Vec3d renderOrigin_;
+	float exposure_ = 3.0f;    // predlss: what the linear colour is multiplied by; run 2 put sunlit ground at 0.6 to 1
+	float jitterSign_ = 1.0f;  // predlss: 1 or -1 as the jitter's sign, 0 for none
+	float mvSign_ = 1.0f;      // predlss: 1 or -1 as the motion vectors' sign, 0 for none
+
+	ID3D12Device*                                              device_ = nullptr;  // the game's
+	ID3D12CommandQueue*                                        queue_ = nullptr;   // the game's main queue
+	gpu::ComPtr<ID3D12RootSignature>                           rootSignature_;
+	std::optional<BlockShaders>                                shaders_;
+	gpu::ComPtr<ID3D12PipelineState>                           pipeline_;
+	DXGI_FORMAT                                                pipelineFormat_ = DXGI_FORMAT_UNKNOWN;
+	int                                                        pipelineCull_ = -1;
+	bool                                                       pipelineReversed_ = false;
+	gpu::ComPtr<ID3D12PipelineState>                           predlssPipeline_;
+	int                                                        predlssCull_ = -1;
+	bool                                                       predlssReversed_ = false;
+	gpu::ComPtr<ID3D12DescriptorHeap>                          rtvHeap_;  // the back buffer; predlss's colour and motion vectors
+	gpu::ComPtr<ID3D12DescriptorHeap>                          dsvHeap_;  // our depth buffer; predlss's depth
+	uint32_t                                                   rtvIncrement_ = 0;
+	uint32_t                                                   dsvIncrement_ = 0;
+	gpu::ComPtr<ID3D12Resource>                                depthTarget_;
+	uint32_t                                                   depthWidth_ = 0;
+	uint32_t                                                   depthHeight_ = 0;
+	gpu::ComPtr<ID3D12Resource>                                constants_;  // upload: kSlots x 256 bytes
+	uint8_t*                                                   constantsMapped_ = nullptr;
+	std::array<gpu::ComPtr<ID3D12CommandAllocator>, kSlots>    allocators_;
+	std::array<gpu::ComPtr<ID3D12GraphicsCommandList>, kSlots> lists_;
+	std::array<uint64_t, kSlots>                               slotFence_{};
+	uint64_t                                                   recordings_ = 0;  // lists of ours recorded to draw
+	gpu::ComPtr<ID3D12CommandAllocator>                        uploadAllocator_;
+	gpu::ComPtr<ID3D12GraphicsCommandList>                     uploadList_;
+	uint64_t                                                   uploadFence_ = 0;
+	gpu::ComPtr<ID3D12Fence>                                   fence_;
+	uint64_t                                                   fenceValue_ = 0;
+	gpu::ComPtr<ID3D12QueryHeap>                               queries_;
+	gpu::ComPtr<ID3D12Resource>                                timings_;  // readback: kSlots x 2 timestamps
+	uint64_t*                                                  timingsMapped_ = nullptr;
+	uint64_t                                                   timestampFrequency_ = 0;
+
+	std::optional<Atlas>                                           atlas_;
+	gpu::ComPtr<ID3D12Resource>                                    atlasBuffer_;
+	uint64_t                                                       atlasReady_ = 0;
+	bool                                                           atlasUploaded_ = false;
+	std::map<SectionPos, SectionGpu>                               sections_;
+	std::vector<std::pair<SectionPos, std::vector<Vertex>>>        pending_;
+	std::vector<std::pair<gpu::ComPtr<ID3D12Resource>, uint64_t>> retired_;
+
+	gpu::ComPtr<ID3D12Resource>              depthCopy_;
+	uint64_t                                 depthCopyBytes_ = 0;
+	std::vector<gpu::ComPtr<ID3D12Resource>> oldDepthCopies_;  // a game list not yet submitted may still use them
+	Frame                                    recorded_;        // the latest evaluate, its list not yet submitted
+	std::atomic<const void*>                 recordedList_{ nullptr };
+	Frame                                    submitted_;       // the latest evaluate whose list was submitted
+	std::optional<uint32_t>                  lastDrawnFrame_;
+	const void*                              checkedSwapChain_ = nullptr;  // compared, never used
+	bool                                     swapChainOnMainQueue_ = false;
+	uint32_t                                 consecutiveSkips_ = 0;
+
+	PredlssFrame             predlss_;  // the latest evaluate, until its list is submitted
+	std::atomic<const void*> predlssList_{ nullptr };
+
+	Stats    stats_;
+	double   gpuMsSum_ = 0.0;
+	uint64_t gpuSamples_ = 0;
+	double   frameMsSum_ = 0.0;
+	uint64_t frameSamples_ = 0;
+	int64_t  lastPresent_ = 0;
+};
+}
+```
+
+- [ ] **Step 2: Write `src/render/Renderer.cpp`**
+
+```cpp
+#include "render/Renderer.h"
+
+#include "hooks/D3D12Hooks.h"
+#include "log/DdsWriter.h"
+#include "log/FrameLogData.h"
+#include "render/Pipeline.h"
+#include "render/Predlss.h"
+
+#include <dxgi1_4.h>
+
+#include <algorithm>
+#include <cstring>
+#include <format>
+#include <fstream>
+#include <iterator>
+
+namespace cpmc
+{
+namespace
+{
+constexpr uint64_t kConstantsStride = 256;  // a constant buffer view's alignment
+constexpr uint32_t kSkipsBeforeOff = 30;     // the spec's "Checks before every draw"
+constexpr int64_t  kTrackedFramesAgo = 3;    // a DLSS list tracked longer ago than this was recorded again untracked
+
+// The slot of the list ListBefore handed to this thread's ExecuteCommandLists call, for OnSubmitted to signal: the
+// same thread makes both calls, while the main thread may change the mode in between.
+thread_local std::optional<uint32_t> t_insertedSlot;
+
+int64_t Now()
+{
+	LARGE_INTEGER now{};
+	QueryPerformanceCounter(&now);
+	return now.QuadPart;
+}
+
+double MsBetween(int64_t aFrom, int64_t aTo)
+{
+	LARGE_INTEGER frequency{};
+	QueryPerformanceFrequency(&frequency);
+	return double(aTo - aFrom) * 1000.0 / double(frequency.QuadPart);
+}
+
+std::optional<std::vector<uint8_t>> ReadWholeFile(const std::filesystem::path& aPath)
+{
+	std::ifstream in(aPath, std::ios::binary);
+	if (!in)
+	{
+		return std::nullopt;
+	}
+	return std::vector<uint8_t>(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+}
+
+// False when all eight corners of the box lie beyond the same side of the view, or behind the camera.
+bool Visible(const Mat4& aCameraToClip, const Vec3d& aLow, const Vec3d& aHigh)
+{
+	int outside[5] = {};
+	for (int corner = 0; corner < 8; ++corner)
+	{
+		const std::array<double, 4> point{ corner & 1 ? aHigh.x : aLow.x, corner & 2 ? aHigh.y : aLow.y,
+			                               corner & 4 ? aHigh.z : aLow.z, 1.0 };
+		const std::array<double, 4> clip = Transform(point, aCameraToClip);
+		outside[0] += clip[0] > clip[3] ? 1 : 0;
+		outside[1] += clip[0] < -clip[3] ? 1 : 0;
+		outside[2] += clip[1] > clip[3] ? 1 : 0;
+		outside[3] += clip[1] < -clip[3] ? 1 : 0;
+		outside[4] += clip[3] < 0.01 ? 1 : 0;
+	}
+	return std::none_of(std::begin(outside), std::end(outside), [](int aCount) { return aCount == 8; });
+}
+
+D3D12_RESOURCE_BARRIER Transition(ID3D12Resource* aResource, D3D12_RESOURCE_STATES aBefore, D3D12_RESOURCE_STATES aAfter)
+{
+	D3D12_RESOURCE_BARRIER barrier{};
+	barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+	barrier.Transition.pResource = aResource;
+	barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+	barrier.Transition.StateBefore = aBefore;
+	barrier.Transition.StateAfter = aAfter;
+	return barrier;
+}
+
+D3D12_CPU_DESCRIPTOR_HANDLE Offset(D3D12_CPU_DESCRIPTOR_HANDLE aHandle, uint32_t aIndex, uint32_t aIncrement)
+{
+	return { aHandle.ptr + size_t(aIndex) * aIncrement };
+}
+}
+
+Renderer::Renderer(LogQueue& aLog, std::filesystem::path aFolder)
+	: log_(aLog)
+	, folder_(std::move(aFolder))
+{
+}
+
+bool Renderer::SetMode(std::string_view aMode, std::string& aError)
+{
+	if (aMode == "present" || aMode == "predlss")
+	{
+		if (!AtlasData() && !LoadAtlas(aError))
+		{
+			return false;
+		}
+		bool haveShaders = false;
+		{
+			std::lock_guard lock(mutex_);
+			haveShaders = shaders_.has_value();
+		}
+		if (!haveShaders && !ReloadShaders(aError))
+		{
+			return false;
+		}
+	}
+	else if (aMode != "off")
+	{
+		aError = std::format("mode {} isn't in this build: it comes with step 4", aMode);
+		return false;
+	}
+	std::lock_guard lock(mutex_);
+	recorded_ = {};
+	recordedList_ = nullptr;
+	submitted_ = {};
+	predlss_ = {};
+	predlssList_ = nullptr;
+	lastDrawnFrame_.reset();
+	consecutiveSkips_ = 0;
+	const Mode mode = aMode == "present" ? Mode::Present : aMode == "predlss" ? Mode::Predlss : Mode::Off;
+	if (mode == Mode::Predlss && !trackingRequested_)
+	{
+		d3d::RequestTracking();  // our barriers start from the DLSS list's first transitions
+		trackingRequested_ = true;
+	}
+	else if (mode != Mode::Predlss)
+	{
+		ReleaseTracking();
+	}
+	mode_ = mode;
+	return true;
+}
+
+std::string Renderer::ModeName() const
+{
+	switch (mode_.load())
+	{
+	case Mode::Present: return "present";
+	case Mode::Predlss: return "predlss";
+	default: return "off";
+	}
+}
+
+bool Renderer::LoadAtlas(std::string& aError)
+{
+	const auto bytes = ReadWholeFile(folder_ / "atlas.bin");
+	if (!bytes)
+	{
+		aError = "there's no atlas.bin in the plugin's folder: build it with tools/build_atlas.py";
+		return false;
+	}
+	auto atlas = ParseAtlas(*bytes, aError);
+	if (!atlas)
+	{
+		aError = "atlas.bin: " + aError;
+		return false;
+	}
+	std::lock_guard lock(mutex_);
+	atlas_ = std::move(*atlas);
+	atlasUploaded_ = false;
+	log_.Push(std::format("atlas: {} x {}, {} levels, {} blocks", atlas_->width, atlas_->height, atlas_->Levels(), atlas_->blocks.size()));
+	return true;
+}
+
+const Atlas* Renderer::AtlasData() const
+{
+	std::lock_guard lock(mutex_);
+	return atlas_ ? &*atlas_ : nullptr;
+}
+
+bool Renderer::ReloadShaders(std::string& aError)
+{
+	const auto bytes = ReadWholeFile(folder_ / "shaders" / "blocks.hlsl");
+	if (!bytes)
+	{
+		aError = "there's no shaders\\blocks.hlsl in the plugin's folder";
+		return false;
+	}
+	auto shaders = CompileBlockShaders(std::string(bytes->begin(), bytes->end()), aError);
+	if (!shaders)
+	{
+		return false;
+	}
+	std::lock_guard lock(mutex_);
+	shaders_ = std::move(*shaders);
+	pipeline_.Reset();  // rebuilt with the new shaders at the next draw
+	predlssPipeline_.Reset();
+	return true;
+}
+
+bool Renderer::Set(std::string_view aName, double aValue, std::string& aError)
+{
+	std::lock_guard lock(mutex_);
+	if (aName == "brightness" || aName == "tolerance" || aName == "exposure")
+	{
+		if (aValue < 0.0)
+		{
+			aError = std::format("{} can't be negative", aName);
+			return false;
+		}
+		(aName == "brightness" ? brightness_ : aName == "tolerance" ? tolerance_ : exposure_) = float(aValue);
+		return true;
+	}
+	if (aName == "jittersign" || aName == "mvsign")
+	{
+		if (aValue != 1.0 && aValue != -1.0 && aValue != 0.0)
+		{
+			aError = std::format("{} is 1, -1, or 0 for none", aName);
+			return false;
+		}
+		(aName == "jittersign" ? jitterSign_ : mvSign_) = float(aValue);
+		return true;
+	}
+	if (aName == "cull")
+	{
+		if (aValue != 0.0 && aValue != 1.0 && aValue != 2.0)
+		{
+			aError = "cull is 0 (none), 1 (back faces) or 2 (front faces)";
+			return false;
+		}
+		cull_ = int(aValue);
+		return true;
+	}
+	if (aName == "origin.x" || aName == "origin.y" || aName == "origin.z")
+	{
+		(aName == "origin.x" ? renderOrigin_.x : aName == "origin.y" ? renderOrigin_.y : renderOrigin_.z) = aValue;
+		return true;
+	}
+	aError = std::format("there's no setting called \"{}\"", aName);
+	return false;
+}
+
+void Renderer::UploadSection(const SectionPos& aSection, std::vector<Vertex> aVertices)
+{
+	std::lock_guard lock(mutex_);
+	pending_.emplace_back(aSection, std::move(aVertices));
+}
+
+bool Renderer::EnsureObjects()
+{
+	if (fence_)
+	{
+		return true;
+	}
+	const d3d::Originals& original = d3d::Original();
+	queue_ = d3d::MainQueue();
+	device_ = queue_ ? d3d::Device() : nullptr;
+	if (queue_ && queue_->GetDesc().Type != D3D12_COMMAND_LIST_TYPE_DIRECT)
+	{
+		Fail("DLSS runs on a compute queue, and this build draws only on a direct one");
+		return false;
+	}
+	if (!device_ || !original.reset || !original.close || !original.executeCommandLists || !original.resourceBarrier ||
+	    !original.omSetRenderTargets || !original.clearDsv || !original.drawInstanced || !original.createRtv || !original.createDsv)
+	{
+		return false;  // not ready yet
+	}
+	D3D12_ROOT_PARAMETER parameters[5]{};
+	parameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;  // b0: the frame
+	parameters[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
+	parameters[1].Constants = { 1, 0, 4 };  // b1: the section
+	for (UINT i = 2; i < 5; ++i)            // t0 vertices, t1 atlas, t2 depth copy
+	{
+		parameters[i].ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV;
+		parameters[i].Descriptor = { i - 2, 0 };
+	}
+	const D3D12_ROOT_SIGNATURE_DESC rootDesc{ 5, parameters, 0, nullptr, D3D12_ROOT_SIGNATURE_FLAG_NONE };
+	gpu::ComPtr<ID3DBlob>           blob;
+	gpu::ComPtr<ID3DBlob>           error;
+	if (FAILED(D3D12SerializeRootSignature(&rootDesc, D3D_ROOT_SIGNATURE_VERSION_1, &blob, &error)) ||
+	    FAILED(device_->CreateRootSignature(0, blob->GetBufferPointer(), blob->GetBufferSize(), IID_PPV_ARGS(&rootSignature_))))
+	{
+		Fail("couldn't create the root signature");
+		return false;
+	}
+	const D3D12_DESCRIPTOR_HEAP_DESC rtvHeapDesc{ D3D12_DESCRIPTOR_HEAP_TYPE_RTV, 3, D3D12_DESCRIPTOR_HEAP_FLAG_NONE, 0 };
+	const D3D12_DESCRIPTOR_HEAP_DESC dsvHeapDesc{ D3D12_DESCRIPTOR_HEAP_TYPE_DSV, 2, D3D12_DESCRIPTOR_HEAP_FLAG_NONE, 0 };
+	const D3D12_QUERY_HEAP_DESC      queryDesc{ D3D12_QUERY_HEAP_TYPE_TIMESTAMP, kSlots * 2, 0 };
+	constants_ = gpu::MakeBuffer(device_, kSlots * kConstantsStride, D3D12_HEAP_TYPE_UPLOAD, D3D12_RESOURCE_STATE_GENERIC_READ);
+	timings_ = gpu::MakeBuffer(device_, kSlots * 2 * sizeof(uint64_t), D3D12_HEAP_TYPE_READBACK, D3D12_RESOURCE_STATE_COPY_DEST);
+	if (FAILED(device_->CreateDescriptorHeap(&rtvHeapDesc, IID_PPV_ARGS(&rtvHeap_))) ||
+	    FAILED(device_->CreateDescriptorHeap(&dsvHeapDesc, IID_PPV_ARGS(&dsvHeap_))) ||
+	    FAILED(device_->CreateQueryHeap(&queryDesc, IID_PPV_ARGS(&queries_))) || !constants_ || !timings_ ||
+	    FAILED(constants_->Map(0, nullptr, reinterpret_cast<void**>(&constantsMapped_))) ||
+	    FAILED(timings_->Map(0, nullptr, reinterpret_cast<void**>(&timingsMapped_))) ||
+	    FAILED(queue_->GetTimestampFrequency(&timestampFrequency_)))
+	{
+		Fail("couldn't create its heaps and buffers");
+		return false;
+	}
+	rtvIncrement_ = device_->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+	dsvIncrement_ = device_->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_DSV);
+	for (uint32_t slot = 0; slot < kSlots; ++slot)
+	{
+		if (FAILED(device_->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&allocators_[slot]))) ||
+		    FAILED(device_->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, allocators_[slot].Get(), nullptr,
+		                                      IID_PPV_ARGS(&lists_[slot]))))
+		{
+			Fail("couldn't create its command lists");
+			return false;
+		}
+		original.close(lists_[slot].Get());
+		lists_[slot]->SetName(L"BlockRender blocks");
+	}
+	gpu::ComPtr<ID3D12Fence> fence;
+	if (FAILED(device_->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&uploadAllocator_))) ||
+	    FAILED(device_->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, uploadAllocator_.Get(), nullptr, IID_PPV_ARGS(&uploadList_))) ||
+	    FAILED(device_->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence))))
+	{
+		Fail("couldn't create its upload list and fence");
+		return false;
+	}
+	original.close(uploadList_.Get());
+	uploadList_->SetName(L"BlockRender uploads");
+	rootSignature_->SetName(L"BlockRender root signature");
+	constants_->SetName(L"BlockRender constants");
+	timings_->SetName(L"BlockRender timings");
+	fence->SetName(L"BlockRender fence");
+	fence_ = fence;  // last: a fence means everything is ready
+	log_.Push("renderer: ready");
+	return true;
+}
+
+bool Renderer::EnsurePipeline(DXGI_FORMAT aFormat, bool aReversed)
+{
+	if (pipeline_ && pipelineFormat_ == aFormat && pipelineCull_ == cull_ && pipelineReversed_ == aReversed)
+	{
+		return true;
+	}
+	if (!shaders_)
+	{
+		Fail("there are no shaders");
+		return false;
+	}
+	D3D12_GRAPHICS_PIPELINE_STATE_DESC desc{};
+	desc.pRootSignature = rootSignature_.Get();
+	desc.VS = { shaders_->vertex.data(), shaders_->vertex.size() };
+	desc.PS = { shaders_->present.data(), shaders_->present.size() };
+	desc.BlendState.RenderTarget[0].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
+	desc.SampleMask = UINT_MAX;
+	desc.RasterizerState = BlockRasterizer(cull_);
+	desc.DepthStencilState.DepthEnable = TRUE;
+	desc.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL;
+	desc.DepthStencilState.DepthFunc = aReversed ? D3D12_COMPARISON_FUNC_GREATER : D3D12_COMPARISON_FUNC_LESS;
+	desc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+	desc.NumRenderTargets = 1;
+	desc.RTVFormats[0] = aFormat;
+	desc.DSVFormat = DXGI_FORMAT_D32_FLOAT;
+	desc.SampleDesc.Count = 1;
+	gpu::ComPtr<ID3D12PipelineState> pipeline;
+	if (FAILED(device_->CreateGraphicsPipelineState(&desc, IID_PPV_ARGS(&pipeline))))
+	{
+		Fail(std::format("couldn't create a pipeline for {}", DxgiFormatName(aFormat)));
+		return false;
+	}
+	pipeline->SetName(L"BlockRender present pipeline");
+	pipeline_ = pipeline;
+	pipelineFormat_ = aFormat;
+	pipelineCull_ = cull_;
+	pipelineReversed_ = aReversed;
+	return true;
+}
+
+bool Renderer::EnsurePredlssPipeline(bool aReversed)
+{
+	if (predlssPipeline_ && predlssCull_ == cull_ && predlssReversed_ == aReversed)
+	{
+		return true;
+	}
+	if (!shaders_)
+	{
+		Fail("there are no shaders");
+		return false;
+	}
+	D3D12_GRAPHICS_PIPELINE_STATE_DESC desc{};
+	desc.pRootSignature = rootSignature_.Get();
+	desc.VS = { shaders_->vertex.data(), shaders_->vertex.size() };
+	desc.PS = { shaders_->predlss.data(), shaders_->predlss.size() };
+	desc.BlendState.RenderTarget[0].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;  // no independent blend: both
+	desc.SampleMask = UINT_MAX;
+	desc.RasterizerState = BlockRasterizer(cull_);
+	desc.DepthStencilState.DepthEnable = TRUE;
+	desc.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL;
+	desc.DepthStencilState.DepthFunc = aReversed ? D3D12_COMPARISON_FUNC_GREATER : D3D12_COMPARISON_FUNC_LESS;
+	desc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+	desc.NumRenderTargets = 2;  // the scaling input colour, and the motion vectors
+	desc.RTVFormats[0] = DXGI_FORMAT_R16G16B16A16_FLOAT;
+	desc.RTVFormats[1] = DXGI_FORMAT_R16G16_FLOAT;
+	desc.DSVFormat = DXGI_FORMAT_D32_FLOAT;
+	desc.SampleDesc.Count = 1;
+	gpu::ComPtr<ID3D12PipelineState> pipeline;
+	if (FAILED(device_->CreateGraphicsPipelineState(&desc, IID_PPV_ARGS(&pipeline))))
+	{
+		Fail("couldn't create the pipeline for drawing before DLSS");
+		return false;
+	}
+	pipeline->SetName(L"BlockRender predlss pipeline");
+	predlssPipeline_ = pipeline;
+	predlssCull_ = cull_;
+	predlssReversed_ = aReversed;
+	return true;
+}
+
+bool Renderer::EnsureDepthTarget(uint32_t aWidth, uint32_t aHeight)
+{
+	if (depthTarget_ && depthWidth_ == aWidth && depthHeight_ == aHeight)
+	{
+		return true;
+	}
+	if (depthTarget_)
+	{
+		Retire(depthTarget_);
+		depthTarget_.Reset();
+	}
+	D3D12_HEAP_PROPERTIES heap{};
+	heap.Type = D3D12_HEAP_TYPE_DEFAULT;
+	D3D12_RESOURCE_DESC desc{};
+	desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+	desc.Width = aWidth;
+	desc.Height = aHeight;
+	desc.DepthOrArraySize = 1;
+	desc.MipLevels = 1;
+	desc.Format = DXGI_FORMAT_D32_FLOAT;
+	desc.SampleDesc.Count = 1;
+	desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
+	D3D12_CLEAR_VALUE clear{};
+	clear.Format = DXGI_FORMAT_D32_FLOAT;
+	if (FAILED(device_->CreateCommittedResource(&heap, D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATE_DEPTH_WRITE, &clear,
+	                                            IID_PPV_ARGS(&depthTarget_))))
+	{
+		Fail("couldn't create its depth buffer");
+		return false;
+	}
+	depthTarget_->SetName(L"BlockRender depth");
+	d3d::Original().createDsv(device_, depthTarget_.Get(), nullptr, dsvHeap_->GetCPUDescriptorHandleForHeapStart());
+	depthWidth_ = aWidth;
+	depthHeight_ = aHeight;
+	return true;
+}
+
+void Renderer::Skip(const std::string& aWhy)
+{
+	++stats_.skipped;
+	stats_.lastSkip = aWhy;
+	if (++consecutiveSkips_ == kSkipsBeforeOff)
+	{
+		Fail(std::format("{} frames in a row were skipped ({})", kSkipsBeforeOff, aWhy));
+	}
+}
+
+void Renderer::Fail(const std::string& aWhy)
+{
+	log_.Push("renderer: " + aWhy + ", so drawing is off");
+	stats_.lastSkip = aWhy;
+	mode_ = Mode::Off;
+	ReleaseTracking();
+}
+
+void Renderer::ReleaseTracking()
+{
+	if (trackingRequested_)
+	{
+		d3d::ReleaseTracking();
+		trackingRequested_ = false;
+	}
+}
+
+uint64_t Renderer::Signal()
+{
+	queue_->Signal(fence_.Get(), ++fenceValue_);
+	return fenceValue_;
+}
+
+void Renderer::Retire(gpu::ComPtr<ID3D12Resource> aResource)
+{
+	// Every list of ours that used it has been submitted, and the fence was signalled after each.
+	retired_.emplace_back(std::move(aResource), fenceValue_);
+}
+
+void Renderer::ReadTimings(uint32_t aSlot)
+{
+	const uint64_t begin = timingsMapped_[aSlot * 2];
+	const uint64_t end = timingsMapped_[aSlot * 2 + 1];
+	if (end > begin && timestampFrequency_ > 0)
+	{
+		const double ms = double(end - begin) * 1000.0 / double(timestampFrequency_);
+		gpuMsSum_ += ms;
+		++gpuSamples_;
+		stats_.gpuMsWorst = std::max(stats_.gpuMsWorst, ms);
+	}
+}
+
+void Renderer::Update()
+{
+	std::lock_guard lock(mutex_);
+	if ((!fence_ && mode_.load() == Mode::Off) || !EnsureObjects())
+	{
+		return;  // nothing is created until drawing is first switched on
+	}
+	const uint64_t completed = fence_->GetCompletedValue();
+	if (completed == UINT64_MAX)
+	{
+		return;  // the device was removed: the plugin reports it
+	}
+	std::erase_if(retired_, [completed](const auto& aEntry) { return aEntry.second <= completed; });
+	const bool atlasDue = atlas_ && !atlasUploaded_;
+	if ((pending_.empty() && !atlasDue) || completed < uploadFence_)
+	{
+		return;
+	}
+	const d3d::Originals& original = d3d::Original();
+	if (FAILED(uploadAllocator_->Reset()) || FAILED(original.reset(uploadList_.Get(), uploadAllocator_.Get(), nullptr)))
+	{
+		Fail("couldn't reset its upload list");
+		return;
+	}
+	const uint64_t                           ready = fenceValue_ + 1;  // the value the Signal below sets
+	std::vector<gpu::ComPtr<ID3D12Resource>> staging;
+	bool                                     failed = false;
+	const auto upload = [&](const void* aData, uint64_t aBytes) -> gpu::ComPtr<ID3D12Resource> {
+		auto  target = gpu::MakeBuffer(device_, aBytes, D3D12_HEAP_TYPE_DEFAULT, D3D12_RESOURCE_STATE_COMMON);
+		auto  source = gpu::MakeBuffer(device_, aBytes, D3D12_HEAP_TYPE_UPLOAD, D3D12_RESOURCE_STATE_GENERIC_READ);
+		void* mapped = nullptr;
+		if (!target || !source || FAILED(source->Map(0, nullptr, &mapped)))
+		{
+			failed = true;
+			return nullptr;
+		}
+		std::memcpy(mapped, aData, aBytes);
+		source->Unmap(0, nullptr);
+		uploadList_->CopyBufferRegion(target.Get(), 0, source.Get(), 0, aBytes);
+		staging.push_back(source);
+		return target;
+	};
+	if (atlasDue)
+	{
+		if (atlasBuffer_)
+		{
+			Retire(atlasBuffer_);
+		}
+		atlasBuffer_ = upload(atlas_->texels.data(), atlas_->texels.size() * sizeof(uint32_t));
+		if (atlasBuffer_)
+		{
+			atlasBuffer_->SetName(L"BlockRender atlas");
+		}
+		atlasReady_ = ready;
+		atlasUploaded_ = true;
+	}
+	for (auto& [section, vertices] : pending_)
+	{
+		if (const auto found = sections_.find(section); found != sections_.end())
+		{
+			Retire(found->second.buffer);
+			sections_.erase(found);
+		}
+		if (vertices.empty())
+		{
+			continue;
+		}
+		SectionGpu gpuSection;
+		gpuSection.buffer = upload(vertices.data(), vertices.size() * sizeof(Vertex));
+		gpuSection.vertices = uint32_t(vertices.size());
+		gpuSection.ready = ready;
+		if (gpuSection.buffer)
+		{
+			gpuSection.buffer->SetName(L"BlockRender section");
+			sections_[section] = std::move(gpuSection);
+		}
+	}
+	pending_.clear();
+	original.close(uploadList_.Get());
+	ID3D12CommandList* lists[] = { uploadList_.Get() };
+	original.executeCommandLists(queue_, 1, lists);
+	uploadFence_ = Signal();
+	for (auto& buffer : staging)
+	{
+		retired_.emplace_back(std::move(buffer), uploadFence_);
+	}
+	if (failed)
+	{
+		log_.Push("renderer: couldn't create some upload buffers; those sections aren't drawn");
+	}
+}
+
+Renderer::Stats Renderer::TakeStats()
+{
+	std::lock_guard lock(mutex_);
+	Stats stats = stats_;
+	stats.gpuMsAverage = gpuSamples_ ? gpuMsSum_ / double(gpuSamples_) : -1.0;
+	stats.frameMsAverage = frameSamples_ ? frameMsSum_ / double(frameSamples_) : -1.0;
+	stats.sections = sections_.size();
+	for (const auto& [section, gpuSection] : sections_)
+	{
+		stats.vertices += gpuSection.vertices;
+	}
+	stats_ = {};
+	gpuMsSum_ = frameMsSum_ = 0.0;
+	gpuSamples_ = frameSamples_ = 0;
+	return stats;
+}
+
+FrameConstants Renderer::BaseConstants(const CameraFrame& aCamera) const
+{
+	FrameConstants constants{};
+	for (size_t i = 0; i < 16; ++i)
+	{
+		constants.cameraToClip[i] = float(aCamera.cameraToClip[i]);
+	}
+	constants.atlasInfo[0] = atlas_->width;
+	constants.atlasInfo[1] = atlas_->height;
+	constants.atlasInfo[2] = atlas_->Levels();
+	for (size_t i = 0; i < atlas_->levelOffsets.size() && i < 8; ++i)
+	{
+		constants.atlasLevels[i] = atlas_->levelOffsets[i];
+	}
+	constants.tuning[0] = brightness_;
+	constants.tuning[1] = tolerance_;
+	constants.tuning[2] = exposure_;
+	constants.tuning[3] = mvSign_;
+	return constants;
+}
+
+void Renderer::DrawSections(ID3D12GraphicsCommandList* aList, const CameraFrame& aCamera, uint64_t aCompleted)
+{
+	for (const auto& [section, gpuSection] : sections_)
+	{
+		if (gpuSection.ready > aCompleted)
+		{
+			continue;  // still uploading
+		}
+		const Vec3d corner = WorldFromMc({ section.x * 16.0, section.y * 16.0, section.z * 16.0 });
+		const Vec3d offset{ corner.x - aCamera.origin.x, corner.y - aCamera.origin.y, corner.z - aCamera.origin.z };
+		// The section fills world x..x+16, y-16..y and z..z+16 from that corner, since Minecraft z runs along world -y.
+		if (!Visible(aCamera.cameraToClip, { offset.x, offset.y - 16.0, offset.z }, { offset.x + 16.0, offset.y, offset.z + 16.0 }))
+		{
+			continue;
+		}
+		const float sectionConstants[4] = { float(offset.x), float(offset.y), float(offset.z), 0.0f };
+		aList->SetGraphicsRoot32BitConstants(1, 4, sectionConstants, 0);
+		aList->SetGraphicsRootShaderResourceView(2, gpuSection.buffer->GetGPUVirtualAddress());
+		d3d::Original().drawInstanced(aList, gpuSection.vertices, 1, 0, 0);
+	}
+}
+
+void Renderer::OnEvaluate(const EvaluateCall& aCall)
+{
+	const Mode mode = mode_.load();
+	if (mode == Mode::Predlss)
+	{
+		std::lock_guard lock(mutex_);
+		predlss_ = {};
+		predlss_.list = aCall.list;
+		predlss_.constants = aCall.constants;
+		for (const SlTag& tag : aCall.tags)
+		{
+			if (tag.type == sl::kBufferTypeScalingInputColor)
+			{
+				predlss_.colour = tag;
+			}
+			else if (tag.type == sl::kBufferTypeMotionVectors)
+			{
+				predlss_.motion = tag;
+			}
+			else if (tag.type == sl::kBufferTypeDepth)
+			{
+				predlss_.depth = tag;
+			}
+		}
+		predlssList_ = aCall.list;
+		return;
+	}
+	if (mode != Mode::Present)
+	{
+		return;
+	}
+	std::lock_guard lock(mutex_);
+	if (mode_.load() != Mode::Present || !aCall.list || !EnsureObjects())
+	{
+		return;
+	}
+	recorded_ = {};
+	recorded_.list = aCall.list;
+	recorded_.frame = aCall.frame;
+	recorded_.valid = aCall.constants.has_value();
+	if (aCall.constants)
+	{
+		recorded_.constants = *aCall.constants;
+	}
+	recordedList_ = aCall.list;
+	const SlTag* depth = nullptr;
+	for (const SlTag& tag : aCall.tags)
+	{
+		if (tag.type == sl::kBufferTypeDepth && tag.resource && tag.state != 0xFFFFFFFF)
+		{
+			depth = &tag;
+		}
+	}
+	if (!depth)
+	{
+		return;  // drawn without the game's depth
+	}
+	auto*                     resource = static_cast<ID3D12Resource*>(depth->resource);
+	const D3D12_RESOURCE_DESC desc = resource->GetDesc();
+	if (desc.Dimension != D3D12_RESOURCE_DIMENSION_TEXTURE2D || DumpFormat(desc.Format, 0) != uint32_t(DXGI_FORMAT_R32_FLOAT))
+	{
+		return;
+	}
+	const uint32_t       subresource = gpu::PlaneSubresource(desc, 0);
+	const gpu::Footprint footprint = gpu::FootprintOf(device_, desc, subresource);
+	if (!depthCopy_ || depthCopyBytes_ < footprint.totalBytes)
+	{
+		if (depthCopy_)
+		{
+			oldDepthCopies_.push_back(depthCopy_);
+		}
+		depthCopy_ = gpu::MakeBuffer(device_, footprint.totalBytes, D3D12_HEAP_TYPE_DEFAULT, D3D12_RESOURCE_STATE_COMMON);
+		depthCopyBytes_ = depthCopy_ ? footprint.totalBytes : 0;
+		if (!depthCopy_)
+		{
+			Fail("couldn't create the depth copy");
+			return;
+		}
+		depthCopy_->SetName(L"BlockRender depth copy");
+	}
+	if (!gpu::RecordCopy(aCall.list, resource, subresource, depth->state, depthCopy_.Get(), footprint))
+	{
+		return;  // drawn without the game's depth
+	}
+	recorded_.depth = true;
+	recorded_.rowFloats = footprint.layout.Footprint.RowPitch / 4;
+	const bool wholeResource = depth->extent.width == 0 || depth->extent.height == 0;
+	recorded_.extent = wholeResource ? sl::Extent{ 0, 0, uint32_t(desc.Width), desc.Height } : depth->extent;
+}
+
+void Renderer::OnSubmit(ID3D12CommandQueue*, UINT aCount, ID3D12CommandList* const* aLists)
+{
+	const void* recorded = recordedList_.load();
+	if (!recorded)
+	{
+		return;
+	}
+	for (UINT i = 0; i < aCount; ++i)
+	{
+		if (static_cast<const void*>(aLists[i]) == recorded)
+		{
+			std::lock_guard lock(mutex_);
+			if (recorded_.list == recorded)
+			{
+				submitted_ = recorded_;
+				recorded_ = {};
+				recordedList_ = nullptr;
+			}
+			return;
+		}
+	}
+}
+
+ID3D12CommandList* Renderer::ListBefore(ID3D12CommandQueue* aQueue, ID3D12CommandList* aList)
+{
+	if (static_cast<const void*>(aList) != predlssList_.load())
+	{
+		return nullptr;  // most lists: no lock taken
+	}
+	std::lock_guard lock(mutex_);
+	if (mode_.load() != Mode::Predlss || predlss_.list != aList)
+	{
+		return nullptr;
+	}
+	ID3D12CommandList* ours = RecordPredlss(aQueue, static_cast<ID3D12GraphicsCommandList*>(aList));
+	predlss_ = {};  // each evaluate draws once
+	predlssList_ = nullptr;
+	return ours;
+}
+
+ID3D12CommandList* Renderer::RecordPredlss(ID3D12CommandQueue* aQueue, ID3D12GraphicsCommandList* aDlssList)
+{
+	if (!EnsureObjects())
+	{
+		Skip("not ready: the main queue isn't known yet");
+		return nullptr;
+	}
+	const uint64_t completed = fence_->GetCompletedValue();
+	if (completed == UINT64_MAX)
+	{
+		Fail(std::format("the device was removed (0x{:08x})", uint32_t(device_->GetDeviceRemovedReason())));
+		return nullptr;
+	}
+	if (aQueue != queue_)
+	{
+		Skip("the DLSS list went to another queue than the main one");
+		return nullptr;
+	}
+	if (!predlss_.constants)
+	{
+		Skip("the DLSS frame came without constants");
+		return nullptr;
+	}
+	auto* colour = static_cast<ID3D12Resource*>(predlss_.colour.resource);
+	auto* motion = static_cast<ID3D12Resource*>(predlss_.motion.resource);
+	auto* depth = static_cast<ID3D12Resource*>(predlss_.depth.resource);
+	if (!colour || !motion || !depth)
+	{
+		Skip("the scaling input colour, motion vectors and depth aren't all tagged");
+		return nullptr;
+	}
+	const D3D12_RESOURCE_DESC colourDesc = colour->GetDesc();
+	const D3D12_RESOURCE_DESC motionDesc = motion->GetDesc();
+	const D3D12_RESOURCE_DESC depthDesc = depth->GetDesc();
+	std::string               why;
+	if (!CheckPredlssTargets(colourDesc, motionDesc, depthDesc, why))
+	{
+		Skip(why);
+		return nullptr;
+	}
+	const ListState* dlss = d3d::Tracker().Find(aDlssList);
+	if (!dlss || dlss->Recording() || int64_t(d3d::CurrentFrame()) - int64_t(dlss->Frame()) > kTrackedFramesAgo)
+	{
+		Skip("the DLSS list wasn't tracked from its Reset");
+		return nullptr;
+	}
+	const std::optional<uint32_t> colourState = StateBeforeList(*dlss, colour, predlss_.colour.state);
+	const std::optional<uint32_t> motionState = StateBeforeList(*dlss, motion, predlss_.motion.state);
+	const std::optional<uint32_t> depthState = StateBeforeList(*dlss, depth, predlss_.depth.state);
+	if (!colourState || !motionState || !depthState)
+	{
+		Skip("a tagged buffer's state before the DLSS list isn't known");
+		return nullptr;
+	}
+	if (!atlasBuffer_ || completed < atlasReady_)
+	{
+		Skip("the atlas isn't on the GPU yet");
+		return nullptr;
+	}
+	const std::optional<CameraFrame> camera = MakeCameraFrame(*predlss_.constants, renderOrigin_);
+	if (!camera)
+	{
+		Skip("the camera isn't understood");
+		return nullptr;
+	}
+	if (!EnsurePredlssPipeline(camera->reversedDepth))
+	{
+		return nullptr;
+	}
+	const uint32_t slot = uint32_t(recordings_ % kSlots);
+	if (completed < slotFence_[slot])
+	{
+		Skip("the GPU is still busy with an earlier frame");
+		return nullptr;
+	}
+	if (slotFence_[slot] != 0)
+	{
+		ReadTimings(slot);
+	}
+
+	const bool        wholeResource = predlss_.depth.extent.width == 0 || predlss_.depth.extent.height == 0;
+	const sl::Extent  extent = wholeResource ? sl::Extent{ 0, 0, uint32_t(depthDesc.Width), depthDesc.Height } : predlss_.depth.extent;
+	const SlConstants& game = *predlss_.constants;
+	FrameConstants     constants = BaseConstants(*camera);
+	constants.target[0] = float(extent.width);
+	constants.target[1] = float(extent.height);
+	constants.target[2] = 1.0f / float(extent.width);
+	constants.target[3] = 1.0f / float(extent.height);
+	for (size_t i = 0; i < 16; ++i)
+	{
+		constants.clipToPrevClip[i] = game.clipToPrevClip[i];
+	}
+	const std::array<double, 2> jitter = ClipJitter(game.jitter[0], game.jitter[1], extent.width, extent.height, jitterSign_);
+	constants.jitter[0] = float(jitter[0]);
+	constants.jitter[1] = float(jitter[1]);
+	std::memcpy(constantsMapped_ + slot * kConstantsStride, &constants, sizeof(constants));
+
+	// Our own list: calls the hooks watch go through their originals, so nothing of ours reaches the tracker.
+	const d3d::Originals&      original = d3d::Original();
+	ID3D12GraphicsCommandList* list = lists_[slot].Get();
+	if (FAILED(allocators_[slot]->Reset()) || FAILED(original.reset(list, allocators_[slot].Get(), predlssPipeline_.Get())))
+	{
+		Fail("couldn't reset a command list");
+		return nullptr;
+	}
+	list->EndQuery(queries_.Get(), D3D12_QUERY_TYPE_TIMESTAMP, slot * 2);
+	const std::vector<Move> into = MovesInto({ { colour, *colourState, D3D12_RESOURCE_STATE_RENDER_TARGET },
+	                                           { motion, *motionState, D3D12_RESOURCE_STATE_RENDER_TARGET },
+	                                           { depth, *depthState, D3D12_RESOURCE_STATE_DEPTH_WRITE } });
+	const std::vector<D3D12_RESOURCE_BARRIER> toTargets = Barriers(into);
+	if (!toTargets.empty())
+	{
+		original.resourceBarrier(list, UINT(toTargets.size()), toTargets.data());
+	}
+	const D3D12_CPU_DESCRIPTOR_HANDLE rtvs[2] = { Offset(rtvHeap_->GetCPUDescriptorHandleForHeapStart(), 1, rtvIncrement_),
+		                                          Offset(rtvHeap_->GetCPUDescriptorHandleForHeapStart(), 2, rtvIncrement_) };
+	const D3D12_CPU_DESCRIPTOR_HANDLE dsv = Offset(dsvHeap_->GetCPUDescriptorHandleForHeapStart(), 1, dsvIncrement_);
+	D3D12_RENDER_TARGET_VIEW_DESC     colourView{};
+	colourView.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+	colourView.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;
+	D3D12_RENDER_TARGET_VIEW_DESC motionView = colourView;
+	motionView.Format = DXGI_FORMAT_R16G16_FLOAT;
+	D3D12_DEPTH_STENCIL_VIEW_DESC depthView{};
+	depthView.Format = DepthViewFormat(depthDesc.Format);
+	depthView.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
+	original.createRtv(device_, colour, &colourView, rtvs[0]);
+	original.createRtv(device_, motion, &motionView, rtvs[1]);
+	original.createDsv(device_, depth, &depthView, dsv);
+	original.omSetRenderTargets(list, 2, rtvs, FALSE, &dsv);
+	const D3D12_VIEWPORT viewport{ float(extent.left), float(extent.top), float(extent.width), float(extent.height), 0.0f, 1.0f };
+	const D3D12_RECT     scissor{ LONG(extent.left), LONG(extent.top), LONG(extent.left + extent.width), LONG(extent.top + extent.height) };
+	list->RSSetViewports(1, &viewport);
+	list->RSSetScissorRects(1, &scissor);
+	list->SetGraphicsRootSignature(rootSignature_.Get());
+	list->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+	list->SetGraphicsRootConstantBufferView(0, constants_->GetGPUVirtualAddress() + slot * kConstantsStride);
+	list->SetGraphicsRootShaderResourceView(3, atlasBuffer_->GetGPUVirtualAddress());
+	list->SetGraphicsRootShaderResourceView(4, atlasBuffer_->GetGPUVirtualAddress());  // t2: only step 2's shader reads it
+	DrawSections(list, *camera, completed);
+	const std::vector<D3D12_RESOURCE_BARRIER> back = Barriers(MovesBack(into));
+	if (!back.empty())
+	{
+		original.resourceBarrier(list, UINT(back.size()), back.data());
+	}
+	list->EndQuery(queries_.Get(), D3D12_QUERY_TYPE_TIMESTAMP, slot * 2 + 1);
+	list->ResolveQueryData(queries_.Get(), D3D12_QUERY_TYPE_TIMESTAMP, slot * 2, 2, timings_.Get(), slot * 2 * sizeof(uint64_t));
+	if (FAILED(original.close(list)))
+	{
+		Fail("couldn't close a command list");
+		return nullptr;
+	}
+	++recordings_;
+	t_insertedSlot = slot;
+	return list;
+}
+
+void Renderer::OnSubmitted(ID3D12CommandQueue*, UINT, ID3D12CommandList* const*)
+{
+	if (!t_insertedSlot)
+	{
+		return;
+	}
+	const uint32_t  slot = *t_insertedSlot;
+	t_insertedSlot.reset();
+	std::lock_guard lock(mutex_);
+	slotFence_[slot] = Signal();  // signalled whatever the mode is now: our list went to the GPU
+	++stats_.drawn;
+	consecutiveSkips_ = 0;
+}
+
+void Renderer::OnPresent(IDXGISwapChain* aSwapChain)
+{
+	const int64_t   now = Now();
+	std::lock_guard lock(mutex_);
+	if (lastPresent_ != 0)
+	{
+		const double ms = MsBetween(lastPresent_, now);
+		frameMsSum_ += ms;
+		++frameSamples_;
+		stats_.frameMsWorst = std::max(stats_.frameMsWorst, ms);
+	}
+	lastPresent_ = now;
+	if (mode_.load() != Mode::Present)
+	{
+		return;
+	}
+	if (!EnsureObjects())
+	{
+		return Skip("not ready: the main queue isn't known yet");
+	}
+	const uint64_t completed = fence_->GetCompletedValue();
+	if (completed == UINT64_MAX)
+	{
+		return Fail(std::format("the device was removed (0x{:08x})", uint32_t(device_->GetDeviceRemovedReason())));
+	}
+	if (aSwapChain != checkedSwapChain_)
+	{
+		checkedSwapChain_ = aSwapChain;
+		swapChainOnMainQueue_ = d3d::PresentQueue(aSwapChain) == queue_;
+		log_.Push(std::format("renderer: swap chain 0x{:x} presents on {}", reinterpret_cast<uintptr_t>(aSwapChain),
+		                      swapChainOnMainQueue_ ? "the main queue" : "another queue"));
+	}
+	if (!swapChainOnMainQueue_)
+	{
+		return Skip("the swap chain presents on another queue than DLSS's");
+	}
+	if (!submitted_.list)
+	{
+		return Skip("no DLSS frame has been submitted yet");
+	}
+	if (!submitted_.valid)
+	{
+		return Skip("the DLSS frame came without constants");
+	}
+	if (!atlasBuffer_ || completed < atlasReady_)
+	{
+		return Skip("the atlas isn't on the GPU yet");
+	}
+	const std::optional<CameraFrame> camera = MakeCameraFrame(submitted_.constants, renderOrigin_);
+	if (!camera)
+	{
+		return Skip("the camera isn't understood");
+	}
+	gpu::ComPtr<IDXGISwapChain3> swapChain;
+	gpu::ComPtr<ID3D12Resource>  backBuffer;
+	if (FAILED(aSwapChain->QueryInterface(IID_PPV_ARGS(&swapChain))) ||
+	    FAILED(swapChain->GetBuffer(swapChain->GetCurrentBackBufferIndex(), IID_PPV_ARGS(&backBuffer))))
+	{
+		return Skip("no back buffer");
+	}
+	const D3D12_RESOURCE_DESC target = backBuffer->GetDesc();
+	if (!EnsurePipeline(target.Format, camera->reversedDepth) || !EnsureDepthTarget(uint32_t(target.Width), target.Height))
+	{
+		return;
+	}
+	const uint32_t slot = uint32_t(recordings_ % kSlots);
+	if (completed < slotFence_[slot])
+	{
+		return Skip("the GPU is still busy with an earlier frame");
+	}
+	if (slotFence_[slot] != 0)
+	{
+		ReadTimings(slot);
+	}
+
+	FrameConstants constants = BaseConstants(*camera);  // no jitter: the image is already resolved
+	constants.target[0] = float(target.Width);
+	constants.target[1] = float(target.Height);
+	constants.target[2] = 1.0f / float(target.Width);
+	constants.target[3] = 1.0f / float(target.Height);
+	constants.depthExtent[0] = float(submitted_.extent.left);
+	constants.depthExtent[1] = float(submitted_.extent.top);
+	constants.depthExtent[2] = float(submitted_.extent.width);
+	constants.depthExtent[3] = float(submitted_.extent.height);
+	constants.depthInfo[0] = submitted_.rowFloats;
+	constants.depthInfo[1] = submitted_.depth ? 1u : 0u;
+	constants.depthInfo[2] = camera->reversedDepth ? 1u : 0u;
+	std::memcpy(constantsMapped_ + slot * kConstantsStride, &constants, sizeof(constants));
+
+	// Our own list: calls the hooks watch go through their originals, so nothing of ours reaches the tracker.
+	const d3d::Originals&      original = d3d::Original();
+	ID3D12GraphicsCommandList* list = lists_[slot].Get();
+	if (FAILED(allocators_[slot]->Reset()) || FAILED(original.reset(list, allocators_[slot].Get(), pipeline_.Get())))
+	{
+		return Fail("couldn't reset a command list");
+	}
+	list->EndQuery(queries_.Get(), D3D12_QUERY_TYPE_TIMESTAMP, slot * 2);
+	const D3D12_RESOURCE_BARRIER toTarget = Transition(backBuffer.Get(), D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET);
+	original.resourceBarrier(list, 1, &toTarget);
+	const D3D12_CPU_DESCRIPTOR_HANDLE rtv = rtvHeap_->GetCPUDescriptorHandleForHeapStart();
+	const D3D12_CPU_DESCRIPTOR_HANDLE dsv = dsvHeap_->GetCPUDescriptorHandleForHeapStart();
+	original.createRtv(device_, backBuffer.Get(), nullptr, rtv);
+	original.clearDsv(list, dsv, D3D12_CLEAR_FLAG_DEPTH, camera->reversedDepth ? 0.0f : 1.0f, 0, 0, nullptr);
+	original.omSetRenderTargets(list, 1, &rtv, FALSE, &dsv);
+	const D3D12_VIEWPORT viewport{ 0.0f, 0.0f, float(target.Width), float(target.Height), 0.0f, 1.0f };
+	const D3D12_RECT     scissor{ 0, 0, LONG(target.Width), LONG(target.Height) };
+	list->RSSetViewports(1, &viewport);
+	list->RSSetScissorRects(1, &scissor);
+	list->SetGraphicsRootSignature(rootSignature_.Get());
+	list->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+	list->SetGraphicsRootConstantBufferView(0, constants_->GetGPUVirtualAddress() + slot * kConstantsStride);
+	list->SetGraphicsRootShaderResourceView(3, atlasBuffer_->GetGPUVirtualAddress());
+	// Without a depth copy the shader never reads t2, but the root argument still needs a valid buffer.
+	list->SetGraphicsRootShaderResourceView(4, (submitted_.depth ? depthCopy_ : atlasBuffer_)->GetGPUVirtualAddress());
+	DrawSections(list, *camera, completed);
+	const D3D12_RESOURCE_BARRIER toPresent = Transition(backBuffer.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT);
+	original.resourceBarrier(list, 1, &toPresent);
+	list->EndQuery(queries_.Get(), D3D12_QUERY_TYPE_TIMESTAMP, slot * 2 + 1);
+	list->ResolveQueryData(queries_.Get(), D3D12_QUERY_TYPE_TIMESTAMP, slot * 2, 2, timings_.Get(), slot * 2 * sizeof(uint64_t));
+	if (FAILED(original.close(list)))
+	{
+		return Fail("couldn't close a command list");
+	}
+	ID3D12CommandList* lists[] = { list };
+	original.executeCommandLists(queue_, 1, lists);
+	slotFence_[slot] = Signal();
+	++recordings_;
+	++stats_.drawn;
+	if (lastDrawnFrame_ == submitted_.frame)
+	{
+		++stats_.lateCamera;
+	}
+	lastDrawnFrame_ = submitted_.frame;
+	consecutiveSkips_ = 0;
+}
+
+void Renderer::Shutdown()
+{
+	mode_ = Mode::Off;
+	std::lock_guard lock(mutex_);
+	ReleaseTracking();
+	if (fence_ && fence_->GetCompletedValue() < fenceValue_)
+	{
+		const HANDLE event = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+		if (event && SUCCEEDED(fence_->SetEventOnCompletion(fenceValue_, event)))
+		{
+			WaitForSingleObject(event, 2000);
+		}
+		if (event)
+		{
+			CloseHandle(event);
+		}
+	}
+	if (constantsMapped_)
+	{
+		constants_->Unmap(0, nullptr);
+		constantsMapped_ = nullptr;
+	}
+	if (timingsMapped_)
+	{
+		timings_->Unmap(0, nullptr);
+		timingsMapped_ = nullptr;
+	}
+	sections_.clear();
+	pending_.clear();
+	retired_.clear();
+	oldDepthCopies_.clear();
+	lists_ = {};
+	allocators_ = {};
+	depthCopy_.Reset();
+	atlasBuffer_.Reset();
+	depthTarget_.Reset();
+	pipeline_.Reset();
+	predlssPipeline_.Reset();
+	rootSignature_.Reset();
+	rtvHeap_.Reset();
+	dsvHeap_.Reset();
+	constants_.Reset();
+	timings_.Reset();
+	queries_.Reset();
+	uploadList_.Reset();
+	uploadAllocator_.Reset();
+	fence_.Reset();
+}
+}
+```
+
+- [ ] **Step 3: Build; it must compile without warnings, and the tests still pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `101 test(s), 0 failure(s)`.
+
+- [ ] **Step 4: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "block-render: the renderer draws before DLSS (mode predlss)" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 43: Version 0.3.0, and the overlay's own frame time
+
+The plugin needs nothing more for step 3: `mode predlss` and the `exposure`, `jittersign` and `mvsign` settings go
+straight to the renderer, and `place house` and `place field` came with Task 40. Two last things:
+- **The version:** 0.3.0.
+- **The overlay's own frame time:** step 3 measures what the hooks cost against the game without BlockRender, which
+  then writes no status file. So the overlay times frames itself, from CET's `onUpdate`. Once a second it shows the
+  average and the worst, with or without the plugin, and writes them into `frames.txt` in its folder, for the agent
+  to read.
+
+**Files:**
+- Modify: `CMakeLists.txt`, `src/Plugin.cpp`, `tools/blockrender_hud/init.lua`
+
+- [ ] **Step 1: Edit `CMakeLists.txt` for the version**
+
+```cmake
+project(BlockRender VERSION 0.2.0 LANGUAGES C CXX)
+```
+```cmake
+project(BlockRender VERSION 0.3.0 LANGUAGES C CXX)
+```
+
+- [ ] **Step 2: Edit `src/Plugin.cpp` for the version**
+
+```cpp
+// (step 1: the frame log and the dumps), and draws Minecraft blocks into it (step 2: on the finished frame). Commands
+// come through blockrender.request in its folder, and status.txt in the overlay's folder says what it's doing. See
+// docs/superpowers/specs/2026-10-01-block-render-design.md.
+```
+```cpp
+// (step 1: the frame log and the dumps), and draws Minecraft blocks into it (step 2: on the finished frame; step 3:
+// before DLSS). Commands come through blockrender.request in its folder, and status.txt in the overlay's folder says
+// what it's doing. See docs/superpowers/specs/2026-10-01-block-render-design.md.
+```
+```cpp
+constexpr const char* kVersion = "0.2.0";
+```
+```cpp
+constexpr const char* kVersion = "0.3.0";
+```
+```cpp
+	aInfo->version = RED4EXT_V1_SEMVER(0, 2, 0);
+```
+```cpp
+	aInfo->version = RED4EXT_V1_SEMVER(0, 3, 0);
+```
+
+- [ ] **Step 3: Edit `tools/blockrender_hud/init.lua` to time frames**
+
+```lua
+-- this folder once a second, plus V's position, heading and Minecraft block, and the nearest structure. Read-only.
+-- Delete this folder to remove it.
+```
+```lua
+-- this folder once a second, plus V's position, heading and Minecraft block, and the nearest structure, and the frame
+-- time as CET sees it, which works without BlockRender too and goes into frames.txt here as well. Delete this folder
+-- to remove it.
+```
+```lua
+local sinceRead = 1.0
+```
+```lua
+local sinceRead = 1.0
+local frames = { sum = 0.0, count = 0, worst = 0.0 }  -- this second's frame times, from onUpdate
+local frameLine = nil                                  -- the last whole second's
+```
+```lua
+registerForEvent("onUpdate", function(delta)
+    sinceRead = sinceRead + delta
+    if sinceRead >= 1.0 then
+        sinceRead = 0.0
+        readStatus()
+    end
+```
+```lua
+registerForEvent("onUpdate", function(delta)
+    frames.sum = frames.sum + delta
+    frames.count = frames.count + 1
+    frames.worst = math.max(frames.worst, delta)
+    sinceRead = sinceRead + delta
+    if sinceRead >= 1.0 then
+        sinceRead = 0.0
+        readStatus()
+        local average = frames.sum / frames.count
+        frameLine = string.format("CET's frame time: %.1f ms average (%.1f fps), %.1f ms worst", average * 1000.0,
+            1.0 / average, frames.worst * 1000.0)
+        frames = { sum = 0.0, count = 0, worst = 0.0 }
+        local out = io.open("frames.txt", "w")
+        if out ~= nil then
+            out:write(frameLine, "\n")
+            out:close()
+        end
+    end
+```
+```lua
+        if player ~= nil then
+            ImGui.Separator()
+            ImGui.Text(player)
+        end
+```
+```lua
+        if frameLine ~= nil then
+            ImGui.Text(frameLine)
+        end
+        if player ~= nil then
+            ImGui.Separator()
+            ImGui.Text(player)
+        end
+```
+
+- [ ] **Step 4: Build; it must compile without warnings, and the tests still pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `101 test(s), 0 failure(s)`.
+
+- [ ] **Step 5: Check the DLL's exports and imports**
+
+```bash
+DUMPBIN="/c/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/dumpbin.exe"
+B=/d/Cyberpunk-Minecraft/spikes/block-render/build/RelWithDebInfo/BlockRender.dll
+"$DUMPBIN" -nologo -exports "$B" | grep -E " (Main|Query|Supports) = "; \
+  "$DUMPBIN" -nologo -dependents "$B" | grep -iE "d3d|dxgi|sl\."
+```
+Expected: exactly `Main`, `Query` and `Supports`, then `D3DCOMPILER_47.dll` and `d3d12.dll`.
+
+- [ ] **Step 6: Check the overlay's Lua**
+
+```bash
+luac -p /d/Cyberpunk-Minecraft/spikes/block-render/tools/blockrender_hud/init.lua && echo "syntax ok"
+```
+Expected: `syntax ok`.
+
+- [ ] **Step 7: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "block-render: version 0.3.0, and the overlay times frames itself" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 44: In the game: step 3 (blocks before DLSS)
+
+Run 4, at run 3's corner (x −116.6, y −2005.2, facing south-west, heading about 220). The user plays, and the agent
+sends requests and reads what comes back, with the commands from Task 29, plus CET's own frame time:
+```bash
+cat /e/Cyberpunk2077/bin/x64/plugins/cyber_engine_tweaks/mods/blockrender_hud/frames.txt
+```
+Each of the step's unknowns has a setting that changes it live, as `set cull` did in Task 30:
+- **The states before the DLSS list:** the first `log` shows them, before anything is drawn.
+- **`exposure`:** how bright the blocks are against the scene.
+- **`jittersign` and `mvsign`:** the signs of the jitter and of the motion vectors.
+
+If drawing skips frames, the status says why: stop there, and fix it in a new task before going on.
+
+**Files:**
+- Modify: `docs/spikes/2026-10-01-block-render-results.md`
+
+- [ ] **Step 1: Deploy (the game must not be running)**
+
+```bash
+tasklist | grep -i -c "cyberpunk2077.exe"
+```
+Expected: `0`. If it's `1`, ask the user to quit the game first, because a running game locks the DLL.
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default -DCP2077_DIR=E:/Cyberpunk2077 > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C|error MSB"; \
+  "$CMAKE" --preset default -DCP2077_DIR= > /dev/null; \
+  ls /e/Cyberpunk2077/red4ext/plugins/BlockRender /e/Cyberpunk2077/bin/x64/plugins/cyber_engine_tweaks/mods/blockrender_hud \
+  && cmp build/RelWithDebInfo/BlockRender.dll /e/Cyberpunk2077/red4ext/plugins/BlockRender/BlockRender.dll && echo installed
+```
+Expected: the plugin's folder holds `BlockRender.dll`, `BlockRender.pdb`, `shaders`, `atlas.bin` and `atlas.json`, the
+overlay's folder holds `init.lua`, then `installed`.
+
+- [ ] **Step 2: Load, at the corner**
+
+Ask the user to launch the game, load the free-roam save, go to run 3's corner, face south-west, and stand still.
+Then read the log's first lines, the status and `frames.txt`. Expected:
+- `BlockRender 0.3.0 loaded`;
+- in the status, `mode=off` and `tracking off`;
+- in `frames.txt`, CET's frame time.
+
+- [ ] **Step 3: What the hooks cost, with the plugin**
+
+With the user standing still and the mouse left alone, read the status's `frame=` line and `frames.txt` five times
+each, a second apart:
+```bash
+H=/e/Cyberpunk2077/bin/x64/plugins/cyber_engine_tweaks/mods/blockrender_hud
+for i in 1 2 3 4 5; do sed -n '5p' $H/status.txt; cat $H/frames.txt; sleep 1.1; done
+```
+Note both averages. Step 13 repeats CET's without the plugin.
+
+- [ ] **Step 4: The states before the DLSS list**
+
+Send `log`, wait 3 seconds, and summarise the newest frame log. In "States in the DLSS and G-buffer lists", note each
+tagged buffer's states in the DLSS lists. Expected:
+- the scaling input colour, the motion vectors and the depth each show `<before> -> <after>; tagged <state>` or `not
+  moved; tagged <state>`;
+- each `<before>` is a plain state: a note of `flags 2` (the end of a split barrier begun earlier) or of a
+  subresource other than 0 would make `predlss` skip. Only the state before matters to `predlss`, so an
+  `unknown` after the arrow doesn't.
+
+Note the G-buffer lists' states too, for Part 3.
+
+- [ ] **Step 5: Everything in one dump**
+
+Send `dump all`, wait 5 seconds, then read `dump.json` and convert the dump, as in Task 32 Step 5:
+```bash
+D=$(ls -td /e/Cyberpunk2077/red4ext/plugins/BlockRender/dumps/*/ | head -1); cat "$D/dump.json" | grep -E '"file"|errors'; \
+  cd /d/Cyberpunk-Minecraft/spikes/block-render && uv run --no-project -q --with numpy --with pillow python tools/view_dump.py "$D"
+```
+Expected: the three tags and the G-buffer's groups, from one frame, and no errors. Part 3 compares the colour with the
+G-buffer's base colour, pixel by pixel, to settle whether the base colour is gamma-encoded.
+
+- [ ] **Step 6: The cube, before DLSS**
+
+Ask the user to face open ground and stand still. Send `mode predlss`, then `place cube`, and read the status twice, a
+second apart. Expected:
+- `mode=predlss`;
+- frames drawn at about the frame rate, and none skipped after the first second;
+- a GPU time.
+
+Ask for a screenshot. Expected: the cube sits under the HUD and CET's windows, with its faces' shading, and tone mapped
+with the scene.
+
+- [ ] **Step 7: The exposure**
+
+Ask the user to compare the cube's top with the sunlit pavement. Try `set exposure` at 1.5, 3, 6 and 12, two seconds
+apart, and ask which looks closest. Narrow it down, and note the value.
+
+- [ ] **Step 8: The jitter's sign**
+
+Ask the user to stand still and watch the cube's edges for a few seconds at each of `set jittersign 1`, `-1` and `0`.
+Expected:
+- the right sign: steady, smooth edges;
+- the wrong sign: edges that crawl or blur;
+- `0`: steady but jagged edges.
+
+Note which is right, and leave it set.
+
+- [ ] **Step 9: The motion vectors' sign**
+
+Ask the user to strafe left and right past the cube, at each of `set mvsign 1`, `-1` and `0`. Expected:
+- the right sign: no trails or smears behind its edges;
+- the others: trails.
+
+Note which is right, and leave it set.
+
+- [ ] **Step 10: More blocks, and the UI**
+
+Ask the user to move to an open spot for each, and to say when they're ready. Then:
+- `place sampler`: leaves and glass are cut out;
+- `place house`.
+
+Ask the user to walk around them, then open the map and the pause menu, with screenshots. Expected:
+- the blocks are under every menu;
+- they hide what's behind them, and nearer things hide them.
+
+- [ ] **Step 11: The timings**
+
+Back at the corner, with the same view and `predlss` still on, send `clear` and read the status five times, a
+second apart: drawing with no blocks. Then `place field 10000` and read it five times, then `clear`, `place field
+100000`, and five times again. Note the blocks, the sections, the vertices, the GPU time and the frame time of
+each.
+
+- [ ] **Step 12: Clean up**
+
+Send `clear`, then `mode off`, two seconds apart. Expected in the status: `mode=off`, and `tracking off`.
+
+- [ ] **Step 13: The game without the plugin**
+
+Ask the user to quit the game. Once `tasklist | grep -i -c "cyberpunk2077.exe"` prints `0`, take the plugin out, and
+remove its stale status file:
+```bash
+P=/e/Cyberpunk2077/red4ext/plugins/BlockRender; mv "$P/BlockRender.dll" "$P/BlockRender.dll.off" \
+  && rm -f /e/Cyberpunk2077/bin/x64/plugins/cyber_engine_tweaks/mods/blockrender_hud/status.txt && ls "$P"
+```
+Ask the user to launch the game, load the same save, stand at the corner facing the same way, and stand still. Read
+`frames.txt` five times, a second apart, as in Step 3. Ask the user to quit, then, once the game is gone, put the
+plugin back:
+```bash
+P=/e/Cyberpunk2077/red4ext/plugins/BlockRender; mv "$P/BlockRender.dll.off" "$P/BlockRender.dll" && ls "$P"
+```
+The difference from Step 3's CET time is what the hooks cost.
+
+- [ ] **Step 14: Record the results, and commit**
+
+In `docs/spikes/2026-10-01-block-render-results.md`, add step 3:
+- the states before the DLSS list;
+- the exposure, and the two signs;
+- the screenshots' findings: the HUD and menus, the cut-outs, hiding both ways;
+- the timings at 10,000 and 100,000 blocks;
+- what the hooks cost.
+
+Then commit:
+```bash
+cd /d/Cyberpunk-Minecraft && git add docs/spikes \
+  && git commit -q -m "block-render: step 3's results" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 45: Close Part 2, and plan Part 3
+
+**Files:**
+- Modify: `docs/superpowers/plans/2026-10-01-block-render.md` (this plan)
+
+- [ ] **Step 1: Add "How Part 2 went" to this plan**
+
+Add a section after Task 45, as Part 1's closed it. Cover:
+- what Task 44 found, and any fixes it needed;
+- any amendments made along the way;
+- what step 3's run decides for step 4:
+  - where blocks can go into the G-buffer: the G-buffer lists' last submission, and the states they leave their
+    targets in;
+  - whether the base colour is gamma-encoded, from Task 44's dump;
+  - the stencil value, and whether blocks must write motion vectors;
+  - what the hooks cost, for the tracking step 4 needs.
+
+- [ ] **Step 2: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add docs/superpowers/plans \
+  && git commit -q -m "block-render plan: how Part 2 went" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" \
+  && git log --oneline -1
+```
+
+- [ ] **Step 3: Plan Part 3**
+
+Use superpowers:writing-plans to write Part 3's tasks (spec step 4) from what steps 1 to 3 found, as Tasks 46 on in
+this plan. As in Parts 1 and 2, compile and test their code in a scratch clone first, and replay the tasks before
+committing.
