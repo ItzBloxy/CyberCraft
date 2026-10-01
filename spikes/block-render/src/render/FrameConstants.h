@@ -17,8 +17,9 @@ struct FrameConstants
 	float    tuning[4];           // brightness; depth tolerance; exposure; the motion vectors' sign
 	float    clipToPrevClip[16];  // Streamline's, for row vectors: a clip position to where it was a frame before
 	float    jitter[4];           // the jitter as an offset per unit of clip w (ClipJitter): x, y; 0; 0
+	float    material[4];         // the G-buffer's material values: metalness, roughness, B; 0
 };
-static_assert(sizeof(FrameConstants) == 256);
+static_assert(sizeof(FrameConstants) == 272);
 
 struct SectionConstants
 {

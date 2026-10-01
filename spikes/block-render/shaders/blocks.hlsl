@@ -22,6 +22,7 @@ cbuffer Frame : register(b0)
     float4 tuning;                    // brightness; depth tolerance; exposure; the motion vectors' sign
     row_major float4x4 clipToPrevClip;  // Streamline's: a clip position to where it was a frame before
     float4 jitter;                    // the jitter as an offset per unit of clip w: x, y
+    float4 material;                  // the G-buffer's material values: metalness, roughness, B; 0
 };
 
 cbuffer Section : register(b1)
@@ -108,6 +109,14 @@ float3 Linear(float3 aColour)
     return aColour <= 0.04045 ? aColour / 12.92 : pow(abs((aColour + 0.055) / 1.055), 2.4);
 }
 
+// As Camera.cpp's MotionVector: a fraction of the screen, from where the point is to where it was.
+float2 MotionVector(VSOut i)
+{
+    const float2 now = i.clip.xy / i.clip.w;
+    const float2 before = i.prevClip.xy / i.prevClip.w;
+    return (before - now) * float2(0.5, -0.5) * tuning.w;
+}
+
 struct PredlssOut
 {
     float4 colour : SV_Target0;
@@ -125,9 +134,46 @@ PredlssOut PredlssPS(VSOut i)
     }
     PredlssOut o;
     o.colour = float4(Linear(texel.rgb * i.colour.rgb) * kFaceShade[min(i.face, 6)] * tuning.z, 1.0);
-    // As Camera.cpp's MotionVector: a fraction of the screen, from where the point is to where it was.
-    const float2 now = i.clip.xy / i.clip.w;
-    const float2 before = i.prevClip.xy / i.prevClip.w;
-    o.motion = (before - now) * float2(0.5, -0.5) * tuning.w;
+    o.motion = MotionVector(i);
     return o;
+}
+
+// Each face's world-space normal, by the flags' direction + 1: none, down, up, north, south, west, east. As FaceNormal
+// in src/render/Gbuffer.cpp: Minecraft's directions in world axes (x east, y north, z up).
+static const float3 kFaceNormal[7] = { float3(0, 0, 1), float3(0, 0, -1), float3(0, 0, 1), float3(0, 1, 0), float3(0, -1, 0),
+                                       float3(-1, 0, 0), float3(1, 0, 0) };
+
+struct GbufferOut
+{
+    float4 base     : SV_Target0;  // the base colour, sRGB-encoded as the atlas is
+    float4 normal   : SV_Target1;  // the world-space normal, as n * 0.5 + 0.5
+    float4 material : SV_Target2;  // metalness, roughness, B (likely translucency), emission
+    float2 motion   : SV_Target3;
+};
+
+// Step 4: into the G-buffer, which the game then lights, shadows and fogs as its own. The colour is Minecraft's
+// without its face brightness: the game's light does that, from the normal. Alphas are 0, as on the game's ordinary
+// surfaces.
+GbufferOut GbufferPS(VSOut i)
+{
+    const float4 texel = SampleAtlas(i.uv);
+    if (texel.a < 0.5)
+    {
+        discard;
+    }
+    GbufferOut o;
+    o.base = float4(saturate(texel.rgb * i.colour.rgb * tuning.x), 0.0);
+    o.normal = float4(kFaceNormal[min(i.face, 6)] * 0.5 + 0.5, 0.0);
+    o.material = float4(material.xyz, 0.0);
+    o.motion = MotionVector(i);
+    return o;
+}
+
+// Step 4's second pass: the blocks' depth into the tagged depth, the copy of the G-buffer's depth that DLSS reads.
+void DepthPS(VSOut i)
+{
+    if (SampleAtlas(i.uv).a < 0.5)
+    {
+        discard;
+    }
 }

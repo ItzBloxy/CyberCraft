@@ -20362,7 +20362,7 @@ The material values come from the frame's constants, which grow by 16 bytes to 2
 - Modify: `tests/TestShaders.cpp`, `src/render/FrameConstants.h`, `shaders/blocks.hlsl`, `src/render/Shaders.h`,
   `src/render/Shaders.cpp`, `src/render/Renderer.cpp`
 
-- [ ] **Step 1: Edit `tests/TestShaders.cpp` to add the failing checks**
+- [x] **Step 1: Edit `tests/TestShaders.cpp` to add the failing checks**
 
 ```cpp
 		CHECK(!shaders->predlss.empty());
@@ -20399,7 +20399,7 @@ TEST(ShadersWriteTheGbuffer)
 TEST(ShadersReportCompileErrors)
 ```
 
-- [ ] **Step 2: Build; it must fail**
+- [x] **Step 2: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -20408,7 +20408,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `'gbuffer': is not a member of 'cpmc::BlockShaders'`.
 
-- [ ] **Step 3: Edit `src/render/FrameConstants.h` for the material values**
+- [x] **Step 3: Edit `src/render/FrameConstants.h` for the material values**
 
 ```cpp
 	float    jitter[4];           // the jitter as an offset per unit of clip w (ClipJitter): x, y; 0; 0
@@ -20422,7 +20422,7 @@ static_assert(sizeof(FrameConstants) == 256);
 static_assert(sizeof(FrameConstants) == 272);
 ```
 
-- [ ] **Step 4: Edit `shaders/blocks.hlsl` to add the G-buffer's shaders**
+- [x] **Step 4: Edit `shaders/blocks.hlsl` to add the G-buffer's shaders**
 
 ```hlsl
     float4 jitter;                    // the jitter as an offset per unit of clip w: x, y
@@ -20511,7 +20511,7 @@ void DepthPS(VSOut i)
 }
 ```
 
-- [ ] **Step 5: Edit `src/render/Shaders.h` for the new entry points**
+- [x] **Step 5: Edit `src/render/Shaders.h` for the new entry points**
 
 ```cpp
 	std::vector<uint8_t> predlss;  // PredlssPS
@@ -20524,7 +20524,7 @@ void DepthPS(VSOut i)
 };
 ```
 
-- [ ] **Step 6: Edit `src/render/Shaders.cpp` to compile them**
+- [x] **Step 6: Edit `src/render/Shaders.cpp` to compile them**
 
 ```cpp
 	auto predlss = CompileShader(aSource, "blocks.hlsl", "PredlssPS", "ps_5_1", aError);
@@ -20553,7 +20553,7 @@ void DepthPS(VSOut i)
 	return BlockShaders{ std::move(*vertex), std::move(*present), std::move(*predlss), std::move(*gbuffer), std::move(*depth) };
 ```
 
-- [ ] **Step 7: Edit `src/render/Renderer.cpp` for the constants' new size**
+- [x] **Step 7: Edit `src/render/Renderer.cpp` for the constants' new size**
 
 ```cpp
 constexpr uint64_t kConstantsStride = 256;  // a constant buffer view's alignment
@@ -20563,7 +20563,7 @@ constexpr uint64_t kConstantsStride = 512;  // a frame's constants, rounded up t
 static_assert(sizeof(FrameConstants) <= kConstantsStride && kConstantsStride % 256 == 0);
 ```
 
-- [ ] **Step 8: Build and run the tests; they must pass**
+- [x] **Step 8: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -20573,7 +20573,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `111 test(s), 0 failure(s)`.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \

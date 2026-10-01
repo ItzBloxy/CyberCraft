@@ -18,7 +18,8 @@ namespace cpmc
 {
 namespace
 {
-constexpr uint64_t kConstantsStride = 256;  // a constant buffer view's alignment
+constexpr uint64_t kConstantsStride = 512;  // a frame's constants, rounded up to a constant buffer view's alignment
+static_assert(sizeof(FrameConstants) <= kConstantsStride && kConstantsStride % 256 == 0);
 constexpr uint32_t kSkipsBeforeOff = 30;     // the spec's "Checks before every draw"
 constexpr int64_t  kTrackedFramesAgo = 3;    // a DLSS list tracked longer ago than this was recorded again untracked
 

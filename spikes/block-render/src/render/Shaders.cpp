@@ -44,6 +44,16 @@ std::optional<BlockShaders> CompileBlockShaders(std::string_view aSource, std::s
 	{
 		return std::nullopt;
 	}
-	return BlockShaders{ std::move(*vertex), std::move(*present), std::move(*predlss) };
+	auto gbuffer = CompileShader(aSource, "blocks.hlsl", "GbufferPS", "ps_5_1", aError);
+	if (!gbuffer)
+	{
+		return std::nullopt;
+	}
+	auto depth = CompileShader(aSource, "blocks.hlsl", "DepthPS", "ps_5_1", aError);
+	if (!depth)
+	{
+		return std::nullopt;
+	}
+	return BlockShaders{ std::move(*vertex), std::move(*present), std::move(*predlss), std::move(*gbuffer), std::move(*depth) };
 }
 }

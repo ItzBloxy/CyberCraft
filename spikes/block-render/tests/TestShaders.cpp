@@ -62,11 +62,15 @@ TEST(ShadersCompileFromTheShaderFile)
 		CHECK(!shaders->vertex.empty());
 		CHECK(!shaders->present.empty());
 		CHECK(!shaders->predlss.empty());
+		CHECK(!shaders->gbuffer.empty());
+		CHECK(!shaders->depth.empty());
 		// The constant buffers match the C++ structs byte for byte.
 		CHECK_EQ(ConstantBufferSize(shaders->vertex, "Frame"), UINT(sizeof(cpmc::FrameConstants)));
 		CHECK_EQ(ConstantBufferSize(shaders->vertex, "Section"), UINT(sizeof(cpmc::SectionConstants)));
 		CHECK_EQ(ConstantBufferSize(shaders->present, "Frame"), UINT(sizeof(cpmc::FrameConstants)));
 		CHECK_EQ(ConstantBufferSize(shaders->predlss, "Frame"), UINT(sizeof(cpmc::FrameConstants)));
+		CHECK_EQ(ConstantBufferSize(shaders->gbuffer, "Frame"), UINT(sizeof(cpmc::FrameConstants)));
+		CHECK_EQ(ConstantBufferSize(shaders->depth, "Frame"), UINT(sizeof(cpmc::FrameConstants)));
 	}
 }
 
@@ -79,6 +83,18 @@ TEST(ShadersWriteColourAndMotionBeforeDlss)
 	{
 		CHECK_EQ(Outputs(shaders->present), 1u);
 		CHECK_EQ(Outputs(shaders->predlss), 2u);  // the colour, and the motion vectors
+	}
+}
+
+TEST(ShadersWriteTheGbuffer)
+{
+	std::string error;
+	const auto  shaders = cpmc::CompileBlockShaders(ShaderSource(), error);
+	CHECK(shaders.has_value());
+	if (shaders)
+	{
+		CHECK_EQ(Outputs(shaders->gbuffer), 4u);  // the base colour, normals, material values and motion vectors
+		CHECK_EQ(Outputs(shaders->depth), 0u);    // depth only
 	}
 }
 
