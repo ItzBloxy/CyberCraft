@@ -12,6 +12,7 @@
 #include <atomic>
 #include <cstring>
 #include <format>
+#include <map>
 #include <mutex>
 
 namespace cpmc::d3d
@@ -44,6 +45,8 @@ std::atomic<void*>           g_listVtable{ nullptr };
 std::atomic<ID3D12CommandQueue*>        g_mainQueue{ nullptr };
 std::atomic<ID3D12GraphicsCommandList*> g_evaluateList{ nullptr };
 std::mutex                   g_patchMutex;  // device, factory and swap-chain patching
+std::mutex                   g_swapChainMutex;
+std::map<const void*, ID3D12CommandQueue*> g_swapChainQueues;  // the native queue each swap chain was made with
 
 D3D12CreateDeviceFn      g_createDevice = nullptr;
 D3D12GetDebugInterfaceFn g_getDebugInterface = nullptr;
@@ -457,6 +460,36 @@ void PatchEntry(void* aObject, size_t aSlot, void* aHook, Fn& aOriginal, const c
 	}
 }
 
+// The native queue under a swap chain's "device", which for D3D12 is the queue it presents on. Null for anything else,
+// such as a D3D11 device. No reference is kept: the pointer is only compared.
+ID3D12CommandQueue* NativeQueueOf(IUnknown* aDevice)
+{
+	ComPtr<ID3D12CommandQueue> queue;
+	if (!aDevice || FAILED(aDevice->QueryInterface(IID_PPV_ARGS(&queue))))
+	{
+		return nullptr;
+	}
+	if (void* native = slhooks::NativeInterface(queue.Get()))
+	{
+		static_cast<IUnknown*>(native)->Release();  // the proxy holds it
+		return static_cast<ID3D12CommandQueue*>(native);
+	}
+	return queue.Get();  // the swap chain holds it
+}
+
+// The game's swap chain doesn't say which queue it presents on (GetDevice fails), so each swap chain's queue is noted
+// when it's made.
+void NoteSwapChain(IDXGISwapChain* aSwapChain, IUnknown* aDevice, const char* aHow)
+{
+	ID3D12CommandQueue* const queue = NativeQueueOf(aDevice);
+	{
+		std::lock_guard lock(g_swapChainMutex);
+		g_swapChainQueues[aSwapChain] = queue;
+	}
+	Log(std::format("swap chain 0x{:x} created ({}), on queue 0x{:x}: Present patched", reinterpret_cast<uintptr_t>(aSwapChain), aHow,
+	                reinterpret_cast<uintptr_t>(queue)));
+}
+
 void PatchSwapChain(IDXGISwapChain* aSwapChain)
 {
 	std::lock_guard lock(g_patchMutex);
@@ -474,7 +507,7 @@ HRESULT STDMETHODCALLTYPE CreateSwapChain(IDXGIFactory* aFactory, IUnknown* aDev
 	if (SUCCEEDED(result) && aSwapChain && *aSwapChain)
 	{
 		PatchSwapChain(*aSwapChain);
-		Log("swap chain created (CreateSwapChain): Present patched");
+		NoteSwapChain(*aSwapChain, aDevice, "CreateSwapChain");
 	}
 	return result;
 }
@@ -486,7 +519,7 @@ HRESULT STDMETHODCALLTYPE CreateSwapChainForHwnd(IDXGIFactory2* aFactory, IUnkno
 	if (SUCCEEDED(result) && aSwapChain && *aSwapChain)
 	{
 		PatchSwapChain(*aSwapChain);
-		Log("swap chain created (CreateSwapChainForHwnd): Present patched");
+		NoteSwapChain(*aSwapChain, aDevice, "CreateSwapChainForHwnd");
 	}
 	return result;
 }
@@ -792,17 +825,20 @@ ID3D12CommandQueue* MainQueue()
 
 ID3D12CommandQueue* PresentQueue(IDXGISwapChain* aSwapChain)
 {
-	ComPtr<ID3D12CommandQueue> queue;
-	if (!aSwapChain || FAILED(aSwapChain->GetDevice(IID_PPV_ARGS(&queue))))
+	{
+		std::lock_guard lock(g_swapChainMutex);
+		if (const auto found = g_swapChainQueues.find(aSwapChain); found != g_swapChainQueues.end())
+		{
+			return found->second;
+		}
+	}
+	// A swap chain made before BlockRender loaded: ask it, though the game's may not say.
+	ComPtr<IUnknown> device;
+	if (!aSwapChain || FAILED(aSwapChain->GetDevice(IID_PPV_ARGS(&device))))
 	{
 		return nullptr;
 	}
-	if (void* native = slhooks::NativeInterface(queue.Get()))
-	{
-		static_cast<IUnknown*>(native)->Release();  // the proxy holds it
-		return static_cast<ID3D12CommandQueue*>(native);
-	}
-	return queue.Get();  // the swap chain holds it
+	return NativeQueueOf(device.Get());
 }
 
 void NoteEvaluateList(ID3D12GraphicsCommandList* aList)

@@ -8,6 +8,7 @@
 #include "Readable.h"
 
 #include <array>
+#include <atomic>
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -77,4 +78,18 @@ std::vector<const sl::BaseStructure*> EvaluateInputs(ReadableMemory& aMemory, co
 
 // The tags an evaluate uses: the global ones, with each local tag replacing the global tag of its type.
 std::vector<SlTag> TagsForEvaluate(const std::vector<SlTag>& aGlobal, const std::vector<SlTag>& aLocal);
+
+// When a frame starts. The game asks Streamline for a frame token several times a frame, from several threads, and
+// the main thread works a frame ahead of the render and present threads. So a frame starts when a token comes for a
+// newer frame index than any before. A far older index means the count started again, and starts a frame too.
+// Safe from any thread.
+class NewestFrame
+{
+public:
+	bool Note(uint32_t aFrame);  // true when aFrame starts a frame
+
+private:
+	static constexpr uint64_t kNone = ~0ull;
+	std::atomic<uint64_t>     newest_{ kNone };
+};
 }

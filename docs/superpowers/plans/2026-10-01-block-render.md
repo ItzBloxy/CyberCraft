@@ -12516,7 +12516,7 @@ The fixes:
 - Modify: `src/hooks/HookEvents.h`, `src/hooks/StreamlineHooks.cpp`, `src/hooks/D3D12Hooks.h`, `src/hooks/D3D12Hooks.cpp`
 - Modify: `tools/frame_summary.py`, `tools/blockrender_hud/init.lua`
 
-- [ ] **Step 1: Edit `tests/TestSl.cpp` to add the failing test**
+- [x] **Step 1: Edit `tests/TestSl.cpp` to add the failing test**
 
 ```cpp
 	CHECK_STR(cpmc::BufferTypeName(sl::kBufferTypeColorAfterDepthOfField), "colorAfterDepthOfField");
@@ -12546,7 +12546,7 @@ TEST(SlNewestFrameStartsEachFrameOnce)
 }
 ```
 
-- [ ] **Step 2: Build; it must fail**
+- [x] **Step 2: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -12555,7 +12555,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `'NewestFrame': is not a member of 'cpmc'`.
 
-- [ ] **Step 3: Edit `src/sl/Sl.h` to declare `NewestFrame`**
+- [x] **Step 3: Edit `src/sl/Sl.h` to declare `NewestFrame`**
 
 ```cpp
 #include <array>
@@ -12589,7 +12589,7 @@ private:
 }
 ```
 
-- [ ] **Step 4: Edit `src/sl/Sl.cpp` to implement it**
+- [x] **Step 4: Edit `src/sl/Sl.cpp` to implement it**
 
 ```cpp
 	tags.insert(tags.end(), aLocal.begin(), aLocal.end());
@@ -12618,7 +12618,7 @@ bool NewestFrame::Note(uint32_t aFrame)
 }
 ```
 
-- [ ] **Step 5: Build and run the tests; they must pass**
+- [x] **Step 5: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -12628,7 +12628,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `84 test(s), 0 failure(s)`.
 
-- [ ] **Step 6: Edit `src/hooks/HookEvents.h` to say when a frame starts**
+- [x] **Step 6: Edit `src/hooks/HookEvents.h` to say when a frame starts**
 
 ```cpp
 	virtual void OnFrameToken(uint32_t /*aFrame*/) {}
@@ -12638,7 +12638,7 @@ Expected: no error or warning lines, then `84 test(s), 0 failure(s)`.
 	virtual void OnFrameToken(uint32_t /*aFrame*/) {}
 ```
 
-- [ ] **Step 7: Edit `src/hooks/StreamlineHooks.cpp` to start each frame once**
+- [x] **Step 7: Edit `src/hooks/StreamlineHooks.cpp` to start each frame once**
 
 ```cpp
 std::atomic<uint64_t>      g_frameTokens{ 0 };
@@ -12685,7 +12685,7 @@ NewestFrame                g_newestFrame;
 	                   g_frameTokens.load(), g_tokenCalls.load(), g_evaluates.load());
 ```
 
-- [ ] **Step 8: Edit `src/hooks/D3D12Hooks.h` to say where the present queue comes from**
+- [x] **Step 8: Edit `src/hooks/D3D12Hooks.h` to say where the present queue comes from**
 
 ```cpp
 // The native queue a swap chain presents on, under any Streamline proxy; null if it can't be found.
@@ -12695,7 +12695,7 @@ NewestFrame                g_newestFrame;
 // it can't be found.
 ```
 
-- [ ] **Step 9: Edit `src/hooks/D3D12Hooks.cpp` to note each swap chain's queue**
+- [x] **Step 9: Edit `src/hooks/D3D12Hooks.cpp` to note each swap chain's queue**
 
 ```cpp
 #include <format>
@@ -12804,7 +12804,7 @@ ID3D12CommandQueue* PresentQueue(IDXGISwapChain* aSwapChain)
 }
 ```
 
-- [ ] **Step 10: Build; it must compile without warnings, and the tests still pass**
+- [x] **Step 10: Build; it must compile without warnings, and the tests still pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -12814,7 +12814,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `84 test(s), 0 failure(s)`.
 
-- [ ] **Step 11: Edit `tools/frame_summary.py` to print the field of view as given**
+- [x] **Step 11: Edit `tools/frame_summary.py` to print the field of view as given**
 
 ```python
         add(f"  near {c['near']}, far {c['far']}, fov {c['fovDegrees']:.3f} deg, aspect {c['aspect']:.4f}, "
@@ -12824,7 +12824,7 @@ Expected: no error or warning lines, then `84 test(s), 0 failure(s)`.
         add(f"  near {c['near']}, far {c['far']}, fov {c['fov']} as given, aspect {c['aspect']:.4f}, "
 ```
 
-- [ ] **Step 12: Edit `tools/blockrender_hud/init.lua` to draw smaller, and split long lines**
+- [x] **Step 12: Edit `tools/blockrender_hud/init.lua` to draw smaller, and split long lines**
 
 ```lua
 local sinceRead = 1.0
@@ -12872,21 +12872,21 @@ end
         end
 ```
 
-- [ ] **Step 13: Run all the tools' tests; they must pass**
+- [x] **Step 13: Run all the tools' tests; they must pass**
 
 ```bash
 cd /d/Cyberpunk-Minecraft/spikes/block-render/tools && uv run --no-project -q --with numpy --with pillow --with pytest pytest -q 2>&1 | tail -1
 ```
 Expected: `20 passed`.
 
-- [ ] **Step 14: Check the overlay's Lua**
+- [x] **Step 14: Check the overlay's Lua**
 
 ```bash
 luac -p /d/Cyberpunk-Minecraft/spikes/block-render/tools/blockrender_hud/init.lua && echo "syntax ok"
 ```
 Expected: `syntax ok`. (`luac` is Lua 5.4's; CET runs LuaJIT, and the overlay uses nothing that differs between them.)
 
-- [ ] **Step 15: Commit**
+- [x] **Step 15: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \

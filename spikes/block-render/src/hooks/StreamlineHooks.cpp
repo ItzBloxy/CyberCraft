@@ -37,8 +37,10 @@ EvaluateFeatureFn          g_evaluateFeature = nullptr;
 GetNativeInterfaceFn       g_getNativeInterface = nullptr;
 uintptr_t                  g_slBase = 0;
 uintptr_t                  g_slEnd = 0;
-std::atomic<uint64_t>      g_frameTokens{ 0 };
+std::atomic<uint64_t>      g_frameTokens{ 0 };  // frames started
+std::atomic<uint64_t>      g_tokenCalls{ 0 };   // every slGetNewFrameToken
 std::atomic<uint64_t>      g_evaluates{ 0 };
+NewestFrame                g_newestFrame;
 
 // What Streamline has been told, by viewport.
 struct Viewport
@@ -69,10 +71,14 @@ sl::Result GetNewFrameToken(sl::FrameToken*& aToken, const uint32_t* aFrameIndex
 	const sl::Result result = g_getNewFrameToken(aToken, aFrameIndex);
 	if (result == sl::Result::eOk && aToken)
 	{
+		++g_tokenCalls;
 		const uint32_t frame = FrameOf(*aToken);
-		d3d::SetCurrentFrame(frame);
-		++g_frameTokens;
-		Each([&](HookEvents& aListener) { aListener.OnFrameToken(frame); });
+		if (g_newestFrame.Note(frame))
+		{
+			d3d::SetCurrentFrame(frame);
+			++g_frameTokens;
+			Each([&](HookEvents& aListener) { aListener.OnFrameToken(frame); });
+		}
 	}
 	return result;
 }
@@ -298,7 +304,7 @@ ID3D12GraphicsCommandList* NativeList(void* aGameList)
 
 std::string Summary()
 {
-	return std::format("{} Streamline imports patched, {} frames, {} DLSS evaluates", g_patches.size(), g_frameTokens.load(),
-	                   g_evaluates.load());
+	return std::format("{} Streamline imports patched, {} frames ({} token calls), {} DLSS evaluates", g_patches.size(),
+	                   g_frameTokens.load(), g_tokenCalls.load(), g_evaluates.load());
 }
 }

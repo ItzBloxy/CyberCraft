@@ -135,3 +135,20 @@ TEST(SlNamesBufferTypes)
 	CHECK_STR(cpmc::BufferTypeName(sl::kBufferTypeColorAfterDepthOfField), "colorAfterDepthOfField");
 	CHECK_STR(cpmc::BufferTypeName(500), "type 500");
 }
+
+TEST(SlNewestFrameStartsEachFrameOnce)
+{
+	// As the game's main menu logged it: three threads ask for tokens, the main thread a frame ahead of the others.
+	cpmc::NewestFrame frames;
+	CHECK(frames.Note(8877));
+	CHECK(!frames.Note(8877));
+	CHECK(frames.Note(8878));
+	CHECK(!frames.Note(8877));
+	CHECK(!frames.Note(8878));
+	CHECK(frames.Note(8880));
+	// A far older index: the count started again.
+	CHECK(frames.Note(12));
+	CHECK(!frames.Note(12));
+	CHECK(!frames.Note(11));
+	CHECK(frames.Note(13));
+}

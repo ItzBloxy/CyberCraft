@@ -193,4 +193,18 @@ std::vector<SlTag> TagsForEvaluate(const std::vector<SlTag>& aGlobal, const std:
 	tags.insert(tags.end(), aLocal.begin(), aLocal.end());
 	return tags;
 }
+
+bool NewestFrame::Note(uint32_t aFrame)
+{
+	constexpr uint64_t kRestart = 1000;  // frames: far more than any thread works behind the main thread
+	uint64_t           newest = newest_.load();
+	while (newest == kNone || aFrame > newest || newest - aFrame > kRestart)
+	{
+		if (newest_.compare_exchange_weak(newest, aFrame))
+		{
+			return true;
+		}
+	}
+	return false;
+}
 }

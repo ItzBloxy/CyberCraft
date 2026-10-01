@@ -100,7 +100,8 @@ def summarise(log):
     for c in constants[:2]:
         add(f"frame {c['frame']}, viewport {c['viewport']}, struct version {c['version']}")
         add(f"  position {c['position']}, forward {c['forward']}, right {c['right']}, up {c['up']}")
-        add(f"  near {c['near']}, far {c['far']}, fov {c['fovDegrees']:.3f} deg, aspect {c['aspect']:.4f}, "
+        # Streamline documents cameraFOV in radians, but the game gives degrees (68.24 at the main menu): print it as is.
+        add(f"  near {c['near']}, far {c['far']}, fov {c['fov']} as given, aspect {c['aspect']:.4f}, "
             f"depthInverted {c['depthInverted']}, jitter {c['jitter']}, mvecScale {c['mvecScale']}")
         add(f"  cameraMotionIncluded {c['cameraMotionIncluded']}, motionVectors3D {c['motionVectors3D']}, "
             f"motionVectorsDilated {c['motionVectorsDilated']}, motionVectorsJittered {c['motionVectorsJittered']}, "

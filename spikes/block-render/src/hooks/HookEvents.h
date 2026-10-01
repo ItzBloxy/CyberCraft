@@ -31,6 +31,7 @@ class HookEvents
 public:
 	virtual ~HookEvents() = default;
 
+	// A frame starts: Streamline gave a token for a newer frame index than any before (see NewestFrame).
 	virtual void OnFrameToken(uint32_t /*aFrame*/) {}
 	virtual void OnConstants(uint32_t /*aFrame*/, uint32_t /*aViewport*/, const SlConstants& /*aConstants*/) {}
 	virtual void OnTags(uint32_t /*aFrame*/, uint32_t /*aViewport*/, const std::vector<SlTag>& /*aTags*/, void* /*aList*/) {}

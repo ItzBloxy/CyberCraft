@@ -93,7 +93,8 @@ ID3D12Device*      Device();
 bool               SeenAtCreation();
 void*              ListVtable();  // native command lists' vtable, once seen
 ID3D12CommandQueue* MainQueue();  // the queue the DLSS evaluate's list goes to, once seen; held for the session
-// The native queue a swap chain presents on, under any Streamline proxy; null if it can't be found.
+// The native queue a swap chain presents on, under any Streamline proxy, as noted when the swap chain was made; null if
+// it can't be found.
 ID3D12CommandQueue* PresentQueue(IDXGISwapChain* aSwapChain);
 void               NoteEvaluateList(ID3D12GraphicsCommandList* aList);
 uint32_t           CurrentFrame();

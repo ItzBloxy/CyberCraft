@@ -5,8 +5,18 @@ local status = nil       -- status.txt's lines, except the structures
 local structures = {}    -- { name, min = { x, y, z }, max = { x, y, z } }, in world coordinates
 local player = nil       -- the lines about V
 local sinceRead = 1.0
+local fontScale = 0.8    -- the window's text, against CET's own size
 
 local atan2 = math.atan2 or function(y, x) return math.atan(y, x) end
+
+-- A status line as the window shows it: a long line splits at each "; ", with the later parts indented.
+local function displayLines(line)
+    local out = {}
+    for part in string.gmatch(line .. "; ", "(.-); ") do
+        table.insert(out, (#out == 0 and "" or "    ") .. part)
+    end
+    return out
+end
 
 local function readStatus()
     local file = io.open("status.txt", "r")
@@ -79,11 +89,16 @@ end)
 registerForEvent("onDraw", function()
     ImGui.SetNextWindowPos(30, 420, ImGuiCond.FirstUseEver)
     if ImGui.Begin("BlockRender", ImGuiWindowFlags.AlwaysAutoResize) then
+        if ImGui.SetWindowFontScale then
+            ImGui.SetWindowFontScale(fontScale)
+        end
         if status == nil then
             ImGui.Text("no status.txt yet: is BlockRender loaded?")
         else
             for _, line in ipairs(status) do
-                ImGui.Text(line)
+                for _, part in ipairs(displayLines(line)) do
+                    ImGui.Text(part)
+                end
             end
         end
         if player ~= nil then
