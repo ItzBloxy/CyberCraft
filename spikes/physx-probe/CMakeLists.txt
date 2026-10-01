@@ -63,6 +63,7 @@ add_executable(probe_tests
 	tests/TestDumpWriter.cpp
 	tests/TestGuard.cpp
 	tests/TestFileVersions.cpp
+	tests/TestAudit.cpp
 )
 target_link_libraries(probe_tests PRIVATE probe_core)
 add_test(NAME probe_tests COMMAND probe_tests)

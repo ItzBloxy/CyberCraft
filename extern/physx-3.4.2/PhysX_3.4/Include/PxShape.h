@@ -170,6 +170,15 @@ public:
 	virtual		void					acquireReference() = 0;
 
 	/**
+	\brief Returns the reference count of the shape.
+
+	LOCAL CHANGE for Cyberpunk 2077, not in NVIDIA's public 3.4.2 headers: the game's PhysX build has this virtual
+	function at slot 6, right after acquireReference(). Declaring it here puts every later PxShape method on the
+	game's slot. See docs/spikes/2026-10-01-physx-abi-audit.md.
+	*/
+	virtual		PxU32					getReferenceCount() const = 0;
+
+	/**
 	\brief Get the geometry type of the shape.
 
 	\return Type of shape geometry.
