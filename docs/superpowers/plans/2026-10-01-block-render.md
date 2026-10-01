@@ -32,7 +32,7 @@ Minecraft blocks on the finished frame. Then run spike 3's first two steps in th
 **Spec:** [docs/superpowers/specs/2026-10-01-block-render-design.md](../specs/2026-10-01-block-render-design.md)
 
 **Part 2:** steps 3 and 4 (blocks before DLSS, and blocks in the G-buffer) get their own tasks once step 1's frame log
-has shown where they can draw. Task 30 ends Part 1 by planning them.
+has shown where they can draw. Task 31 ends Part 1 by planning them.
 
 ---
 
@@ -48,19 +48,19 @@ has shown where they can draw. Task 30 ends Part 1 by planning them.
     ```
   - Pass MSBuild switches as `-m`, never `/m`: Git Bash rewrites `/m` into a file path.
 - **Already verified:** all the C++, HLSL, Lua and Python in this plan has been compiled and tested once already, in a
-  scratch clone. Tasks 1 to 27 were then replayed in a fresh clone by a script that applied every file step exactly
+  scratch clone. Tasks 1 to 28 were then replayed in a fresh clone by a script that applied every file step exactly
   as written, and checked every build and test step's expected result. The results:
   - zero compiler warnings at `/W4`;
-  - 83 C++ tests and 20 Python tests passing;
+  - 84 C++ tests and 20 Python tests passing;
   - the plugin DLL exporting exactly `Main`, `Query` and `Supports`;
   - the replayed files identical to the scratch clone's.
 
   So a failure while following the plan most likely means a transcription slip: compare against the plan's code first.
 - **Test counts:** the C++ test count grows with each task: 7, 11, 16, 19, 25, 28, 31, 36, 41, 48, 51, 56, 64, 69, 72, 75,
-  79, 80, then 83 from Task 20 on.
+  79, 80, then 83 from Task 20 on, and 84 from Task 28 on.
 - **What only the game can test:** the code that runs inside the game, which is the hooks, GpuApi, the frame log, the
-  dumps, the renderer and the plugin (Tasks 23 to 27). Tasks 3 to 20 test, offline, the pieces it relies on. Tasks 28
-  and 29 test the rest in the game, with the user.
+  dumps, the renderer and the plugin (Tasks 23 to 27). Tasks 3 to 20 test, offline, the pieces it relies on. Tasks 29
+  and 30 test the rest in the game, with the user. Task 28 fixes what the first run in the game found.
 - **The game and the user:**
   - **The user does everything in the game:** launching it, loading saves, moving, pressing keys and taking
     screenshots. Never drive their mouse or keyboard: ask, then wait for them to say they're done.
@@ -1163,6 +1163,23 @@ TEST(SlNamesBufferTypes)
 	CHECK_STR(cpmc::BufferTypeName(sl::kBufferTypeColorAfterDepthOfField), "colorAfterDepthOfField");
 	CHECK_STR(cpmc::BufferTypeName(500), "type 500");
 }
+
+TEST(SlNewestFrameStartsEachFrameOnce)
+{
+	// As the game's main menu logged it: three threads ask for tokens, the main thread a frame ahead of the others.
+	cpmc::NewestFrame frames;
+	CHECK(frames.Note(8877));
+	CHECK(!frames.Note(8877));
+	CHECK(frames.Note(8878));
+	CHECK(!frames.Note(8877));
+	CHECK(!frames.Note(8878));
+	CHECK(frames.Note(8880));
+	// A far older index: the count started again.
+	CHECK(frames.Note(12));
+	CHECK(!frames.Note(12));
+	CHECK(!frames.Note(11));
+	CHECK(frames.Note(13));
+}
 ```
 
 - [x] **Step 2: Edit `CMakeLists.txt` to add the test**
@@ -1199,6 +1216,7 @@ Expected: `fatal error C1083: Cannot open include file: 'sl/Sl.h'`.
 #include "Readable.h"
 
 #include <array>
+#include <atomic>
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -1268,6 +1286,20 @@ std::vector<const sl::BaseStructure*> EvaluateInputs(ReadableMemory& aMemory, co
 
 // The tags an evaluate uses: the global ones, with each local tag replacing the global tag of its type.
 std::vector<SlTag> TagsForEvaluate(const std::vector<SlTag>& aGlobal, const std::vector<SlTag>& aLocal);
+
+// When a frame starts. The game asks Streamline for a frame token several times a frame, from several threads, and
+// the main thread works a frame ahead of the render and present threads. So a frame starts when a token comes for a
+// newer frame index than any before. A far older index means the count started again, and starts a frame too.
+// Safe from any thread.
+class NewestFrame
+{
+public:
+	bool Note(uint32_t aFrame);  // true when aFrame starts a frame
+
+private:
+	static constexpr uint64_t kNone = ~0ull;
+	std::atomic<uint64_t>     newest_{ kNone };
+};
 }
 ```
 
@@ -1468,6 +1500,20 @@ std::vector<SlTag> TagsForEvaluate(const std::vector<SlTag>& aGlobal, const std:
 	}
 	tags.insert(tags.end(), aLocal.begin(), aLocal.end());
 	return tags;
+}
+
+bool NewestFrame::Note(uint32_t aFrame)
+{
+	constexpr uint64_t kRestart = 1000;  // frames: far more than any thread works behind the main thread
+	uint64_t           newest = newest_.load();
+	while (newest == kNone || aFrame > newest || newest - aFrame > kRestart)
+	{
+		if (newest_.compare_exchange_weak(newest, aFrame))
+		{
+			return true;
+		}
+	}
+	return false;
 }
 }
 ```
@@ -7664,7 +7710,8 @@ def summarise(log):
     for c in constants[:2]:
         add(f"frame {c['frame']}, viewport {c['viewport']}, struct version {c['version']}")
         add(f"  position {c['position']}, forward {c['forward']}, right {c['right']}, up {c['up']}")
-        add(f"  near {c['near']}, far {c['far']}, fov {c['fovDegrees']:.3f} deg, aspect {c['aspect']:.4f}, "
+        # Streamline documents cameraFOV in radians, but the game gives degrees (68.24 at the main menu): print it as is.
+        add(f"  near {c['near']}, far {c['far']}, fov {c['fov']} as given, aspect {c['aspect']:.4f}, "
             f"depthInverted {c['depthInverted']}, jitter {c['jitter']}, mvecScale {c['mvecScale']}")
         add(f"  cameraMotionIncluded {c['cameraMotionIncluded']}, motionVectors3D {c['motionVectors3D']}, "
             f"motionVectorsDilated {c['motionVectorsDilated']}, motionVectorsJittered {c['motionVectorsJittered']}, "
@@ -7814,8 +7861,8 @@ cd /d/Cyberpunk-Minecraft && git add spikes/block-render/tools \
 
 ### Task 23: The hooks
 
-From here on, the code runs inside the game, so it's built and checked for warnings here, and tested in Tasks 28
-and 29.
+From here on, the code runs inside the game, so it's built and checked for warnings here, and tested in Tasks 29
+and 30.
 
 - **`StreamlineHooks`** swaps the game exe's imports of `slGetNewFrameToken`, `slSetConstants`, `slSetTag` and
   `slEvaluateFeature` for hooks. Each hook checks and records what it's given, tells the listeners, and calls
@@ -7874,6 +7921,7 @@ class HookEvents
 public:
 	virtual ~HookEvents() = default;
 
+	// A frame starts: Streamline gave a token for a newer frame index than any before (see NewestFrame).
 	virtual void OnFrameToken(uint32_t /*aFrame*/) {}
 	virtual void OnConstants(uint32_t /*aFrame*/, uint32_t /*aViewport*/, const SlConstants& /*aConstants*/) {}
 	virtual void OnTags(uint32_t /*aFrame*/, uint32_t /*aViewport*/, const std::vector<SlTag>& /*aTags*/, void* /*aList*/) {}
@@ -7974,8 +8022,10 @@ EvaluateFeatureFn          g_evaluateFeature = nullptr;
 GetNativeInterfaceFn       g_getNativeInterface = nullptr;
 uintptr_t                  g_slBase = 0;
 uintptr_t                  g_slEnd = 0;
-std::atomic<uint64_t>      g_frameTokens{ 0 };
+std::atomic<uint64_t>      g_frameTokens{ 0 };  // frames started
+std::atomic<uint64_t>      g_tokenCalls{ 0 };   // every slGetNewFrameToken
 std::atomic<uint64_t>      g_evaluates{ 0 };
+NewestFrame                g_newestFrame;
 
 // What Streamline has been told, by viewport.
 struct Viewport
@@ -8006,10 +8056,14 @@ sl::Result GetNewFrameToken(sl::FrameToken*& aToken, const uint32_t* aFrameIndex
 	const sl::Result result = g_getNewFrameToken(aToken, aFrameIndex);
 	if (result == sl::Result::eOk && aToken)
 	{
+		++g_tokenCalls;
 		const uint32_t frame = FrameOf(*aToken);
-		d3d::SetCurrentFrame(frame);
-		++g_frameTokens;
-		Each([&](HookEvents& aListener) { aListener.OnFrameToken(frame); });
+		if (g_newestFrame.Note(frame))
+		{
+			d3d::SetCurrentFrame(frame);
+			++g_frameTokens;
+			Each([&](HookEvents& aListener) { aListener.OnFrameToken(frame); });
+		}
 	}
 	return result;
 }
@@ -8235,8 +8289,8 @@ ID3D12GraphicsCommandList* NativeList(void* aGameList)
 
 std::string Summary()
 {
-	return std::format("{} Streamline imports patched, {} frames, {} DLSS evaluates", g_patches.size(), g_frameTokens.load(),
-	                   g_evaluates.load());
+	return std::format("{} Streamline imports patched, {} frames ({} token calls), {} DLSS evaluates", g_patches.size(),
+	                   g_frameTokens.load(), g_tokenCalls.load(), g_evaluates.load());
 }
 }
 ```
@@ -8339,7 +8393,8 @@ ID3D12Device*      Device();
 bool               SeenAtCreation();
 void*              ListVtable();  // native command lists' vtable, once seen
 ID3D12CommandQueue* MainQueue();  // the queue the DLSS evaluate's list goes to, once seen; held for the session
-// The native queue a swap chain presents on, under any Streamline proxy; null if it can't be found.
+// The native queue a swap chain presents on, under any Streamline proxy, as noted when the swap chain was made; null if
+// it can't be found.
 ID3D12CommandQueue* PresentQueue(IDXGISwapChain* aSwapChain);
 void               NoteEvaluateList(ID3D12GraphicsCommandList* aList);
 uint32_t           CurrentFrame();
@@ -8378,6 +8433,7 @@ void RemovePatches();
 #include <atomic>
 #include <cstring>
 #include <format>
+#include <map>
 #include <mutex>
 
 namespace cpmc::d3d
@@ -8410,6 +8466,8 @@ std::atomic<void*>           g_listVtable{ nullptr };
 std::atomic<ID3D12CommandQueue*>        g_mainQueue{ nullptr };
 std::atomic<ID3D12GraphicsCommandList*> g_evaluateList{ nullptr };
 std::mutex                   g_patchMutex;  // device, factory and swap-chain patching
+std::mutex                   g_swapChainMutex;
+std::map<const void*, ID3D12CommandQueue*> g_swapChainQueues;  // the native queue each swap chain was made with
 
 D3D12CreateDeviceFn      g_createDevice = nullptr;
 D3D12GetDebugInterfaceFn g_getDebugInterface = nullptr;
@@ -8823,6 +8881,36 @@ void PatchEntry(void* aObject, size_t aSlot, void* aHook, Fn& aOriginal, const c
 	}
 }
 
+// The native queue under a swap chain's "device", which for D3D12 is the queue it presents on. Null for anything else,
+// such as a D3D11 device. No reference is kept: the pointer is only compared.
+ID3D12CommandQueue* NativeQueueOf(IUnknown* aDevice)
+{
+	ComPtr<ID3D12CommandQueue> queue;
+	if (!aDevice || FAILED(aDevice->QueryInterface(IID_PPV_ARGS(&queue))))
+	{
+		return nullptr;
+	}
+	if (void* native = slhooks::NativeInterface(queue.Get()))
+	{
+		static_cast<IUnknown*>(native)->Release();  // the proxy holds it
+		return static_cast<ID3D12CommandQueue*>(native);
+	}
+	return queue.Get();  // the swap chain holds it
+}
+
+// The game's swap chain doesn't say which queue it presents on (GetDevice fails), so each swap chain's queue is noted
+// when it's made.
+void NoteSwapChain(IDXGISwapChain* aSwapChain, IUnknown* aDevice, const char* aHow)
+{
+	ID3D12CommandQueue* const queue = NativeQueueOf(aDevice);
+	{
+		std::lock_guard lock(g_swapChainMutex);
+		g_swapChainQueues[aSwapChain] = queue;
+	}
+	Log(std::format("swap chain 0x{:x} created ({}), on queue 0x{:x}: Present patched", reinterpret_cast<uintptr_t>(aSwapChain), aHow,
+	                reinterpret_cast<uintptr_t>(queue)));
+}
+
 void PatchSwapChain(IDXGISwapChain* aSwapChain)
 {
 	std::lock_guard lock(g_patchMutex);
@@ -8840,7 +8928,7 @@ HRESULT STDMETHODCALLTYPE CreateSwapChain(IDXGIFactory* aFactory, IUnknown* aDev
 	if (SUCCEEDED(result) && aSwapChain && *aSwapChain)
 	{
 		PatchSwapChain(*aSwapChain);
-		Log("swap chain created (CreateSwapChain): Present patched");
+		NoteSwapChain(*aSwapChain, aDevice, "CreateSwapChain");
 	}
 	return result;
 }
@@ -8852,7 +8940,7 @@ HRESULT STDMETHODCALLTYPE CreateSwapChainForHwnd(IDXGIFactory2* aFactory, IUnkno
 	if (SUCCEEDED(result) && aSwapChain && *aSwapChain)
 	{
 		PatchSwapChain(*aSwapChain);
-		Log("swap chain created (CreateSwapChainForHwnd): Present patched");
+		NoteSwapChain(*aSwapChain, aDevice, "CreateSwapChainForHwnd");
 	}
 	return result;
 }
@@ -9158,17 +9246,20 @@ ID3D12CommandQueue* MainQueue()
 
 ID3D12CommandQueue* PresentQueue(IDXGISwapChain* aSwapChain)
 {
-	ComPtr<ID3D12CommandQueue> queue;
-	if (!aSwapChain || FAILED(aSwapChain->GetDevice(IID_PPV_ARGS(&queue))))
+	{
+		std::lock_guard lock(g_swapChainMutex);
+		if (const auto found = g_swapChainQueues.find(aSwapChain); found != g_swapChainQueues.end())
+		{
+			return found->second;
+		}
+	}
+	// A swap chain made before BlockRender loaded: ask it, though the game's may not say.
+	ComPtr<IUnknown> device;
+	if (!aSwapChain || FAILED(aSwapChain->GetDevice(IID_PPV_ARGS(&device))))
 	{
 		return nullptr;
 	}
-	if (void* native = slhooks::NativeInterface(queue.Get()))
-	{
-		static_cast<IUnknown*>(native)->Release();  // the proxy holds it
-		return static_cast<ID3D12CommandQueue*>(native);
-	}
-	return queue.Get();  // the swap chain holds it
+	return NativeQueueOf(device.Get());
 }
 
 void NoteEvaluateList(ID3D12GraphicsCommandList* aList)
@@ -12233,8 +12324,18 @@ local status = nil       -- status.txt's lines, except the structures
 local structures = {}    -- { name, min = { x, y, z }, max = { x, y, z } }, in world coordinates
 local player = nil       -- the lines about V
 local sinceRead = 1.0
+local fontScale = 0.8    -- the window's text, against CET's own size
 
 local atan2 = math.atan2 or function(y, x) return math.atan(y, x) end
+
+-- A status line as the window shows it: a long line splits at each "; ", with the later parts indented.
+local function displayLines(line)
+    local out = {}
+    for part in string.gmatch(line .. "; ", "(.-); ") do
+        table.insert(out, (#out == 0 and "" or "    ") .. part)
+    end
+    return out
+end
 
 local function readStatus()
     local file = io.open("status.txt", "r")
@@ -12307,11 +12408,16 @@ end)
 registerForEvent("onDraw", function()
     ImGui.SetNextWindowPos(30, 420, ImGuiCond.FirstUseEver)
     if ImGui.Begin("BlockRender", ImGuiWindowFlags.AlwaysAutoResize) then
+        if ImGui.SetWindowFontScale then
+            ImGui.SetWindowFontScale(fontScale)
+        end
         if status == nil then
             ImGui.Text("no status.txt yet: is BlockRender loaded?")
         else
             for _, line in ipairs(status) do
-                ImGui.Text(line)
+                for _, part in ipairs(displayLines(line)) do
+                    ImGui.Text(part)
+                end
             end
         end
         if player ~= nil then
@@ -12381,10 +12487,421 @@ cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
 
 ---
 
-### Task 28: In the game: loading, and step 1 (the frame log)
+### Task 28: Fixes from the first run in the game: frame tokens and the present queue
 
-This tests everything that talks to the game. The user plays, and the agent sends requests and reads what comes
-back. The agent reads:
+Task 29's Steps 1 to 4 first ran on 2026-10-01, before this task existed. The plugin loaded 13 seconds before the
+game made its device, so the hooks saw it, and GpuApi's device matched theirs, which confirms the SDK's offsets for
+2.31. But the main menu's frame log found two problems:
+- **Frame tokens.** The game asks Streamline for a frame token about 8 times a frame, from three threads, probably for
+  Reflex's markers. The main thread works a frame ahead: it asked for frame 8878 while the render and present threads
+  still asked for 8877. The plugin took every call as a new frame, so the log's "two frames" lasted 2 ms, and a dump
+  would have missed the DLSS evaluate.
+- **The present queue.** Asking the swap chain for its queue (`GetDevice`) fails, so the present event said
+  `on queue 0x0`, and step 2's renderer would skip every frame.
+
+The log also showed:
+- the projection is for row vectors, with +z forward, and reversed depth (near 0.02, far 16000);
+- the game gives `cameraFOV` in degrees (68.24), where Streamline documents radians;
+- DLSS doesn't run at the main menu.
+
+The fixes:
+- `NewestFrame` starts a frame only when a token comes for a newer frame index than any before, so the listeners hear
+  each frame once. The status counts frames and token calls apart.
+- The factory hooks note the queue each swap chain is made with, and `PresentQueue` looks it up.
+- `frame_summary.py` prints the field of view as given.
+- The overlay draws smaller, and splits long lines at "; ", because the user found it a little big.
+
+**Files:**
+- Modify: `src/sl/Sl.h`, `src/sl/Sl.cpp`, `tests/TestSl.cpp`
+- Modify: `src/hooks/HookEvents.h`, `src/hooks/StreamlineHooks.cpp`, `src/hooks/D3D12Hooks.h`, `src/hooks/D3D12Hooks.cpp`
+- Modify: `tools/frame_summary.py`, `tools/blockrender_hud/init.lua`
+
+- [ ] **Step 1: Edit `tests/TestSl.cpp` to add the failing test**
+
+```cpp
+	CHECK_STR(cpmc::BufferTypeName(sl::kBufferTypeColorAfterDepthOfField), "colorAfterDepthOfField");
+	CHECK_STR(cpmc::BufferTypeName(500), "type 500");
+}
+```
+```cpp
+	CHECK_STR(cpmc::BufferTypeName(sl::kBufferTypeColorAfterDepthOfField), "colorAfterDepthOfField");
+	CHECK_STR(cpmc::BufferTypeName(500), "type 500");
+}
+
+TEST(SlNewestFrameStartsEachFrameOnce)
+{
+	// As the game's main menu logged it: three threads ask for tokens, the main thread a frame ahead of the others.
+	cpmc::NewestFrame frames;
+	CHECK(frames.Note(8877));
+	CHECK(!frames.Note(8877));
+	CHECK(frames.Note(8878));
+	CHECK(!frames.Note(8877));
+	CHECK(!frames.Note(8878));
+	CHECK(frames.Note(8880));
+	// A far older index: the count started again.
+	CHECK(frames.Note(12));
+	CHECK(!frames.Note(12));
+	CHECK(!frames.Note(11));
+	CHECK(frames.Note(13));
+}
+```
+
+- [ ] **Step 2: Build; it must fail**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C" | sort -u | head -3
+```
+Expected: `'NewestFrame': is not a member of 'cpmc'`.
+
+- [ ] **Step 3: Edit `src/sl/Sl.h` to declare `NewestFrame`**
+
+```cpp
+#include <array>
+#include <cstdint>
+```
+```cpp
+#include <array>
+#include <atomic>
+#include <cstdint>
+```
+```cpp
+std::vector<SlTag> TagsForEvaluate(const std::vector<SlTag>& aGlobal, const std::vector<SlTag>& aLocal);
+}
+```
+```cpp
+std::vector<SlTag> TagsForEvaluate(const std::vector<SlTag>& aGlobal, const std::vector<SlTag>& aLocal);
+
+// When a frame starts. The game asks Streamline for a frame token several times a frame, from several threads, and
+// the main thread works a frame ahead of the render and present threads. So a frame starts when a token comes for a
+// newer frame index than any before. A far older index means the count started again, and starts a frame too.
+// Safe from any thread.
+class NewestFrame
+{
+public:
+	bool Note(uint32_t aFrame);  // true when aFrame starts a frame
+
+private:
+	static constexpr uint64_t kNone = ~0ull;
+	std::atomic<uint64_t>     newest_{ kNone };
+};
+}
+```
+
+- [ ] **Step 4: Edit `src/sl/Sl.cpp` to implement it**
+
+```cpp
+	tags.insert(tags.end(), aLocal.begin(), aLocal.end());
+	return tags;
+}
+}
+```
+```cpp
+	tags.insert(tags.end(), aLocal.begin(), aLocal.end());
+	return tags;
+}
+
+bool NewestFrame::Note(uint32_t aFrame)
+{
+	constexpr uint64_t kRestart = 1000;  // frames: far more than any thread works behind the main thread
+	uint64_t           newest = newest_.load();
+	while (newest == kNone || aFrame > newest || newest - aFrame > kRestart)
+	{
+		if (newest_.compare_exchange_weak(newest, aFrame))
+		{
+			return true;
+		}
+	}
+	return false;
+}
+}
+```
+
+- [ ] **Step 5: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `84 test(s), 0 failure(s)`.
+
+- [ ] **Step 6: Edit `src/hooks/HookEvents.h` to say when a frame starts**
+
+```cpp
+	virtual void OnFrameToken(uint32_t /*aFrame*/) {}
+```
+```cpp
+	// A frame starts: Streamline gave a token for a newer frame index than any before (see NewestFrame).
+	virtual void OnFrameToken(uint32_t /*aFrame*/) {}
+```
+
+- [ ] **Step 7: Edit `src/hooks/StreamlineHooks.cpp` to start each frame once**
+
+```cpp
+std::atomic<uint64_t>      g_frameTokens{ 0 };
+std::atomic<uint64_t>      g_evaluates{ 0 };
+```
+```cpp
+std::atomic<uint64_t>      g_frameTokens{ 0 };  // frames started
+std::atomic<uint64_t>      g_tokenCalls{ 0 };   // every slGetNewFrameToken
+std::atomic<uint64_t>      g_evaluates{ 0 };
+NewestFrame                g_newestFrame;
+```
+```cpp
+	const sl::Result result = g_getNewFrameToken(aToken, aFrameIndex);
+	if (result == sl::Result::eOk && aToken)
+	{
+		const uint32_t frame = FrameOf(*aToken);
+		d3d::SetCurrentFrame(frame);
+		++g_frameTokens;
+		Each([&](HookEvents& aListener) { aListener.OnFrameToken(frame); });
+	}
+	return result;
+```
+```cpp
+	const sl::Result result = g_getNewFrameToken(aToken, aFrameIndex);
+	if (result == sl::Result::eOk && aToken)
+	{
+		++g_tokenCalls;
+		const uint32_t frame = FrameOf(*aToken);
+		if (g_newestFrame.Note(frame))
+		{
+			d3d::SetCurrentFrame(frame);
+			++g_frameTokens;
+			Each([&](HookEvents& aListener) { aListener.OnFrameToken(frame); });
+		}
+	}
+	return result;
+```
+```cpp
+	return std::format("{} Streamline imports patched, {} frames, {} DLSS evaluates", g_patches.size(), g_frameTokens.load(),
+	                   g_evaluates.load());
+```
+```cpp
+	return std::format("{} Streamline imports patched, {} frames ({} token calls), {} DLSS evaluates", g_patches.size(),
+	                   g_frameTokens.load(), g_tokenCalls.load(), g_evaluates.load());
+```
+
+- [ ] **Step 8: Edit `src/hooks/D3D12Hooks.h` to say where the present queue comes from**
+
+```cpp
+// The native queue a swap chain presents on, under any Streamline proxy; null if it can't be found.
+```
+```cpp
+// The native queue a swap chain presents on, under any Streamline proxy, as noted when the swap chain was made; null if
+// it can't be found.
+```
+
+- [ ] **Step 9: Edit `src/hooks/D3D12Hooks.cpp` to note each swap chain's queue**
+
+```cpp
+#include <format>
+#include <mutex>
+```
+```cpp
+#include <format>
+#include <map>
+#include <mutex>
+```
+```cpp
+std::mutex                   g_patchMutex;  // device, factory and swap-chain patching
+```
+```cpp
+std::mutex                   g_patchMutex;  // device, factory and swap-chain patching
+std::mutex                   g_swapChainMutex;
+std::map<const void*, ID3D12CommandQueue*> g_swapChainQueues;  // the native queue each swap chain was made with
+```
+```cpp
+void PatchSwapChain(IDXGISwapChain* aSwapChain)
+{
+```
+```cpp
+// The native queue under a swap chain's "device", which for D3D12 is the queue it presents on. Null for anything else,
+// such as a D3D11 device. No reference is kept: the pointer is only compared.
+ID3D12CommandQueue* NativeQueueOf(IUnknown* aDevice)
+{
+	ComPtr<ID3D12CommandQueue> queue;
+	if (!aDevice || FAILED(aDevice->QueryInterface(IID_PPV_ARGS(&queue))))
+	{
+		return nullptr;
+	}
+	if (void* native = slhooks::NativeInterface(queue.Get()))
+	{
+		static_cast<IUnknown*>(native)->Release();  // the proxy holds it
+		return static_cast<ID3D12CommandQueue*>(native);
+	}
+	return queue.Get();  // the swap chain holds it
+}
+
+// The game's swap chain doesn't say which queue it presents on (GetDevice fails), so each swap chain's queue is noted
+// when it's made.
+void NoteSwapChain(IDXGISwapChain* aSwapChain, IUnknown* aDevice, const char* aHow)
+{
+	ID3D12CommandQueue* const queue = NativeQueueOf(aDevice);
+	{
+		std::lock_guard lock(g_swapChainMutex);
+		g_swapChainQueues[aSwapChain] = queue;
+	}
+	Log(std::format("swap chain 0x{:x} created ({}), on queue 0x{:x}: Present patched", reinterpret_cast<uintptr_t>(aSwapChain), aHow,
+	                reinterpret_cast<uintptr_t>(queue)));
+}
+
+void PatchSwapChain(IDXGISwapChain* aSwapChain)
+{
+```
+```cpp
+		PatchSwapChain(*aSwapChain);
+		Log("swap chain created (CreateSwapChain): Present patched");
+```
+```cpp
+		PatchSwapChain(*aSwapChain);
+		NoteSwapChain(*aSwapChain, aDevice, "CreateSwapChain");
+```
+```cpp
+		PatchSwapChain(*aSwapChain);
+		Log("swap chain created (CreateSwapChainForHwnd): Present patched");
+```
+```cpp
+		PatchSwapChain(*aSwapChain);
+		NoteSwapChain(*aSwapChain, aDevice, "CreateSwapChainForHwnd");
+```
+```cpp
+ID3D12CommandQueue* PresentQueue(IDXGISwapChain* aSwapChain)
+{
+	ComPtr<ID3D12CommandQueue> queue;
+	if (!aSwapChain || FAILED(aSwapChain->GetDevice(IID_PPV_ARGS(&queue))))
+	{
+		return nullptr;
+	}
+	if (void* native = slhooks::NativeInterface(queue.Get()))
+	{
+		static_cast<IUnknown*>(native)->Release();  // the proxy holds it
+		return static_cast<ID3D12CommandQueue*>(native);
+	}
+	return queue.Get();  // the swap chain holds it
+}
+```
+```cpp
+ID3D12CommandQueue* PresentQueue(IDXGISwapChain* aSwapChain)
+{
+	{
+		std::lock_guard lock(g_swapChainMutex);
+		if (const auto found = g_swapChainQueues.find(aSwapChain); found != g_swapChainQueues.end())
+		{
+			return found->second;
+		}
+	}
+	// A swap chain made before BlockRender loaded: ask it, though the game's may not say.
+	ComPtr<IUnknown> device;
+	if (!aSwapChain || FAILED(aSwapChain->GetDevice(IID_PPV_ARGS(&device))))
+	{
+		return nullptr;
+	}
+	return NativeQueueOf(device.Get());
+}
+```
+
+- [ ] **Step 10: Build; it must compile without warnings, and the tests still pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C|error LNK" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `84 test(s), 0 failure(s)`.
+
+- [ ] **Step 11: Edit `tools/frame_summary.py` to print the field of view as given**
+
+```python
+        add(f"  near {c['near']}, far {c['far']}, fov {c['fovDegrees']:.3f} deg, aspect {c['aspect']:.4f}, "
+```
+```python
+        # Streamline documents cameraFOV in radians, but the game gives degrees (68.24 at the main menu): print it as is.
+        add(f"  near {c['near']}, far {c['far']}, fov {c['fov']} as given, aspect {c['aspect']:.4f}, "
+```
+
+- [ ] **Step 12: Edit `tools/blockrender_hud/init.lua` to draw smaller, and split long lines**
+
+```lua
+local sinceRead = 1.0
+
+local atan2 = math.atan2 or function(y, x) return math.atan(y, x) end
+```
+```lua
+local sinceRead = 1.0
+local fontScale = 0.8    -- the window's text, against CET's own size
+
+local atan2 = math.atan2 or function(y, x) return math.atan(y, x) end
+
+-- A status line as the window shows it: a long line splits at each "; ", with the later parts indented.
+local function displayLines(line)
+    local out = {}
+    for part in string.gmatch(line .. "; ", "(.-); ") do
+        table.insert(out, (#out == 0 and "" or "    ") .. part)
+    end
+    return out
+end
+```
+```lua
+    if ImGui.Begin("BlockRender", ImGuiWindowFlags.AlwaysAutoResize) then
+        if status == nil then
+            ImGui.Text("no status.txt yet: is BlockRender loaded?")
+        else
+            for _, line in ipairs(status) do
+                ImGui.Text(line)
+            end
+        end
+```
+```lua
+    if ImGui.Begin("BlockRender", ImGuiWindowFlags.AlwaysAutoResize) then
+        if ImGui.SetWindowFontScale then
+            ImGui.SetWindowFontScale(fontScale)
+        end
+        if status == nil then
+            ImGui.Text("no status.txt yet: is BlockRender loaded?")
+        else
+            for _, line in ipairs(status) do
+                for _, part in ipairs(displayLines(line)) do
+                    ImGui.Text(part)
+                end
+            end
+        end
+```
+
+- [ ] **Step 13: Run all the tools' tests; they must pass**
+
+```bash
+cd /d/Cyberpunk-Minecraft/spikes/block-render/tools && uv run --no-project -q --with numpy --with pillow --with pytest pytest -q 2>&1 | tail -1
+```
+Expected: `20 passed`.
+
+- [ ] **Step 14: Check the overlay's Lua**
+
+```bash
+luac -p /d/Cyberpunk-Minecraft/spikes/block-render/tools/blockrender_hud/init.lua && echo "syntax ok"
+```
+Expected: `syntax ok`. (`luac` is Lua 5.4's; CET runs LuaJIT, and the overlay uses nothing that differs between them.)
+
+- [ ] **Step 15: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "block-render: start each frame once, and note each swap chain's queue (from the first game run)" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 29: In the game: loading, and step 1 (the frame log)
+
+This tests everything that talks to the game. Steps 1 to 4 first ran before Task 28, which fixed what they found:
+after Task 28, run every step again, from Step 1.
+
+The user plays, and the agent sends requests and reads what comes back. The agent reads:
 - BlockRender's log, in `E:\Cyberpunk2077\red4ext\logs\blockrender-<time>.log`;
 - `status.txt`;
 - the frame logs and the dumps.
@@ -12456,13 +12973,15 @@ Expected in the log:
   - seen at creation: `device 0x... created on NVIDIA GeForce RTX 3070`, then `device 0x... patched: N vtable entries`;
   - or made before BlockRender loaded (risk 1): `the device was made before BlockRender loaded: patched it through
     GpuApi (...)`;
-- the swap chain: `swap chain created (CreateSwapChainForHwnd): Present patched`, or its GpuApi line;
+- the swap chain: `swap chain 0x... created (CreateSwapChainForHwnd), on queue 0x...: Present patched`, where the
+  queue is the one the `main queue` line names; or its GpuApi line;
 - once DLSS has run: `main queue 0x..., on device 0x..., the one the detour saw`.
 
 In the status:
 - `mode=off`;
-- `streamline=N frames in the last second`, where N above 0 means DLSS runs at the menu;
-- `hooks=...`, saying `present patched` and `main queue known` once DLSS has run.
+- `streamline=N frames in the last second`, about the frame rate;
+- `hooks=...`, saying `present patched` and `main queue known` once DLSS has run. Its `DLSS evaluates` count grows
+  only while DLSS runs, which on the first run it didn't at the menu.
 
 Ask the user two things:
 - whether the BlockRender window shows in CET's overlay, and the PhysX probe's still shows;
@@ -12473,13 +12992,11 @@ Ask the user two things:
 
 - [ ] **Step 4: A frame log at the main menu**
 
-If the status showed Streamline frames at the menu, send `log`, wait 3 seconds, and read the log's newest lines.
-Expected: `request: log: armed for the next two frames`, then
-`request: log: written to logs\<time>\frame.json (...)`. Then run the summary. Note:
+Send `log`, wait 3 seconds, and read the log's newest lines. Expected: `request: log: armed for the next two frames`,
+then `request: log: written to logs\<time>\frame.json (...)`. Then run the summary. Note:
 - the device section, especially `matches the detour's`;
-- how many lists the menu's frame has.
-
-If there were no Streamline frames, note that DLSS doesn't run at the menu, and go on.
+- each `present` event's queue, which should end with `(the main queue)`;
+- which threads start frames, and how many lists the menu's frames have.
 
 - [ ] **Step 5: A frame log in free roam, standing still**
 
@@ -12599,14 +13116,14 @@ cd /d/Cyberpunk-Minecraft && git add docs/spikes \
 
 ---
 
-### Task 29: In the game: step 2 (a cube on the finished frame)
+### Task 30: In the game: step 2 (a cube on the finished frame)
 
-The same game session can carry straight on from Task 28.
+The same game session can carry straight on from Task 29.
 
 **If a gate failed,** stop before this task. The renderer would skip every frame, then switch itself off and say
 why. Instead, plan the fix with the user as an amendment to this plan, and come back here afterwards.
 
-The commands are Task 28's.
+The commands are Task 29's.
 
 **Files:**
 - Modify: `docs/spikes/2026-10-01-block-render-results.md`
@@ -12700,15 +13217,15 @@ cd /d/Cyberpunk-Minecraft && git add docs/spikes \
 
 ---
 
-### Task 30: Close Part 1, and plan Part 2
+### Task 31: Close Part 1, and plan Part 2
 
 **Files:**
 - Modify: `docs/superpowers/plans/2026-10-01-block-render.md` (this plan)
 
 - [ ] **Step 1: Add "How Part 1 went" to this plan**
 
-Add a section after Task 30, as spike 1's plan did after its in-game task. Cover:
-- what Tasks 28 and 29 found;
+Add a section after Task 31, as spike 1's plan did after its in-game task. Cover:
+- what Tasks 29 and 30 found, and Task 28's fixes;
 - any amendments made along the way;
 - what step 1's findings decide for steps 3 and 4:
   - where blocks can be drawn before DLSS;
@@ -12726,5 +13243,5 @@ cd /d/Cyberpunk-Minecraft && git add docs/superpowers/plans \
 
 - [ ] **Step 3: Plan Part 2**
 
-Use superpowers:writing-plans to write Part 2's tasks (spec steps 3 and 4) from what step 1 found, as Tasks 31 on in
+Use superpowers:writing-plans to write Part 2's tasks (spec steps 3 and 4) from what step 1 found, as Tasks 32 on in
 this plan. As in Part 1, compile and test their code in a scratch clone first, and replay the tasks before committing.

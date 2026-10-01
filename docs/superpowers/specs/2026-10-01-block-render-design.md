@@ -281,7 +281,9 @@ spikes/block-render/
   `slGetNewFrameToken`, `slSetConstants`, `slSetTag` and `slEvaluateFeature`, with one atomic pointer write each, and
   keeps the originals.
 - **`StreamlineHooks`:** each hook records what it's given, then calls the original and returns its result unchanged.
-  - `slGetNewFrameToken`: notes the index of the frame the game is starting.
+  - `slGetNewFrameToken`: notes when a frame starts. The game asks for tokens several times a frame, from several
+    threads, and the main thread works a frame ahead. So a frame starts when a token comes for a newer frame index
+    than any before.
   - `slSetConstants`: checks the struct's type GUID and version, then keeps each viewport's constants in a small
     ring, by frame index. The viewport that DLSS evaluates is the one used.
   - `slSetTag`: checks each tag, then records its type, resource, state, extent and lifecycle for the frame. It reads
@@ -329,6 +331,8 @@ spikes/block-render/
     - If the swap chain already exists when the plugin loads, it comes from `GetDeviceData()` instead, once its vtable
       is seen to lie in `dxgi.dll` or `sl.interposer.dll`. Under a Streamline proxy, the native swap chain is the one
       patched.
+    - Each swap chain's queue is noted as the swap chain is made, because the swap chain doesn't say: `GetDevice`
+      fails for its queue.
   - **Why vtable patches:** everything after load is patched in vtables, because swapping one pointer is safe while
     the game's render threads are running. Rewriting the start of a heavily called function isn't.
 - **`VtablePatch`:** makes a vtable entry writable, swaps it atomically, restores the protection and keeps the
@@ -826,3 +830,14 @@ Writing and verifying the plan's code corrected these details. The sections abov
   - the `house` and `field` structures;
   - the tracker's `Restore`, and the state hooks it needs;
   - the `exposure`, `jittersign` and `mvsign` settings.
+
+## Changes from the first run in the game
+
+The first run (2026-10-01, at the main menu) changed two details, which the sections above include. The plan's
+Task 28 made both changes:
+- **When a frame starts:** the game asks for frame tokens about 8 times a frame, from three threads. A frame now starts
+  only with a newer frame index.
+- **The present queue:** the swap chain doesn't say which queue it presents on, so the hooks note it when the swap
+  chain is made.
+
+What else the run found goes in the results, `docs/spikes/2026-10-01-block-render-results.md`.
