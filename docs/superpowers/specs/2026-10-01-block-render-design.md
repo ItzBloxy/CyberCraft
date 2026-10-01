@@ -355,11 +355,12 @@ spikes/block-render/
 
 - **Which lists:** it follows each command list from `Reset` to `Close`. A list whose `Reset` came before tracking
   started is marked untracked, and nothing is ever drawn into it.
-- **When:** every list is tracked only while a log or a dump needs it, or `set tracking 1` holds it. Step 3's drawing
-  watches just the DLSS evaluate's lists, which are tracked from their `Reset` while the rest aren't.
-- **What it costs while off:** the hooks count the tracked lists that are recording. While none is, a hooked call
-  costs one atomic read, not a lookup. Run 4 measured the plugin doubling the frame time with drawing off, and the
-  lookup under the tracker's lock on every call was the likeliest cause.
+- **When:** every list is tracked while a log, a dump or step 3's drawing needs it, or while `set tracking 1` holds
+  it, and none otherwise. A list is tracked whole: from a `Reset` while tracking is on, to its `Close`. Tracking
+  only the DLSS evaluate's lists missed some, because the game rotates through more of them than a few (run 6).
+- **What it costs:** while it's off, the hooks count the tracked lists that are recording. While none is, a hooked
+  call costs one atomic read, not a lookup under the tracker's lock. Tracking every list costs about 0.1 ms a frame
+  (run 6).
 - **What it keeps:**
   - the bound render targets and depth, with their resources;
   - each resource's state after the last barrier recorded in the list. A resource in the middle of a split barrier
@@ -851,7 +852,7 @@ Writing and verifying the plan's code corrected these details. The sections abov
 
 ## Changes from the runs in the game
 
-The runs on 2026-10-01 changed these details, which the sections above include.
+The runs on 2026-10-01, and just after midnight, changed these details, which the sections above include.
 
 The first run, at the main menu, led to the plan's Task 28:
 - **When a frame starts:** the game asks for frame tokens about 8 times a frame, from three threads. A frame now starts
@@ -872,7 +873,7 @@ The fourth run, step 3, led to Tasks 45 and 46:
 - **What the hooks cost:** with drawing off, the plugin doubled the frame time (26.5 ms against 13.6 ms without it).
   `set hooks.<group> 0` makes a group of hooks pass straight through, to measure each.
 - **Tracking while it's off** costs one atomic read per hooked call, not a lookup.
-- **Step 3's drawing tracks only the DLSS lists,** not every list.
+- **Step 3's drawing tracks only the DLSS lists,** not every list. Task 50 undid this after the sixth run.
 - **The exposure** starts at 2.5, the value the run settled on.
 
 The fifth run found the hooks' cost, and led to Task 48:
@@ -881,6 +882,11 @@ The fifth run found the hooks' cost, and led to Task 48:
   12 ms a frame.
 - **The fix:** `Readable` now answers pages in the working set with `QueryWorkingSetEx`, which costs the same for any
   page, and asks `VirtualQuery` only about the rest.
+
+The sixth run measured the fix: 13.5 ms idle, against 13.6 ms without BlockRender. It led to Task 50:
+- **Step 3's drawing tracks every list again.** The game rotates through more DLSS lists than the four watched, so a
+  list that dropped out was recorded untracked, and its frame was skipped: a flicker when turning fast. Tracking every
+  list costs about 0.1 ms a frame. The seventh run skipped no frame in three minutes of fast turns.
 
 What else the runs found goes in the results, `docs/spikes/2026-10-01-block-render-results.md`.
 
