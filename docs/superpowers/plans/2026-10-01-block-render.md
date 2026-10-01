@@ -185,50 +185,50 @@ Spike 1's test harness, `Coords.h` and JSON writer come over unchanged.
 - Copy from `spikes/physx-probe/`: `CMakePresets.json`, `tests/Harness.h`, `tests/TestMain.cpp`, `tests/TestCoords.cpp`,
   `tests/TestJson.cpp`, `src/Json.h`, `src/Json.cpp`, `src/Coords.h`
 
-- [ ] **Step 1: Copy `../physx-probe/CMakePresets.json` to `CMakePresets.json`**
+- [x] **Step 1: Copy `../physx-probe/CMakePresets.json` to `CMakePresets.json`**
 
 ```bash
 mkdir -p /d/Cyberpunk-Minecraft/spikes/block-render/src /d/Cyberpunk-Minecraft/spikes/block-render/tests \
   && cp /d/Cyberpunk-Minecraft/spikes/physx-probe/CMakePresets.json /d/Cyberpunk-Minecraft/spikes/block-render/
 ```
 
-- [ ] **Step 2: Copy `../physx-probe/tests/Harness.h` to `tests/Harness.h`**
+- [x] **Step 2: Copy `../physx-probe/tests/Harness.h` to `tests/Harness.h`**
 
 ```bash
 cp /d/Cyberpunk-Minecraft/spikes/physx-probe/tests/Harness.h /d/Cyberpunk-Minecraft/spikes/block-render/tests/
 ```
 
-- [ ] **Step 3: Copy `../physx-probe/tests/TestMain.cpp` to `tests/TestMain.cpp`**
+- [x] **Step 3: Copy `../physx-probe/tests/TestMain.cpp` to `tests/TestMain.cpp`**
 
 ```bash
 cp /d/Cyberpunk-Minecraft/spikes/physx-probe/tests/TestMain.cpp /d/Cyberpunk-Minecraft/spikes/block-render/tests/
 ```
 
-- [ ] **Step 4: Copy `../physx-probe/tests/TestCoords.cpp` to `tests/TestCoords.cpp`**
+- [x] **Step 4: Copy `../physx-probe/tests/TestCoords.cpp` to `tests/TestCoords.cpp`**
 
 ```bash
 cp /d/Cyberpunk-Minecraft/spikes/physx-probe/tests/TestCoords.cpp /d/Cyberpunk-Minecraft/spikes/block-render/tests/
 ```
 
-- [ ] **Step 5: Copy `../physx-probe/tests/TestJson.cpp` to `tests/TestJson.cpp`**
+- [x] **Step 5: Copy `../physx-probe/tests/TestJson.cpp` to `tests/TestJson.cpp`**
 
 ```bash
 cp /d/Cyberpunk-Minecraft/spikes/physx-probe/tests/TestJson.cpp /d/Cyberpunk-Minecraft/spikes/block-render/tests/
 ```
 
-- [ ] **Step 6: Copy `../physx-probe/src/Json.h` to `src/Json.h`**
+- [x] **Step 6: Copy `../physx-probe/src/Json.h` to `src/Json.h`**
 
 ```bash
 cp /d/Cyberpunk-Minecraft/spikes/physx-probe/src/Json.h /d/Cyberpunk-Minecraft/spikes/block-render/src/
 ```
 
-- [ ] **Step 7: Copy `../physx-probe/src/Json.cpp` to `src/Json.cpp`**
+- [x] **Step 7: Copy `../physx-probe/src/Json.cpp` to `src/Json.cpp`**
 
 ```bash
 cp /d/Cyberpunk-Minecraft/spikes/physx-probe/src/Json.cpp /d/Cyberpunk-Minecraft/spikes/block-render/src/
 ```
 
-- [ ] **Step 8: Write `CMakeLists.txt`**
+- [x] **Step 8: Write `CMakeLists.txt`**
 
 ```cmake
 cmake_minimum_required(VERSION 3.25)
@@ -269,7 +269,7 @@ target_link_libraries(render_tests PRIVATE render_core)
 add_test(NAME render_tests COMMAND render_tests WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
 ```
 
-- [ ] **Step 9: Configure and build; it must fail**
+- [x] **Step 9: Configure and build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -278,13 +278,13 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `fatal error C1083: Cannot open include file: 'Coords.h'`.
 
-- [ ] **Step 10: Copy `../physx-probe/src/Coords.h` to `src/Coords.h`**
+- [x] **Step 10: Copy `../physx-probe/src/Coords.h` to `src/Coords.h`**
 
 ```bash
 cp /d/Cyberpunk-Minecraft/spikes/physx-probe/src/Coords.h /d/Cyberpunk-Minecraft/spikes/block-render/src/
 ```
 
-- [ ] **Step 11: Build and run the tests; they must pass**
+- [x] **Step 11: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -294,7 +294,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `7 test(s), 0 failure(s)`.
 
-- [ ] **Step 12: Commit**
+- [x] **Step 12: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
