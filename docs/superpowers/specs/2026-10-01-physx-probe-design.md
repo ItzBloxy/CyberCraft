@@ -237,8 +237,14 @@ All scene reads during a dump happen between `lockRead` and `unlockRead` on that
   | `Gu::HeightField` | `PhysX3Common_x64.dll` | 0x1b6b18 | `eHEIGHTFIELD` |
 
 - `ModuleIdentity(module)` reads the timestamp and image size from a loaded module's PE header.
-- `AuditedClass(vtablePointer, moduleBases)` returns the audited class a vtable pointer belongs to, or nothing. It
+- `AuditedClassOf(vtablePointer, moduleBases)` returns the audited class a vtable pointer belongs to, or nothing. It
   only compares numbers, so it's unit-tested without the game.
+- `CheckObject(memory, bases, object, bytes)` checks an object before the probe uses it, and returns a verdict and
+  the class:
+  - **Readable:** the bytes the caller reads from it are readable (at least 16).
+  - **Audited:** its vtable is an audited table.
+  - **Typed:** for `PxBase` objects, its type ID agrees with that table's class.
+  - **The verdicts:** ok, unreadable, unaudited, or wrong type.
 - Each place in the probe that receives an object says which classes it accepts:
   - **the physics object:** `NpPhysics`;
   - **a scene:** `NpScene`;
@@ -250,9 +256,9 @@ All scene reads during a dump happen between `lockRead` and `unlockRead` on that
 
 ### `physx/Readable` (reusable)
 
-- `Readable(address, size)` is true when every byte of the range is committed memory whose protection allows
-  reading and that isn't a guard page. It asks `VirtualQuery` region by region, so a range may span regions. A null
-  or wrapping range is never readable.
+- `ReadableMemory::Range(address, size)` is true when every byte of the range is committed memory whose protection
+  allows reading and that isn't a guard page. It asks `VirtualQuery` region by region, so a range may span regions. A
+  null or wrapping range is never readable.
 - The regions it has seen are cached for one dump. That keeps checking hundreds of thousands of objects cheap, and
   the cache is cleared at the start of every dump.
 
@@ -511,7 +517,7 @@ and reported, and the in-game pass criteria require both counts to be zero.
   - **What it catches:** a header change, or a revert of the local `PxShape.h` fix, fails it.
 - `GameAbi`:
   - the timestamp and image size read from a hand-built PE header;
-  - `AuditedClass` for every audited table, for an address one slot off, and for a module loaded at a different base;
+  - `AuditedClassOf` for every audited table, for an address one slot off, and for a module loaded at a different base;
 - `Readable`, on real memory:
   - a readable buffer;
   - a `PAGE_NOACCESS` page and a reserved but uncommitted page;

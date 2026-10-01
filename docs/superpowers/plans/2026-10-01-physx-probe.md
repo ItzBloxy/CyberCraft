@@ -3,15 +3,19 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build PhysXProbe, a read-only RED4ext plugin that checks whether Cyberpunk 2077's PhysX 3.4.2 can be read
-through NVIDIA's public headers and dumps the collision around V (an OBJ plus a JSON report). Then verify it in the
-running game.
+through NVIDIA's headers, corrected where the game's build differs, and dumps the collision around V (an OBJ plus a
+JSON report). Then verify it in the running game.
+
+**Status:** Tasks 1 to 14 built revision 1 of the spec. Task 15's first in-game runs led to the spec's revision 2,
+which Tasks 16 to 22 build and verify (see "Revision 2" below).
 
 **Architecture:** A C++20 RED4ext plugin, built with the header-only RED4ext SDK and NVIDIA's PhysX 3.4.2 headers,
 and linked against no PhysX libraries.
 - Everything that doesn't need the game lives in a static library, `probe_core`, with unit tests.
 - The plugin adds the RED4ext glue: entry points, triggers and finding V.
-- PhysX is reached through the exported `PxGetPhysics` and called only through virtual tables, with every call under
-  a crash guard.
+- PhysX is reached through the exported `PxGetPhysics` and called only through the vtable slots the audit verified,
+  on objects whose vtables are audited tables of the audited DLL build. Memory is checked before it is read, and
+  nothing is caught: revision 1's crash guard is gone.
 - A Python tool renders dumps to images for checking.
 
 **Tech stack:** C++20, MSVC 14.44 (Visual Studio 2022), CMake 3.31 (bundled with Visual Studio), RED4ext.SDK
@@ -38,9 +42,11 @@ and linked against no PhysX libraries.
   - the plugin DLL exporting exactly `Main`, `Query` and `Supports`, with no PhysX imports.
 
   So a failure while following the plan most likely means a transcription slip; compare against the plan's code first.
-- Code that talks to the live game (`PhysxSession`, `Probe`, `PlayerLocator`, `Plugin`) can't be unit-tested. The
-  crash guard it relies on is unit-tested, and Task 15's in-game run tests the rest.
-- The test count grows with each task: 3, 7, 11, 15, 21, 28, 31, 33, 36, then 39.
+- Code that talks to the live game (`PhysxSession`, `Probe`, `PlayerLocator`, `Plugin`) can't be unit-tested. What it
+  relies on that can be tested offline is: the vtable slots, the struct layouts, the memory checks and the audited
+  build (Tasks 16 to 18). Task 22's in-game run tests the rest.
+- The test count grows with each task: 3, 7, 11, 15, 21, 28, 31, 33, 36, then 39; 42 after the version fix in
+  `e3cbc0b`. Revision 2's counts are in its section.
 
 ## File map
 
@@ -48,22 +54,25 @@ and linked against no PhysX libraries.
 |---|---|
 | `.gitignore`, `.gitattributes`, `README.md` | Repo basics |
 | `extern/RED4ext.SDK/` | Git submodule, pinned at `ad7277714ad30d6885d7050c5ba24fa0102f6920`, used header-only |
-| `extern/physx-3.4.2/` | NVIDIA PhysX 3.4.2 public headers (vendored, BSD-3) |
+| `extern/physx-3.4.2/` | NVIDIA PhysX 3.4.2 public headers (vendored, BSD-3), with one local change in `PxShape.h` to match the game |
+| `docs/spikes/2026-10-01-physx-abi-audit.md` | The audit of the game's PhysX DLLs that revision 2 relies on |
 | `spikes/physx-probe/CMakeLists.txt`, `CMakePresets.json` | The build: `probe_core`, the `PhysXProbe` plugin, `probe_tests` |
 | `src/Coords.h` | World (Z up) to Minecraft (Y up) axes; `Vec3d`, `Vec3f` |
 | `src/Report.h` | Plain data for `report.json` |
 | `src/Json.h`, `.cpp` | The small JSON writer |
 | `src/physx/PxHeaders.h` | The PhysX headers the probe uses |
 | `src/physx/ShapeTriangles.h`, `.cpp` | PhysX shapes as world triangles (pure geometry plus `AppendTriangles` for live shapes) |
-| `src/physx/Checks.h`, `.cpp` | Pure parts of the compatibility check: type names, ranges, categories, tallies |
+| `src/physx/Checks.h`, `.cpp` | Pure parts of the compatibility check: ranges, geometry against mesh, categories, tallies |
+| `src/physx/Readable.h`, `.cpp` | Readable-memory checks, with a region cache for one dump |
+| `src/physx/GameAbi.h`, `.cpp` | The audited PhysX build: DLL identities, vtable addresses, `CheckObject` |
 | `src/ObjWriter.h`, `.cpp` | `collision.obj` and `.mtl` text |
 | `src/ReportJson.h`, `.cpp` | `report.json` text |
 | `src/DumpWriter.h`, `.cpp` | Writes a dump's files on a background thread |
-| `src/physx/PhysxSession.h`, `.cpp` | The only code that calls the game's PhysX: crash guard, compatibility check, census, region, ray |
+| `src/physx/PhysxSession.h`, `.cpp` | The only code that calls the game's PhysX: compatibility check, census, region, ray, every object checked first |
 | `src/Probe.h`, `.cpp` | One dump, start to finish |
 | `src/PlayerLocator.h`, `.cpp` | V's and the camera's pose, through the game's script functions (RED4ext) |
 | `src/Plugin.cpp` | RED4ext entry points, triggers, hand-off to the writer |
-| `tests/*` | The harness (`Harness.h`, `TestMain.cpp`) and one test file per unit |
+| `tests/*` | The harness (`Harness.h`, `TestMain.cpp`) and one test file per unit; `TestAudit.cpp` checks vtable slots and struct layouts against the audit |
 | `tools/render_dump.py`, `tools/test_render_dump.py` | Renders a dump to `top.png` and `eye.png`, plus its tests |
 
 All paths under `src/`, `tests/` and `tools/` are relative to `spikes/physx-probe/`.
@@ -76,14 +85,14 @@ All paths under `src/`, `tests/` and `tools/` are relative to `spikes/physx-prob
 - Create: `.gitignore`, `.gitattributes`, `README.md`
 - Create: `extern/RED4ext.SDK` (submodule), `extern/physx-3.4.2/` (headers, `LICENSE.md`, `README.md`)
 
-- [ ] **Step 1: Create the branch**
+- [x] **Step 1: Create the branch**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git switch -c spike/physx-probe && git branch --show-current
 ```
 Expected: `spike/physx-probe`
 
-- [ ] **Step 2: Write `.gitignore`**
+- [x] **Step 2: Write `.gitignore`**
 
 ```gitignore
 # CMake build folders
@@ -97,13 +106,13 @@ __pycache__/
 spikes/physx-probe/smoke/
 ```
 
-- [ ] **Step 3: Write `.gitattributes`**
+- [x] **Step 3: Write `.gitattributes`**
 
 ```gitattributes
 * text=auto
 ```
 
-- [ ] **Step 4: Write `README.md`**
+- [x] **Step 4: Write `README.md`**
 
 ```markdown
 # Cyberpunk-Minecraft
@@ -124,7 +133,7 @@ Nothing is playable yet. The work so far is a set of spikes that de-risk the har
 To clone with the submodule, use `git clone --recursive`, or run `git submodule update --init` after cloning.
 ```
 
-- [ ] **Step 5: Add the RED4ext SDK as a submodule, pinned**
+- [x] **Step 5: Add the RED4ext SDK as a submodule, pinned**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git submodule add https://github.com/WopsS/RED4ext.SDK.git extern/RED4ext.SDK \
@@ -133,7 +142,7 @@ cd /d/Cyberpunk-Minecraft && git submodule add https://github.com/WopsS/RED4ext.
 ```
 Expected: `ad7277714ad30d6885d7050c5ba24fa0102f6920`
 
-- [ ] **Step 6: Vendor the PhysX 3.4.2 headers**
+- [x] **Step 6: Vendor the PhysX 3.4.2 headers**
 
 `SCRATCH` is a scratch folder outside the repo; the command falls back to a fresh temp folder.
 ```bash
@@ -151,7 +160,7 @@ cd /d/Cyberpunk-Minecraft && SCRATCH="${SCRATCH:-$(mktemp -d)}" \
 Expected: the commit `5e42a5f112351a223c19c17bb331e6c55037b8eb`, then `1` (the header says 3.4.2), then `207` (206
 headers plus `LICENSE.md`).
 
-- [ ] **Step 7: Write `extern/physx-3.4.2/README.md`**
+- [x] **Step 7: Write `extern/physx-3.4.2/README.md`**
 
 ```markdown
 # NVIDIA PhysX 3.4.2 public headers
@@ -162,7 +171,7 @@ and `PxShared/include` only. They match the `PhysX3_x64.dll` (file version 3.4.2
 ships. The licence is BSD-3-Clause: see `LICENSE.md`, and the notice in each header.
 ```
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add .gitignore .gitattributes README.md .gitmodules extern \
@@ -179,7 +188,7 @@ cd /d/Cyberpunk-Minecraft && git add .gitignore .gitattributes README.md .gitmod
 - Create: `tests/Harness.h`, `tests/TestMain.cpp`, `tests/TestCoords.cpp`
 - Create: `src/Coords.h`
 
-- [ ] **Step 1: Write `spikes/physx-probe/CMakeLists.txt`**
+- [x] **Step 1: Write `spikes/physx-probe/CMakeLists.txt`**
 
 ```cmake
 cmake_minimum_required(VERSION 3.25)
@@ -211,7 +220,7 @@ target_link_libraries(probe_tests PRIVATE probe_settings)
 add_test(NAME probe_tests COMMAND probe_tests)
 ```
 
-- [ ] **Step 2: Write `spikes/physx-probe/CMakePresets.json`**
+- [x] **Step 2: Write `spikes/physx-probe/CMakePresets.json`**
 
 ```json
 {
@@ -243,7 +252,7 @@ add_test(NAME probe_tests COMMAND probe_tests)
 }
 ```
 
-- [ ] **Step 3: Write the test harness, `tests/Harness.h`**
+- [x] **Step 3: Write the test harness, `tests/Harness.h`**
 
 ```cpp
 #pragma once
@@ -338,7 +347,7 @@ inline void Fail(const char* aFile, int aLine, const std::string& aWhat)
 	} while (0)
 ```
 
-- [ ] **Step 4: Write `tests/TestMain.cpp`**
+- [x] **Step 4: Write `tests/TestMain.cpp`**
 
 ```cpp
 #include "Harness.h"
@@ -356,7 +365,7 @@ int main()
 }
 ```
 
-- [ ] **Step 5: Write the failing test, `tests/TestCoords.cpp`**
+- [x] **Step 5: Write the failing test, `tests/TestCoords.cpp`**
 
 ```cpp
 #include "Harness.h"
@@ -397,7 +406,7 @@ TEST(McFromWorldIsAProperRotation)
 }
 ```
 
-- [ ] **Step 6: Configure and build; the build must fail**
+- [x] **Step 6: Configure and build; the build must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -406,7 +415,7 @@ cd /d/Cyberpunk-Minecraft/spikes/physx-probe && "$CMAKE" --preset default > /dev
 ```
 Expected: `error C1083: Cannot open include file: 'Coords.h': No such file or directory`
 
-- [ ] **Step 7: Write `src/Coords.h`**
+- [x] **Step 7: Write `src/Coords.h`**
 
 ```cpp
 #pragma once
@@ -441,7 +450,7 @@ constexpr Vec3d WorldFromMc(const Vec3d& aMc)
 }
 ```
 
-- [ ] **Step 8: Build and run the tests; they must pass**
+- [x] **Step 8: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -450,7 +459,7 @@ cd /d/Cyberpunk-Minecraft/spikes/physx-probe && "$CMAKE" --build --preset releas
 ```
 Expected: no lines from the build filter, then `3 test(s), 0 failure(s)`
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/physx-probe \
@@ -466,7 +475,7 @@ cd /d/Cyberpunk-Minecraft && git add spikes/physx-probe \
 - Create: `tests/TestJson.cpp`, `src/Json.h`, `src/Json.cpp`
 - Modify: `spikes/physx-probe/CMakeLists.txt` (add `probe_core`; the tests link it)
 
-- [ ] **Step 1: Write the failing test, `tests/TestJson.cpp`**
+- [x] **Step 1: Write the failing test, `tests/TestJson.cpp`**
 
 ```cpp
 #include "Harness.h"
@@ -517,7 +526,7 @@ TEST(NonFiniteNumbersBecomeNull)
 }
 ```
 
-- [ ] **Step 2: Add `probe_core` and the new test to `CMakeLists.txt`**
+- [x] **Step 2: Add `probe_core` and the new test to `CMakeLists.txt`**
 
 Insert this block right after the `probe_settings` block (before `# Unit tests`):
 ```cmake
@@ -537,7 +546,7 @@ add_executable(probe_tests
 target_link_libraries(probe_tests PRIVATE probe_core)
 ```
 
-- [ ] **Step 3: Build; it must fail**
+- [x] **Step 3: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -545,7 +554,7 @@ cd /d/Cyberpunk-Minecraft/spikes/physx-probe && "$CMAKE" --build --preset releas
 ```
 Expected: `error C1083: Cannot open include file: 'Json.h'`, or a missing `src/Json.cpp` source error.
 
-- [ ] **Step 4: Write `src/Json.h`**
+- [x] **Step 4: Write `src/Json.h`**
 
 ```cpp
 #pragma once
@@ -594,7 +603,7 @@ private:
 }
 ```
 
-- [ ] **Step 5: Write `src/Json.cpp`**
+- [x] **Step 5: Write `src/Json.cpp`**
 
 ```cpp
 #include "Json.h"
@@ -770,7 +779,7 @@ JsonWriter& JsonWriter::Null()
 }
 ```
 
-- [ ] **Step 6: Build and run the tests; they must pass**
+- [x] **Step 6: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -779,7 +788,7 @@ cd /d/Cyberpunk-Minecraft/spikes/physx-probe && "$CMAKE" --build --preset releas
 ```
 Expected: `7 test(s), 0 failure(s)`
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/physx-probe \
@@ -794,7 +803,7 @@ cd /d/Cyberpunk-Minecraft && git add spikes/physx-probe \
 - Create: `tests/TestPrimitives.cpp`, `src/physx/PxHeaders.h`, `src/physx/ShapeTriangles.h`, `src/physx/ShapeTriangles.cpp`
 - Modify: `spikes/physx-probe/CMakeLists.txt`
 
-- [ ] **Step 1: Write the failing test, `tests/TestPrimitives.cpp`**
+- [x] **Step 1: Write the failing test, `tests/TestPrimitives.cpp`**
 
 ```cpp
 #include "Harness.h"
@@ -927,7 +936,7 @@ TEST(KeepIfTouchesUsesTheTrianglesBounds)
 }
 ```
 
-- [ ] **Step 2: Add the source and the test to `CMakeLists.txt`**
+- [x] **Step 2: Add the source and the test to `CMakeLists.txt`**
 
 Replace the `probe_core` and `probe_tests` source lists with:
 ```cmake
@@ -945,7 +954,7 @@ add_executable(probe_tests
 )
 ```
 
-- [ ] **Step 3: Build; it must fail**
+- [x] **Step 3: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -953,7 +962,7 @@ cd /d/Cyberpunk-Minecraft/spikes/physx-probe && "$CMAKE" --build --preset releas
 ```
 Expected: `error C1083: Cannot open include file: 'physx/ShapeTriangles.h'`, or a missing source error.
 
-- [ ] **Step 4: Write `src/physx/PxHeaders.h`**
+- [x] **Step 4: Write `src/physx/PxHeaders.h`**
 
 ```cpp
 #pragma once
@@ -990,7 +999,7 @@ Expected: `error C1083: Cannot open include file: 'physx/ShapeTriangles.h'`, or 
 #include <geometry/PxTriangleMeshGeometry.h>
 ```
 
-- [ ] **Step 5: Write `src/physx/ShapeTriangles.h`**
+- [x] **Step 5: Write `src/physx/ShapeTriangles.h`**
 
 Tasks 5, 6 and 11 add more declarations to this header.
 ```cpp
@@ -1023,7 +1032,7 @@ void CapsuleTriangles(float aRadius, float aHalfHeight, const physx::PxTransform
 }
 ```
 
-- [ ] **Step 6: Write `src/physx/ShapeTriangles.cpp`**
+- [x] **Step 6: Write `src/physx/ShapeTriangles.cpp`**
 
 Tasks 5, 6 and 11 append more functions to this file.
 ```cpp
@@ -1168,7 +1177,7 @@ void CapsuleTriangles(float aRadius, float aHalfHeight, const PxTransform& aPose
 }
 ```
 
-- [ ] **Step 7: Build and run the tests; they must pass**
+- [x] **Step 7: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -1177,7 +1186,7 @@ cd /d/Cyberpunk-Minecraft/spikes/physx-probe && "$CMAKE" --build --preset releas
 ```
 Expected: `11 test(s), 0 failure(s)`. No warnings from the PhysX headers (they're included as `SYSTEM`).
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/physx-probe \
@@ -1192,7 +1201,7 @@ cd /d/Cyberpunk-Minecraft && git add spikes/physx-probe \
 - Create: `tests/TestMeshes.cpp`
 - Modify: `src/physx/ShapeTriangles.h`, `src/physx/ShapeTriangles.cpp`, `spikes/physx-probe/CMakeLists.txt`
 
-- [ ] **Step 1: Write the failing test, `tests/TestMeshes.cpp`**
+- [x] **Step 1: Write the failing test, `tests/TestMeshes.cpp`**
 
 ```cpp
 #include "Harness.h"
@@ -1294,11 +1303,11 @@ TEST(ConvexPolygonsAreFanTriangulated)
 }
 ```
 
-- [ ] **Step 2: Add the test to `CMakeLists.txt`**
+- [x] **Step 2: Add the test to `CMakeLists.txt`**
 
 Add `tests/TestMeshes.cpp` as the last entry of the `probe_tests` list.
 
-- [ ] **Step 3: Build; it must fail**
+- [x] **Step 3: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -1306,7 +1315,7 @@ cd /d/Cyberpunk-Minecraft/spikes/physx-probe && "$CMAKE" --build --preset releas
 ```
 Expected: `error C2039: 'ApplyMeshScale': is not a member of 'cpmc::px'` (or C3861 for the same name).
 
-- [ ] **Step 4: Declare the mesh functions in `src/physx/ShapeTriangles.h`**
+- [x] **Step 4: Declare the mesh functions in `src/physx/ShapeTriangles.h`**
 
 Add these just before the namespace's closing `}`:
 ```cpp
@@ -1327,7 +1336,7 @@ void ConvexPolygonTriangles(const physx::PxVec3* aVertices, uint32_t aVertexCoun
                             const physx::PxMeshScale& aScale, const physx::PxTransform& aPose, std::vector<Tri>& aOut);
 ```
 
-- [ ] **Step 5: Implement them in `src/physx/ShapeTriangles.cpp`**
+- [x] **Step 5: Implement them in `src/physx/ShapeTriangles.cpp`**
 
 Add these just before the file's last closing `}` (the end of `namespace cpmc::px`):
 ```cpp
@@ -1406,7 +1415,7 @@ void ConvexPolygonTriangles(const PxVec3* aVertices, uint32_t aVertexCount, cons
 }
 ```
 
-- [ ] **Step 6: Build and run the tests; they must pass**
+- [x] **Step 6: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -1415,7 +1424,7 @@ cd /d/Cyberpunk-Minecraft/spikes/physx-probe && "$CMAKE" --build --preset releas
 ```
 Expected: `15 test(s), 0 failure(s)`
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/physx-probe \
@@ -1430,7 +1439,7 @@ cd /d/Cyberpunk-Minecraft && git add spikes/physx-probe \
 - Create: `tests/TestHeightfield.cpp`
 - Modify: `src/physx/ShapeTriangles.h`, `src/physx/ShapeTriangles.cpp`, `spikes/physx-probe/CMakeLists.txt`
 
-- [ ] **Step 1: Write the failing test, `tests/TestHeightfield.cpp`**
+- [x] **Step 1: Write the failing test, `tests/TestHeightfield.cpp`**
 
 The expected vertex orders are PhysX's own, from `Gu::HeightField::getTriangleVertexIndices` in the 3.4.2 source.
 ```cpp
@@ -1582,11 +1591,11 @@ TEST(OnlyCellsUnderTheRegionAreVisited)
 }
 ```
 
-- [ ] **Step 2: Add the test to `CMakeLists.txt`**
+- [x] **Step 2: Add the test to `CMakeLists.txt`**
 
 Add `tests/TestHeightfield.cpp` as the last entry of the `probe_tests` list.
 
-- [ ] **Step 3: Build; it must fail**
+- [x] **Step 3: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -1594,7 +1603,7 @@ cd /d/Cyberpunk-Minecraft/spikes/physx-probe && "$CMAKE" --build --preset releas
 ```
 Expected: `error C2039: 'CellRange': is not a member of 'cpmc::px'` (or similar for `HeightfieldView`).
 
-- [ ] **Step 4: Declare the heightfield types and functions in `src/physx/ShapeTriangles.h`**
+- [x] **Step 4: Declare the heightfield types and functions in `src/physx/ShapeTriangles.h`**
 
 Add these just before the namespace's closing `}`:
 ```cpp
@@ -1631,7 +1640,7 @@ void HeightfieldTriangles(const HeightfieldView& aField, const CellRange& aCells
                           const physx::PxBounds3& aRegion, std::vector<Tri>& aOut);
 ```
 
-- [ ] **Step 5: Implement them in `src/physx/ShapeTriangles.cpp`**
+- [x] **Step 5: Implement them in `src/physx/ShapeTriangles.cpp`**
 
 Add these just before the file's last closing `}`:
 ```cpp
@@ -1710,7 +1719,7 @@ void HeightfieldTriangles(const HeightfieldView& aField, const CellRange& aCells
 }
 ```
 
-- [ ] **Step 6: Build and run the tests; they must pass**
+- [x] **Step 6: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -1719,7 +1728,7 @@ cd /d/Cyberpunk-Minecraft/spikes/physx-probe && "$CMAKE" --build --preset releas
 ```
 Expected: `21 test(s), 0 failure(s)`
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/physx-probe \
@@ -1734,7 +1743,7 @@ cd /d/Cyberpunk-Minecraft && git add spikes/physx-probe \
 - Create: `tests/TestChecks.cpp`, `src/Report.h`, `src/physx/Checks.h`, `src/physx/Checks.cpp`
 - Modify: `spikes/physx-probe/CMakeLists.txt`
 
-- [ ] **Step 1: Write the failing test, `tests/TestChecks.cpp`**
+- [x] **Step 1: Write the failing test, `tests/TestChecks.cpp`**
 
 ```cpp
 #include "Harness.h"
@@ -1819,12 +1828,12 @@ TEST(TrimTallyKeepsTheMostCommon)
 }
 ```
 
-- [ ] **Step 2: Add the source and test to `CMakeLists.txt`**
+- [x] **Step 2: Add the source and test to `CMakeLists.txt`**
 
 Add `src/physx/Checks.cpp` as the last entry of the `probe_core` list, and `tests/TestChecks.cpp` as the last entry of
 the `probe_tests` list.
 
-- [ ] **Step 3: Build; it must fail**
+- [x] **Step 3: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -1832,7 +1841,7 @@ cd /d/Cyberpunk-Minecraft/spikes/physx-probe && "$CMAKE" --build --preset releas
 ```
 Expected: `error C1083: Cannot open include file: 'physx/Checks.h'`, or a missing source error.
 
-- [ ] **Step 4: Write `src/Report.h`**
+- [x] **Step 4: Write `src/Report.h`**
 
 ```cpp
 #pragma once
@@ -1951,7 +1960,7 @@ struct DumpReport
 }
 ```
 
-- [ ] **Step 5: Write `src/physx/Checks.h`**
+- [x] **Step 5: Write `src/physx/Checks.h`**
 
 ```cpp
 #pragma once
@@ -1998,7 +2007,7 @@ Tally TrimTally(const Tally& aTally, size_t aKeep = 64);
 }
 ```
 
-- [ ] **Step 6: Write `src/physx/Checks.cpp`**
+- [x] **Step 6: Write `src/physx/Checks.cpp`**
 
 ```cpp
 #include "physx/Checks.h"
@@ -2183,7 +2192,7 @@ Tally TrimTally(const Tally& aTally, size_t aKeep)
 }
 ```
 
-- [ ] **Step 7: Build and run the tests; they must pass**
+- [x] **Step 7: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -2192,7 +2201,7 @@ cd /d/Cyberpunk-Minecraft/spikes/physx-probe && "$CMAKE" --build --preset releas
 ```
 Expected: `28 test(s), 0 failure(s)`
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/physx-probe \
@@ -2207,7 +2216,7 @@ cd /d/Cyberpunk-Minecraft && git add spikes/physx-probe \
 - Create: `tests/TestObjWriter.cpp`, `src/ObjWriter.h`, `src/ObjWriter.cpp`
 - Modify: `spikes/physx-probe/CMakeLists.txt`
 
-- [ ] **Step 1: Write the failing test, `tests/TestObjWriter.cpp`**
+- [x] **Step 1: Write the failing test, `tests/TestObjWriter.cpp`**
 
 ```cpp
 #include "Harness.h"
@@ -2269,12 +2278,12 @@ TEST(CategoryColorsIgnoreTheScenePrefix)
 }
 ```
 
-- [ ] **Step 2: Add the source and test to `CMakeLists.txt`**
+- [x] **Step 2: Add the source and test to `CMakeLists.txt`**
 
 Add `src/ObjWriter.cpp` as the last entry of the `probe_core` list, and `tests/TestObjWriter.cpp` as the last entry of
 the `probe_tests` list.
 
-- [ ] **Step 3: Build; it must fail**
+- [x] **Step 3: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -2282,7 +2291,7 @@ cd /d/Cyberpunk-Minecraft/spikes/physx-probe && "$CMAKE" --build --preset releas
 ```
 Expected: `error C1083: Cannot open include file: 'ObjWriter.h'`, or a missing source error.
 
-- [ ] **Step 4: Write `src/ObjWriter.h`**
+- [x] **Step 4: Write `src/ObjWriter.h`**
 
 ```cpp
 #pragma once
@@ -2320,7 +2329,7 @@ void WriteMtl(std::ostream& aOut, const std::vector<ObjGroup>& aGroups);
 }
 ```
 
-- [ ] **Step 5: Write `src/ObjWriter.cpp`**
+- [x] **Step 5: Write `src/ObjWriter.cpp`**
 
 ```cpp
 #include "ObjWriter.h"
@@ -2469,7 +2478,7 @@ void WriteMtl(std::ostream& aOut, const std::vector<ObjGroup>& aGroups)
 }
 ```
 
-- [ ] **Step 6: Build and run the tests; they must pass**
+- [x] **Step 6: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -2478,7 +2487,7 @@ cd /d/Cyberpunk-Minecraft/spikes/physx-probe && "$CMAKE" --build --preset releas
 ```
 Expected: `31 test(s), 0 failure(s)`
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/physx-probe \
@@ -2493,7 +2502,7 @@ cd /d/Cyberpunk-Minecraft && git add spikes/physx-probe \
 - Create: `tests/TestReportJson.cpp`, `src/ReportJson.h`, `src/ReportJson.cpp`
 - Modify: `spikes/physx-probe/CMakeLists.txt`
 
-- [ ] **Step 1: Write the failing test, `tests/TestReportJson.cpp`**
+- [x] **Step 1: Write the failing test, `tests/TestReportJson.cpp`**
 
 ```cpp
 #include "Harness.h"
@@ -2567,12 +2576,12 @@ TEST(ReportWithGeometryHasItsSections)
 }
 ```
 
-- [ ] **Step 2: Add the source and test to `CMakeLists.txt`**
+- [x] **Step 2: Add the source and test to `CMakeLists.txt`**
 
 Add `src/ReportJson.cpp` as the last entry of the `probe_core` list, and `tests/TestReportJson.cpp` as the last entry
 of the `probe_tests` list.
 
-- [ ] **Step 3: Build; it must fail**
+- [x] **Step 3: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -2580,7 +2589,7 @@ cd /d/Cyberpunk-Minecraft/spikes/physx-probe && "$CMAKE" --build --preset releas
 ```
 Expected: `error C1083: Cannot open include file: 'ReportJson.h'`, or a missing source error.
 
-- [ ] **Step 4: Write `src/ReportJson.h`**
+- [x] **Step 4: Write `src/ReportJson.h`**
 
 ```cpp
 #pragma once
@@ -2596,7 +2605,7 @@ std::string ReportToJson(const DumpReport& aReport);
 }
 ```
 
-- [ ] **Step 5: Write `src/ReportJson.cpp`**
+- [x] **Step 5: Write `src/ReportJson.cpp`**
 
 ```cpp
 #include "ReportJson.h"
@@ -2792,7 +2801,7 @@ std::string ReportToJson(const DumpReport& aReport)
 }
 ```
 
-- [ ] **Step 6: Build and run the tests; they must pass**
+- [x] **Step 6: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -2801,7 +2810,7 @@ cd /d/Cyberpunk-Minecraft/spikes/physx-probe && "$CMAKE" --build --preset releas
 ```
 Expected: `33 test(s), 0 failure(s)`
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/physx-probe \
@@ -2816,7 +2825,7 @@ cd /d/Cyberpunk-Minecraft && git add spikes/physx-probe \
 - Create: `tests/TestDumpWriter.cpp`, `src/DumpWriter.h`, `src/DumpWriter.cpp`
 - Modify: `spikes/physx-probe/CMakeLists.txt`
 
-- [ ] **Step 1: Write the failing test, `tests/TestDumpWriter.cpp`**
+- [x] **Step 1: Write the failing test, `tests/TestDumpWriter.cpp`**
 
 ```cpp
 #include "Harness.h"
@@ -2895,12 +2904,12 @@ TEST(DumpWriterRunsOneJobAtATime)
 }
 ```
 
-- [ ] **Step 2: Add the source and test to `CMakeLists.txt`**
+- [x] **Step 2: Add the source and test to `CMakeLists.txt`**
 
 Add `src/DumpWriter.cpp` as the last entry of the `probe_core` list, and `tests/TestDumpWriter.cpp` as the last entry
 of the `probe_tests` list.
 
-- [ ] **Step 3: Build; it must fail**
+- [x] **Step 3: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -2908,7 +2917,7 @@ cd /d/Cyberpunk-Minecraft/spikes/physx-probe && "$CMAKE" --build --preset releas
 ```
 Expected: `error C1083: Cannot open include file: 'DumpWriter.h'`, or a missing source error.
 
-- [ ] **Step 4: Write `src/DumpWriter.h`**
+- [x] **Step 4: Write `src/DumpWriter.h`**
 
 ```cpp
 #pragma once
@@ -2970,7 +2979,7 @@ private:
 }
 ```
 
-- [ ] **Step 5: Write `src/DumpWriter.cpp`**
+- [x] **Step 5: Write `src/DumpWriter.cpp`**
 
 ```cpp
 #include "DumpWriter.h"
@@ -3069,7 +3078,7 @@ void DumpWriter::Join()
 }
 ```
 
-- [ ] **Step 6: Build and run the tests; they must pass**
+- [x] **Step 6: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -3078,7 +3087,7 @@ cd /d/Cyberpunk-Minecraft/spikes/physx-probe && "$CMAKE" --build --preset releas
 ```
 Expected: `36 test(s), 0 failure(s)`
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/physx-probe \
@@ -3097,7 +3106,7 @@ Everything else here is exercised by Task 15.
 - Create: `tests/TestGuard.cpp`, `src/physx/PhysxSession.h`, `src/physx/PhysxSession.cpp`
 - Modify: `src/physx/ShapeTriangles.h`, `src/physx/ShapeTriangles.cpp`, `spikes/physx-probe/CMakeLists.txt`
 
-- [ ] **Step 1: Write the failing test, `tests/TestGuard.cpp`**
+- [x] **Step 1: Write the failing test, `tests/TestGuard.cpp`**
 
 ```cpp
 #include "Harness.h"
@@ -3127,12 +3136,12 @@ TEST(GuardedSurvivesAThrownException)
 }
 ```
 
-- [ ] **Step 2: Add the source and test to `CMakeLists.txt`**
+- [x] **Step 2: Add the source and test to `CMakeLists.txt`**
 
 Add `src/physx/PhysxSession.cpp` as the last entry of the `probe_core` list, and `tests/TestGuard.cpp` as the last
 entry of the `probe_tests` list.
 
-- [ ] **Step 3: Build; it must fail**
+- [x] **Step 3: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -3140,7 +3149,7 @@ cd /d/Cyberpunk-Minecraft/spikes/physx-probe && "$CMAKE" --build --preset releas
 ```
 Expected: `error C1083: Cannot open include file: 'physx/PhysxSession.h'`, or a missing source error.
 
-- [ ] **Step 4: Declare `AppendTriangles` in `src/physx/ShapeTriangles.h`**
+- [x] **Step 4: Declare `AppendTriangles` in `src/physx/ShapeTriangles.h`**
 
 Add these just before the namespace's closing `}`:
 ```cpp
@@ -3158,7 +3167,7 @@ void AppendTriangles(const physx::PxShape& aShape, const physx::PxTransform& aAc
                      std::vector<Tri>& aOut, AppendStats& aStats);
 ```
 
-- [ ] **Step 5: Implement `AppendTriangles` in `src/physx/ShapeTriangles.cpp`**
+- [x] **Step 5: Implement `AppendTriangles` in `src/physx/ShapeTriangles.cpp`**
 
 Add this just before the file's last closing `}`:
 ```cpp
@@ -3263,7 +3272,7 @@ void AppendTriangles(const PxShape& aShape, const PxTransform& aActorPose, const
 }
 ```
 
-- [ ] **Step 6: Write `src/physx/PhysxSession.h`**
+- [x] **Step 6: Write `src/physx/PhysxSession.h`**
 
 ```cpp
 #pragma once
@@ -3354,7 +3363,7 @@ private:
 }
 ```
 
-- [ ] **Step 7: Write `src/physx/PhysxSession.cpp`**
+- [x] **Step 7: Write `src/physx/PhysxSession.cpp`**
 
 ```cpp
 #include "physx/PhysxSession.h"
@@ -4101,7 +4110,7 @@ std::optional<float> PhysxSession::RaycastDown(PxScene* aScene, const PxVec3& aF
 }
 ```
 
-- [ ] **Step 8: Build and run the tests; they must pass, with no warnings**
+- [x] **Step 8: Build and run the tests; they must pass, with no warnings**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -4111,7 +4120,7 @@ cd /d/Cyberpunk-Minecraft/spikes/physx-probe && "$CMAKE" --build --preset releas
 Expected: no build lines, then `PASS GuardedRunsTheFunction`, `PASS GuardedSurvivesAnAccessViolation`,
 `PASS GuardedSurvivesAThrownException`, and `39 test(s), 0 failure(s)`.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/physx-probe \
@@ -4128,7 +4137,7 @@ cd /d/Cyberpunk-Minecraft && git add spikes/physx-probe \
 - Create: `src/Probe.h`, `src/Probe.cpp`
 - Modify: `spikes/physx-probe/CMakeLists.txt`
 
-- [ ] **Step 1: Write `src/Probe.h`**
+- [x] **Step 1: Write `src/Probe.h`**
 
 ```cpp
 #pragma once
@@ -4157,7 +4166,7 @@ DumpData RunDump(px::PhysxSession& aSession, const PlayerPose& aPose, const std:
 }
 ```
 
-- [ ] **Step 2: Write `src/Probe.cpp`**
+- [x] **Step 2: Write `src/Probe.cpp`**
 
 ```cpp
 #include "Probe.h"
@@ -4266,11 +4275,11 @@ DumpData RunDump(px::PhysxSession& aSession, const PlayerPose& aPose, const std:
 }
 ```
 
-- [ ] **Step 3: Add the source to `CMakeLists.txt`**
+- [x] **Step 3: Add the source to `CMakeLists.txt`**
 
 Add `src/Probe.cpp` as the last entry of the `probe_core` list.
 
-- [ ] **Step 4: Build and run the tests; they must still pass, with no warnings**
+- [x] **Step 4: Build and run the tests; they must still pass, with no warnings**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -4279,7 +4288,7 @@ cd /d/Cyberpunk-Minecraft/spikes/physx-probe && "$CMAKE" --build --preset releas
 ```
 Expected: `39 test(s), 0 failure(s)`
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/physx-probe \
@@ -4294,7 +4303,7 @@ cd /d/Cyberpunk-Minecraft && git add spikes/physx-probe \
 - Create: `src/PlayerLocator.h`, `src/PlayerLocator.cpp`, `src/Plugin.cpp`
 - Modify: `spikes/physx-probe/CMakeLists.txt`
 
-- [ ] **Step 1: Write `src/PlayerLocator.h`**
+- [x] **Step 1: Write `src/PlayerLocator.h`**
 
 ```cpp
 #pragma once
@@ -4313,7 +4322,7 @@ std::optional<PlayerPose> LocatePlayer();
 }
 ```
 
-- [ ] **Step 2: Write `src/PlayerLocator.cpp`**
+- [x] **Step 2: Write `src/PlayerLocator.cpp`**
 
 ```cpp
 #include "PlayerLocator.h"
@@ -4412,7 +4421,7 @@ std::optional<PlayerPose> LocatePlayer()
 }
 ```
 
-- [ ] **Step 3: Write `src/Plugin.cpp`**
+- [x] **Step 3: Write `src/Plugin.cpp`**
 
 ```cpp
 // PhysXProbe: a read-only RED4ext plugin that checks whether Cyberpunk's PhysX 3.4.2 can be read through
@@ -4631,7 +4640,7 @@ RED4EXT_C_EXPORT uint32_t RED4EXT_CALL Supports()
 }
 ```
 
-- [ ] **Step 4: Add the SDK and the plugin target to `CMakeLists.txt`**
+- [x] **Step 4: Add the SDK and the plugin target to `CMakeLists.txt`**
 
 Insert this block right after the `probe_core` block (before `# Unit tests`):
 ```cmake
@@ -4654,7 +4663,7 @@ if(CP2077_DIR)
 endif()
 ```
 
-- [ ] **Step 5: Build; there must be no errors or warnings, and the tests still pass**
+- [x] **Step 5: Build; there must be no errors or warnings, and the tests still pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -4663,7 +4672,7 @@ cd /d/Cyberpunk-Minecraft/spikes/physx-probe && "$CMAKE" --build --preset releas
 ```
 Expected: `39 test(s), 0 failure(s)`, and `PhysXProbe.dll` exists (about 800 KB).
 
-- [ ] **Step 6: Check the DLL's exports and imports**
+- [x] **Step 6: Check the DLL's exports and imports**
 
 ```bash
 DUMPBIN="/c/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/dumpbin.exe"
@@ -4674,14 +4683,14 @@ cd /d/Cyberpunk-Minecraft/spikes/physx-probe && echo "entry points: $("$DUMPBIN"
 Expected: `entry points: 3`, `PhysX3 imports: 0`, then `0`. The last number confirms the SDK submodule is still clean,
 because configuring rewrites its `Version.hpp` with identical content.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/physx-probe \
   && git commit -q -m "physx-probe: RED4ext plugin (entry points, triggers, player lookup)" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
 ```
 
-- [ ] **Step 8: Deploy into the game (the game must not be running)**
+- [x] **Step 8: Deploy into the game (the game must not be running)**
 
 ```bash
 tasklist | grep -i -c "cyberpunk2077.exe"
@@ -4703,7 +4712,7 @@ that folder.
 **Files:**
 - Create: `tools/test_render_dump.py`, `tools/render_dump.py`
 
-- [ ] **Step 1: Write the failing tests, `tools/test_render_dump.py`**
+- [x] **Step 1: Write the failing tests, `tools/test_render_dump.py`**
 
 ```python
 """Tests for render_dump.py:  uv run --no-project --with numpy --with pillow --with pytest pytest tools/test_render_dump.py -q"""
@@ -4805,14 +4814,14 @@ def test_render_top_draws_the_floor(tmp_path):
     assert image.getpixel((5, 60)) == rd.SKY  # outside it: background
 ```
 
-- [ ] **Step 2: Run the tests; they must fail**
+- [x] **Step 2: Run the tests; they must fail**
 
 ```bash
 cd /d/Cyberpunk-Minecraft/spikes/physx-probe && uv run --no-project -q --with numpy --with pillow --with pytest pytest tools/test_render_dump.py -q -p no:cacheprovider 2>&1 | tail -3
 ```
 Expected: `ModuleNotFoundError: No module named 'render_dump'`
 
-- [ ] **Step 3: Write `tools/render_dump.py`**
+- [x] **Step 3: Write `tools/render_dump.py`**
 
 ```python
 """Render a PhysXProbe dump to images, so it can be checked without Blender.
@@ -5039,14 +5048,14 @@ if __name__ == "__main__":
     main()
 ```
 
-- [ ] **Step 4: Run the tests; they must pass**
+- [x] **Step 4: Run the tests; they must pass**
 
 ```bash
 cd /d/Cyberpunk-Minecraft/spikes/physx-probe && uv run --no-project -q --with numpy --with pillow --with pytest pytest tools/test_render_dump.py -q -p no:cacheprovider 2>&1 | tail -2
 ```
 Expected: `7 passed`
 
-- [ ] **Step 5: Smoke-test the command line on a synthetic dump, and look at the result**
+- [x] **Step 5: Smoke-test the command line on a synthetic dump, and look at the result**
 
 ```bash
 cd /d/Cyberpunk-Minecraft/spikes/physx-probe && mkdir -p smoke/demo \
@@ -5058,7 +5067,7 @@ cd /d/Cyberpunk-Minecraft/spikes/physx-probe && mkdir -p smoke/demo \
 Expected: `rendered 4 triangles in 2 group(s) ...`, with the trigger group hidden. Open `smoke/demo/eye.png`. It should show
 a grey floor, and a blue-grey panel ahead whose base is a straight horizontal edge, not a V.
 
-- [ ] **Step 6: Commit** (`smoke/` is ignored)
+- [x] **Step 6: Commit** (`smoke/` is ignored)
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/physx-probe/tools \
@@ -5067,59 +5076,3285 @@ cd /d/Cyberpunk-Minecraft && git add spikes/physx-probe/tools \
 
 ---
 
-### Task 15: Verify in the running game
+### Task 15: Verify in the running game (superseded by Task 22)
 
-This is the test for everything that talks to the game. It needs the user at the keyboard, and the agent never
-drives their mouse or keyboard. Write down the numbers as you go; Step 7 records them.
+Steps 1 and 2 ran on 2026-10-01, against revision 1:
+- **The first run** stopped at compatibility step 1. NVIDIA's 3.4.2 release keeps 3.4.1.0 in the binary version field,
+  so step 1 now reads the "FileVersion" string (`e3cbc0b`).
+- **The second run** fired the automatic dump on the startup screen and passed all seven steps, then froze the game.
+  - **The shift:** the game's `PxShape` has an extra virtual function, so the probe's `PxShape` calls ran the next
+    function, several of them setters.
+  - **The freeze:** the game's crash handler fired on the resulting fault before the crash guard could.
+  - **The record:** `docs/spikes/2026-10-01-physx-abi-audit.md` has the evidence, and the spec's revision 2 the
+    redesign.
+
+Task 22 replaces the remaining steps.
+
+---
+
+## Revision 2
+
+Task 15's first in-game runs found two things the spec hadn't foreseen. The game's PhysX is a modified 3.4.2 whose
+`PxShape` has one more virtual function than NVIDIA's headers, so revision 1's `PxShape` calls landed one slot late,
+several of them on setters. And the game's crash handler sees a fault before any `__try/__except`, so revision 1's
+crash guard froze the game instead of protecting it. `docs/spikes/2026-10-01-physx-abi-audit.md` records the audit of
+the game's DLLs, and the spec's revision 2 redesigns the compatibility check around it. Tasks 16 to 21 build revision
+2, test-first where a test can run without the game; Task 22 verifies it in the game.
+
+- All the code in Tasks 16 to 21 has been compiled and tested once in a scratch copy, like revision 1's: zero compiler
+  warnings at `/W4`, the test counts below, and the plugin exporting exactly `Main`, `Query` and `Supports` with no
+  PhysX imports.
+- The test count goes 42 (after `e3cbc0b`), then 50, 54, 60, 60, 55 and 55. Task 20 deletes five tests whose code goes
+  away: the crash guard's three, and two for functions revision 2 no longer has.
+
+---
+
+### Task 16: The game's `PxShape` layout, pinned by a test
+
+**Files:**
+- Create: `tests/TestAudit.cpp`
+- Modify: `CMakeLists.txt` (the test list)
+- Modify: `extern/physx-3.4.2/PhysX_3.4/Include/PxShape.h` (one declaration)
+- Modify: `extern/physx-3.4.2/README.md`
+
+- [ ] **Step 1: Stop builds from installing into the game**
+
+The CMake cache still has `CP2077_DIR=E:/Cyberpunk2077` from Task 13, so every build would copy a half-finished plugin
+into the game. Task 22 sets it again.
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/physx-probe && "$CMAKE" --preset default -DCP2077_DIR= > /dev/null \
+  && grep "^CP2077_DIR" build/CMakeCache.txt
+```
+Expected: `CP2077_DIR:PATH=`
+
+- [ ] **Step 2: Write the failing test `tests/TestAudit.cpp`**
+
+It checks the vtable slot of every PhysX call the probe makes against the slot the audit verified in the game's DLLs,
+and the layout of every struct the game reads from or writes into the probe's memory.
+```cpp
+#include "Harness.h"
+
+#include "physx/PxHeaders.h"
+
+#include <array>
+#include <cstdint>
+#include <cstring>
+#include <string>
+#include <utility>
+
+// The probe's side of the PhysX ABI, checked against what the audit verified in the game's DLLs
+// (docs/spikes/2026-10-01-physx-abi-audit.md): the vtable slot of every call the probe makes, the layout of the hit
+// callbacks the game fills in and calls back through, and the structs both sides share.
+//
+// Slots are measured with a fake object whose vtable entries each record their own index. Each entry returns its
+// second argument, which is where a call that returns a struct passes the hidden return pointer. Calling through a
+// fake object is outside standard C++, but it compiles to exactly what the probe does to the game's objects.
+using namespace physx;
+
+namespace
+{
+int g_slot = -1;
+
+template<int I>
+void* Record(void*, void* aSecond)
+{
+	g_slot = I;
+	return aSecond;
+}
+
+using Entry = void* (*)(void*, void*);
+
+template<int... I>
+constexpr std::array<Entry, sizeof...(I)> MakeVtable(std::integer_sequence<int, I...>)
+{
+	return { &Record<I>... };
+}
+
+constexpr auto kVtable = MakeVtable(std::make_integer_sequence<int, 128>{});
+
+// A stand-in object: a vtable pointer, then the object's data from offset 8.
+struct Fake
+{
+	const Entry*  vtable = kVtable.data();
+	unsigned char body[256] = {};
+};
+
+// The vtable slot a call on a T goes through.
+template<class T, class Call>
+int SlotOf(Call aCall)
+{
+	Fake fake;
+	g_slot = -1;
+	aCall(*reinterpret_cast<T*>(&fake));
+	return g_slot;
+}
+
+void Expect(const char* aCall, int aSlot, int aGameSlot)
+{
+	if (aSlot != aGameSlot)
+	{
+		th::Fail(__FILE__, __LINE__,
+		         std::string(aCall) + " goes through slot " + std::to_string(aSlot) + "; the game's is " + std::to_string(aGameSlot));
+	}
+}
+
+// The byte offset of a member within an object.
+template<class T, class M>
+size_t OffsetOf(const T& aObject, const M& aMember)
+{
+	return size_t(reinterpret_cast<const char*>(&aMember) - reinterpret_cast<const char*>(&aObject));
+}
+}
+
+// The sizes of the structs the game copies into the probe's memory, or reads from it.
+static_assert(sizeof(PxOverlapHit) == 32);
+static_assert(sizeof(PxRaycastHit) == 64);
+static_assert(sizeof(PxBoxGeometry) == 16);
+static_assert(sizeof(PxSphereGeometry) == 8);
+static_assert(sizeof(PxCapsuleGeometry) == 12);
+static_assert(sizeof(PxGeometryHolder) == 48);
+static_assert(sizeof(PxConvexMeshGeometry) == 48);
+static_assert(sizeof(PxTriangleMeshGeometry) == 48);
+static_assert(sizeof(PxHeightFieldGeometry) == 32);
+static_assert(sizeof(PxHullPolygon) == 20);
+static_assert(sizeof(PxHeightFieldSample) == 4);
+static_assert(sizeof(PxTransform) == 28);
+static_assert(sizeof(PxFilterData) == 16);
+
+TEST(PhysicsCallsUseTheGamesSlots)
+{
+	Expect("PxPhysics::getTolerancesScale", SlotOf<PxPhysics>([](PxPhysics& a) { (void)&a.getTolerancesScale(); }), 4);
+	Expect("PxPhysics::getNbScenes", SlotOf<PxPhysics>([](PxPhysics& a) { (void)a.getNbScenes(); }), 19);
+	Expect("PxPhysics::getScenes", SlotOf<PxPhysics>([](PxPhysics& a) { (void)a.getScenes(nullptr, 0); }), 20);
+}
+
+TEST(SceneCallsUseTheGamesSlots)
+{
+	const PxActorTypeFlags rigid = PxActorTypeFlag::eRIGID_STATIC | PxActorTypeFlag::eRIGID_DYNAMIC;
+	const PxBoxGeometry    box(1.0f, 1.0f, 1.0f);
+	const PxTransform      pose(PxIdentity);
+	PxOverlapBuffer        overlaps;
+	PxRaycastBuffer        ray;
+	Expect("PxScene::getFlags", SlotOf<PxScene>([](PxScene& a) { (void)a.getFlags(); }), 3);
+	Expect("PxScene::getNbActors", SlotOf<PxScene>([&](PxScene& a) { (void)a.getNbActors(rigid); }), 18);
+	Expect("PxScene::getActors", SlotOf<PxScene>([&](PxScene& a) { (void)a.getActors(rigid, nullptr, 0); }), 19);
+	Expect("PxScene::getNbArticulations", SlotOf<PxScene>([](PxScene& a) { (void)a.getNbArticulations(); }), 22);
+	Expect("PxScene::getNbAggregates", SlotOf<PxScene>([](PxScene& a) { (void)a.getNbAggregates(); }), 26);
+	Expect("PxScene::getAggregates", SlotOf<PxScene>([](PxScene& a) { (void)a.getAggregates(nullptr, 0); }), 27);
+	Expect("PxScene::getGravity", SlotOf<PxScene>([](PxScene& a) { (void)a.getGravity(); }), 67);
+	Expect("PxScene::raycast", SlotOf<PxScene>([&](PxScene& a) { (void)a.raycast(PxVec3(0.0f), PxVec3(0.0f, 0.0f, -1.0f), 1.0f, ray); }), 94);
+	Expect("PxScene::overlap", SlotOf<PxScene>([&](PxScene& a) { (void)a.overlap(box, pose, overlaps); }), 96);
+	Expect("PxScene::lockRead", SlotOf<PxScene>([](PxScene& a) { a.lockRead(); }), 105);
+	Expect("PxScene::unlockRead", SlotOf<PxScene>([](PxScene& a) { a.unlockRead(); }), 106);
+}
+
+TEST(ActorCallsUseTheGamesSlots)
+{
+	Expect("PxActor::getName", SlotOf<PxActor>([](PxActor& a) { (void)a.getName(); }), 8);
+	Expect("PxActor::getWorldBounds", SlotOf<PxActor>([](PxActor& a) { (void)a.getWorldBounds(1.0f); }), 9);
+	Expect("PxRigidActor::getGlobalPose", SlotOf<PxRigidActor>([](PxRigidActor& a) { (void)a.getGlobalPose(); }), 20);
+	Expect("PxRigidActor::getNbShapes", SlotOf<PxRigidActor>([](PxRigidActor& a) { (void)a.getNbShapes(); }), 25);
+	Expect("PxRigidActor::getShapes", SlotOf<PxRigidActor>([](PxRigidActor& a) { (void)a.getShapes(nullptr, 0); }), 26);
+	Expect("PxRigidBody::getRigidBodyFlags", SlotOf<PxRigidBody>([](PxRigidBody& a) { (void)a.getRigidBodyFlags(); }), 47);
+	Expect("PxAggregate::getNbActors", SlotOf<PxAggregate>([](PxAggregate& a) { (void)a.getNbActors(); }), 9);
+}
+
+TEST(ShapeCallsUseTheGamesSlots)
+{
+	// The game's PxShape has a reference-count getter at slot 6 that NVIDIA's public headers lack (see PxShape.h).
+	PxBoxGeometry          box;
+	PxSphereGeometry       sphere;
+	PxCapsuleGeometry      capsule;
+	PxConvexMeshGeometry   convex;
+	PxTriangleMeshGeometry mesh;
+	PxHeightFieldGeometry  field;
+	Expect("PxShape::getGeometryType", SlotOf<PxShape>([](PxShape& a) { (void)a.getGeometryType(); }), 7);
+	Expect("PxShape::getBoxGeometry", SlotOf<PxShape>([&](PxShape& a) { (void)a.getBoxGeometry(box); }), 10);
+	Expect("PxShape::getSphereGeometry", SlotOf<PxShape>([&](PxShape& a) { (void)a.getSphereGeometry(sphere); }), 11);
+	Expect("PxShape::getCapsuleGeometry", SlotOf<PxShape>([&](PxShape& a) { (void)a.getCapsuleGeometry(capsule); }), 12);
+	Expect("PxShape::getConvexMeshGeometry", SlotOf<PxShape>([&](PxShape& a) { (void)a.getConvexMeshGeometry(convex); }), 14);
+	Expect("PxShape::getTriangleMeshGeometry", SlotOf<PxShape>([&](PxShape& a) { (void)a.getTriangleMeshGeometry(mesh); }), 15);
+	Expect("PxShape::getHeightFieldGeometry", SlotOf<PxShape>([&](PxShape& a) { (void)a.getHeightFieldGeometry(field); }), 16);
+	Expect("PxShape::getLocalPose", SlotOf<PxShape>([](PxShape& a) { (void)a.getLocalPose(); }), 19);
+	Expect("PxShape::getSimulationFilterData", SlotOf<PxShape>([](PxShape& a) { (void)a.getSimulationFilterData(); }), 21);
+	Expect("PxShape::getQueryFilterData", SlotOf<PxShape>([](PxShape& a) { (void)a.getQueryFilterData(); }), 23);
+	Expect("PxShape::getFlags", SlotOf<PxShape>([](PxShape& a) { (void)a.getFlags(); }), 34);
+}
+
+TEST(MeshCallsUseTheGamesSlots)
+{
+	PxHullPolygon polygon;
+	Expect("PxConvexMesh::getNbVertices", SlotOf<PxConvexMesh>([](PxConvexMesh& a) { (void)a.getNbVertices(); }), 5);
+	Expect("PxConvexMesh::getVertices", SlotOf<PxConvexMesh>([](PxConvexMesh& a) { (void)a.getVertices(); }), 6);
+	Expect("PxConvexMesh::getIndexBuffer", SlotOf<PxConvexMesh>([](PxConvexMesh& a) { (void)a.getIndexBuffer(); }), 7);
+	Expect("PxConvexMesh::getNbPolygons", SlotOf<PxConvexMesh>([](PxConvexMesh& a) { (void)a.getNbPolygons(); }), 8);
+	Expect("PxConvexMesh::getPolygonData", SlotOf<PxConvexMesh>([&](PxConvexMesh& a) { (void)a.getPolygonData(0, polygon); }), 9);
+	Expect("PxTriangleMesh::getNbVertices", SlotOf<PxTriangleMesh>([](PxTriangleMesh& a) { (void)a.getNbVertices(); }), 5);
+	Expect("PxTriangleMesh::getVertices", SlotOf<PxTriangleMesh>([](PxTriangleMesh& a) { (void)a.getVertices(); }), 6);
+	Expect("PxTriangleMesh::getNbTriangles", SlotOf<PxTriangleMesh>([](PxTriangleMesh& a) { (void)a.getNbTriangles(); }), 9);
+	Expect("PxTriangleMesh::getTriangles", SlotOf<PxTriangleMesh>([](PxTriangleMesh& a) { (void)a.getTriangles(); }), 10);
+	Expect("PxTriangleMesh::getTriangleMeshFlags",
+	       SlotOf<PxTriangleMesh>([](PxTriangleMesh& a) { (void)a.getTriangleMeshFlags(); }), 11);
+	Expect("PxHeightField::getNbRows", SlotOf<PxHeightField>([](PxHeightField& a) { (void)a.getNbRows(); }), 7);
+	Expect("PxHeightField::getNbColumns", SlotOf<PxHeightField>([](PxHeightField& a) { (void)a.getNbColumns(); }), 8);
+	Expect("PxHeightField::getSample", SlotOf<PxHeightField>([](PxHeightField& a) { (void)&a.getSample(1, 2); }), 19);
+}
+
+TEST(HitCallbacksHaveTheGamesLayout)
+{
+	// The game writes hits into these objects and calls processTouches (slot 0) and finalizeQuery (slot 1) on them.
+	struct Overlaps final : PxHitCallback<PxOverlapHit>
+	{
+		Overlaps()
+			: PxHitCallback<PxOverlapHit>(nullptr, 0)
+		{
+		}
+		PxAgain processTouches(const PxOverlapHit*, PxU32) override
+		{
+			g_slot = 0;
+			return true;
+		}
+		void finalizeQuery() override { g_slot = 1; }
+	};
+	Overlaps   overlaps;
+	auto*      vtable = *reinterpret_cast<void* const* const*>(&overlaps);
+	const auto touches = reinterpret_cast<PxAgain (*)(void*, const PxOverlapHit*, PxU32)>(vtable[0]);
+	const auto finalize = reinterpret_cast<void (*)(void*)>(vtable[1]);
+	g_slot = -1;
+	touches(&overlaps, nullptr, 0);
+	CHECK_EQ(g_slot, 0);
+	finalize(&overlaps);
+	CHECK_EQ(g_slot, 1);
+
+	CHECK_EQ(OffsetOf(overlaps, overlaps.block), size_t(8));
+	CHECK_EQ(OffsetOf(overlaps, overlaps.hasBlock), size_t(40));
+	CHECK_EQ(OffsetOf(overlaps, overlaps.touches), size_t(48));
+	CHECK_EQ(OffsetOf(overlaps, overlaps.maxNbTouches), size_t(56));
+	CHECK_EQ(OffsetOf(overlaps, overlaps.nbTouches), size_t(60));
+
+	PxRaycastBuffer ray;
+	CHECK_EQ(OffsetOf(ray, ray.block), size_t(8));
+	CHECK_EQ(OffsetOf(ray.block, ray.block.distance), size_t(52));
+	CHECK_EQ(OffsetOf(ray, ray.hasBlock), size_t(72));
+	CHECK_EQ(OffsetOf(ray, ray.touches), size_t(80));
+	CHECK_EQ(OffsetOf(ray, ray.maxNbTouches), size_t(88));
+	CHECK_EQ(OffsetOf(ray, ray.nbTouches), size_t(92));
+}
+
+TEST(ObjectFieldsHaveTheGamesLayout)
+{
+	// The probe reads two fields straight from game objects: PxBase's type ID and PxActor::userData.
+	Fake                 object;
+	const std::uint16_t type = PxConcreteType::eSHAPE;
+	std::memcpy(object.body, &type, sizeof(type));  // offset 8
+	CHECK_EQ(int(reinterpret_cast<const PxBase&>(object).getConcreteType()), int(PxConcreteType::eSHAPE));
+	const auto& actor = reinterpret_cast<const PxActor&>(object);
+	CHECK_EQ(OffsetOf(actor, actor.userData), size_t(16));
+}
+
+TEST(SharedStructsHaveTheGamesLayout)
+{
+	// What the game's getters copy into the probe's structs, byte for byte.
+	PxConvexMeshGeometry convex;
+	CHECK_EQ(OffsetOf(convex, convex.convexMesh), size_t(32));
+	CHECK_EQ(OffsetOf(convex, convex.maxMargin), size_t(40));
+	CHECK_EQ(OffsetOf(convex, convex.meshFlags), size_t(44));
+	PxTriangleMeshGeometry mesh;
+	CHECK_EQ(OffsetOf(mesh, mesh.meshFlags), size_t(32));
+	CHECK_EQ(OffsetOf(mesh, mesh.triangleMesh), size_t(40));
+	PxHeightFieldGeometry field;
+	CHECK_EQ(OffsetOf(field, field.heightField), size_t(8));
+	CHECK_EQ(OffsetOf(field, field.heightScale), size_t(16));
+	CHECK_EQ(OffsetOf(field, field.heightFieldFlags), size_t(28));
+	PxHullPolygon polygon;
+	CHECK_EQ(OffsetOf(polygon, polygon.mNbVerts), size_t(16));
+	CHECK_EQ(OffsetOf(polygon, polygon.mIndexBase), size_t(18));
+	PxQueryFilterData filter;
+	CHECK_EQ(OffsetOf(filter, filter.flags), size_t(16));
+	PxTolerancesScale scale;
+	CHECK_EQ(OffsetOf(scale, scale.length), size_t(0));
+	CHECK_EQ(OffsetOf(scale, scale.speed), size_t(8));
+}
+```
+
+- [ ] **Step 3: Edit `CMakeLists.txt`: add the test**
+
+Replace:
+```cmake
+	tests/TestFileVersions.cpp
+)
+```
+with:
+```cmake
+	tests/TestFileVersions.cpp
+	tests/TestAudit.cpp
+)
+```
+
+- [ ] **Step 4: Run the tests; exactly the `PxShape` slots fail**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/physx-probe && "$CMAKE" --build --preset release --target probe_tests -- -m -v:minimal 2>&1 | grep -E " error |warning C"; \
+  ./build/RelWithDebInfo/probe_tests.exe | grep -E "FAIL|test\(s\)"
+```
+Expected: no lines from the build filter. Then 11 lines like
+`FAIL ...TestAudit.cpp:62: PxShape::getGeometryType goes through slot 6; the game's is 7`, one per `PxShape` call and
+each one slot low, then `FAIL ShapeCallsUseTheGamesSlots` and `50 test(s), 11 failure(s)`. Every other class, the hit
+callbacks and the struct layouts already match.
+
+- [ ] **Step 5: Edit `extern/physx-3.4.2/PhysX_3.4/Include/PxShape.h`: declare the game's extra function**
+
+The header uses tabs; keep them. Replace:
+```cpp
+	virtual		void					acquireReference() = 0;
+```
+with:
+```cpp
+	virtual		void					acquireReference() = 0;
+
+	/**
+	\brief Returns the reference count of the shape.
+
+	LOCAL CHANGE for Cyberpunk 2077, not in NVIDIA's public 3.4.2 headers: the game's PhysX build has this virtual
+	function at slot 6, right after acquireReference(). Declaring it here puts every later PxShape method on the
+	game's slot. See docs/spikes/2026-10-01-physx-abi-audit.md.
+	*/
+	virtual		PxU32					getReferenceCount() const = 0;
+```
+
+- [ ] **Step 6: Run the tests; they all pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/physx-probe && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E " error |warning C"; \
+  ./build/RelWithDebInfo/probe_tests.exe | tail -1
+```
+Expected: no lines from the build filter, then `50 test(s), 0 failure(s)`
+
+- [ ] **Step 7: Write `extern/physx-3.4.2/README.md`**
+
+```markdown
+# NVIDIA PhysX 3.4.2 public headers
+
+Copied from https://github.com/NVIDIAGameWorks/PhysX-3.4 at commit 5e42a5f112351a223c19c17bb331e6c55037b8eb
+("PhysX 3.4, APEX 1.4 patch release @25354359"): `PhysX_3.4/Include` and `PxShared/include` only. The licence is
+BSD-3-Clause: see `LICENSE.md`, and the notice in each header.
+
+One local change makes them match the PhysX that Cyberpunk 2077 2.31 ships (`PhysX3_x64.dll`, FileVersion string
+3.4.2.0). `PhysX_3.4/Include/PxShape.h` declares `getReferenceCount()` right after `acquireReference()`: the game's
+build has that virtual function there, and NVIDIA's public headers don't. Everything else is unmodified. See
+`docs/spikes/2026-10-01-physx-abi-audit.md`.
+```
+
+- [ ] **Step 8: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add extern/physx-3.4.2 spikes/physx-probe \
+  && git commit -q -m "physx-probe: match the game's PxShape vtable, pinned by a slot and layout test" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 17: Readable-memory checks
+
+**Files:**
+- Create: `src/physx/Readable.h`, `src/physx/Readable.cpp`
+- Create: `tests/TestReadable.cpp`
+- Modify: `CMakeLists.txt`
+
+- [ ] **Step 1: Write the failing test `tests/TestReadable.cpp`**
+
+It uses real pages: readable, no access, a guard page, reserved but never committed.
+```cpp
+#include "Harness.h"
+
+#include "physx/Readable.h"
+
+#include <Windows.h>
+
+#include <cstdint>
+
+using cpmc::px::ReadableMemory;
+
+namespace
+{
+size_t PageSize()
+{
+	SYSTEM_INFO system{};
+	GetSystemInfo(&system);
+	return system.dwPageSize;
+}
+}
+
+TEST(ReadableMemoryAcceptsOrdinaryMemory)
+{
+	ReadableMemory memory;
+	const int      values[16] = {};
+	CHECK(memory.Range(values, sizeof(values)));
+	CHECK(memory.Range(values, 0));  // nothing to read at a real address
+}
+
+TEST(ReadableMemoryRejectsPagesThatWouldFault)
+{
+	// Four pages: readable, no access, a guard page, and reserved but never committed.
+	const size_t page = PageSize();
+	auto*        base = static_cast<uint8_t*>(VirtualAlloc(nullptr, 4 * page, MEM_RESERVE, PAGE_NOACCESS));
+	CHECK(base != nullptr);
+	if (!base)
+	{
+		return;
+	}
+	VirtualAlloc(base, page, MEM_COMMIT, PAGE_READWRITE);
+	VirtualAlloc(base + page, page, MEM_COMMIT, PAGE_NOACCESS);
+	VirtualAlloc(base + 2 * page, page, MEM_COMMIT, PAGE_READWRITE | PAGE_GUARD);
+	ReadableMemory memory;
+	CHECK(memory.Range(base, page));
+	CHECK(!memory.Range(base + page, 1));
+	CHECK(!memory.Range(base + 2 * page, 1));
+	CHECK(!memory.Range(base + 3 * page, 1));
+	CHECK(memory.Range(base + page - 8, 8));
+	CHECK(!memory.Range(base + page - 8, 16));  // starts readable, runs into the no-access page
+	VirtualFree(base, 0, MEM_RELEASE);
+}
+
+TEST(ReadableMemoryRejectsNullAndWrappingRanges)
+{
+	ReadableMemory memory;
+	CHECK(!memory.Range(nullptr, 1));
+	CHECK(!memory.Range(nullptr, 0));
+	const int value = 0;
+	CHECK(!memory.Range(&value, SIZE_MAX));
+}
+
+TEST(ReadableMemoryRemembersRegionsUntilCleared)
+{
+	const size_t page = PageSize();
+	auto*        base = static_cast<uint8_t*>(VirtualAlloc(nullptr, page, MEM_RESERVE | MEM_COMMIT, PAGE_NOACCESS));
+	CHECK(base != nullptr);
+	if (!base)
+	{
+		return;
+	}
+	ReadableMemory memory;
+	CHECK(!memory.Range(base, 1));
+	DWORD old = 0;
+	VirtualProtect(base, page, PAGE_READONLY, &old);
+	CHECK(!memory.Range(base, 1));  // still the remembered answer
+	memory.Clear();
+	CHECK(memory.Range(base, 1));
+	VirtualFree(base, 0, MEM_RELEASE);
+}
+```
+
+- [ ] **Step 2: Edit `CMakeLists.txt`: add the test**
+
+Replace:
+```cmake
+	tests/TestAudit.cpp
+)
+```
+with:
+```cmake
+	tests/TestAudit.cpp
+	tests/TestReadable.cpp
+)
+```
+
+- [ ] **Step 3: Build; it fails**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/physx-probe && "$CMAKE" --build --preset release --target probe_tests -- -m -v:minimal 2>&1 | grep -E " error " | head -3
+```
+Expected: `fatal error C1083: Cannot open include file: 'physx/Readable.h'`
+
+- [ ] **Step 4: Write `src/physx/Readable.h`**
+
+```cpp
+#pragma once
+
+#include <cstddef>
+#include <cstdint>
+#include <map>
+
+namespace cpmc::px
+{
+// Answers "can these bytes be read without faulting?" from VirtualQuery, and remembers each region it has asked
+// about. The game's memory changes over time, so use one per dump and Clear() it before the next.
+class ReadableMemory
+{
+public:
+	// True when every byte of [aAddress, aAddress + aSize) is committed, readable and not a guard page. A null or
+	// wrapping range never is; an empty range at a non-null address always is.
+	bool Range(const void* aAddress, size_t aSize);
+
+	void Clear();
+
+private:
+	struct Region
+	{
+		uintptr_t end = 0;
+		bool      readable = false;
+	};
+
+	// The region holding aAddress, from memory or from VirtualQuery. False if VirtualQuery fails.
+	bool Find(uintptr_t aAddress, Region& aOut);
+
+	std::map<uintptr_t, Region> regions_;  // by start address
+};
+}
+```
+
+- [ ] **Step 5: Write `src/physx/Readable.cpp`**
+
+```cpp
+#include "physx/Readable.h"
+
+#include <Windows.h>
+
+#include <iterator>
+
+namespace cpmc::px
+{
+namespace
+{
+constexpr DWORD kReadable = PAGE_READONLY | PAGE_READWRITE | PAGE_WRITECOPY | PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE |
+                            PAGE_EXECUTE_WRITECOPY;
+}
+
+bool ReadableMemory::Range(const void* aAddress, size_t aSize)
+{
+	const auto start = reinterpret_cast<uintptr_t>(aAddress);
+	if (start == 0 || start + aSize < start)
+	{
+		return false;
+	}
+	const uintptr_t end = start + aSize;
+	for (uintptr_t at = start; at < end;)
+	{
+		Region region;
+		if (!Find(at, region) || !region.readable)
+		{
+			return false;
+		}
+		at = region.end;
+	}
+	return true;
+}
+
+void ReadableMemory::Clear()
+{
+	regions_.clear();
+}
+
+bool ReadableMemory::Find(uintptr_t aAddress, Region& aOut)
+{
+	auto next = regions_.upper_bound(aAddress);
+	if (next != regions_.begin())
+	{
+		const auto& [start, region] = *std::prev(next);
+		if (aAddress < region.end)
+		{
+			aOut = region;
+			return true;
+		}
+	}
+	MEMORY_BASIC_INFORMATION info{};
+	if (VirtualQuery(reinterpret_cast<const void*>(aAddress), &info, sizeof(info)) == 0)
+	{
+		return false;
+	}
+	const auto base = reinterpret_cast<uintptr_t>(info.BaseAddress);
+	aOut.end = base + info.RegionSize;
+	aOut.readable = info.State == MEM_COMMIT && (info.Protect & kReadable) != 0 &&
+	                (info.Protect & (PAGE_GUARD | PAGE_NOACCESS)) == 0;
+	regions_[base] = aOut;
+	return true;
+}
+}
+```
+
+- [ ] **Step 6: Edit `CMakeLists.txt`: add `Readable.cpp` to `probe_core`**
+
+Replace:
+```cmake
+	src/physx/Checks.cpp
+```
+with:
+```cmake
+	src/physx/Checks.cpp
+	src/physx/Readable.cpp
+```
+
+- [ ] **Step 7: Run the tests; they all pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/physx-probe && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E " error |warning C"; \
+  ./build/RelWithDebInfo/probe_tests.exe | tail -1
+```
+Expected: no lines from the build filter, then `54 test(s), 0 failure(s)`
+
+- [ ] **Step 8: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/physx-probe \
+  && git commit -q -m "physx-probe: readable-memory checks" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" \
+  && git log --oneline -1
+```
+
+---
+
+### Task 18: The audited build (`GameAbi`)
+
+**Files:**
+- Create: `src/physx/GameAbi.h`, `src/physx/GameAbi.cpp`
+- Create: `tests/TestGameAbi.cpp`
+- Modify: `CMakeLists.txt`
+
+- [ ] **Step 1: Write the failing test `tests/TestGameAbi.cpp`**
+
+```cpp
+#include "Harness.h"
+
+#include "physx/GameAbi.h"
+
+#include <Windows.h>
+
+#include <Psapi.h>
+
+#include <cstdint>
+
+using namespace physx;
+using namespace cpmc::px;
+
+namespace
+{
+// Where the crashed run had the two DLLs.
+constexpr ModuleBases kBases{ 0x7ffcb6820000, 0x7ffcb6ab0000 };
+
+// A PhysX object's leading fields: the vtable pointer, the type ID, the base flags and, for actors, userData.
+struct FakeObject
+{
+	uintptr_t     vtable = 0;
+	std::uint16_t type = 0;
+	std::uint16_t baseFlags = 0;
+	std::uint32_t padding = 0;
+	void*         userData = nullptr;
+};
+}
+
+TEST(ModuleIdentityReadsThePeHeader)
+{
+	alignas(8) unsigned char image[0x200] = {};
+	auto* dos = reinterpret_cast<IMAGE_DOS_HEADER*>(image);
+	dos->e_magic = IMAGE_DOS_SIGNATURE;
+	dos->e_lfanew = 0x80;
+	auto* nt = reinterpret_cast<IMAGE_NT_HEADERS64*>(image + 0x80);
+	nt->Signature = IMAGE_NT_SIGNATURE;
+	nt->FileHeader.TimeDateStamp = 0x64c978b4;
+	nt->OptionalHeader.Magic = IMAGE_NT_OPTIONAL_HDR64_MAGIC;
+	nt->OptionalHeader.SizeOfImage = 0x281000;
+	const auto id = ModuleIdentity(image);
+	CHECK(id && *id == kAuditedModules[0].id);
+	nt->OptionalHeader.Magic = IMAGE_NT_OPTIONAL_HDR32_MAGIC;
+	CHECK(!ModuleIdentity(image));
+	nt->OptionalHeader.Magic = IMAGE_NT_OPTIONAL_HDR64_MAGIC;
+	nt->Signature = 0;
+	CHECK(!ModuleIdentity(image));
+	dos->e_magic = 0;
+	CHECK(!ModuleIdentity(image));
+	CHECK(!ModuleIdentity(nullptr));
+}
+
+TEST(ModuleIdentityOfALoadedDll)
+{
+	// kernel32's image size, checked against GetModuleInformation.
+	const HMODULE kernel32 = GetModuleHandleW(L"kernel32.dll");
+	MODULEINFO    info{};
+	CHECK(GetModuleInformation(GetCurrentProcess(), kernel32, &info, sizeof(info)));
+	const auto id = ModuleIdentity(kernel32);
+	CHECK(id && id->imageSize == info.SizeOfImage);
+	CHECK(id && id->timestamp != 0);
+}
+
+TEST(AuditedClassesAreFoundByVtable)
+{
+	CHECK(AuditedClassOf(kBases.physx3 + 0x20a310, kBases) == AuditedClass::Physics);
+	CHECK(AuditedClassOf(kBases.physx3 + 0x20caf0, kBases) == AuditedClass::Scene);
+	CHECK(AuditedClassOf(kBases.physx3 + 0x20b980, kBases) == AuditedClass::RigidStatic);
+	CHECK(AuditedClassOf(kBases.physx3 + 0x20b2e8, kBases) == AuditedClass::RigidDynamic);
+	CHECK(AuditedClassOf(kBases.physx3 + 0x206e68, kBases) == AuditedClass::Aggregate);
+	CHECK(AuditedClassOf(kBases.physx3 + 0x20e9a8, kBases) == AuditedClass::Shape);
+	CHECK(AuditedClassOf(kBases.common + 0x1b5200, kBases) == AuditedClass::ConvexMesh);
+	CHECK(AuditedClassOf(kBases.common + 0x1b6978, kBases) == AuditedClass::TriangleMeshBv33);
+	CHECK(AuditedClassOf(kBases.common + 0x1b6868, kBases) == AuditedClass::TriangleMeshBv34);
+	CHECK(AuditedClassOf(kBases.common + 0x1b6b18, kBases) == AuditedClass::HeightField);
+	CHECK(!AuditedClassOf(kBases.physx3 + 0x20e9a8 + 8, kBases));  // one slot into NpShape's table
+	CHECK(!AuditedClassOf(kBases.physx3 + 0x20e878, kBases));      // the abstract PxShape table
+	CHECK(!AuditedClassOf(kBases.common + 0x20e9a8, kBases));      // the right RVA in the wrong DLL
+	const ModuleBases moved{ 0x180000000, 0x190000000 };
+	CHECK(AuditedClassOf(moved.physx3 + 0x20e9a8, moved) == AuditedClass::Shape);
+	CHECK(!AuditedClassOf(kBases.physx3 + 0x20e9a8, moved));
+	CHECK(!AuditedClassOf(0x20e9a8, ModuleBases{}));  // the DLLs aren't loaded
+}
+
+TEST(AuditedClassesKnowTheirTypeIdsAndNames)
+{
+	CHECK_EQ(ConcreteTypeOf(AuditedClass::Shape), int(PxConcreteType::eSHAPE));
+	CHECK_EQ(ConcreteTypeOf(AuditedClass::TriangleMeshBv34), int(PxConcreteType::eTRIANGLE_MESH_BVH34));
+	CHECK_EQ(ConcreteTypeOf(AuditedClass::Scene), -1);
+	CHECK_STR(InterfaceName(AuditedClass::RigidStatic), "PxRigidStatic");
+	CHECK_STR(InterfaceName(AuditedClass::TriangleMeshBv33), "PxBVH33TriangleMesh");
+}
+
+TEST(CheckObjectNeedsReadableMemoryAnAuditedVtableAndTheRightType)
+{
+	ReadableMemory    memory;
+	FakeObject        shape{ kBases.physx3 + 0x20e9a8, std::uint16_t(PxConcreteType::eSHAPE) };
+	const ObjectCheck check = CheckObject(memory, kBases, &shape);
+	CHECK(check.verdict == ObjectVerdict::Ok && check.cls == AuditedClass::Shape);
+	shape.type = std::uint16_t(PxConcreteType::eCONVEX_MESH);
+	CHECK(CheckObject(memory, kBases, &shape).verdict == ObjectVerdict::WrongType);
+	shape.vtable += 8;
+	CHECK(CheckObject(memory, kBases, &shape).verdict == ObjectVerdict::Unaudited);
+	CHECK(CheckObject(memory, kBases, nullptr).verdict == ObjectVerdict::Unreadable);
+	FakeObject scene{ kBases.physx3 + 0x20caf0, 0xffff };  // not a PxBase object: no type ID to check
+	CHECK(CheckObject(memory, kBases, &scene).verdict == ObjectVerdict::Ok);
+}
+
+TEST(CheckObjectCoversTheBytesTheCallerReads)
+{
+	// An actor whose first 16 bytes end a readable page: its userData (bytes 16 to 24) would fault.
+	SYSTEM_INFO system{};
+	GetSystemInfo(&system);
+	const size_t page = system.dwPageSize;
+	auto*        base = static_cast<unsigned char*>(VirtualAlloc(nullptr, 2 * page, MEM_RESERVE, PAGE_NOACCESS));
+	CHECK(base != nullptr);
+	if (!base)
+	{
+		return;
+	}
+	VirtualAlloc(base, page, MEM_COMMIT, PAGE_READWRITE);
+	auto* actor = reinterpret_cast<uintptr_t*>(base + page - 16);
+	actor[0] = kBases.physx3 + 0x20b980;
+	actor[1] = PxConcreteType::eRIGID_STATIC;
+	ReadableMemory memory;
+	CHECK(CheckObject(memory, kBases, actor).verdict == ObjectVerdict::Ok);
+	CHECK(CheckObject(memory, kBases, actor, 24).verdict == ObjectVerdict::Unreadable);
+	VirtualFree(base, 0, MEM_RELEASE);
+}
+```
+
+- [ ] **Step 2: Edit `CMakeLists.txt`: add the test**
+
+Replace:
+```cmake
+	tests/TestReadable.cpp
+)
+```
+with:
+```cmake
+	tests/TestReadable.cpp
+	tests/TestGameAbi.cpp
+)
+```
+
+- [ ] **Step 3: Build; it fails**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/physx-probe && "$CMAKE" --build --preset release --target probe_tests -- -m -v:minimal 2>&1 | grep -E " error " | head -3
+```
+Expected: `fatal error C1083: Cannot open include file: 'physx/GameAbi.h'`
+
+- [ ] **Step 4: Write `src/physx/GameAbi.h`**
+
+The RVAs and identities come from `docs/spikes/2026-10-01-physx-abi-audit.md`.
+```cpp
+#pragma once
+
+#include "physx/PxHeaders.h"
+#include "physx/Readable.h"
+
+#include <cstddef>
+#include <cstdint>
+#include <optional>
+
+// The game's PhysX build as audited in docs/spikes/2026-10-01-physx-abi-audit.md: the two DLLs' identities and the
+// vtables of every class the probe calls into. The probe calls nothing on an object whose vtable isn't one of these.
+namespace cpmc::px
+{
+// A module's PE timestamp and image size.
+struct ModuleId
+{
+	uint32_t timestamp = 0;
+	uint32_t imageSize = 0;
+
+	bool operator==(const ModuleId&) const = default;
+};
+
+struct AuditedModule
+{
+	const wchar_t* name;
+	ModuleId       id;
+};
+
+// PhysX3_x64.dll, then PhysX3Common_x64.dll, as audited.
+inline constexpr AuditedModule kAuditedModules[2] = {
+	{ L"PhysX3_x64.dll", { 0x64c978b4, 0x281000 } },
+	{ L"PhysX3Common_x64.dll", { 0x64c978a8, 0x1f9000 } },
+};
+
+// The identity in the PE header of the module loaded at aBase; nothing unless it is a 64-bit PE image.
+std::optional<ModuleId> ModuleIdentity(const void* aBase);
+
+// Where the two DLLs are loaded.
+struct ModuleBases
+{
+	uintptr_t physx3 = 0;
+	uintptr_t common = 0;
+};
+
+enum class AuditedClass
+{
+	Physics,
+	Scene,
+	RigidStatic,
+	RigidDynamic,
+	Aggregate,
+	Shape,
+	ConvexMesh,
+	TriangleMeshBv33,
+	TriangleMeshBv34,
+	HeightField,
+};
+
+// The audited class whose vtable starts at aVtable, if any.
+std::optional<AuditedClass> AuditedClassOf(uintptr_t aVtable, const ModuleBases& aBases);
+
+// The PxConcreteType ID the class's objects report, or -1 for the two classes that aren't PxBase objects.
+int ConcreteTypeOf(AuditedClass aClass);
+
+// The PhysX interface name, for reports: "PxRigidStatic", "PxShape", "PxBVH34TriangleMesh" and so on.
+const char* InterfaceName(AuditedClass aClass);
+
+enum class ObjectVerdict
+{
+	Ok,          // readable, an audited vtable, and (for PxBase objects) the type ID that vtable's class reports
+	Unreadable,  // the bytes the caller reads aren't all readable
+	Unaudited,   // the vtable isn't an audited table
+	WrongType,   // an audited vtable, but the type ID disagrees with it
+};
+
+struct ObjectCheck
+{
+	ObjectVerdict verdict = ObjectVerdict::Unreadable;
+	AuditedClass  cls = AuditedClass::Physics;  // meaningful for Ok and WrongType
+};
+
+// Checks a PhysX object before the probe touches it. At least its first 16 bytes must be readable: the vtable
+// pointer and, for PxBase objects, the type ID at offset 8. Pass a larger aBytes to cover fields the caller reads
+// itself, such as an actor's userData, which ends at 24.
+ObjectCheck CheckObject(ReadableMemory& aMemory, const ModuleBases& aBases, const void* aObject, size_t aBytes = 16);
+}
+```
+
+- [ ] **Step 5: Write `src/physx/GameAbi.cpp`**
+
+```cpp
+#include "physx/GameAbi.h"
+
+#include <Windows.h>
+
+#include <algorithm>
+#include <iterator>
+
+using namespace physx;
+
+namespace cpmc::px
+{
+namespace
+{
+struct AuditedVtable
+{
+	AuditedClass cls;
+	bool         common;  // in PhysX3Common_x64.dll rather than PhysX3_x64.dll
+	uintptr_t    rva;
+	int          concreteType;
+	const char*  name;
+};
+
+// Each audited class's primary vtable, from the audit.
+constexpr AuditedVtable kVtables[] = {
+	{ AuditedClass::Physics, false, 0x20a310, -1, "PxPhysics" },
+	{ AuditedClass::Scene, false, 0x20caf0, -1, "PxScene" },
+	{ AuditedClass::RigidStatic, false, 0x20b980, PxConcreteType::eRIGID_STATIC, "PxRigidStatic" },
+	{ AuditedClass::RigidDynamic, false, 0x20b2e8, PxConcreteType::eRIGID_DYNAMIC, "PxRigidDynamic" },
+	{ AuditedClass::Aggregate, false, 0x206e68, PxConcreteType::eAGGREGATE, "PxAggregate" },
+	{ AuditedClass::Shape, false, 0x20e9a8, PxConcreteType::eSHAPE, "PxShape" },
+	{ AuditedClass::ConvexMesh, true, 0x1b5200, PxConcreteType::eCONVEX_MESH, "PxConvexMesh" },
+	{ AuditedClass::TriangleMeshBv33, true, 0x1b6978, PxConcreteType::eTRIANGLE_MESH_BVH33, "PxBVH33TriangleMesh" },
+	{ AuditedClass::TriangleMeshBv34, true, 0x1b6868, PxConcreteType::eTRIANGLE_MESH_BVH34, "PxBVH34TriangleMesh" },
+	{ AuditedClass::HeightField, true, 0x1b6b18, PxConcreteType::eHEIGHTFIELD, "PxHeightField" },
+};
+
+const AuditedVtable& Entry(AuditedClass aClass)
+{
+	return *std::find_if(std::begin(kVtables), std::end(kVtables), [&](const AuditedVtable& aEntry) { return aEntry.cls == aClass; });
+}
+}
+
+std::optional<ModuleId> ModuleIdentity(const void* aBase)
+{
+	if (!aBase)
+	{
+		return std::nullopt;
+	}
+	const auto* dos = static_cast<const IMAGE_DOS_HEADER*>(aBase);
+	if (dos->e_magic != IMAGE_DOS_SIGNATURE || dos->e_lfanew <= 0 || dos->e_lfanew > 0x1000 - LONG(sizeof(IMAGE_NT_HEADERS64)))
+	{
+		return std::nullopt;
+	}
+	const auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS64*>(static_cast<const uint8_t*>(aBase) + dos->e_lfanew);
+	if (nt->Signature != IMAGE_NT_SIGNATURE || nt->OptionalHeader.Magic != IMAGE_NT_OPTIONAL_HDR64_MAGIC)
+	{
+		return std::nullopt;
+	}
+	return ModuleId{ nt->FileHeader.TimeDateStamp, nt->OptionalHeader.SizeOfImage };
+}
+
+std::optional<AuditedClass> AuditedClassOf(uintptr_t aVtable, const ModuleBases& aBases)
+{
+	for (const AuditedVtable& entry : kVtables)
+	{
+		const uintptr_t base = entry.common ? aBases.common : aBases.physx3;
+		if (base != 0 && aVtable == base + entry.rva)
+		{
+			return entry.cls;
+		}
+	}
+	return std::nullopt;
+}
+
+int ConcreteTypeOf(AuditedClass aClass)
+{
+	return Entry(aClass).concreteType;
+}
+
+const char* InterfaceName(AuditedClass aClass)
+{
+	return Entry(aClass).name;
+}
+
+ObjectCheck CheckObject(ReadableMemory& aMemory, const ModuleBases& aBases, const void* aObject, size_t aBytes)
+{
+	if (!aMemory.Range(aObject, std::max<size_t>(aBytes, 16)))
+	{
+		return { ObjectVerdict::Unreadable };
+	}
+	const std::optional<AuditedClass> cls = AuditedClassOf(*static_cast<const uintptr_t*>(aObject), aBases);
+	if (!cls)
+	{
+		return { ObjectVerdict::Unaudited };
+	}
+	const int type = ConcreteTypeOf(*cls);
+	if (type >= 0 && int(static_cast<const PxBase*>(aObject)->getConcreteType()) != type)
+	{
+		return { ObjectVerdict::WrongType, *cls };
+	}
+	return { ObjectVerdict::Ok, *cls };
+}
+}
+```
+
+- [ ] **Step 6: Edit `CMakeLists.txt`: add `GameAbi.cpp` to `probe_core`**
+
+Replace:
+```cmake
+	src/physx/Readable.cpp
+```
+with:
+```cmake
+	src/physx/Readable.cpp
+	src/physx/GameAbi.cpp
+```
+
+- [ ] **Step 7: Run the tests; they all pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/physx-probe && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E " error |warning C"; \
+  ./build/RelWithDebInfo/probe_tests.exe | tail -1
+```
+Expected: no lines from the build filter, then `60 test(s), 0 failure(s)`
+
+- [ ] **Step 8: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/physx-probe \
+  && git commit -q -m "physx-probe: the audited PhysX build and per-object checks" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 19: The report for revision 2
+
+**Files:**
+- Modify: `tests/TestReportJson.cpp`, `src/Report.h`, `src/ReportJson.cpp`
+- Modify: `src/Probe.cpp`, `src/Plugin.cpp` (one line each, so the build stays green until Tasks 20 and 21)
+
+- [ ] **Step 1: Write the failing test `tests/TestReportJson.cpp`**
+
+It expects version 0.2.0, the DLL identities, the skip counts, and no `faults`.
+```cpp
+#include "Harness.h"
+
+#include "ReportJson.h"
+
+namespace
+{
+bool Contains(const std::string& aText, const std::string& aPart)
+{
+	return aText.find(aPart) != std::string::npos;
+}
+}
+
+TEST(ReportWithoutGeometryHasNulls)
+{
+	cpmc::DumpReport report;
+	report.time = "2026-10-01T12:00:00";
+	report.trigger = "request";
+	report.runtime = "2.3.1";
+	report.physxFileVersion = "3.4.2.0";
+	report.modules.push_back({ "PhysX3_x64.dll", 0x64c978b4, 0x281000, true });
+	report.modules.push_back({ "PhysX3Common_x64.dll", 0, 0, false });
+	report.steps.push_back({ 1, "build", false, "PhysX3Common_x64.dll is not loaded" });
+	const std::string json = cpmc::ReportToJson(report);
+	CHECK(Contains(json, "\"probeVersion\": \"0.2.0\""));
+	CHECK(Contains(json, "\"trigger\": \"request\""));
+	CHECK(Contains(json, "\"runtime\": \"2.3.1\""));
+	CHECK(Contains(json, "\"name\": \"PhysX3_x64.dll\""));
+	CHECK(Contains(json, "\"timestamp\": \"0x64c978b4\""));
+	CHECK(Contains(json, "\"imageSize\": \"0x281000\""));
+	CHECK(Contains(json, "\"audited\": true"));
+	CHECK(Contains(json, "\"audited\": false"));
+	CHECK(Contains(json, "\"player\": null"));
+	CHECK(Contains(json, "\"pass\": false"));
+	CHECK(Contains(json, "\"detail\": \"PhysX3Common_x64.dll is not loaded\""));
+	CHECK(Contains(json, "\"censusSkipped\": 0"));
+	CHECK(Contains(json, "\"region\": null"));
+	CHECK(Contains(json, "\"coordinateCheck\": null"));
+	CHECK(Contains(json, "\"files\": {}"));
+	CHECK(!Contains(json, "faults"));
+}
+
+TEST(ReportWithGeometryHasItsSections)
+{
+	cpmc::DumpReport report;
+	cpmc::PlayerPose pose;
+	pose.feet = { 1.0, 2.0, 3.0 };
+	pose.forward = { 0.0f, 1.0f, 0.0f };
+	pose.camera = cpmc::CameraPose{ { 1.0, 2.0, 4.7 }, { 0.0f, 1.0f, 0.0f }, 80.0f };
+	report.player = pose;
+	report.censusSkipped = 5;
+	cpmc::SceneCensus scene;
+	scene.gravity = { 0.0f, 0.0f, -9.81f };
+	scene.flags = 0x1000;
+	scene.requiresRwLock = true;
+	scene.byConcreteType["PxRigidStatic"] = 7;
+	scene.actorNameSamples = { "door \"A\"" };
+	scene.skippedUnreadable = 2;
+	scene.skippedUnaudited = 3;
+	scene.mismatches = 1;
+	report.scenes.push_back(scene);
+	cpmc::RegionResult region;
+	region.triangles = 42;
+	region.trianglesByCategory["static_trimesh"] = 42;
+	region.unreadable = 4;
+	report.region = region;
+	cpmc::CoordinateCheck check;
+	check.rayHit = true;
+	check.hitDistance = 1.75;
+	check.pass = true;
+	check.scene = 0;
+	report.coordinateCheck = check;
+	report.objWritten = true;
+	const std::string json = cpmc::ReportToJson(report);
+	CHECK(Contains(json, "\"fov\": 80"));
+	CHECK(Contains(json, "\"censusSkipped\": 5"));
+	CHECK(Contains(json, "\"flags\": \"0x1000\""));
+	CHECK(Contains(json, "\"requiresRwLock\": true"));
+	CHECK(Contains(json, "\"PxRigidStatic\": 7"));
+	CHECK(Contains(json, "\"door \\\"A\\\"\""));
+	CHECK(Contains(json, "\"unreadable\": 2"));
+	CHECK(Contains(json, "\"unauditedVtable\": 3"));
+	CHECK(Contains(json, "\"mismatches\": 1"));
+	CHECK(Contains(json, "\"static_trimesh\": 42"));
+	CHECK(Contains(json, "\"unreadable\": 4"));
+	CHECK(Contains(json, "\"hitDistance\": 1.75"));
+	CHECK(Contains(json, "\"nearestCapsule\": null"));
+	CHECK(Contains(json, "\"obj\": \"collision.obj\""));
+}
+```
+
+- [ ] **Step 2: Build; it fails**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/physx-probe && "$CMAKE" --build --preset release --target probe_tests -- -m -v:minimal 2>&1 | grep -E " error " | head -3
+```
+Expected: `error C2039: 'modules': is not a member of 'cpmc::DumpReport'` (and more like it)
+
+- [ ] **Step 3: Write `src/Report.h`**
+
+```cpp
+#pragma once
+
+#include "Coords.h"
+
+#include <cstdint>
+#include <map>
+#include <optional>
+#include <string>
+#include <vector>
+
+// Plain data for one dump's report.json (see the spec's report schema).
+namespace cpmc
+{
+using Tally = std::map<std::string, uint64_t>;
+
+struct CameraPose
+{
+	Vec3d position;
+	Vec3f forward;
+	float fov = 0.0f;
+};
+
+struct PlayerPose
+{
+	Vec3d feet;
+	Vec3f forward;
+	std::optional<CameraPose> camera;
+};
+
+// One of the game's PhysX DLLs, and whether it is the build the audit covers.
+struct ModuleReport
+{
+	std::string name;
+	uint32_t timestamp = 0;
+	uint32_t imageSize = 0;
+	bool audited = false;
+};
+
+struct CompatStep
+{
+	int step = 0;
+	std::string name;
+	bool pass = false;
+	std::string detail;
+};
+
+struct SceneCensus
+{
+	int index = 0;
+	Vec3f gravity;
+	uint32_t flags = 0;
+	bool requiresRwLock = false;
+	uint32_t staticActors = 0;
+	uint32_t dynamicActors = 0;
+	uint32_t aggregates = 0;
+	uint32_t actorsInAggregates = 0;
+	uint32_t articulations = 0;
+	Tally byConcreteType;
+	Tally byGeometryType;
+	Tally shapeFlags;
+	Tally queryFilter;
+	Tally simulationFilter;
+	uint32_t namedActors = 0;
+	uint32_t actorsWithUserData = 0;
+	std::vector<std::string> actorNameSamples;
+	uint64_t skippedUnreadable = 0;  // objects whose memory couldn't be read
+	uint64_t skippedUnaudited = 0;   // objects whose vtable isn't an audited table
+	uint64_t mismatches = 0;         // type IDs that disagree with the vtable, meshes that don't fit their shape
+	double censusMs = 0.0;
+};
+
+struct RegionResult
+{
+	Vec3d center;
+	Vec3f halfExtents;
+	uint32_t boundsSelectedActors = 0;
+	uint32_t overlapHits = 0;
+	bool overlapOverflow = false;
+	double selectMs = 0.0;
+	double overlapMs = 0.0;
+	double extractMs = 0.0;
+	uint64_t triangles = 0;
+	Tally trianglesByCategory;
+	uint32_t skippedPlanes = 0;
+	uint32_t unknownGeometry = 0;
+	uint32_t badTriangles = 0;
+	uint32_t unreadable = 0;  // shapes and meshes that failed their checks during extraction
+	bool triangleCapHit = false;
+};
+
+struct NearestCapsule
+{
+	double distance = 0.0;
+	float radius = 0.0f;
+	float halfHeight = 0.0f;
+	std::string kind;
+};
+
+struct CoordinateCheck
+{
+	bool rayHit = false;
+	double hitDistance = 0.0;
+	int scene = -1;
+	bool pass = false;
+	std::optional<NearestCapsule> nearestCapsule;
+};
+
+struct DumpReport
+{
+	std::string probeVersion = "0.2.0";
+	std::string time;
+	std::string trigger;
+	std::string runtime;
+	std::string physxFileVersion;
+	std::vector<ModuleReport> modules;
+	std::optional<PlayerPose> player;
+	bool compatibilityPass = false;
+	std::vector<CompatStep> steps;
+	uint64_t censusSkipped = 0;
+	uint64_t censusMismatches = 0;
+	std::vector<SceneCensus> scenes;
+	std::optional<RegionResult> region;
+	std::optional<CoordinateCheck> coordinateCheck;
+	double mainThreadPauseMs = 0.0;
+	bool objWritten = false;
+};
+}
+```
+
+- [ ] **Step 4: Write `src/ReportJson.cpp`**
+
+```cpp
+#include "ReportJson.h"
+
+#include "Json.h"
+
+#include <format>
+
+namespace cpmc
+{
+namespace
+{
+void Vec(JsonWriter& aJson, const Vec3d& aValue)
+{
+	aJson.BeginArray().Number(aValue.x).Number(aValue.y).Number(aValue.z).EndArray();
+}
+
+void Vec(JsonWriter& aJson, const Vec3f& aValue)
+{
+	aJson.BeginArray().Number(aValue.x).Number(aValue.y).Number(aValue.z).EndArray();
+}
+
+void Counts(JsonWriter& aJson, const Tally& aTally)
+{
+	aJson.BeginObject();
+	for (const auto& [name, count] : aTally)
+	{
+		aJson.Key(name).UInt(count);
+	}
+	aJson.EndObject();
+}
+
+void Player(JsonWriter& aJson, const PlayerPose& aPose)
+{
+	aJson.BeginObject();
+	aJson.Key("feet");
+	Vec(aJson, aPose.feet);
+	aJson.Key("forward");
+	Vec(aJson, aPose.forward);
+	aJson.Key("camera");
+	if (aPose.camera)
+	{
+		aJson.BeginObject();
+		aJson.Key("position");
+		Vec(aJson, aPose.camera->position);
+		aJson.Key("forward");
+		Vec(aJson, aPose.camera->forward);
+		aJson.Key("fov").Number(aPose.camera->fov);
+		aJson.EndObject();
+	}
+	else
+	{
+		aJson.Null();
+	}
+	aJson.EndObject();
+}
+
+void Scene(JsonWriter& aJson, const SceneCensus& aScene)
+{
+	aJson.BeginObject();
+	aJson.Key("index").Int(aScene.index);
+	aJson.Key("gravity");
+	Vec(aJson, aScene.gravity);
+	aJson.Key("flags").String(std::format("0x{:x}", aScene.flags));
+	aJson.Key("requiresRwLock").Bool(aScene.requiresRwLock);
+	aJson.Key("staticActors").UInt(aScene.staticActors);
+	aJson.Key("dynamicActors").UInt(aScene.dynamicActors);
+	aJson.Key("aggregates").UInt(aScene.aggregates);
+	aJson.Key("actorsInAggregates").UInt(aScene.actorsInAggregates);
+	aJson.Key("articulations").UInt(aScene.articulations);
+	aJson.Key("byConcreteType");
+	Counts(aJson, aScene.byConcreteType);
+	aJson.Key("byGeometryType");
+	Counts(aJson, aScene.byGeometryType);
+	aJson.Key("shapeFlags");
+	Counts(aJson, aScene.shapeFlags);
+	aJson.Key("queryFilter");
+	Counts(aJson, aScene.queryFilter);
+	aJson.Key("simulationFilter");
+	Counts(aJson, aScene.simulationFilter);
+	aJson.Key("namedActors").UInt(aScene.namedActors);
+	aJson.Key("actorsWithUserData").UInt(aScene.actorsWithUserData);
+	aJson.Key("actorNameSamples").BeginArray();
+	for (const auto& name : aScene.actorNameSamples)
+	{
+		aJson.String(name);
+	}
+	aJson.EndArray();
+	aJson.Key("skipped").BeginObject().Key("unreadable").UInt(aScene.skippedUnreadable);
+	aJson.Key("unauditedVtable").UInt(aScene.skippedUnaudited).EndObject();
+	aJson.Key("mismatches").UInt(aScene.mismatches);
+	aJson.Key("censusMs").Number(aScene.censusMs);
+	aJson.EndObject();
+}
+
+void Region(JsonWriter& aJson, const RegionResult& aRegion)
+{
+	aJson.BeginObject();
+	aJson.Key("center");
+	Vec(aJson, aRegion.center);
+	aJson.Key("halfExtents");
+	Vec(aJson, aRegion.halfExtents);
+	aJson.Key("boundsSelectedActors").UInt(aRegion.boundsSelectedActors);
+	aJson.Key("overlapHits").UInt(aRegion.overlapHits);
+	aJson.Key("overlapOverflow").Bool(aRegion.overlapOverflow);
+	aJson.Key("selectMs").Number(aRegion.selectMs);
+	aJson.Key("overlapMs").Number(aRegion.overlapMs);
+	aJson.Key("extractMs").Number(aRegion.extractMs);
+	aJson.Key("triangles").UInt(aRegion.triangles);
+	aJson.Key("trianglesByCategory");
+	Counts(aJson, aRegion.trianglesByCategory);
+	aJson.Key("skipped").BeginObject().Key("plane").UInt(aRegion.skippedPlanes);
+	aJson.Key("unknownGeometry").UInt(aRegion.unknownGeometry);
+	aJson.Key("badTriangles").UInt(aRegion.badTriangles);
+	aJson.Key("unreadable").UInt(aRegion.unreadable).EndObject();
+	aJson.Key("triangleCapHit").Bool(aRegion.triangleCapHit);
+	aJson.EndObject();
+}
+
+void Coordinates(JsonWriter& aJson, const CoordinateCheck& aCheck)
+{
+	aJson.BeginObject();
+	aJson.Key("rayHit").Bool(aCheck.rayHit);
+	aJson.Key("hitDistance");
+	aCheck.rayHit ? aJson.Number(aCheck.hitDistance) : aJson.Null();
+	aJson.Key("scene").Int(aCheck.scene);
+	aJson.Key("pass").Bool(aCheck.pass);
+	aJson.Key("nearestCapsule");
+	if (aCheck.nearestCapsule)
+	{
+		aJson.BeginObject();
+		aJson.Key("distance").Number(aCheck.nearestCapsule->distance);
+		aJson.Key("radius").Number(aCheck.nearestCapsule->radius);
+		aJson.Key("halfHeight").Number(aCheck.nearestCapsule->halfHeight);
+		aJson.Key("kind").String(aCheck.nearestCapsule->kind);
+		aJson.EndObject();
+	}
+	else
+	{
+		aJson.Null();
+	}
+	aJson.EndObject();
+}
+}
+
+std::string ReportToJson(const DumpReport& aReport)
+{
+	JsonWriter json;
+	json.BeginObject();
+	json.Key("probeVersion").String(aReport.probeVersion);
+	json.Key("time").String(aReport.time);
+	json.Key("trigger").String(aReport.trigger);
+	json.Key("game").BeginObject();
+	json.Key("runtime").String(aReport.runtime);
+	json.Key("physxFileVersion").String(aReport.physxFileVersion);
+	json.Key("modules").BeginArray();
+	for (const ModuleReport& module : aReport.modules)
+	{
+		json.BeginObject();
+		json.Key("name").String(module.name);
+		json.Key("timestamp").String(std::format("0x{:x}", module.timestamp));
+		json.Key("imageSize").String(std::format("0x{:x}", module.imageSize));
+		json.Key("audited").Bool(module.audited);
+		json.EndObject();
+	}
+	json.EndArray();
+	json.EndObject();
+	json.Key("player");
+	aReport.player ? Player(json, *aReport.player) : void(json.Null());
+	json.Key("compatibility").BeginObject();
+	json.Key("pass").Bool(aReport.compatibilityPass);
+	json.Key("steps").BeginArray();
+	for (const CompatStep& step : aReport.steps)
+	{
+		json.BeginObject();
+		json.Key("step").Int(step.step);
+		json.Key("name").String(step.name);
+		json.Key("pass").Bool(step.pass);
+		json.Key("detail").String(step.detail);
+		json.EndObject();
+	}
+	json.EndArray();
+	json.Key("censusSkipped").UInt(aReport.censusSkipped);
+	json.Key("censusMismatches").UInt(aReport.censusMismatches);
+	json.EndObject();
+	json.Key("scenes").BeginArray();
+	for (const SceneCensus& scene : aReport.scenes)
+	{
+		Scene(json, scene);
+	}
+	json.EndArray();
+	json.Key("region");
+	aReport.region ? Region(json, *aReport.region) : void(json.Null());
+	json.Key("coordinateCheck");
+	aReport.coordinateCheck ? Coordinates(json, *aReport.coordinateCheck) : void(json.Null());
+	json.Key("mainThreadPauseMs").Number(aReport.mainThreadPauseMs);
+	json.Key("files").BeginObject();
+	if (aReport.objWritten)
+	{
+		json.Key("obj").String("collision.obj");
+		json.Key("mtl").String("collision.mtl");
+	}
+	json.EndObject();
+	json.EndObject();
+	return json.Str() + "\n";
+}
+}
+```
+
+- [ ] **Step 5: Edit `src/Probe.cpp`: drop the removed `faults` field**
+
+Task 20 rewrites this file; this keeps it compiling until then. Replace:
+```cpp
+	report.coordinateCheck = check;
+	report.faults = faults;
+```
+with:
+```cpp
+	report.coordinateCheck = check;
+```
+
+- [ ] **Step 6: Edit `src/Plugin.cpp`: log skipped objects instead of faults**
+
+Replace:
+```cpp
+	Log("dump ({}): compatibility {}, {} scene(s), {} triangles, coordinate check {}, main-thread pause {:.1f} ms, {} fault(s)",
+```
+with:
+```cpp
+	Log("dump ({}): compatibility {}, {} scene(s), {} triangles, coordinate check {}, main-thread pause {:.1f} ms, {} object(s) skipped",
+```
+Then replace:
+```cpp
+	    report.faults);
+```
+with:
+```cpp
+	    report.censusSkipped);
+```
+
+- [ ] **Step 7: Run the tests; they all pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/physx-probe && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E " error |warning C"; \
+  ./build/RelWithDebInfo/probe_tests.exe | tail -1
+```
+Expected: no lines from the build filter, then `60 test(s), 0 failure(s)`
+
+- [ ] **Step 8: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/physx-probe \
+  && git commit -q -m "physx-probe: report DLL identities and skipped objects, version 0.2.0" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 20: The PhysX session without a crash guard
+
+Every object is checked before anything is called on it, every raw array before it is read, and nothing is caught.
+This code runs only against the game, so it has no new unit tests. Tasks 16 to 18 test everything it relies on that can
+be tested offline, and Task 22 tests the rest.
+
+**Files:**
+- Modify: `src/physx/PhysxSession.h`, `src/physx/PhysxSession.cpp`, `src/Probe.cpp` (rewritten)
+- Modify: `src/physx/ShapeTriangles.h`, `src/physx/ShapeTriangles.cpp` (`AppendTriangles`)
+- Modify: `src/physx/Checks.h`, `src/physx/Checks.cpp`, `tests/TestChecks.cpp` (two functions go)
+- Modify: `CMakeLists.txt` (`/EHsc`, no `TestGuard.cpp`)
+- Delete: `tests/TestGuard.cpp`
+
+- [ ] **Step 1: Write `src/physx/PhysxSession.h`**
+
+```cpp
+#pragma once
+
+#include "Report.h"
+#include "physx/GameAbi.h"
+#include "physx/PxHeaders.h"
+#include "physx/Readable.h"
+#include "physx/ShapeTriangles.h"
+
+#include <cstdint>
+#include <map>
+#include <optional>
+#include <string>
+#include <vector>
+
+// The only code that calls the game's PhysX. It catches no faults: the game's crash handler sees a fault before any
+// handler of ours could, and freezes the game if we carry on. So it checks before it touches anything. It calls only
+// the methods the audit verified, only on objects whose vtables are audited tables of the audited build, and it
+// checks every raw array before reading it.
+namespace cpmc::px
+{
+// A module's version resource: the binary FILEVERSION field and the "FileVersion" string. They can disagree:
+// NVIDIA's PhysX 3.4.2 release says 3.4.1.0 in the binary field and 3.4.2.0 in the string. Empty if unreadable.
+struct FileVersions
+{
+	std::string binary;
+	std::string text;
+};
+
+// aModule is an HMODULE.
+FileVersions ReadFileVersions(void* aModule);
+
+// The compatibility check's result for one dump.
+struct CheckResult
+{
+	bool                         pass = false;
+	std::vector<CompatStep>      steps;
+	std::string                  physxFileVersion;
+	std::vector<ModuleReport>    modules;
+	std::vector<physx::PxScene*> scenes;  // checked, once step 4 has passed
+};
+
+// Census and region results for one scene.
+struct SceneDump
+{
+	SceneCensus                             census;
+	uint32_t                                boundsSelected = 0;
+	uint32_t                                overlapHits = 0;
+	bool                                    overlapCapped = false;
+	double                                  selectMs = 0.0;
+	double                                  overlapMs = 0.0;
+	double                                  extractMs = 0.0;
+	std::map<std::string, std::vector<Tri>> triangles;  // by category
+	AppendStats                             stats;
+	std::optional<NearestCapsule>           nearestCapsule;
+	bool                                    triangleCapHit = false;
+};
+
+class PhysxSession
+{
+public:
+	// Starts a dump: forgets remembered memory regions, then runs the compatibility check. Steps 1-3 describe the
+	// build and run once per session; steps 4-7 describe the world and run every time.
+	CheckResult Check();
+
+	// Census, region selection, overlap query and triangle extraction, all under the scene's read lock. aScene must
+	// come from this dump's Check(). aFeet is V's feet (world), used for the nearest capsule. At most aTriangleBudget
+	// triangles are kept. After 100 skipped objects the census stops and the region work is left out.
+	SceneDump DumpScene(physx::PxScene* aScene, int aIndex, const physx::PxBounds3& aRegion, const physx::PxVec3& aFeet,
+	                    uint64_t aTriangleBudget);
+
+	// A ray straight down against static geometry. The distance to the nearest hit, if any.
+	std::optional<float> RaycastDown(physx::PxScene* aScene, const physx::PxVec3& aFrom, float aMaxDistance);
+
+private:
+	struct Build
+	{
+		bool                      pass = false;
+		std::vector<CompatStep>   steps;
+		std::string               physxFileVersion;
+		std::vector<ModuleReport> modules;
+		ModuleBases               bases;
+		physx::PxPhysics*         physics = nullptr;
+	};
+
+	// Steps 1-3.
+	Build CheckBuild();
+
+	std::optional<Build> build_;
+	ReadableMemory       memory_;
+};
+}
+```
+
+- [ ] **Step 2: Write `src/physx/PhysxSession.cpp`**
+
+```cpp
+#include "physx/PhysxSession.h"
+
+#include "physx/Checks.h"
+
+#include <Windows.h>
+
+#include <algorithm>
+#include <format>
+#include <initializer_list>
+#include <set>
+#include <string_view>
+#include <utility>
+
+using namespace physx;
+
+namespace cpmc::px
+{
+FileVersions ReadFileVersions(void* aModule)
+{
+	FileVersions versions;
+	wchar_t      path[MAX_PATH]{};
+	if (!GetModuleFileNameW(static_cast<HMODULE>(aModule), path, MAX_PATH))
+	{
+		return versions;
+	}
+	DWORD       handle = 0;
+	const DWORD size = GetFileVersionInfoSizeW(path, &handle);
+	if (size == 0)
+	{
+		return versions;
+	}
+	std::vector<uint8_t> data(size);
+	if (!GetFileVersionInfoW(path, 0, size, data.data()))
+	{
+		return versions;
+	}
+	VS_FIXEDFILEINFO* info = nullptr;
+	UINT              length = 0;
+	if (VerQueryValueW(data.data(), L"\\", reinterpret_cast<void**>(&info), &length) && info)
+	{
+		versions.binary = std::format("{}.{}.{}.{}", HIWORD(info->dwFileVersionMS), LOWORD(info->dwFileVersionMS),
+		                              HIWORD(info->dwFileVersionLS), LOWORD(info->dwFileVersionLS));
+	}
+	// The string table is keyed by the resource's first language and code page.
+	struct Translation
+	{
+		WORD language;
+		WORD codePage;
+	};
+	Translation* translations = nullptr;
+	if (VerQueryValueW(data.data(), L"\\VarFileInfo\\Translation", reinterpret_cast<void**>(&translations), &length) &&
+	    translations && length >= sizeof(Translation))
+	{
+		const std::wstring key =
+		    std::format(L"\\StringFileInfo\\{:04x}{:04x}\\FileVersion", translations[0].language, translations[0].codePage);
+		wchar_t* text = nullptr;
+		UINT     textLength = 0;
+		if (VerQueryValueW(data.data(), key.c_str(), reinterpret_cast<void**>(&text), &textLength) && text)
+		{
+			for (size_t i = 0; i < textLength && text[i] != L'\0'; ++i)
+			{
+				versions.text.push_back(text[i] < 0x80 ? char(text[i]) : '?');  // version strings are ASCII
+			}
+		}
+	}
+	return versions;
+}
+
+namespace
+{
+constexpr uint32_t kMaxScenes = 16;
+constexpr uint32_t kMaxActorsPerScene = 10'000'000;
+constexpr size_t   kSampleActors = 64;
+constexpr uint32_t kMaxSampledActors = 10'000;
+constexpr size_t   kMaxNameSamples = 32;
+constexpr size_t   kMaxNameLength = 128;
+constexpr size_t   kOverlapBuffer = 8192;
+constexpr size_t   kOverlapCap = 1'000'000;
+constexpr uint64_t kMaxSkipsPerScene = 100;
+constexpr float    kCapsuleSearch = 1.5f;
+constexpr size_t   kActorBytes = 24;  // the vtable pointer, the type ID and base flags, and userData
+
+const PxActorTypeFlags kRigidActors = PxActorTypeFlag::eRIGID_STATIC | PxActorTypeFlag::eRIGID_DYNAMIC;
+
+double NowMs()
+{
+	LARGE_INTEGER counter;
+	LARGE_INTEGER frequency;
+	QueryPerformanceCounter(&counter);
+	QueryPerformanceFrequency(&frequency);
+	return double(counter.QuadPart) * 1000.0 / double(frequency.QuadPart);
+}
+
+std::string Narrow(const wchar_t* aText)
+{
+	std::string out;
+	for (; *aText; ++aText)
+	{
+		out.push_back(char(*aText));  // module names are ASCII
+	}
+	return out;
+}
+
+std::string Describe(const ObjectCheck& aCheck)
+{
+	switch (aCheck.verdict)
+	{
+	case ObjectVerdict::Ok:
+		return std::format("a {} vtable", InterfaceName(aCheck.cls));
+	case ObjectVerdict::Unreadable:
+		return "not readable";
+	case ObjectVerdict::Unaudited:
+		return "a vtable the audit doesn't cover";
+	case ObjectVerdict::WrongType:
+		return std::format("a {} vtable but a different type ID", InterfaceName(aCheck.cls));
+	}
+	return {};
+}
+
+// What checking objects found, in a census or in the compatibility check's sample.
+struct Findings
+{
+	uint64_t    objectsChecked = 0;
+	uint64_t    unreadable = 0;
+	uint64_t    unaudited = 0;
+	uint64_t    typeMismatches = 0;      // a type ID that disagrees with the vtable, or the wrong class for the place
+	uint64_t    geometryMismatches = 0;  // a shape whose mesh doesn't fit its geometry type
+	std::string firstProblem;
+	std::string firstGeometryMismatch;
+	bool        seenTriangleMesh = false;
+	bool        seenHeightField = false;
+	bool        seenConvex = false;
+
+	uint64_t Skipped() const { return unreadable + unaudited; }
+	uint64_t Mismatches() const { return typeMismatches + geometryMismatches; }
+};
+
+// Checks game objects and memory for one dump.
+struct Checker
+{
+	ReadableMemory&    memory;
+	const ModuleBases& bases;
+
+	// The object's audited class, if it passes CheckObject and is one of aAccepted. Counts what it finds either way.
+	std::optional<AuditedClass> Accept(const void* aObject, std::initializer_list<AuditedClass> aAccepted, const char* aWhat,
+	                                   Findings& aFindings, size_t aBytes = 16) const
+	{
+		++aFindings.objectsChecked;
+		const ObjectCheck check = CheckObject(memory, bases, aObject, aBytes);
+		const bool accepted = check.verdict == ObjectVerdict::Ok &&
+		                      std::find(aAccepted.begin(), aAccepted.end(), check.cls) != aAccepted.end();
+		if (accepted)
+		{
+			return check.cls;
+		}
+		switch (check.verdict)
+		{
+		case ObjectVerdict::Unreadable:
+			++aFindings.unreadable;
+			break;
+		case ObjectVerdict::Unaudited:
+			++aFindings.unaudited;
+			break;
+		default:
+			++aFindings.typeMismatches;
+			break;
+		}
+		if (aFindings.firstProblem.empty())
+		{
+			aFindings.firstProblem = std::format("{} at {} is {}", aWhat, aObject, Describe(check));
+		}
+		return std::nullopt;
+	}
+
+	// How many bytes from aText on can be read, up to aMax.
+	size_t ReadableLength(const char* aText, size_t aMax) const
+	{
+		size_t length = 0;
+		while (length < aMax && memory.Range(aText + length, 1))
+		{
+			++length;
+		}
+		return length;
+	}
+};
+
+std::vector<PxShape*> ShapesOf(const PxRigidActor& aActor)
+{
+	std::vector<PxShape*> shapes(aActor.getNbShapes());
+	shapes.resize(aActor.getShapes(shapes.data(), PxU32(shapes.size())));
+	return shapes;
+}
+
+// The mesh object a mesh-based shape references; nullptr for primitives.
+const PxBase* MeshOf(const PxShape& aShape, PxGeometryType::Enum aGeometry)
+{
+	switch (aGeometry)
+	{
+	case PxGeometryType::eTRIANGLEMESH:
+	{
+		PxTriangleMeshGeometry geometry;
+		return aShape.getTriangleMeshGeometry(geometry) ? geometry.triangleMesh : nullptr;
+	}
+	case PxGeometryType::eCONVEXMESH:
+	{
+		PxConvexMeshGeometry geometry;
+		return aShape.getConvexMeshGeometry(geometry) ? geometry.convexMesh : nullptr;
+	}
+	case PxGeometryType::eHEIGHTFIELD:
+	{
+		PxHeightFieldGeometry geometry;
+		return aShape.getHeightFieldGeometry(geometry) ? geometry.heightField : nullptr;
+	}
+	default:
+		return nullptr;
+	}
+}
+
+// "static", "kinematic" or "dynamic". The audited class tells a static actor from a dynamic one.
+const char* ActorKind(const PxActor& aActor, AuditedClass aClass)
+{
+	if (aClass == AuditedClass::RigidStatic)
+	{
+		return "static";
+	}
+	return static_cast<const PxRigidBody&>(aActor).getRigidBodyFlags().isSet(PxRigidBodyFlag::eKINEMATIC) ? "kinematic"
+	                                                                                                       : "dynamic";
+}
+
+// Checks one actor, its shapes and their meshes; with aCensus set, it also fills the census tallies. Returns the
+// actor's class if the actor itself passed its check.
+std::optional<AuditedClass> VisitActor(const Checker& aChecker, const PxActor* aActor, Findings& aFindings,
+                                       SceneCensus* aCensus, std::set<std::string>* aNames)
+{
+	const std::optional<AuditedClass> actorClass =
+	    aChecker.Accept(aActor, { AuditedClass::RigidStatic, AuditedClass::RigidDynamic }, "an actor", aFindings, kActorBytes);
+	if (!actorClass)
+	{
+		return std::nullopt;
+	}
+	if (aCensus)
+	{
+		++aCensus->byConcreteType[InterfaceName(*actorClass)];
+		if (const char* name = aActor->getName())
+		{
+			++aCensus->namedActors;
+			if (aNames && aNames->size() < kMaxNameSamples)
+			{
+				aNames->insert(SanitizeName(name, aChecker.ReadableLength(name, kMaxNameLength)));
+			}
+		}
+		if (aActor->userData)
+		{
+			++aCensus->actorsWithUserData;
+		}
+	}
+	for (const PxShape* shape : ShapesOf(static_cast<const PxRigidActor&>(*aActor)))
+	{
+		if (!aChecker.Accept(shape, { AuditedClass::Shape }, "a shape", aFindings))
+		{
+			continue;
+		}
+		const PxGeometryType::Enum geometry = shape->getGeometryType();
+		if (aCensus)
+		{
+			++aCensus->byGeometryType[GeometryName(geometry)];
+			const PxShapeFlags flags = shape->getFlags();
+			if (flags.isSet(PxShapeFlag::eSIMULATION_SHAPE))
+			{
+				++aCensus->shapeFlags["simulation"];
+			}
+			if (flags.isSet(PxShapeFlag::eSCENE_QUERY_SHAPE))
+			{
+				++aCensus->shapeFlags["sceneQuery"];
+			}
+			if (flags.isSet(PxShapeFlag::eTRIGGER_SHAPE))
+			{
+				++aCensus->shapeFlags["trigger"];
+			}
+			++aCensus->queryFilter[FilterKey(shape->getQueryFilterData())];
+			++aCensus->simulationFilter[FilterKey(shape->getSimulationFilterData())];
+		}
+		const PxBase* mesh = MeshOf(*shape, geometry);
+		if (!mesh)
+		{
+			continue;
+		}
+		const std::optional<AuditedClass> meshClass =
+		    aChecker.Accept(mesh,
+		                    { AuditedClass::ConvexMesh, AuditedClass::TriangleMeshBv33, AuditedClass::TriangleMeshBv34,
+		                      AuditedClass::HeightField },
+		                    "a mesh", aFindings);
+		if (!meshClass)
+		{
+			continue;
+		}
+		if (!GeometryMatchesMesh(geometry, ConcreteTypeOf(*meshClass)))
+		{
+			++aFindings.geometryMismatches;
+			if (aFindings.firstGeometryMismatch.empty())
+			{
+				aFindings.firstGeometryMismatch =
+				    std::format("a {} shape references a {}", GeometryName(geometry), InterfaceName(*meshClass));
+			}
+		}
+		aFindings.seenTriangleMesh |= geometry == PxGeometryType::eTRIANGLEMESH;
+		aFindings.seenHeightField |= geometry == PxGeometryType::eHEIGHTFIELD;
+		aFindings.seenConvex |= geometry == PxGeometryType::eCONVEXMESH;
+	}
+	return actorClass;
+}
+
+// Collects every overlap hit: PhysX hands over each full buffer, and the last partial one, via processTouches.
+struct CollectOverlaps final : PxHitCallback<PxOverlapHit>
+{
+	CollectOverlaps(PxOverlapHit* aBuffer, PxU32 aSize, std::vector<PxOverlapHit>& aOut)
+		: PxHitCallback<PxOverlapHit>(aBuffer, aSize)
+		, out(aOut)
+	{
+	}
+
+	PxAgain processTouches(const PxOverlapHit* aHits, PxU32 aCount) override
+	{
+		out.insert(out.end(), aHits, aHits + aCount);
+		if (out.size() >= kOverlapCap)
+		{
+			capped = true;
+			return false;
+		}
+		return true;
+	}
+
+	std::vector<PxOverlapHit>& out;
+	bool                       capped = false;
+};
+
+// Keeps the capsule nearest to V's feet (distance to its surface), if within kCapsuleSearch.
+void NoteCapsule(const PxShape& aShape, const PxTransform& aActorPose, const PxVec3& aFeet, const char* aKind,
+                 std::optional<NearestCapsule>& aNearest)
+{
+	PxCapsuleGeometry geometry;
+	if (!aShape.getCapsuleGeometry(geometry))
+	{
+		return;
+	}
+	const PxTransform pose = aActorPose * aShape.getLocalPose();
+	const PxVec3      axis = pose.q.rotate(PxVec3(geometry.halfHeight, 0.0f, 0.0f));  // capsules lie along local X
+	const PxVec3      a = pose.p - axis;
+	const PxVec3      ab = axis * 2.0f;
+	const float       lengthSquared = ab.magnitudeSquared();
+	const float       t = lengthSquared > 0.0f ? std::clamp((aFeet - a).dot(ab) / lengthSquared, 0.0f, 1.0f) : 0.0f;
+	const float       distance = std::max(0.0f, (a + ab * t - aFeet).magnitude() - geometry.radius);
+	if (distance <= kCapsuleSearch && (!aNearest || distance < aNearest->distance))
+	{
+		aNearest = NearestCapsule{ distance, geometry.radius, geometry.halfHeight, aKind };
+	}
+}
+
+uint64_t CountTriangles(const std::map<std::string, std::vector<Tri>>& aTriangles)
+{
+	uint64_t count = 0;
+	for (const auto& [category, triangles] : aTriangles)
+	{
+		count += triangles.size();
+	}
+	return count;
+}
+
+// Drops triangles beyond aBudget, starting from the last category.
+void TrimToBudget(std::map<std::string, std::vector<Tri>>& aTriangles, uint64_t aBudget)
+{
+	uint64_t excess = CountTriangles(aTriangles);
+	excess = excess > aBudget ? excess - aBudget : 0;
+	for (auto it = aTriangles.rbegin(); it != aTriangles.rend() && excess > 0; ++it)
+	{
+		const uint64_t drop = std::min<uint64_t>(excess, it->second.size());
+		it->second.resize(it->second.size() - drop);
+		excess -= drop;
+	}
+}
+}
+
+PhysxSession::Build PhysxSession::CheckBuild()
+{
+	Build      build;
+	const auto step = [&](int aNumber, const char* aName, bool aPass, std::string aDetail) {
+		build.steps.push_back({ aNumber, aName, aPass, std::move(aDetail) });
+		return aPass;
+	};
+
+	// 1. The build: both DLLs loaded, with the audited timestamps and image sizes.
+	HMODULE     modules[2] = {};
+	bool        audited = true;
+	std::string detail;
+	for (size_t i = 0; i < 2; ++i)
+	{
+		const AuditedModule& expected = kAuditedModules[i];
+		modules[i] = GetModuleHandleW(expected.name);
+		ModuleReport report;
+		report.name = Narrow(expected.name);
+		const std::optional<ModuleId> id = modules[i] ? ModuleIdentity(modules[i]) : std::nullopt;
+		if (id)
+		{
+			report.timestamp = id->timestamp;
+			report.imageSize = id->imageSize;
+			report.audited = *id == expected.id;
+		}
+		audited &= report.audited;
+		detail += std::format("{}{} ", detail.empty() ? "" : "; ", report.name);
+		detail += !modules[i] ? std::string("is not loaded")
+		          : !id       ? std::string("has no readable PE header")
+		                      : std::format("timestamp 0x{:x}, image size 0x{:x}{}", report.timestamp, report.imageSize,
+		                                    report.audited ? "" : ": not the audited build");
+		build.modules.push_back(std::move(report));
+	}
+	const FileVersions versions = modules[0] ? ReadFileVersions(modules[0]) : FileVersions{};
+	build.physxFileVersion = versions.text;
+	if (modules[0])
+	{
+		detail += std::format("; PhysX3_x64.dll FileVersion \"{}\" (binary field {})", versions.text, versions.binary);
+	}
+	if (!step(1, "build", audited, detail))
+	{
+		return build;
+	}
+	build.bases = { reinterpret_cast<uintptr_t>(modules[0]), reinterpret_cast<uintptr_t>(modules[1]) };
+
+	// 2. The physics object. PxGetPhysics is the only function called before this check.
+	using GetPhysicsFn = PxPhysics& (*)();
+	const auto        getPhysics = reinterpret_cast<GetPhysicsFn>(GetProcAddress(modules[0], "PxGetPhysics"));
+	PxPhysics*        physics = getPhysics ? &getPhysics() : nullptr;
+	const ObjectCheck check = CheckObject(memory_, build.bases, physics);
+	if (!step(2, "physics", check.verdict == ObjectVerdict::Ok && check.cls == AuditedClass::Physics,
+	          getPhysics ? std::format("PxPhysics at {}: {}", static_cast<const void*>(physics), Describe(check))
+	                     : std::string("PxGetPhysics isn't exported")))
+	{
+		return build;
+	}
+
+	// 3. Tolerances.
+	const PxTolerancesScale& scale = physics->getTolerancesScale();
+	const bool               readable = memory_.Range(&scale, sizeof(scale));
+	if (!step(3, "tolerances", readable && TolerancesPlausible(scale.length, scale.speed),
+	          readable ? std::format("length {}, speed {}", scale.length, scale.speed)
+	                   : std::string("the tolerances aren't readable")))
+	{
+		return build;
+	}
+	build.physics = physics;
+	build.pass = true;
+	return build;
+}
+
+CheckResult PhysxSession::Check()
+{
+	memory_.Clear();
+	if (!build_)
+	{
+		build_ = CheckBuild();
+	}
+	CheckResult result;
+	result.steps = build_->steps;
+	result.physxFileVersion = build_->physxFileVersion;
+	result.modules = build_->modules;
+	if (!build_->pass)
+	{
+		return result;
+	}
+	const auto step = [&](int aNumber, const char* aName, bool aPass, std::string aDetail) {
+		result.steps.push_back({ aNumber, aName, aPass, std::move(aDetail) });
+		return aPass;
+	};
+	PxPhysics&    physics = *build_->physics;
+	const Checker checker{ memory_, build_->bases };
+
+	// 4. Scenes.
+	const PxU32           count = physics.getNbScenes();
+	std::vector<PxScene*> scenes;
+	if (count >= 1 && count <= kMaxScenes)
+	{
+		scenes.resize(count);
+		scenes.resize(physics.getScenes(scenes.data(), count));
+	}
+	std::string sceneProblem;
+	for (PxScene* scene : scenes)
+	{
+		const ObjectCheck check = CheckObject(memory_, build_->bases, scene);
+		if (sceneProblem.empty() && (check.verdict != ObjectVerdict::Ok || check.cls != AuditedClass::Scene))
+		{
+			sceneProblem = std::format("; the scene at {} is {}", static_cast<const void*>(scene), Describe(check));
+		}
+	}
+	const bool scenesOk = count >= 1 && count <= kMaxScenes && scenes.size() == count && sceneProblem.empty();
+	if (!step(4, "scenes", scenesOk, std::format("{} scene(s){}", count, sceneProblem)))
+	{
+		return result;
+	}
+	result.scenes = scenes;
+
+	// 5. Gravity and counts.
+	bool        allSane = true;
+	bool        anyEarthLike = false;
+	std::string factsDetail;
+	for (PxScene* scene : scenes)
+	{
+		const PxVec3 gravity = scene->getGravity();
+		const PxU32  actors = scene->getNbActors(kRigidActors);
+		allSane &= GravityFinite(gravity) && actors <= kMaxActorsPerScene;
+		anyEarthLike |= GravityEarthLike(gravity);
+		factsDetail += std::format("{}gravity ({:.2f}, {:.2f}, {:.2f}), {} actors", factsDetail.empty() ? "" : "; ", gravity.x,
+		                           gravity.y, gravity.z, actors);
+	}
+	if (!step(5, "gravity and counts", allSane && anyEarthLike, factsDetail))
+	{
+		return result;
+	}
+
+	// 6 and 7. Sampled actors, their shapes and their meshes; then each shape's geometry against its mesh.
+	Findings findings;
+	for (PxScene* scene : scenes)
+	{
+		scene->lockRead();
+		std::vector<PxActor*> actors(std::min<PxU32>(scene->getNbActors(kRigidActors), kMaxSampledActors));
+		actors.resize(scene->getActors(kRigidActors, actors.data(), PxU32(actors.size())));
+		for (size_t i = 0; i < actors.size(); ++i)
+		{
+			const bool seenAll = findings.seenTriangleMesh && findings.seenHeightField && findings.seenConvex;
+			if ((i >= kSampleActors && seenAll) || findings.Skipped() + findings.typeMismatches > 0)
+			{
+				break;
+			}
+			VisitActor(checker, actors[i], findings, nullptr, nullptr);
+		}
+		scene->unlockRead();
+	}
+	const bool objectsOk = findings.objectsChecked > 0 && findings.Skipped() + findings.typeMismatches == 0;
+	if (!step(6, "objects", objectsOk,
+	          objectsOk ? std::format("checked {} objects; saw a triangle mesh: {}, a heightfield: {}, a convex mesh: {}",
+	                                  findings.objectsChecked, findings.seenTriangleMesh, findings.seenHeightField,
+	                                  findings.seenConvex)
+	                    : findings.firstProblem))
+	{
+		return result;
+	}
+	step(7, "geometry and meshes", findings.geometryMismatches == 0,
+	     findings.geometryMismatches ? findings.firstGeometryMismatch : std::string("every checked mesh matches its shape"));
+	result.pass = result.steps.size() == 7 &&
+	              std::all_of(result.steps.begin(), result.steps.end(), [](const CompatStep& aStep) { return aStep.pass; });
+	return result;
+}
+
+SceneDump PhysxSession::DumpScene(PxScene* aScene, int aIndex, const PxBounds3& aRegion, const PxVec3& aFeet,
+                                  uint64_t aTriangleBudget)
+{
+	SceneDump     dump;
+	SceneCensus&  census = dump.census;
+	const Checker checker{ memory_, build_->bases };
+	census.index = aIndex;
+	aScene->lockRead();
+
+	// Scene facts and the actor list.
+	double       t0 = NowMs();
+	const PxVec3 gravity = aScene->getGravity();
+	census.gravity = { gravity.x, gravity.y, gravity.z };
+	const PxSceneFlags flags = aScene->getFlags();
+	census.flags = static_cast<uint32_t>(flags);
+	census.requiresRwLock = flags.isSet(PxSceneFlag::eREQUIRE_RW_LOCK);
+	census.staticActors = aScene->getNbActors(PxActorTypeFlag::eRIGID_STATIC);
+	census.dynamicActors = aScene->getNbActors(PxActorTypeFlag::eRIGID_DYNAMIC);
+	census.articulations = aScene->getNbArticulations();
+	std::vector<PxActor*> actors(std::min<PxU32>(aScene->getNbActors(kRigidActors), kMaxActorsPerScene));
+	actors.resize(aScene->getActors(kRigidActors, actors.data(), PxU32(actors.size())));
+	std::vector<PxAggregate*> aggregates(aScene->getNbAggregates());
+	aggregates.resize(aScene->getAggregates(aggregates.data(), PxU32(aggregates.size())));
+	census.aggregates = uint32_t(aggregates.size());
+
+	// The census: every aggregate, actor, shape and mesh, each checked before anything is called on it.
+	Findings findings;
+	for (const PxAggregate* aggregate : aggregates)
+	{
+		if (checker.Accept(aggregate, { AuditedClass::Aggregate }, "an aggregate", findings))
+		{
+			census.actorsInAggregates += aggregate->getNbActors();
+		}
+	}
+	std::set<std::string>                                names;
+	std::vector<std::pair<const PxActor*, AuditedClass>> usable;
+	bool                                                 abandoned = false;
+	for (const PxActor* actor : actors)
+	{
+		if (findings.Skipped() >= kMaxSkipsPerScene)
+		{
+			abandoned = true;
+			break;
+		}
+		if (const std::optional<AuditedClass> cls = VisitActor(checker, actor, findings, &census, &names))
+		{
+			usable.emplace_back(actor, *cls);
+		}
+	}
+	census.skippedUnreadable = findings.unreadable;
+	census.skippedUnaudited = findings.unaudited;
+	census.mismatches = findings.Mismatches();
+	census.actorNameSamples.assign(names.begin(), names.end());
+	census.censusMs = NowMs() - t0;
+	if (abandoned)
+	{
+		aScene->unlockRead();
+		return dump;
+	}
+
+	// Region selection by actor bounds.
+	t0 = NowMs();
+	std::vector<std::pair<const PxActor*, AuditedClass>> selected;
+	for (const auto& [actor, cls] : usable)
+	{
+		if (actor->getWorldBounds(1.0f).intersects(aRegion))
+		{
+			selected.emplace_back(actor, cls);
+		}
+	}
+	dump.boundsSelected = uint32_t(selected.size());
+	dump.selectMs = NowMs() - t0;
+
+	// The same region through PhysX's own overlap query (scene-query shapes only), for comparison.
+	t0 = NowMs();
+	std::vector<PxOverlapHit> buffer(kOverlapBuffer);
+	std::vector<PxOverlapHit> hits;
+	CollectOverlaps           collect(buffer.data(), PxU32(buffer.size()), hits);
+	aScene->overlap(PxBoxGeometry(aRegion.getExtents()), PxTransform(aRegion.getCenter()), collect,
+	                PxQueryFilterData(PxQueryFlag::eSTATIC | PxQueryFlag::eDYNAMIC | PxQueryFlag::eNO_BLOCK));
+	dump.overlapHits = uint32_t(hits.size());
+	dump.overlapCapped = collect.capped;
+	dump.overlapMs = NowMs() - t0;
+
+	// Triangles of every shape of the selected actors.
+	t0 = NowMs();
+	for (const auto& [actor, cls] : selected)
+	{
+		if (CountTriangles(dump.triangles) >= aTriangleBudget)
+		{
+			dump.triangleCapHit = true;
+			break;
+		}
+		const char*        kind = ActorKind(*actor, cls);
+		const auto&        rigid = static_cast<const PxRigidActor&>(*actor);
+		const PxTransform  pose = rigid.getGlobalPose();
+		for (const PxShape* shape : ShapesOf(rigid))
+		{
+			const ObjectCheck check = CheckObject(memory_, build_->bases, shape);
+			if (check.verdict != ObjectVerdict::Ok || check.cls != AuditedClass::Shape)
+			{
+				++dump.stats.unreadable;
+				continue;
+			}
+			const PxGeometryType::Enum geometry = shape->getGeometryType();
+			AppendTriangles(*shape, pose, aRegion, memory_, build_->bases,
+			                dump.triangles[Category(kind, shape->getFlags(), geometry)], dump.stats);
+			if (geometry == PxGeometryType::eCAPSULE && std::string_view(kind) != "static")
+			{
+				NoteCapsule(*shape, pose, aFeet, kind, dump.nearestCapsule);
+			}
+		}
+	}
+	if (CountTriangles(dump.triangles) > aTriangleBudget)
+	{
+		TrimToBudget(dump.triangles, aTriangleBudget);
+		dump.triangleCapHit = true;
+	}
+	std::erase_if(dump.triangles, [](const auto& aEntry) { return aEntry.second.empty(); });
+	dump.extractMs = NowMs() - t0;
+
+	aScene->unlockRead();
+	return dump;
+}
+
+std::optional<float> PhysxSession::RaycastDown(PxScene* aScene, const PxVec3& aFrom, float aMaxDistance)
+{
+	aScene->lockRead();
+	PxRaycastBuffer buffer;
+	aScene->raycast(aFrom, PxVec3(0.0f, 0.0f, -1.0f), aMaxDistance, buffer, PxHitFlag::eDEFAULT,
+	                PxQueryFilterData(PxQueryFlag::eSTATIC));
+	aScene->unlockRead();
+	return buffer.hasBlock ? std::optional<float>(buffer.block.distance) : std::nullopt;
+}
+}
+```
+
+- [ ] **Step 3: Edit `src/physx/ShapeTriangles.h`: `AppendTriangles` takes the checks**
+
+Replace:
+```cpp
+#include "physx/PxHeaders.h"
+```
+with:
+```cpp
+#include "physx/GameAbi.h"
+#include "physx/PxHeaders.h"
+#include "physx/Readable.h"
+```
+Then replace:
+```cpp
+	uint32_t badTriangles = 0;
+};
+```
+with:
+```cpp
+	uint32_t badTriangles = 0;
+	uint32_t unreadable = 0;  // meshes that failed their checks
+};
+```
+Then replace:
+```cpp
+// World-space triangles of a live shape that touch aRegion. This calls into the game's PhysX, so run it under
+// a crash guard (see RunGuarded in PhysxSession.h).
+void AppendTriangles(const physx::PxShape& aShape, const physx::PxTransform& aActorPose, const physx::PxBounds3& aRegion,
+                     std::vector<Tri>& aOut, AppendStats& aStats);
+```
+with:
+```cpp
+// World-space triangles of a live shape that touch aRegion. The caller has checked the shape (see CheckObject);
+// this checks the shape's mesh the same way, and checks every array it reads for readability first. A mesh that fails
+// is skipped and counted in aStats.unreadable.
+void AppendTriangles(const physx::PxShape& aShape, const physx::PxTransform& aActorPose, const physx::PxBounds3& aRegion,
+                     ReadableMemory& aMemory, const ModuleBases& aBases, std::vector<Tri>& aOut, AppendStats& aStats);
+```
+
+- [ ] **Step 4: Edit `src/physx/ShapeTriangles.cpp`: check meshes and arrays in `AppendTriangles`**
+
+Replace the whole function, which is the last one in the file:
+```cpp
+void AppendTriangles(const PxShape& aShape, const PxTransform& aActorPose, const PxBounds3& aRegion,
+                     std::vector<Tri>& aOut, AppendStats& aStats)
+{
+	const PxTransform pose = aActorPose * aShape.getLocalPose();
+	std::vector<Tri>  small;
+	switch (aShape.getGeometryType())
+	{
+	case PxGeometryType::eBOX:
+	{
+		PxBoxGeometry geometry;
+		if (aShape.getBoxGeometry(geometry))
+		{
+			BoxTriangles(geometry.halfExtents, pose, small);
+		}
+		break;
+	}
+	case PxGeometryType::eSPHERE:
+	{
+		PxSphereGeometry geometry;
+		if (aShape.getSphereGeometry(geometry))
+		{
+			SphereTriangles(geometry.radius, pose, small);
+		}
+		break;
+	}
+	case PxGeometryType::eCAPSULE:
+	{
+		PxCapsuleGeometry geometry;
+		if (aShape.getCapsuleGeometry(geometry))
+		{
+			CapsuleTriangles(geometry.radius, geometry.halfHeight, pose, small);
+		}
+		break;
+	}
+	case PxGeometryType::ePLANE:
+		++aStats.planes;
+		break;
+	case PxGeometryType::eCONVEXMESH:
+	{
+		PxConvexMeshGeometry geometry;
+		if (aShape.getConvexMeshGeometry(geometry) && geometry.convexMesh)
+		{
+			const PxConvexMesh&        mesh = *geometry.convexMesh;
+			std::vector<PxHullPolygon> polygons(mesh.getNbPolygons());
+			for (PxU32 i = 0; i < PxU32(polygons.size()); ++i)
+			{
+				mesh.getPolygonData(i, polygons[i]);
+			}
+			ConvexPolygonTriangles(mesh.getVertices(), mesh.getNbVertices(), mesh.getIndexBuffer(), polygons.data(),
+			                       PxU32(polygons.size()), geometry.scale, pose, small);
+		}
+		break;
+	}
+	case PxGeometryType::eTRIANGLEMESH:
+	{
+		PxTriangleMeshGeometry geometry;
+		if (aShape.getTriangleMeshGeometry(geometry) && geometry.triangleMesh)
+		{
+			const PxTriangleMesh& mesh = *geometry.triangleMesh;
+			MeshTriangles(mesh.getVertices(), mesh.getNbVertices(), mesh.getTriangles(),
+			              mesh.getTriangleMeshFlags().isSet(PxTriangleMeshFlag::e16_BIT_INDICES), mesh.getNbTriangles(),
+			              geometry.scale, pose, aRegion, aOut, aStats.badTriangles);
+		}
+		break;
+	}
+	case PxGeometryType::eHEIGHTFIELD:
+	{
+		PxHeightFieldGeometry geometry;
+		if (aShape.getHeightFieldGeometry(geometry) && geometry.heightField)
+		{
+			const PxHeightField& field = *geometry.heightField;
+			HeightfieldView      view;
+			view.rows = field.getNbRows();
+			view.columns = field.getNbColumns();
+			view.heightScale = geometry.heightScale;
+			view.rowScale = geometry.rowScale;
+			view.columnScale = geometry.columnScale;
+			view.sample = [&field](uint32_t aRow, uint32_t aColumn) { return field.getSample(aRow, aColumn); };
+			const CellRange cells = HeightfieldCellsUnder(view, pose, aRegion);
+			if (!cells.Empty())
+			{
+				HeightfieldTriangles(view, cells, pose, aRegion, aOut);
+			}
+		}
+		break;
+	}
+	default:
+		++aStats.unknownGeometry;
+		break;
+	}
+	for (const Tri& tri : small)
+	{
+		if (KeepIfTouches(tri, aRegion))
+		{
+			aOut.push_back(tri);
+		}
+	}
+}
+```
+with:
+```cpp
+void AppendTriangles(const PxShape& aShape, const PxTransform& aActorPose, const PxBounds3& aRegion,
+                     ReadableMemory& aMemory, const ModuleBases& aBases, std::vector<Tri>& aOut, AppendStats& aStats)
+{
+	// A mesh object passes when it is readable and its vtable is the audited table of aClass or aOther.
+	const auto meshOk = [&](const void* aMesh, AuditedClass aClass, AuditedClass aOther) {
+		const ObjectCheck check = CheckObject(aMemory, aBases, aMesh);
+		return check.verdict == ObjectVerdict::Ok && (check.cls == aClass || check.cls == aOther);
+	};
+	const PxTransform pose = aActorPose * aShape.getLocalPose();
+	std::vector<Tri>  small;
+	switch (aShape.getGeometryType())
+	{
+	case PxGeometryType::eBOX:
+	{
+		PxBoxGeometry geometry;
+		if (aShape.getBoxGeometry(geometry))
+		{
+			BoxTriangles(geometry.halfExtents, pose, small);
+		}
+		break;
+	}
+	case PxGeometryType::eSPHERE:
+	{
+		PxSphereGeometry geometry;
+		if (aShape.getSphereGeometry(geometry))
+		{
+			SphereTriangles(geometry.radius, pose, small);
+		}
+		break;
+	}
+	case PxGeometryType::eCAPSULE:
+	{
+		PxCapsuleGeometry geometry;
+		if (aShape.getCapsuleGeometry(geometry))
+		{
+			CapsuleTriangles(geometry.radius, geometry.halfHeight, pose, small);
+		}
+		break;
+	}
+	case PxGeometryType::ePLANE:
+		++aStats.planes;
+		break;
+	case PxGeometryType::eCONVEXMESH:
+	{
+		PxConvexMeshGeometry geometry;
+		if (!aShape.getConvexMeshGeometry(geometry) || !geometry.convexMesh)
+		{
+			break;
+		}
+		if (!meshOk(geometry.convexMesh, AuditedClass::ConvexMesh, AuditedClass::ConvexMesh))
+		{
+			++aStats.unreadable;
+			break;
+		}
+		const PxConvexMesh&        mesh = *geometry.convexMesh;
+		std::vector<PxHullPolygon> polygons(mesh.getNbPolygons());
+		uint32_t                   indexCount = 0;
+		for (PxU32 i = 0; i < PxU32(polygons.size()); ++i)
+		{
+			mesh.getPolygonData(i, polygons[i]);
+			indexCount = std::max<uint32_t>(indexCount, uint32_t(polygons[i].mIndexBase) + polygons[i].mNbVerts);
+		}
+		const PxVec3*  vertices = mesh.getVertices();
+		const uint32_t vertexCount = mesh.getNbVertices();
+		const PxU8*    indices = mesh.getIndexBuffer();
+		if (vertexCount == 0 || indexCount == 0)
+		{
+			break;
+		}
+		if (!aMemory.Range(vertices, size_t(vertexCount) * sizeof(PxVec3)) || !aMemory.Range(indices, indexCount))
+		{
+			++aStats.unreadable;
+			break;
+		}
+		ConvexPolygonTriangles(vertices, vertexCount, indices, polygons.data(), PxU32(polygons.size()), geometry.scale, pose, small);
+		break;
+	}
+	case PxGeometryType::eTRIANGLEMESH:
+	{
+		PxTriangleMeshGeometry geometry;
+		if (!aShape.getTriangleMeshGeometry(geometry) || !geometry.triangleMesh)
+		{
+			break;
+		}
+		if (!meshOk(geometry.triangleMesh, AuditedClass::TriangleMeshBv33, AuditedClass::TriangleMeshBv34))
+		{
+			++aStats.unreadable;
+			break;
+		}
+		const PxTriangleMesh& mesh = *geometry.triangleMesh;
+		const PxVec3*         vertices = mesh.getVertices();
+		const uint32_t        vertexCount = mesh.getNbVertices();
+		const void*           triangles = mesh.getTriangles();
+		const bool            indices16 = mesh.getTriangleMeshFlags().isSet(PxTriangleMeshFlag::e16_BIT_INDICES);
+		const uint32_t        triangleCount = mesh.getNbTriangles();
+		if (vertexCount == 0 || triangleCount == 0)
+		{
+			break;
+		}
+		if (!aMemory.Range(vertices, size_t(vertexCount) * sizeof(PxVec3)) ||
+		    !aMemory.Range(triangles, size_t(triangleCount) * 3 * (indices16 ? 2 : 4)))
+		{
+			++aStats.unreadable;
+			break;
+		}
+		MeshTriangles(vertices, vertexCount, triangles, indices16, triangleCount, geometry.scale, pose, aRegion, aOut,
+		              aStats.badTriangles);
+		break;
+	}
+	case PxGeometryType::eHEIGHTFIELD:
+	{
+		PxHeightFieldGeometry geometry;
+		if (!aShape.getHeightFieldGeometry(geometry) || !geometry.heightField)
+		{
+			break;
+		}
+		if (!meshOk(geometry.heightField, AuditedClass::HeightField, AuditedClass::HeightField))
+		{
+			++aStats.unreadable;
+			break;
+		}
+		const PxHeightField& field = *geometry.heightField;
+		HeightfieldView      view;
+		view.rows = field.getNbRows();
+		view.columns = field.getNbColumns();
+		if (view.rows == 0 || view.columns == 0)
+		{
+			break;
+		}
+		// The samples are one array of rows x columns; getSample returns a reference into it.
+		if (!aMemory.Range(&field.getSample(0, 0), size_t(view.rows) * view.columns * sizeof(PxHeightFieldSample)))
+		{
+			++aStats.unreadable;
+			break;
+		}
+		view.heightScale = geometry.heightScale;
+		view.rowScale = geometry.rowScale;
+		view.columnScale = geometry.columnScale;
+		view.sample = [&field](uint32_t aRow, uint32_t aColumn) { return field.getSample(aRow, aColumn); };
+		const CellRange cells = HeightfieldCellsUnder(view, pose, aRegion);
+		if (!cells.Empty())
+		{
+			HeightfieldTriangles(view, cells, pose, aRegion, aOut);
+		}
+		break;
+	}
+	default:
+		++aStats.unknownGeometry;
+		break;
+	}
+	for (const Tri& tri : small)
+	{
+		if (KeepIfTouches(tri, aRegion))
+		{
+			aOut.push_back(tri);
+		}
+	}
+}
+```
+
+- [ ] **Step 5: Write `src/Probe.cpp`**
+
+```cpp
+#include "Probe.h"
+
+#include "physx/Checks.h"
+
+#include <cmath>
+#include <format>
+#include <map>
+
+using namespace physx;
+
+namespace cpmc
+{
+DumpData RunDump(px::PhysxSession& aSession, const PlayerPose& aPose, const std::string& aTrigger,
+                 const std::string& aRuntime, const std::string& aTime)
+{
+	DumpData    data;
+	DumpReport& report = data.report;
+	report.time = aTime;
+	report.trigger = aTrigger;
+	report.runtime = aRuntime;
+	report.player = aPose;
+
+	const px::CheckResult compat = aSession.Check();
+	report.physxFileVersion = compat.physxFileVersion;
+	report.modules = compat.modules;
+	report.steps = compat.steps;
+	report.compatibilityPass = compat.pass;
+	if (!compat.pass)
+	{
+		return data;  // no geometry without a passing compatibility check
+	}
+
+	const std::vector<PxScene*>&                scenes = compat.scenes;
+	const PxVec3                                feet(float(aPose.feet.x), float(aPose.feet.y), float(aPose.feet.z));
+	const PxVec3                                center = feet + PxVec3(0.0f, 0.0f, 8.0f);
+	const PxVec3                                halfExtents(32.0f, 32.0f, 24.0f);
+	const PxBounds3                             regionBox = PxBounds3::centerExtents(center, halfExtents);
+	RegionResult                                region;
+	region.center = { center.x, center.y, center.z };
+	region.halfExtents = { halfExtents.x, halfExtents.y, halfExtents.z };
+	std::map<std::string, std::vector<px::Tri>> byCategory;
+	std::optional<NearestCapsule>               nearest;
+	uint64_t                                    kept = 0;
+
+	for (size_t i = 0; i < scenes.size(); ++i)
+	{
+		px::SceneDump scene = aSession.DumpScene(scenes[i], int(i), regionBox, feet, kTriangleCap - kept);
+		report.censusSkipped += scene.census.skippedUnreadable + scene.census.skippedUnaudited;
+		report.censusMismatches += scene.census.mismatches;
+		region.boundsSelectedActors += scene.boundsSelected;
+		region.overlapHits += scene.overlapHits;
+		region.overlapOverflow |= scene.overlapCapped;
+		region.selectMs += scene.selectMs;
+		region.overlapMs += scene.overlapMs;
+		region.extractMs += scene.extractMs;
+		region.skippedPlanes += scene.stats.planes;
+		region.unknownGeometry += scene.stats.unknownGeometry;
+		region.badTriangles += scene.stats.badTriangles;
+		region.unreadable += scene.stats.unreadable;
+		region.triangleCapHit |= scene.triangleCapHit;
+		for (auto& [category, triangles] : scene.triangles)
+		{
+			const std::string name = scenes.size() > 1 ? std::format("s{}_{}", i, category) : category;
+			region.trianglesByCategory[name] += triangles.size();
+			region.triangles += triangles.size();
+			kept += triangles.size();
+			auto& destination = byCategory[name];
+			destination.insert(destination.end(), triangles.begin(), triangles.end());
+		}
+		if (scene.nearestCapsule && (!nearest || scene.nearestCapsule->distance < nearest->distance))
+		{
+			nearest = scene.nearestCapsule;
+		}
+		scene.census.queryFilter = px::TrimTally(scene.census.queryFilter);
+		scene.census.simulationFilter = px::TrimTally(scene.census.simulationFilter);
+		report.scenes.push_back(std::move(scene.census));
+	}
+
+	// The coordinate check: a ray down from 1.8 m above V's feet should hit the ground about 1.8 m down.
+	CoordinateCheck check;
+	check.nearestCapsule = nearest;
+	const PxVec3 from = feet + PxVec3(0.0f, 0.0f, 1.8f);
+	for (size_t i = 0; i < scenes.size(); ++i)
+	{
+		const std::optional<float> distance = aSession.RaycastDown(scenes[i], from, 3.0f);
+		if (distance && (!check.rayHit || *distance < check.hitDistance))
+		{
+			check.rayHit = true;
+			check.hitDistance = *distance;
+			check.scene = int(i);
+		}
+	}
+	check.pass = check.rayHit && std::fabs(check.hitDistance - 1.8) <= 0.3;
+
+	report.region = region;
+	report.coordinateCheck = check;
+	report.compatibilityPass = compat.pass && report.censusMismatches == 0 && report.censusSkipped == 0;
+	for (auto& [name, triangles] : byCategory)
+	{
+		data.groups.push_back({ name, CategoryColor(name), std::move(triangles) });
+	}
+	report.objWritten = !data.groups.empty();
+	return data;
+}
+}
+```
+
+- [ ] **Step 6: Write `src/physx/Checks.h`**
+
+`ConcreteTypeForName` and `IsPhysX342` go: `GameAbi` now gives each class's type ID, and step 1 checks the build's identity.
+```cpp
+#pragma once
+
+#include "Report.h"
+#include "physx/PxHeaders.h"
+
+#include <cstddef>
+#include <string>
+
+// The pure parts of the compatibility check and the census bookkeeping. No PhysX calls happen here.
+namespace cpmc::px
+{
+// PxTolerancesScale: length 0.01 .. 100, speed 0.1 .. 1000.
+bool TolerancesPlausible(float aLength, float aSpeed);
+// Finite, with a magnitude of at most 100.
+bool GravityFinite(const physx::PxVec3& aGravity);
+// A magnitude between 1 and 30.
+bool GravityEarthLike(const physx::PxVec3& aGravity);
+
+// A mesh-based geometry type references a mesh of the matching concrete type.
+bool GeometryMatchesMesh(physx::PxGeometryType::Enum aGeometry, int aMeshConcreteType);
+
+// "triangleMesh", "heightField", "convexMesh", "box", "sphere", "capsule", "plane" (report tallies).
+const char* GeometryName(physx::PxGeometryType::Enum aGeometry);
+// "trimesh", "heightfield", "convex", "box", "sphere", "capsule", "plane" (OBJ categories).
+const char* GeometryShortName(physx::PxGeometryType::Enum aGeometry);
+
+// The category of a shape: "trigger" if it has the trigger flag, otherwise "queryonly" if it has the
+// scene-query flag but not the simulation flag, otherwise the actor's kind; then "_" and the short geometry name.
+std::string Category(const char* aActorKind, physx::PxShapeFlags aShapeFlags, physx::PxGeometryType::Enum aGeometry);
+
+// Filter data as "w0:w1:w2:w3" in hexadecimal.
+std::string FilterKey(const physx::PxFilterData& aData);
+
+// At most aMaxLength characters up to the first NUL; bytes outside printable ASCII become '?'.
+std::string SanitizeName(const char* aName, size_t aMaxLength = 128);
+
+// Keeps the aKeep most common entries (ties by name) and folds the rest into "other".
+Tally TrimTally(const Tally& aTally, size_t aKeep = 64);
+}
+```
+
+- [ ] **Step 7: Edit `src/physx/Checks.cpp`: remove the two functions**
+
+Replace:
+```cpp
+#include <cmath>
+#include <cstring>
+#include <format>
+```
+with:
+```cpp
+#include <cmath>
+#include <format>
+```
+Then replace:
+```cpp
+namespace cpmc::px
+{
+namespace
+{
+struct NamedType
+{
+	const char* name;
+	int         type;
+};
+
+// Every concrete type name PhysX 3.4.2 returns from getConcreteTypeName(), with its PxConcreteType.
+constexpr NamedType kTypes[] = {
+	{ "PxHeightField", PxConcreteType::eHEIGHTFIELD },
+	{ "PxConvexMesh", PxConcreteType::eCONVEX_MESH },
+	{ "PxBVH33TriangleMesh", PxConcreteType::eTRIANGLE_MESH_BVH33 },
+	{ "PxBVH34TriangleMesh", PxConcreteType::eTRIANGLE_MESH_BVH34 },
+	{ "PxClothFabric", PxConcreteType::eCLOTH_FABRIC },
+	{ "PxRigidDynamic", PxConcreteType::eRIGID_DYNAMIC },
+	{ "PxRigidStatic", PxConcreteType::eRIGID_STATIC },
+	{ "PxShape", PxConcreteType::eSHAPE },
+	{ "PxMaterial", PxConcreteType::eMATERIAL },
+	{ "PxConstraint", PxConcreteType::eCONSTRAINT },
+	{ "PxCloth", PxConcreteType::eCLOTH },
+	{ "PxParticleSystem", PxConcreteType::ePARTICLE_SYSTEM },
+	{ "PxParticleFluid", PxConcreteType::ePARTICLE_FLUID },
+	{ "PxAggregate", PxConcreteType::eAGGREGATE },
+	{ "PxArticulation", PxConcreteType::eARTICULATION },
+	{ "PxArticulationLink", PxConcreteType::eARTICULATION_LINK },
+	{ "PxPruningStructure", PxConcreteType::ePRUNING_STRUCTURE },
+};
+}
+
+int ConcreteTypeForName(const char* aName)
+{
+	if (!aName)
+	{
+		return -1;
+	}
+	for (const auto& entry : kTypes)
+	{
+		if (std::strcmp(entry.name, aName) == 0)
+		{
+			return entry.type;
+		}
+	}
+	return -1;
+}
+
+bool IsPhysX342(const std::string& aFileVersionString)
+{
+	return aFileVersionString.starts_with("3.4.2.");
+}
+
+bool TolerancesPlausible(float aLength, float aSpeed)
+```
+with:
+```cpp
+namespace cpmc::px
+{
+bool TolerancesPlausible(float aLength, float aSpeed)
+```
+
+- [ ] **Step 8: Edit `tests/TestChecks.cpp`: remove their tests**
+
+Replace:
+```cpp
+TEST(ConcreteTypeNamesMapToTheirIds)
+{
+	CHECK_EQ(ConcreteTypeForName("PxRigidStatic"), int(PxConcreteType::eRIGID_STATIC));
+	CHECK_EQ(ConcreteTypeForName("PxRigidDynamic"), int(PxConcreteType::eRIGID_DYNAMIC));
+	CHECK_EQ(ConcreteTypeForName("PxShape"), int(PxConcreteType::eSHAPE));
+	CHECK_EQ(ConcreteTypeForName("PxBVH33TriangleMesh"), int(PxConcreteType::eTRIANGLE_MESH_BVH33));
+	CHECK_EQ(ConcreteTypeForName("PxBVH34TriangleMesh"), int(PxConcreteType::eTRIANGLE_MESH_BVH34));
+	CHECK_EQ(ConcreteTypeForName("PxHeightField"), int(PxConcreteType::eHEIGHTFIELD));
+	CHECK_EQ(ConcreteTypeForName("PxConvexMesh"), int(PxConcreteType::eCONVEX_MESH));
+	CHECK_EQ(ConcreteTypeForName("PxTriangleMesh"), -1);  // an interface name, never a concrete type
+	CHECK_EQ(ConcreteTypeForName("garbage"), -1);
+	CHECK_EQ(ConcreteTypeForName(nullptr), -1);
+}
+
+TEST(PhysXVersionComesFromTheFileVersionString)
+{
+	// NVIDIA's 3.4.2 release says 3.4.2.0 in the FileVersion string but 3.4.1.0 in the binary field.
+	CHECK(IsPhysX342("3.4.2.0"));
+	CHECK(!IsPhysX342("3.4.1.0"));
+	CHECK(!IsPhysX342("13.4.2.0"));
+	CHECK(!IsPhysX342(""));
+}
+
+TEST(PlausibilityRanges)
+```
+with:
+```cpp
+TEST(PlausibilityRanges)
+```
+
+- [ ] **Step 9: Delete `tests/TestGuard.cpp`**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git rm -q spikes/physx-probe/tests/TestGuard.cpp
+```
+
+- [ ] **Step 10: Edit `CMakeLists.txt`: no guard, so standard C++ exceptions only**
+
+Replace:
+```cmake
+# Shared settings. /EHa lets the crash guard (__try/__except) unwind C++ objects cleanly.
+add_library(probe_settings INTERFACE)
+target_compile_options(probe_settings INTERFACE /W4 /permissive- /utf-8 /EHa /Zc:__cplusplus)
+```
+with:
+```cmake
+# Shared settings.
+add_library(probe_settings INTERFACE)
+target_compile_options(probe_settings INTERFACE /W4 /permissive- /utf-8 /EHsc /Zc:__cplusplus)
+```
+Then replace:
+```cmake
+	tests/TestGuard.cpp
+```
+with nothing (delete the line):
+```cmake
+```
+
+- [ ] **Step 11: Build; no warnings, and the tests pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/physx-probe && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E " error |warning C"; \
+  ./build/RelWithDebInfo/probe_tests.exe | tail -1
+```
+Expected: no lines from the build filter, then `55 test(s), 0 failure(s)`
+
+- [ ] **Step 12: Check the DLL's exports and imports**
+
+```bash
+DUMPBIN="/c/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/dumpbin.exe"
+cd /d/Cyberpunk-Minecraft/spikes/physx-probe && echo "entry points: $("$DUMPBIN" -nologo -exports build/RelWithDebInfo/PhysXProbe.dll | grep -c -E ' (Main|Query|Supports) = ')" \
+  && echo "PhysX3 imports: $("$DUMPBIN" -nologo -imports build/RelWithDebInfo/PhysXProbe.dll | grep -c PhysX3)" \
+  && grep -c -E "Guarded|__try|ConcreteTypeForName|IsPhysX342" src/physx/*.cpp src/physx/*.h src/*.cpp | grep -v ":0" | wc -l
+```
+Expected: `entry points: 3`, `PhysX3 imports: 0`, then `0` (nothing left of the guard or the name checks).
+
+- [ ] **Step 13: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add -A spikes/physx-probe \
+  && git commit -q -m "physx-probe: check every object and array instead of catching faults" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 21: The plugin: no automatic dump, version 0.2.0
+
+**Files:**
+- Modify: `src/Plugin.cpp` (rewritten), `CMakeLists.txt` (the project version)
+
+- [ ] **Step 1: Write `src/Plugin.cpp`**
+
+The automatic trigger goes (see the spec's `Plugin.cpp` section), and the version becomes 0.2.0.
+```cpp
+// PhysXProbe: a read-only RED4ext plugin that checks whether Cyberpunk's PhysX 3.4.2 can be read through NVIDIA's
+// headers, corrected where the game's build differs, and dumps the collision around V. F10 or a request file starts a
+// dump; there is no automatic one. See docs/superpowers/specs/2026-10-01-physx-probe-design.md.
+#include <RED4ext/RED4ext.hpp>
+
+#include "DumpWriter.h"
+#include "PlayerLocator.h"
+#include "Probe.h"
+
+#include <Windows.h>
+
+#include <chrono>
+#include <filesystem>
+#include <format>
+#include <string>
+
+namespace
+{
+using Clock = std::chrono::steady_clock;
+using namespace std::chrono_literals;
+
+RED4ext::v1::PluginHandle   g_handle = nullptr;
+const RED4ext::v1::Sdk*     g_sdk = nullptr;
+std::filesystem::path       g_pluginDir;
+cpmc::px::PhysxSession      g_session;
+cpmc::DumpWriter            g_writer;
+std::string                 g_runtime;
+
+bool                        g_f10WasDown = false;
+Clock::time_point           g_lastDump{};
+Clock::time_point           g_lastSecondlyCheck{};
+
+template<class... Args>
+void Log(std::format_string<Args...> aFormat, Args&&... aArgs)
+{
+	if (g_sdk)
+	{
+		g_sdk->logger->Info(g_handle, std::format(aFormat, std::forward<Args>(aArgs)...).c_str());
+	}
+}
+
+std::filesystem::path PluginFolder()
+{
+	HMODULE module = nullptr;
+	GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+	                   reinterpret_cast<LPCWSTR>(&PluginFolder), &module);
+	wchar_t path[MAX_PATH]{};
+	GetModuleFileNameW(module, path, MAX_PATH);
+	return std::filesystem::path(path).parent_path();
+}
+
+bool GameInForeground()
+{
+	DWORD processId = 0;
+	GetWindowThreadProcessId(GetForegroundWindow(), &processId);
+	return processId == GetCurrentProcessId();
+}
+
+// "2026-10-01T12:34:56" for the report, "2026-10-01_12-34-56" for the folder.
+std::pair<std::string, std::string> Timestamps()
+{
+	SYSTEMTIME now{};
+	GetLocalTime(&now);
+	return { std::format("{:04}-{:02}-{:02}T{:02}:{:02}:{:02}", now.wYear, now.wMonth, now.wDay, now.wHour, now.wMinute, now.wSecond),
+	         std::format("{:04}-{:02}-{:02}_{:02}-{:02}-{:02}", now.wYear, now.wMonth, now.wDay, now.wHour, now.wMinute, now.wSecond) };
+}
+
+void RunOne(const std::string& aTrigger)
+{
+	const auto pose = cpmc::LocatePlayer();
+	if (!pose)
+	{
+		Log("{} trigger: no player", aTrigger);
+		return;
+	}
+	const auto [time, folderName] = Timestamps();
+	LARGE_INTEGER start;
+	LARGE_INTEGER end;
+	LARGE_INTEGER frequency;
+	QueryPerformanceCounter(&start);
+	cpmc::DumpData data = cpmc::RunDump(g_session, *pose, aTrigger, g_runtime, time);
+	QueryPerformanceCounter(&end);
+	QueryPerformanceFrequency(&frequency);
+	data.report.mainThreadPauseMs = double(end.QuadPart - start.QuadPart) * 1000.0 / double(frequency.QuadPart);
+
+	const auto& report = data.report;
+	Log("dump ({}): compatibility {}, {} scene(s), {} triangles, coordinate check {}, main-thread pause {:.1f} ms, {} object(s) skipped",
+	    aTrigger, report.compatibilityPass ? "passed" : "FAILED", report.scenes.size(),
+	    report.region ? report.region->triangles : 0,
+	    report.coordinateCheck ? (report.coordinateCheck->pass ? "passed" : "FAILED") : "not run", report.mainThreadPauseMs,
+	    report.censusSkipped);
+	for (const auto& step : report.steps)
+	{
+		if (!step.pass)
+		{
+			Log("  compatibility step {} ({}) failed: {}", step.step, step.name, step.detail);
+		}
+	}
+	cpmc::DumpJob job{ g_pluginDir / "dumps" / folderName, std::move(data.report), std::move(data.groups), pose->feet };
+	g_writer.Start(std::move(job));
+}
+
+bool OnEnter(RED4ext::CGameApplication*)
+{
+	return true;
+}
+
+bool OnExit(RED4ext::CGameApplication*)
+{
+	return true;
+}
+
+// Every frame on the main thread while the game runs (RED4ext ignores the return value in this state).
+bool OnUpdate(RED4ext::CGameApplication*)
+{
+	if (auto written = g_writer.TakeResult())
+	{
+		if (written->ok)
+		{
+			Log("dump written to {} ({} triangles, {:.0f} ms)", written->folder.string(), written->triangles, written->writeMs);
+		}
+		else
+		{
+			Log("couldn't write the dump to {}: {}", written->folder.string(), written->error);
+		}
+	}
+
+	const auto  now = Clock::now();
+	std::string trigger;
+
+	const bool f10Down = (GetAsyncKeyState(VK_F10) & 0x8000) != 0 && GameInForeground();
+	if (f10Down && !g_f10WasDown)
+	{
+		trigger = "hotkey";
+	}
+	g_f10WasDown = f10Down;
+
+	if (now - g_lastSecondlyCheck >= 1s)
+	{
+		g_lastSecondlyCheck = now;
+		const auto      request = g_pluginDir / "dump.request";
+		std::error_code error;
+		if (trigger.empty() && std::filesystem::exists(request, error))
+		{
+			std::filesystem::remove(request, error);
+			trigger = "request";
+		}
+	}
+
+	if (trigger.empty() || now - g_lastDump < 2s)
+	{
+		return false;
+	}
+	if (g_writer.Busy())
+	{
+		Log("{} trigger ignored: the previous dump is still being written", trigger);
+		return false;
+	}
+	g_lastDump = now;
+	RunOne(trigger);
+	return false;
+}
+}
+
+RED4EXT_C_EXPORT bool RED4EXT_CALL Main(RED4ext::v1::PluginHandle aHandle, RED4ext::v1::EMainReason aReason,
+                                        const RED4ext::v1::Sdk* aSdk)
+{
+	switch (aReason)
+	{
+	case RED4ext::v1::EMainReason::Load:
+	{
+		g_handle = aHandle;
+		g_sdk = aSdk;
+		g_pluginDir = PluginFolder();
+		g_runtime = std::format("{}.{}.{}", unsigned(aSdk->runtime->major), aSdk->runtime->minor, aSdk->runtime->patch);
+		static RED4ext::v1::GameState running{ &OnEnter, &OnUpdate, &OnExit };
+		aSdk->gameStates->Add(aHandle, RED4ext::EGameStateType::Running, &running);
+		Log("PhysXProbe 0.2.0 loaded (game {}); F10 or {} triggers a dump", g_runtime, (g_pluginDir / "dump.request").string());
+		break;
+	}
+	case RED4ext::v1::EMainReason::Unload:
+		g_writer.Join();
+		break;
+	}
+	return true;
+}
+
+RED4EXT_C_EXPORT void RED4EXT_CALL Query(RED4ext::v1::PluginInfo* aInfo)
+{
+	aInfo->name = L"PhysXProbe";
+	aInfo->author = L"Cyberpunk-Minecraft";
+	aInfo->version = RED4EXT_V1_SEMVER(0, 2, 0);
+	aInfo->runtime = RED4EXT_V1_RUNTIME_VERSION_LATEST;
+	aInfo->sdk = RED4EXT_V1_SDK_VERSION_CURRENT;
+}
+
+RED4EXT_C_EXPORT uint32_t RED4EXT_CALL Supports()
+{
+	return RED4EXT_API_VERSION_1;
+}
+```
+
+- [ ] **Step 2: Edit `CMakeLists.txt`: the project version**
+
+Replace:
+```cmake
+project(PhysXProbe VERSION 0.1.0 LANGUAGES CXX)
+```
+with:
+```cmake
+project(PhysXProbe VERSION 0.2.0 LANGUAGES CXX)
+```
+
+- [ ] **Step 3: Build; no warnings, the tests pass, and the DLL says 0.2.0**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/physx-probe && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E " error |warning C"; \
+  ./build/RelWithDebInfo/probe_tests.exe | tail -1; grep -a -c "PhysXProbe 0.2.0 loaded" build/RelWithDebInfo/PhysXProbe.dll
+```
+Expected: no lines from the build filter, then `55 test(s), 0 failure(s)`, then `1`
+
+- [ ] **Step 4: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/physx-probe \
+  && git commit -q -m "physx-probe: drop the automatic dump; version 0.2.0" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 22: Verify revision 2 in the running game
+
+This is the test for everything that talks to the game. It needs the user at the keyboard, and the agent never drives
+their mouse or keyboard. Write down the numbers as you go; Step 6 records them.
 
 **Files:**
 - Create: `docs/spikes/2026-10-01-physx-probe-results.md`
 
-- [ ] **Step 1: Ask the user to set the scene**
-
-Send the user these instructions:
-1. Launch Cyberpunk 2077 from Epic and load a save that's in free roam, not a scene.
-2. Walk somewhere on the ground with varied geometry around: buildings, stairs, a parked car.
-3. Stand still and leave the mouse alone. About 10 seconds after V appears, the probe dumps automatically.
-4. Without moving, take a screenshot (Win+Shift+S works) and paste it into the chat, or save it as `screenshot.png`
-   in the newest folder under `E:\Cyberpunk2077\red4ext\plugins\PhysXProbe\dumps\`.
-
-- [ ] **Step 2: Find the dump and the log**
+- [ ] **Step 1: Deploy (the game must not be running)**
 
 ```bash
-ls -t /e/Cyberpunk2077/red4ext/plugins/PhysXProbe/dumps | head -3; \
-  L=$(ls -t /e/Cyberpunk2077/red4ext/logs | grep -i physx | head -1); echo "log: $L"; tail -20 "/e/Cyberpunk2077/red4ext/logs/$L"
+tasklist | grep -i -c "cyberpunk2077.exe"
 ```
-Expected:
-- a dump folder named by the time;
-- a PhysXProbe log with `PhysXProbe 0.1.0 loaded (game 2.31.0)`;
-- `dump (auto): compatibility passed, ...`;
-- `dump written to ...`.
+Expected: `0`. If it's `1`, ask the user to quit the game first, because a running game locks the DLL.
+`PhysXProbe.dll.disabled` is revision 1, renamed after the freeze so the game couldn't load it; it goes.
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/physx-probe && rm -f /e/Cyberpunk2077/red4ext/plugins/PhysXProbe/PhysXProbe.dll.disabled \
+  && "$CMAKE" --preset default -DCP2077_DIR=E:/Cyberpunk2077 > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E " error |warning C"; \
+  ls /e/Cyberpunk2077/red4ext/plugins/PhysXProbe/ \
+  && cmp build/RelWithDebInfo/PhysXProbe.dll /e/Cyberpunk2077/red4ext/plugins/PhysXProbe/PhysXProbe.dll && echo installed
+```
+Expected: `PhysXProbe.dll`, `PhysXProbe.pdb` and `dumps` in the folder, then `installed`.
 
-If there's no PhysXProbe log, look in the newest `red4ext-*.log` for PhysXProbe's load line or an error.
+- [ ] **Step 2: The startup world, at the main menu**
 
-- [ ] **Step 3: Check the pass criteria in `report.json`**
+Ask the user to launch Cyberpunk 2077 from Epic and wait at the main menu, without loading a save, and to say when
+they're there. Then run:
+```bash
+touch /e/Cyberpunk2077/red4ext/plugins/PhysXProbe/dump.request; sleep 5; \
+  L=$(ls -t /e/Cyberpunk2077/red4ext/logs | grep -i physx | head -1); tail -4 "/e/Cyberpunk2077/red4ext/logs/$L"
+```
+Expected: `PhysXProbe 0.2.0 loaded`, then `dump (request): compatibility passed, 1 scene(s), ... 0 object(s) skipped`,
+then `dump written to ...`. If the game froze or crashed instead, stop: read the newest folder under
+`%LOCALAPPDATA%\REDEngine\ReportQueue\` and the probe log, and record what happened in Step 6.
 
+Then check the report:
 ```bash
 D=/e/Cyberpunk2077/red4ext/plugins/PhysXProbe/dumps/$(ls -t /e/Cyberpunk2077/red4ext/plugins/PhysXProbe/dumps | head -1)
 uv run --no-project -q python -c "
 import json,sys; r=json.load(open(sys.argv[1]+'/report.json'))
-c=r['compatibility']; print('compatibility:', c['pass'], '| census mismatches:', c['censusMismatches'])
+print('modules:', [(m['name'], m['audited']) for m in r['game']['modules']])
+c=r['compatibility']; print('compatibility:', c['pass'], '| skipped:', c['censusSkipped'], '| mismatches:', c['censusMismatches'])
 for s in c['steps']: print('  step', s['step'], s['name'], 'PASS' if s['pass'] else 'FAIL', '-', s['detail'])
-cc=r['coordinateCheck']; print('coordinate check:', cc and cc['pass'], '| hit distance:', cc and cc['hitDistance'], '| capsule:', cc and cc['nearestCapsule'])
-g=r['region']; print('region:', g and {k: g[k] for k in ('boundsSelectedActors','overlapHits','triangles','selectMs','overlapMs','extractMs','triangleCapHit')})
-print('scenes:', [(s['index'], s['staticActors'], s['dynamicActors'], s['requiresRwLock'], round(s['censusMs'],1)) for s in r['scenes']])
-print('main-thread pause ms:', r['mainThreadPauseMs'], '| faults:', r['faults'], '| camera:', r['player'] and r['player']['camera'])
+for s in r['scenes']: print('scene', s['index'], s['byConcreteType'], s['byGeometryType'], s['shapeFlags'], len(s['queryFilter']), 'filter keys', s['skipped'])
 " "$D"
 ```
-Pass criteria:
-1. `compatibility: True` with all seven steps `PASS`, and census mismatches `0`.
+Pass criteria for the startup world:
+- every module `audited`, and all seven steps `PASS`;
+- skipped `0` and mismatches `0`;
+- `shapeFlags` and the filter tallies filled in. Revision 1's report had them empty, because the census faulted on
+  every shape.
+
+- [ ] **Step 3: Free roam**
+
+Send the user these instructions:
+1. Load a save that's in free roam, not a scene.
+2. Stand on solid ground (pavement, stairs or a walkway, not a car, and not right under anything low) with varied
+   geometry around: buildings, stairs or kerbs, a parked car.
+3. Stand still, leave the mouse alone, and press F10.
+4. Without moving, take a screenshot (Win+Shift+S works) and paste it into the chat.
+
+Then check the pass criteria:
+```bash
+D=/e/Cyberpunk2077/red4ext/plugins/PhysXProbe/dumps/$(ls -t /e/Cyberpunk2077/red4ext/plugins/PhysXProbe/dumps | head -1)
+uv run --no-project -q python -c "
+import json,sys; r=json.load(open(sys.argv[1]+'/report.json'))
+c=r['compatibility']; print('trigger:', r['trigger'], '| compatibility:', c['pass'], '| skipped:', c['censusSkipped'], '| mismatches:', c['censusMismatches'])
+for s in c['steps']: print('  step', s['step'], s['name'], 'PASS' if s['pass'] else 'FAIL', '-', s['detail'])
+cc=r['coordinateCheck']; print('coordinate check:', cc and cc['pass'], '| hit distance:', cc and cc['hitDistance'], '| capsule:', cc and cc['nearestCapsule'])
+g=r['region']; print('region:', g and {k: g[k] for k in ('boundsSelectedActors','overlapHits','triangles','selectMs','overlapMs','extractMs','triangleCapHit','skipped')})
+print('scenes:', [(s['index'], s['staticActors'], s['dynamicActors'], s['requiresRwLock'], round(s['censusMs'],1), s['skipped']) for s in r['scenes']])
+print('main-thread pause ms:', r['mainThreadPauseMs'], '| camera:', r['player'] and r['player']['camera'])
+" "$D"
+```
+Pass criteria (the spec's):
+1. `compatibility: True` with all seven steps `PASS`, skipped `0` and mismatches `0`.
 2. The coordinate check is `True`, with a hit distance of 1.8 ± 0.3.
 3. Checked in Step 4 below.
 4. Every timing is present.
 
-**If compatibility failed,** stop here. Record the failing step and its detail in Step 7. That is the decisive
-negative result: collision moves to ray casts through `SpatialQueriesSystem`.
+**If compatibility failed,** stop here and record the failing step and its detail in Step 6:
+- **Skipped objects with unaudited vtables:** the live world has a class or build the audit didn't cover.
+- **Unreadable objects:** the world changed under the read, which means a race.
 
 - [ ] **Step 4: Render and compare with the screenshot**
 
@@ -5133,33 +8368,28 @@ Look at `eye.png` next to the user's screenshot, and at `top.png` too. Criterion
 - steps or kerbs;
 - a car's outline, when there's one.
 
-If everything lines up but looks too wide or too narrow, rerender with `--fov-axis h`, then note which axis the
-game's field of view is.
+If everything lines up but looks too wide or too narrow, rerender with `--fov-axis h`, then note which axis the game's
+field of view is.
 
 - [ ] **Step 5: A second dump somewhere different, triggered from here**
 
-Ask the user to walk somewhere different (indoors, or up some stairs), stand still, and screenshot again. Then run:
+Ask the user to walk somewhere different (indoors, or up some stairs), stand still, screenshot again, and say when
+they're there. Then run:
 ```bash
 touch /e/Cyberpunk2077/red4ext/plugins/PhysXProbe/dump.request; sleep 5; ls -t /e/Cyberpunk2077/red4ext/plugins/PhysXProbe/dumps | head -2
 ```
 Expected: a new dump folder, and `dump (request)` in the log. Repeat Steps 3 and 4 for it.
 
-- [ ] **Step 6: The main-menu path**
-
-Ask the user to quit to the main menu. Then run:
-```bash
-touch /e/Cyberpunk2077/red4ext/plugins/PhysXProbe/dump.request; sleep 3; \
-  L=$(ls -t /e/Cyberpunk2077/red4ext/logs | grep -i physx | head -1); tail -3 "/e/Cyberpunk2077/red4ext/logs/$L"
-```
-Expected: `request trigger: no player`, and no new dump folder.
-
-- [ ] **Step 7: Record the results and commit**
+- [ ] **Step 6: Record the results and commit**
 
 Write `docs/spikes/2026-10-01-physx-probe-results.md` with these sections. Fill every value from the reports and your
 observations:
 - **Verdict:** pass or fail, in one sentence.
-- **Pass criteria:** a table with one row per criterion (1-4), and one column per dump holding the observed value.
-- **Compatibility steps:** each step's detail line from the first dump.
+- **Revision 1:** what the first runs found, briefly. That's the version-field quirk, the `PxShape` slot shift, and the
+  crash handler; link `2026-10-01-physx-abi-audit.md`.
+- **Pass criteria:** a table with one row per criterion (1–4), and one column per dump holding the observed value. Put
+  the startup world in its own column.
+- **Compatibility steps:** each step's detail line from the first free-roam dump.
 - **Scenes:**
   - the scene count;
   - static and dynamic actors per scene;
@@ -5185,7 +8415,6 @@ cd /d/Cyberpunk-Minecraft && git add docs/spikes \
 ```
 
 ---
-
 ## Afterwards
 
 Use superpowers:finishing-a-development-branch to decide how `spike/physx-probe` goes back into `main`.
