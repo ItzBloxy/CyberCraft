@@ -76,3 +76,24 @@ TEST(ReadableMemoryRemembersRegionsUntilCleared)
 	CHECK(memory.Range(base, 1));
 	VirtualFree(base, 0, MEM_RELEASE);
 }
+
+TEST(ReadableMemoryAnswersPagesInTheWorkingSetWithoutVirtualQuery)
+{
+	// VirtualQuery reports the size of the whole region an address lies in, which takes longer the bigger the region:
+	// in the game's heaps it cost 12 ms a frame. Pages in the working set are answered without it.
+	const size_t page = PageSize();
+	auto*        base = static_cast<uint8_t*>(VirtualAlloc(nullptr, 4 * page, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE));
+	CHECK(base != nullptr);
+	if (!base)
+	{
+		return;
+	}
+	base[0] = 1;  // written to, so in the working set
+	base[page] = 1;
+	ReadableMemory memory;
+	CHECK(memory.Range(base + 100, page));  // across both pages
+	CHECK_EQ(memory.SlowQueries(), size_t(0));
+	CHECK(memory.Range(base + 3 * page, 16));  // never touched, so not in the working set yet: VirtualQuery answers
+	CHECK_EQ(memory.SlowQueries(), size_t(1));
+	VirtualFree(base, 0, MEM_RELEASE);
+}

@@ -18939,7 +18939,7 @@ The version goes to 0.5.0.
 - Modify: `tests/TestReadable.cpp`, `CMakeLists.txt`, `src/Plugin.cpp`
 - Rewrite: `src/Readable.h`, `src/Readable.cpp`
 
-- [ ] **Step 1: Edit `tests/TestReadable.cpp` to count the slow queries**
+- [x] **Step 1: Edit `tests/TestReadable.cpp` to count the slow queries**
 
 ```cpp
 	memory.Clear();
@@ -18975,7 +18975,7 @@ TEST(ReadableMemoryAnswersPagesInTheWorkingSetWithoutVirtualQuery)
 }
 ```
 
-- [ ] **Step 2: Build; it must fail**
+- [x] **Step 2: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -18984,7 +18984,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `'SlowQueries': is not a member of 'cpmc::ReadableMemory'`.
 
-- [ ] **Step 3: Write `src/Readable.h`**
+- [x] **Step 3: Write `src/Readable.h`**
 
 ```cpp
 #pragma once
@@ -19032,7 +19032,7 @@ private:
 }
 ```
 
-- [ ] **Step 4: Write `src/Readable.cpp`**
+- [x] **Step 4: Write `src/Readable.cpp`**
 
 ```cpp
 #include "Readable.h"
@@ -19141,7 +19141,7 @@ bool ReadableMemory::Find(uintptr_t aAddress, Region& aOut)
 }
 ```
 
-- [ ] **Step 5: Build and run the tests; they must pass**
+- [x] **Step 5: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -19151,7 +19151,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `105 test(s), 0 failure(s)`.
 
-- [ ] **Step 6: Edit `CMakeLists.txt` for the version**
+- [x] **Step 6: Edit `CMakeLists.txt` for the version**
 
 ```cmake
 project(BlockRender VERSION 0.4.0 LANGUAGES C CXX)
@@ -19160,7 +19160,7 @@ project(BlockRender VERSION 0.4.0 LANGUAGES C CXX)
 project(BlockRender VERSION 0.5.0 LANGUAGES C CXX)
 ```
 
-- [ ] **Step 7: Edit `src/Plugin.cpp` for the version**
+- [x] **Step 7: Edit `src/Plugin.cpp` for the version**
 
 ```cpp
 constexpr const char* kVersion = "0.4.0";
@@ -19175,7 +19175,7 @@ constexpr const char* kVersion = "0.5.0";
 	aInfo->version = RED4EXT_V1_SEMVER(0, 5, 0);
 ```
 
-- [ ] **Step 8: Build; it must compile without warnings, and the tests still pass**
+- [x] **Step 8: Build; it must compile without warnings, and the tests still pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -19185,7 +19185,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `105 test(s), 0 failure(s)`.
 
-- [ ] **Step 9: Check the DLL's exports and imports**
+- [x] **Step 9: Check the DLL's exports and imports**
 
 ```bash
 DUMPBIN="/c/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/dumpbin.exe"
@@ -19196,7 +19196,7 @@ B=/d/Cyberpunk-Minecraft/spikes/block-render/build/RelWithDebInfo/BlockRender.dl
 Expected: exactly `Main`, `Query` and `Supports`, then `D3DCOMPILER_47.dll` and `d3d12.dll`. `QueryWorkingSetEx` comes
 from `kernel32.dll`.
 
-- [ ] **Step 10: Commit**
+- [x] **Step 10: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
