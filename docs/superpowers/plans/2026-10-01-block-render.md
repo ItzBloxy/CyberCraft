@@ -14564,7 +14564,7 @@ asks each listener, for each list submitted, whether it has a list to put before
 - Create: `src/hooks/Submission.h`, `src/hooks/Submission.cpp`, `tests/TestSubmission.cpp`
 - Modify: `CMakeLists.txt`, `src/hooks/HookEvents.h`, `src/hooks/D3D12Hooks.cpp`
 
-- [ ] **Step 1: Write the failing test, `tests/TestSubmission.cpp`**
+- [x] **Step 1: Write the failing test, `tests/TestSubmission.cpp`**
 
 ```cpp
 #include "Harness.h"
@@ -14603,7 +14603,7 @@ TEST(SubmissionsGetAListJustBeforeTheOneItGoesBefore)
 }
 ```
 
-- [ ] **Step 2: Edit `CMakeLists.txt` to add the test**
+- [x] **Step 2: Edit `CMakeLists.txt` to add the test**
 
 ```cmake
 	tests/TestEventNames.cpp
@@ -14615,7 +14615,7 @@ TEST(SubmissionsGetAListJustBeforeTheOneItGoesBefore)
 )
 ```
 
-- [ ] **Step 3: Build; it must fail**
+- [x] **Step 3: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -14624,7 +14624,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `error C1083: Cannot open include file: 'hooks/Submission.h'`.
 
-- [ ] **Step 4: Write `src/hooks/Submission.h`**
+- [x] **Step 4: Write `src/hooks/Submission.h`**
 
 ```cpp
 #pragma once
@@ -14643,7 +14643,7 @@ std::vector<ID3D12CommandList*> WithListsBefore(UINT aCount, ID3D12CommandList* 
 }
 ```
 
-- [ ] **Step 5: Write `src/hooks/Submission.cpp`**
+- [x] **Step 5: Write `src/hooks/Submission.cpp`**
 
 ```cpp
 #include "hooks/Submission.h"
@@ -14674,7 +14674,7 @@ std::vector<ID3D12CommandList*> WithListsBefore(UINT aCount, ID3D12CommandList* 
 }
 ```
 
-- [ ] **Step 6: Edit `CMakeLists.txt` to add the source**
+- [x] **Step 6: Edit `CMakeLists.txt` to add the source**
 
 ```cmake
 	src/render/Pipeline.cpp
@@ -14686,7 +14686,7 @@ std::vector<ID3D12CommandList*> WithListsBefore(UINT aCount, ID3D12CommandList* 
 )
 ```
 
-- [ ] **Step 7: Build and run the tests; they must pass**
+- [x] **Step 7: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -14696,7 +14696,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `88 test(s), 0 failure(s)`.
 
-- [ ] **Step 8: Edit `src/hooks/HookEvents.h` to ask for lists to put in**
+- [x] **Step 8: Edit `src/hooks/HookEvents.h` to ask for lists to put in**
 
 ```cpp
 	virtual void OnSubmit(ID3D12CommandQueue* /*aQueue*/, UINT /*aCount*/, ID3D12CommandList* const* /*aLists*/) {}
@@ -14708,7 +14708,7 @@ Expected: no error or warning lines, then `88 test(s), 0 failure(s)`.
 	virtual ID3D12CommandList* ListBefore(ID3D12CommandQueue* /*aQueue*/, ID3D12CommandList* /*aList*/) { return nullptr; }
 ```
 
-- [ ] **Step 9: Edit `src/hooks/D3D12Hooks.cpp` to put them in**
+- [x] **Step 9: Edit `src/hooks/D3D12Hooks.cpp` to put them in**
 
 ```cpp
 #include "hooks/StreamlineHooks.h"
@@ -14747,7 +14747,7 @@ Expected: no error or warning lines, then `88 test(s), 0 failure(s)`.
 	Each([&](HookEvents& aListener) { aListener.OnSubmitted(aQueue, aCount, aLists); });
 ```
 
-- [ ] **Step 10: Build; it must compile without warnings, and the tests still pass**
+- [x] **Step 10: Build; it must compile without warnings, and the tests still pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -14757,7 +14757,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `88 test(s), 0 failure(s)`.
 
-- [ ] **Step 11: Commit**
+- [x] **Step 11: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \

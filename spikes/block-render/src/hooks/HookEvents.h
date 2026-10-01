@@ -43,6 +43,9 @@ public:
 	virtual void OnClose(ID3D12GraphicsCommandList* /*aList*/, ListState& /*aState*/) {}
 
 	virtual void OnSubmit(ID3D12CommandQueue* /*aQueue*/, UINT /*aCount*/, ID3D12CommandList* const* /*aLists*/) {}
+	// Asked for each list of a submission, after OnSubmit: a list of the feature's own to submit just before aList, or
+	// null. The first listener to name one wins. OnSubmitted sees only the game's lists, as OnSubmit does.
+	virtual ID3D12CommandList* ListBefore(ID3D12CommandQueue* /*aQueue*/, ID3D12CommandList* /*aList*/) { return nullptr; }
 	virtual void OnSubmitted(ID3D12CommandQueue* /*aQueue*/, UINT /*aCount*/, ID3D12CommandList* const* /*aLists*/) {}
 	virtual void OnPresent(IDXGISwapChain* /*aSwapChain*/) {}
 };

@@ -2,6 +2,7 @@
 
 #include "hooks/Slots.h"
 #include "hooks/StreamlineHooks.h"
+#include "hooks/Submission.h"
 #include "hooks/VtablePatch.h"
 #include "log/EventNames.h"
 
@@ -220,7 +221,24 @@ void STDMETHODCALLTYPE ExecuteCommandLists(ID3D12CommandQueue* aQueue, UINT aCou
 		}
 	}
 	Each([&](HookEvents& aListener) { aListener.OnSubmit(aQueue, aCount, aLists); });
-	g_original.executeCommandLists(aQueue, aCount, aLists);
+	const std::vector<ID3D12CommandList*> lists = WithListsBefore(aCount, aLists, [&](ID3D12CommandList* aList) {
+		ID3D12CommandList* before = nullptr;
+		Each([&](HookEvents& aListener) {
+			if (!before)
+			{
+				before = aListener.ListBefore(aQueue, aList);
+			}
+		});
+		return before;
+	});
+	if (lists.empty())
+	{
+		g_original.executeCommandLists(aQueue, aCount, aLists);
+	}
+	else
+	{
+		g_original.executeCommandLists(aQueue, UINT(lists.size()), lists.data());
+	}
 	Each([&](HookEvents& aListener) { aListener.OnSubmitted(aQueue, aCount, aLists); });
 }
 

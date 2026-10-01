@@ -41,6 +41,7 @@ add_library(render_core STATIC
 	src/Status.cpp
 	src/log/EventNames.cpp
 	src/render/Pipeline.cpp
+	src/hooks/Submission.cpp
 )
 target_link_libraries(render_core PUBLIC render_settings d3dcompiler dxguid)
 
@@ -104,6 +105,7 @@ add_executable(render_tests
 	tests/TestWinding.cpp
 	tests/TestStatus.cpp
 	tests/TestEventNames.cpp
+	tests/TestSubmission.cpp
 )
 target_link_libraries(render_tests PRIVATE render_core)
 add_test(NAME render_tests COMMAND render_tests WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
