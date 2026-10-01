@@ -4157,7 +4157,7 @@ Minecraft's per-face brightness is left to the shader.
 - Create: `src/world/Vertex.h`, `src/world/Mesher.h`, `src/world/Mesher.cpp`, `tests/TestMesher.cpp`
 - Modify: `CMakeLists.txt`
 
-- [ ] **Step 1: Write the failing test, `tests/TestMesher.cpp`**
+- [x] **Step 1: Write the failing test, `tests/TestMesher.cpp`**
 
 ```cpp
 #include "Harness.h"
@@ -4326,7 +4326,7 @@ TEST(MesherSplitsQuadsAlongTheDarkerDiagonal)
 }
 ```
 
-- [ ] **Step 2: Edit `CMakeLists.txt` to add the test**
+- [x] **Step 2: Edit `CMakeLists.txt` to add the test**
 
 ```cmake
 	tests/TestBlockWorld.cpp
@@ -4338,7 +4338,7 @@ TEST(MesherSplitsQuadsAlongTheDarkerDiagonal)
 )
 ```
 
-- [ ] **Step 3: Build; it must fail**
+- [x] **Step 3: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -4347,7 +4347,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `fatal error C1083: Cannot open include file: 'world/Mesher.h'`.
 
-- [ ] **Step 4: Write `src/world/Vertex.h`**
+- [x] **Step 4: Write `src/world/Vertex.h`**
 
 ```cpp
 #pragma once
@@ -4394,7 +4394,7 @@ constexpr uint32_t FaceFlags(Face aFace)
 }
 ```
 
-- [ ] **Step 5: Write `src/world/Mesher.h`**
+- [x] **Step 5: Write `src/world/Mesher.h`**
 
 ```cpp
 #pragma once
@@ -4425,7 +4425,7 @@ std::vector<Vertex> MeshSection(const BlockWorld& aWorld, const SectionPos& aSec
 }
 ```
 
-- [ ] **Step 6: Write `src/world/Mesher.cpp`**
+- [x] **Step 6: Write `src/world/Mesher.cpp`**
 
 ```cpp
 #include "world/Mesher.h"
@@ -4566,7 +4566,7 @@ std::vector<Vertex> MeshSection(const BlockWorld& aWorld, const SectionPos& aSec
 }
 ```
 
-- [ ] **Step 7: Edit `CMakeLists.txt` to add the source**
+- [x] **Step 7: Edit `CMakeLists.txt` to add the source**
 
 ```cmake
 	src/world/BlockWorld.cpp
@@ -4578,7 +4578,7 @@ std::vector<Vertex> MeshSection(const BlockWorld& aWorld, const SectionPos& aSec
 )
 ```
 
-- [ ] **Step 8: Build and run the tests; they must pass**
+- [x] **Step 8: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -4588,7 +4588,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `64 test(s), 0 failure(s)`.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
