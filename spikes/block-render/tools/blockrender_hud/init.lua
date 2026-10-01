@@ -1,0 +1,95 @@
+-- BlockRender HUD: what BlockRender (spike 3 of D:\Cyberpunk-Minecraft) is doing, from the status.txt it writes into
+-- this folder once a second, plus V's position, heading and Minecraft block, and the nearest structure. Read-only.
+-- Delete this folder to remove it.
+local status = nil       -- status.txt's lines, except the structures
+local structures = {}    -- { name, min = { x, y, z }, max = { x, y, z } }, in world coordinates
+local player = nil       -- the lines about V
+local sinceRead = 1.0
+
+local atan2 = math.atan2 or function(y, x) return math.atan(y, x) end
+
+local function readStatus()
+    local file = io.open("status.txt", "r")
+    if file == nil then
+        status = nil
+        structures = {}
+        return
+    end
+    status = {}
+    structures = {}
+    for line in file:lines() do
+        local name, a, b, c, d, e, f = line:match("^structure=(%S+) (%S+) (%S+) (%S+) (%S+) (%S+) (%S+)$")
+        if name ~= nil then
+            table.insert(structures, {
+                name = name,
+                min = { tonumber(a), tonumber(b), tonumber(c) },
+                max = { tonumber(d), tonumber(e), tonumber(f) },
+            })
+        else
+            table.insert(status, line)
+        end
+    end
+    file:close()
+end
+
+-- How far a point is from a box, 0 inside it.
+local function distanceToBox(p, box)
+    local function gap(value, low, high)
+        if value < low then return low - value end
+        if value > high then return value - high end
+        return 0
+    end
+    local dx = gap(p.x, box.min[1], box.max[1])
+    local dy = gap(p.y, box.min[2], box.max[2])
+    local dz = gap(p.z, box.min[3], box.max[3])
+    return math.sqrt(dx * dx + dy * dy + dz * dz)
+end
+
+registerForEvent("onUpdate", function(delta)
+    sinceRead = sinceRead + delta
+    if sinceRead >= 1.0 then
+        sinceRead = 0.0
+        readStatus()
+    end
+    local v = Game.GetPlayer()
+    if v == nil then
+        player = nil
+        return
+    end
+    local p = v:GetWorldPosition()
+    local f = v:GetWorldForward()
+    local heading = math.deg(atan2(f.x, f.y)) % 360  -- 0 = north (+y), 90 = east (+x)
+    -- Minecraft's axes: x is world x, y is world z (up), z is world -y (south).
+    local text = string.format(
+        "V: x %.2f  y %.2f  z %.2f, heading %d (0 north, 90 east)\nMinecraft block at V's feet: %d %d %d",
+        p.x, p.y, p.z, math.floor(heading + 0.5), math.floor(p.x), math.floor(p.z), math.floor(-p.y))
+    local nearest, nearestName = nil, nil
+    for _, box in ipairs(structures) do
+        local distance = distanceToBox(p, box)
+        if nearest == nil or distance < nearest then
+            nearest, nearestName = distance, box.name
+        end
+    end
+    if nearest ~= nil then
+        text = text .. string.format("\nnearest structure: %s, %.2f m away", nearestName, nearest)
+    end
+    player = text
+end)
+
+registerForEvent("onDraw", function()
+    ImGui.SetNextWindowPos(30, 420, ImGuiCond.FirstUseEver)
+    if ImGui.Begin("BlockRender", ImGuiWindowFlags.AlwaysAutoResize) then
+        if status == nil then
+            ImGui.Text("no status.txt yet: is BlockRender loaded?")
+        else
+            for _, line in ipairs(status) do
+                ImGui.Text(line)
+            end
+        end
+        if player ~= nil then
+            ImGui.Separator()
+            ImGui.Text(player)
+        end
+    end
+    ImGui.End()
+end)

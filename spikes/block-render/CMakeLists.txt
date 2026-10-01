@@ -59,6 +59,24 @@ add_library(render_runtime STATIC
 )
 target_link_libraries(render_runtime PUBLIC render_core RED4ext::SDK d3d12)
 
+# The RED4ext plugin: entry points, requests, the status file and finding V.
+add_library(BlockRender SHARED
+	src/Plugin.cpp
+	src/PlayerLocator.cpp
+)
+target_link_libraries(BlockRender PRIVATE render_runtime)
+
+if(CP2077_DIR)
+	set(PLUGIN_OUT "${CP2077_DIR}/red4ext/plugins/BlockRender")
+	set(HUD_OUT "${CP2077_DIR}/bin/x64/plugins/cyber_engine_tweaks/mods/blockrender_hud")
+	add_custom_command(TARGET BlockRender POST_BUILD
+		COMMAND ${CMAKE_COMMAND} -E make_directory "${PLUGIN_OUT}/shaders" "${HUD_OUT}"
+		COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:BlockRender>" "$<TARGET_PDB_FILE:BlockRender>" "${PLUGIN_OUT}/"
+		COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/shaders/blocks.hlsl" "${PLUGIN_OUT}/shaders/"
+		COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/tools/blockrender_hud/init.lua" "${HUD_OUT}/"
+		VERBATIM)
+endif()
+
 # Unit tests: no game needed. They run in this folder, so tests can find shaders/.
 enable_testing()
 add_executable(render_tests

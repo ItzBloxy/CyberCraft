@@ -11753,7 +11753,7 @@ folder, and the overlay into CET's mods.
 - Copy from `spikes/physx-probe/`: `src/PlayerLocator.cpp`
 - Modify: `CMakeLists.txt`
 
-- [ ] **Step 1: Write `src/PlayerLocator.h`**
+- [x] **Step 1: Write `src/PlayerLocator.h`**
 
 ```cpp
 #pragma once
@@ -11786,13 +11786,13 @@ std::optional<PlayerPose> LocatePlayer();
 }
 ```
 
-- [ ] **Step 2: Copy `../physx-probe/src/PlayerLocator.cpp` to `src/PlayerLocator.cpp`**
+- [x] **Step 2: Copy `../physx-probe/src/PlayerLocator.cpp` to `src/PlayerLocator.cpp`**
 
 ```bash
 cp /d/Cyberpunk-Minecraft/spikes/physx-probe/src/PlayerLocator.cpp /d/Cyberpunk-Minecraft/spikes/block-render/src/
 ```
 
-- [ ] **Step 3: Write `src/Plugin.cpp`**
+- [x] **Step 3: Write `src/Plugin.cpp`**
 
 ```cpp
 // BlockRender: spike 3's RED4ext plugin. It hooks the game's Streamline calls and D3D12 to map Cyberpunk's frame
@@ -12223,7 +12223,7 @@ RED4EXT_C_EXPORT uint32_t RED4EXT_CALL Supports()
 }
 ```
 
-- [ ] **Step 4: Write `tools/blockrender_hud/init.lua`**
+- [x] **Step 4: Write `tools/blockrender_hud/init.lua`**
 
 ```lua
 -- BlockRender HUD: what BlockRender (spike 3 of D:\Cyberpunk-Minecraft) is doing, from the status.txt it writes into
@@ -12323,7 +12323,7 @@ registerForEvent("onDraw", function()
 end)
 ```
 
-- [ ] **Step 5: Edit `CMakeLists.txt` to add the plugin and its deploy step**
+- [x] **Step 5: Edit `CMakeLists.txt` to add the plugin and its deploy step**
 
 ```cmake
 target_link_libraries(render_runtime PUBLIC render_core RED4ext::SDK d3d12)
@@ -12350,7 +12350,7 @@ if(CP2077_DIR)
 endif()
 ```
 
-- [ ] **Step 6: Build; it must compile without warnings, and the tests still pass**
+- [x] **Step 6: Build; it must compile without warnings, and the tests still pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -12360,7 +12360,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `83 test(s), 0 failure(s)`.
 
-- [ ] **Step 7: Check the DLL's exports and imports**
+- [x] **Step 7: Check the DLL's exports and imports**
 
 ```bash
 DUMPBIN="/c/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/dumpbin.exe"
@@ -12371,7 +12371,7 @@ B=/d/Cyberpunk-Minecraft/spikes/block-render/build/RelWithDebInfo/BlockRender.dl
 Expected: exactly `Main`, `Query` and `Supports`, then `D3DCOMPILER_47.dll` and `d3d12.dll`. There's no `dxgi.dll`
 and no Streamline DLL: the hooks find those at runtime.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
