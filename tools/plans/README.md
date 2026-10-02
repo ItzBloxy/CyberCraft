@@ -10,12 +10,17 @@ scratchpad while in use; this is a copy, so the next spike can start from them. 
   each old block found exactly once.
 - **`gen_plan.py`:** builds the plan from skeleton files. A line `@@FILE <path>@@` becomes a code block holding the
   file, from the scratch copy (`verify/`), or from a commit after a `@@SOURCE <commit>@@` line, so a task that has run
-  keeps showing its files as they were then. Pin each task to its commit once it has run.
+  keeps showing its files as they were then. Pin each task to its commit once it has run. A line
+  `@@EDIT <path> <from> <to>@@` becomes an Edit step's pairs, between two versions of a file: the scratch copy, a
+  commit, or a snapshot between two tasks (`snap:<name>`, in `snap/<name>/`), for a file more than one task changes.
+- **`pairs.py`** (spike 4's Part 2): the pairs for `@@EDIT`. Each is one change with as little context as keeps its
+  old block unique, readable (a line with words in it, not only braces), and free of blank lines at its edges.
 - **`apply_step.py`:** applies one step, to the scratch copy or the repo.
 - **`run_plan.py`** (spike 4): replays tasks in a fresh clone, or executes them in the real repo, ticking each task's
-  boxes before its commit. It checks each build's expected failure or test count, with no warnings, and `mclink`'s
-  self-check. Under `%TEMP%`, MSBuild doesn't track header changes (MSB8029), so a replay rebuilds from clean after a
-  step changes a header.
+  boxes before its commit. It checks each build's expected failure or test count, with no warnings, `mclink`'s
+  self-check, the overlay's Lua syntax (`luac -p`), and the tools' Python tests, failing or passing. Under `%TEMP%`,
+  MSBuild doesn't track header changes (MSB8029), so a replay rebuilds from clean after a step changes a header.
+  `replay|execute <plan> <repo> [first task] [last task] [first step]` resumes a stopped run at its step.
 - **`replay.py`, `execute.py`** (spike 3): the same, in two scripts, with spike 3's step kinds; they also check the
   DLL's exports.
 - **`tick.py`, `tick_steps.py`:** tick a whole task, or single steps.
@@ -25,3 +30,4 @@ scratchpad while in use; this is a copy, so the next spike can start from them. 
 `run_plan.project`) and at spike 4's scratchpad (`b.sh`). The runners know a few step kinds only their spike had:
 `run_plan.py` copies SkyCraft's header from the scratchpad's `dl/` and checks the plan's hashes, and runs `mclink`
 without Minecraft; `replay.py` has spike 3's header download, the atlas from the user's jar and the dump conversion.
+`run_plan.py`'s last task defaults to Part 1's 10: pass the tasks to run.

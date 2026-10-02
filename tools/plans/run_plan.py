@@ -11,6 +11,9 @@ expectation it states.
   the tests must report the plan's count. Under %TEMP%, MSBuild doesn't track headers (MSB8029), so a replay rebuilds
   from clean after a step changes a header.
 - "Run mclink without Minecraft": it must open the mapping, find Minecraft absent, and exit 0.
+- "Check the overlay's syntax": `luac -p` must accept the CET overlay.
+- "Run the new tool's test; it must fail": pytest must stop on the plan's missing module. "Run the tools' tests; they
+  must pass": all of `tools/`'s Python tests, with the plan's count.
 - Commits use the plan's messages. Executing ticks the task's boxes first.
 """
 import hashlib
@@ -72,6 +75,12 @@ def tests():
     return out.strip().splitlines()[-1] if out.strip() else ""
 
 
+def pytest(files):
+    args = ["uv", "run", "--no-project", "-q", "--with", "numpy", "--with", "pillow", "--with", "pytest", "pytest", "-q",
+            "-p", "no:cacheprovider"] + files
+    return run(args, project / "tools")
+
+
 def fail(step, why):
     raise SystemExit(f"Task {step.task} step {step.number} ({step.title}): {why}")
 
@@ -119,6 +128,24 @@ for step in planlib.read_plan(plan_path):
         if result != f"{match.group(1)} test(s), 0 failure(s)":
             fail(step, f"tests said: {result}")
         say(f"{label}: clean, {result}")
+    elif title.startswith("Run the new tool's test; it must fail"):
+        files = re.findall(r"(test_\w+\.py)", step.body.split("Expected")[0])
+        code, out = pytest(files)
+        module = re.search(r"No module named '(\w+)'", step.body).group(1)
+        if code == 0 or f"No module named '{module}'" not in out:
+            fail(step, f"expected a missing {module}:\n{out[-800:]}")
+        say(f"{label}: fails on {module}, as expected")
+    elif title.startswith("Run the tools' tests; they must pass"):
+        code, out = pytest([])
+        count = re.search(r"`(\d+) passed`", step.body).group(1)
+        if code != 0 or not re.search(rf"\b{count} passed\b", out):
+            fail(step, f"expected {count} passed:\n{out[-1500:]}")
+        say(f"{label}: {count} passed")
+    elif title.startswith("Check the overlay's syntax"):
+        code, out = run(["luac", "-p", str(project / "tools" / "blockrender_hud" / "init.lua")], project)
+        if code != 0:
+            fail(step, f"luac said:\n{out}")
+        say(f"{label}: syntax ok")
     elif title.startswith("Run mclink without Minecraft"):
         script = project / "build" / "selfcheck.txt"
         script.write_text("status\nquit\n", encoding="utf-8")
