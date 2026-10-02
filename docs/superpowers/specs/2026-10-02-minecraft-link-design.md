@@ -302,8 +302,8 @@ Minecraft's (blocks, y up, z south). The mapping is `Local\SkyCraft_v1`, 200,327
     the slot it gets back as its new front, which Minecraft won't touch until it's swapped out again;
   - each slot has a 64-byte header at `0x340`: width, height, flags (bit 0: rows bottom-up) and a frame number. Its
     pixels are at `0x2020000` plus the slot × 33,177,600;
-  - when Minecraft connects or comes back, the state goes to 0 and the reader's front to slot 2. Minecraft's writer
-    starts again at slot 1.
+  - for a new Minecraft process, the state goes to 0 and the reader's front to slot 2, since its writer starts again
+    at slot 1 (see "Changes while planning").
 - **Collision messages, as sent:**
   - clear: payload is the epoch;
   - triangles: a `ColRegion` header (the region's inclusive block box, the epoch, the count), then `ColTri`s (9 floats
@@ -369,13 +369,12 @@ spikes/block-render/
 ### `Plugin.cpp`
 
 - **On load,** before the existing hooks:
-  - creates the mapping (see "The link");
   - patches `GetRawInputData`;
   - starts the focus watch.
 
-  None of them does anything visible until the user links or presses F8.
+  Neither does anything visible until the user links or presses F8.
 - **Every frame, in `OnUpdate`,** in this order:
-  1. requests, once a second;
+  1. once a second: the mapping, until it's open (see "The link"), and requests;
   2. `Link::Update`, with V's pose from `LocatePlayer` (see "The link"). Spike 1 called the same script functions
      every frame without trouble. It also hands the newest HUD image, if there is one, to the renderer;
   3. the frame log and the dumps;
@@ -417,7 +416,8 @@ spikes/block-render/
     straight up or down, where the forward vector's horizontal length is under 0.001, the last yaw is kept;
   - the teleport target: the camera's position in Minecraft's axes, less 1.62 blocks of height, Minecraft's standing
     eye height, so Minecraft's eye is at V's camera;
-  - if the camera can't be read, the last look is kept, and there's no teleport.
+  - if the camera can't be read, V counts as not found: the in-game flag clears, the last look is kept, and there's no
+    teleport (see "Changes while planning").
 - **`Commands`:** the typing state machine (see "Typed commands"), driven by `McState`'s flags.
 - **`Link`:** the per-frame logic, given the mapping, V's pose and the time. Its decisions (teleport or not, floor or
   not, what to type next) are testable with a fake pose and a mapping in memory.
@@ -436,8 +436,8 @@ spikes/block-render/
 ### The renderer and the atlas
 
 - **`Atlas`:** a new constructor from width, height and RGBA bytes. It builds 5 levels, each half the last
-  (rounding down, at least 1 texel), by averaging 2×2 texels and clamping at odd edges. The shader already finds
-  levels this way.
+  (rounding down, at least 1 texel), by averaging 2×2 texels: an odd side's last row or column is left out, and a
+  side of 1 is used twice. The shader already finds levels this way.
 - **`Renderer`:**
   - **`SetAtlas`** replaces whatever atlas it has, from `atlas.bin` or Minecraft, under the renderer's lock, and
     uploads it on the next `Update`. Until now the atlas was loaded once, and `AtlasData()`'s pointer stayed valid for
@@ -455,9 +455,14 @@ spikes/block-render/
     barriers, and a pipeline for its format. The list copies the newest image into a buffer in GPU memory, if a new
     one came, then draws one full-screen triangle with the HUD's shaders and premultiplied-alpha blending, without
     depth. It has its own skip count, and never switches block drawing off.
-- **`Hud`:** the pass's pure parts: whether the HUD shows (the `hud` setting, build mode, Minecraft in its world, an
-  image received), and which image texel a back-buffer pixel takes (scaled by `hudscale`, flipped when the rows are
-  bottom-up, clamped to the image).
+- **`Hud`:** the pass's pure parts:
+  - whether the HUD shows: the `hud` setting, build mode, and Minecraft in its world. Until an image has come, the
+    pass skips its frames;
+  - the viewport to ask for;
+  - which image texel a back-buffer pixel takes: scaled by as many whole back-buffer pixels a texel as fit, which is
+    `hudscale` once Minecraft has resized, and flipped when the rows are bottom-up. Pixels outside the image show
+    nothing (see "Changes while planning");
+  - which of the 3 upload buffers each image goes through.
 - **The HUD's shaders,** in `blocks.hlsl`, with the existing root signature:
   - the vertex shader makes one full-screen triangle from the vertex index;
   - the pixel shader reads the image as a structured buffer of RGBA8 texels, the way the atlas is read, with no
@@ -501,8 +506,10 @@ A console program around the same `link/` code, standing in for Cyberpunk:
 
 ## The link
 
-- **The mapping** is created at load. Minecraft polls for it once a second, so it links whichever game starts first,
-  and opens its world straight away. The in-game flag stays clear until the user links.
+- **The mapping** is created at the game's first update, at its main menu, rather than at load: the heartbeat comes
+  from `Link::Update`, once a frame, and the game doesn't update until it has loaded (see "Changes while planning").
+  Minecraft polls for it once a second, so it links whichever starts first, and opens its world straight away. The
+  in-game flag stays clear until the user links.
 - **Linking:**
   - the overlay's Link button, `link on`, or the first F8 links. F8 arrives on the hook's thread, so it only asks, and
     `Link::Update` links on the main thread, which `LocatePlayer` needs;
@@ -746,7 +753,7 @@ The user makes the Modrinth instance, starts Minecraft, and says when it's at it
   - images arrive at 1280×720, the viewport asked for, with their bottom-up flag;
   - the saved image shows the hotbar, the crosshair, and chat with the replies to the typed commands;
   - its alpha is premultiplied: across the whole image, no pixel has a colour channel above its alpha. `mclink`
-    counts any that do.
+    counts any that do. Step 1 found one (see risk 13).
 - **Coming and going:**
   - unlinking and linking again;
   - stopping `mclink`: Minecraft's link drops within 8 s;
@@ -820,15 +827,16 @@ plugin's folder or the overlay's. New and changed commands:
   - a HUD image needs a slot index from 0 to 2, and a width and height from 1 to 3840 and 2160, so it fits its
     slot. The pixels are copied out of the slot before use.
 - **The HUD pass never switches block drawing off.** It skips a frame it can't draw (no back buffer, another queue,
-  no image yet) and counts it separately. Its draw reads only within the image: the texel it takes is clamped to the
-  image's size.
+  no image yet) and counts it separately. Its draw reads only within the image: a pixel whose texel would fall outside
+  it shows nothing.
 - **The hook passes through** anything it doesn't fully understand, and checks every size before reading or writing.
 - **The ring is always drained,** so Minecraft never stalls. If the mapping can't be created, the link is off, and the
   status and log say why.
 - **Nothing stays held.** Leaving build mode, focus loss (`FocusWatch`, on its own thread) and Minecraft going all
   release inputs. Menu keys always reach the game.
-- **Off by default.** Until the user links or presses F8, the plugin only keeps the mapping's heartbeat, and the hook
-  passes everything through. Drawing stays as spike 3 left it, off until switched on.
+- **Off by default.** Until the user links or presses F8, the plugin keeps the mapping's heartbeat and takes what
+  Minecraft sends (see "Blocks"), and the hook passes everything through. Drawing stays as spike 3 left it, off until
+  switched on, so nothing shows (see "Changes while planning").
 - **Two game sides never share the mapping:**
   - the plugin refuses while another live game side holds it, and retries once a second. `mclink` refuses to start,
     and says why;
@@ -870,8 +878,11 @@ plugin's folder or the overlay's. New and changed commands:
   - the reset;
   - refusing slot index 3, and sizes out of range.
 - **`Hud`:**
-  - whether it shows, for each `hud` setting, with and without build mode, Minecraft and an image;
-  - the texel for a pixel at each `hudscale`, flipped and not, and clamped at the edges.
+  - whether it shows, for each `hud` setting, with and without build mode and Minecraft;
+  - the viewport, and the scale taken from an image's size;
+  - the texel for a pixel at each `hudscale`, flipped and not, and none outside the image;
+  - the upload buffers: an image written, taken once and read until its fence, a failed write, and the waiting image
+    replaced while the GPU reads the rest.
 - **`Floor`:** the messages byte for byte against `fake_skyrim.py`'s `floor_tris_payload`, and the regions covered.
 - **`Look`:**
   - north, east, up and down to yaw and pitch;
@@ -949,7 +960,8 @@ Steps 2 and 3. Every step also checks that CET's overlay and spike 3's mode butt
     off, at `hudscale 2` and at `hudscale 1`. `hudscale 4` quarters it again if needed, at the cost of a coarser HUD.
 13. **The image's alpha isn't premultiplied.** Its edges would then look wrong over Night City: too bright where it's
     translucent. Step 1 counts any pixel with a colour above its alpha. If there are any, the blend changes to straight
-    alpha.
+    alpha. Step 1 found one, at an edge of Minecraft's first-person shield, and the rest premultiplied, so the blend
+    stays premultiplied (see "Changes while planning").
 14. **Minecraft's HUD covers Cyberpunk's.** Both draw at the bottom of the screen, and ours goes on top. It shows only
     in build mode by default, and `hud 0` hides it.
 
@@ -1089,3 +1101,27 @@ Writing and verifying Part 1's code corrected these details. The sections above 
 - **`mclink` refuses rather than retries,** as its own section says; "Safety" had it retrying like the plugin.
 - **`mclink`'s input:** a script, one action a line (`tools/mclink/McLinkScript.h`), so step 1's runs can change
   without a rebuild.
+
+Planning Part 2, after step 1, corrected these:
+- **The mapping is created at the first update, not at load.** The heartbeat comes from `Link::Update`, once a frame,
+  and the game doesn't update until it has loaded: in spike 3's runs, the D3D12 device alone came 13 s after load. A
+  mapping made at load would let a running Minecraft link at once and send its atlas and sections into a render ring
+  nothing drains yet, then drop the link 8 s later, only to link again.
+- **The overlay's reset,** in "The protocol", still said the triple buffer starts over whenever Minecraft connects or
+  comes back. It starts over only for a new Minecraft process, as above.
+- **Pixels outside the HUD image show nothing,** instead of the nearest texel. An image smaller than the back buffer
+  at its scale (one Minecraft drew before it resized, or at a `hudscale` that doesn't divide the back buffer) then
+  leaves the rest of the screen alone, rather than smearing its last row and column across it. The draw still reads
+  only within the image.
+- **The HUD's scale comes from each image:** as many whole back-buffer pixels a texel as fit. An image Minecraft drew
+  at the old size, before it caught up with a new `hudscale`, is still drawn whole. Once it has, that's `hudscale`.
+- **Premultiplied blending stays** (risk 13). Step 1 found one texel with colour above its alpha in a whole image, at
+  an edge of the first-person shield's model, and the rest premultiplied. Straight alpha would darken every
+  translucent pixel of the HUD to fix one texel, which premultiplied blending only brightens a little.
+- **V found means V's camera found.** `LocatePlayer` can find V without the camera, but the teleport target and the
+  look need it. Without it the plugin passes the link no pose: the in-game flag clears, the last look is kept, and
+  there's no teleport. "Look" had only the last two.
+- **Before linking, Minecraft's blocks are taken,** as "Blocks" has it: the ring is drained, and the atlas and the
+  sections are kept as they come, so they're there as soon as the user links. Drawing stays as spike 3 left it, so
+  nothing shows until then, and the renderer uploads nothing until drawing is first switched on. "Safety" said the
+  plugin only kept the heartbeat.
