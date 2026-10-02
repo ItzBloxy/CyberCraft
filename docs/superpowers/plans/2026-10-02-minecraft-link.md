@@ -9760,10 +9760,11 @@ On 2026-10-02 and 03, inline, as the user asked.
 - **What step 2 found, for Part 3** (the results have the numbers):
   - **the link, the blocks and the HUD work in the game as designed:** our half of the latency is under a frame,
     bursts don't hitch, and the HUD costs 0.25 ms a frame at `hudscale 2`;
-  - **Minecraft's player isn't always at V's feet.** It stands on our floor, which stays flat at the height it was
-    sent with, so where the street dips, commands land a block higher, and V can stand inside Minecraft's blocks.
-    Minecraft then drops to crouching or crawling, which moves its eye off V's camera, and the HUD shows its in-block
-    overlay. Clicks cast from Minecraft's eye, so Part 3 has to settle first how often that happens, and where clicks
-    land;
+  - **Minecraft's eye leaves V's camera among blocks.** V can stand inside Minecraft's blocks, as in `field`'s layer.
+    Minecraft then drops to crawling for about a second after V walks, and stays crawling under any block 1 to 2 m
+    overhead, which moves its eye off V's camera and shows its in-block overlay in the HUD. Before Part 3 was
+    planned, an `mclink` run settled it (the results' "Minecraft's eye among blocks"). Clicks follow the eye; in the
+    open the eye stays at V's camera; and commands work from the held feet, not from our floor, as first guessed. So
+    Part 3 builds on the open street. `mclink`'s status line gained the eye for that run (`tools/mclink/eye.txt`);
   - **latency samples from sets of several commands are wrong,** since each Enter replaces the mark. A click is one
     input, but the same rule applies to clicks in quick succession.

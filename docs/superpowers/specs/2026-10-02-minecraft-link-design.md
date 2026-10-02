@@ -944,7 +944,9 @@ Steps 2 and 3. Every step also checks that CET's overlay and spike 3's mode butt
 5. **The atlas's mip levels take a long frame at link time.** That's once per link and acceptable. If it isn't, they're
    built on a worker thread.
 6. **Placement is off when V crouches or moves.** Minecraft stands at V's camera, less its standing eye height, and
-   teleports follow at most 10 times a second. The settings tune both, and step 3 says whether it's noticeable.
+   teleports follow at most 10 times a second. The settings tune both, and step 3 says whether it's noticeable. It's
+   also off inside or under Minecraft's blocks, where Minecraft crawls, its eye 0.4 above its feet (see "Changes from
+   step 2"). Step 3 builds on the open street.
 7. **Cyberpunk's menus read keys some other way** (window messages). Menu keys leave build mode before a menu opens,
    so forwarded keys never reach a menu.
 8. **The user's Minecraft binds chat to another key.** Typed commands then time out, and the status says so. The
@@ -1134,3 +1136,9 @@ Step 2's game run, in Part 2 of the plan, found these. The sections above alread
   SkyCraft puts it straight into the player's yaw, where Minecraft's own never wraps, and Minecraft sways the
   first-person hand by the yaw's change. So the held item in the HUD swung and settled, at north only. Each yaw
   is now the one within 180° of the last.
+- **Minecraft's eye leaves V's camera among blocks.** V doesn't collide with Minecraft's blocks, so Minecraft's
+  player, held at V's feet, can be inside them, as in `field`'s layer. Minecraft then crawls, its eye 0.4 above its
+  feet: for about a second after teleports inside blocks, and for as long as a block overhangs 1 to 2 m above the
+  feet. A click then casts from that eye, and lands short. An `mclink` run measured it (`tools/mclink/eye.txt`, and
+  the results' "Minecraft's eye among blocks"). In the open, the eye stays at V's camera. Commands work from the
+  held feet, not from the floor.

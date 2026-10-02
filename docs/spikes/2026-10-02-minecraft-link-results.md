@@ -196,8 +196,9 @@ game the next day.
   within 0.07 m on average, at most 0.44 m at full speed, and the floor moved three times.
 - **The HUD:** Minecraft's hotbar, crosshair and held item over Night City: sharp, the right way up, at the size
   planned. It was steady while turning, with frame generation on, except at north (the fix above).
-- **Building by command:** `wall`, `tnt-ahead`, `field` and `wipe` built and blew up where they should, and the
-  blocks were lit and shadowed as the game's own surfaces are. Minecraft's chat replies showed in the HUD.
+- **Building by command:** `wall`, `tnt-ahead` and `field` built and blew up where they should, and the blocks were
+  lit and shadowed as the game's own surfaces are. Minecraft's chat replies showed in the HUD. `wipe` missed, a block
+  off: see "Surprises".
 - **Latency:** Minecraft's half averaged 68 ms, from a command's Enter to its section arriving. Ours averaged 20 ms,
   0.8 frames, from arrival to the first list that drew it.
 - **Bursts:** neither the field (81 sections at once) nor 125 TNT hitched a frame.
@@ -260,7 +261,7 @@ game the next day.
 | `wall` (the button) | Chat: `Successfully filled 20 block(s)`. 5 × 4 stone bricks, 4 m ahead, sharp, sunlit and shaded like the street | 1 section, worst `Update` 0.74 ms, worst frame 14.3 ms |
 | `mc tnt-ahead` | 3 commands typed in 0.1 s; the TNT went off 4.0 s after the summon, at −118.4 6.1 2006.4, and chipped the wall's near end (stone bricks resist TNT) | 1 section each; worst frames 16.2 and 17.3 ms |
 | `mc field` | A grass layer 128 blocks square, the game's palm shadows falling on it. 81 sections, 202,968 vertices, 0.065 ms of GPU time | 81 sections, 13.6 MB; worst drain 0.12 ms, worst `Update` 9.6 ms, worst frame 19.9 ms |
-| `mc wipe` | The wall went, but not the field: see "Surprises" | 8 sections; worst `Update` 8.5 ms, worst frame 21.4 ms |
+| `mc wipe` | Missed the field, a block below its layer, and the wall, its 32-block box centred where V stood by then: see "Surprises" | 8 sections; worst `Update` 8.5 ms, worst frame 21.4 ms |
 
 `wall` always runs east to west, so facing about west it stood edge-on beside V at first.
 
@@ -348,20 +349,21 @@ held item now stays steady at north, with no jump.
 ### Surprises, and what they mean for Part 3
 
 - **The held item jumped at north.** The yaw wrapped; Task 28 fixed it (see "The HUD" and "The yaw fix, checked").
-- **Minecraft's player stands on our floor, not at V's feet.** The floor is flat at the height it was sent with, and
-  moves only at 16 m or a metre's change. Where the street dips below it, Minecraft's player stands on the floor:
-  - **commands work from there:** `field` filled at y 6, a block higher than V's feet (5.92). So V stood in the
-    grass, and only 3 of the wall's 4 rows showed above it;
-  - **Minecraft's pose changes:** with its player inside a block, Minecraft drops to crouching or crawling for a
-    second or two after V stops, and the crawling eye, 0.4 m up, is inside the block. The HUD then shows Minecraft's
-    in-block overlay, dirt for grass. As the user put it, that's Minecraft working as intended without collision, in
-    a world where nothing is ever inside a block.
+- **V stood inside the field.** `field` fills the block that holds the feet, so its layer went in at y 6, from 6 to
+  7, around V's shins: only 3 of the wall's 4 rows showed above it. Minecraft's player, held at V's feet, stood in it
+  too:
+  - **Minecraft's pose changes:** with its player inside blocks, Minecraft dropped to crawling for a second or so
+    after V stopped walking. The crawling eye, 0.4 m up, was inside the grass, and the HUD showed Minecraft's in-block
+    overlay, dirt for grass. As the user put it, that's Minecraft working as intended without collision, in a world
+    where nothing is ever inside a block;
+  - **a wrong guess, corrected:** at first this looked like Minecraft's player standing on our floor, above V's feet
+    where the street dips. The experiment below ("Minecraft's eye among blocks") found commands work from the held
+    feet, not from the floor.
 
-  **For Part 3:** clicks cast from Minecraft's eye, which is at V's camera only while Minecraft's player stands. And
-  V can walk into any block it places, since Cyberpunk doesn't collide with Minecraft's blocks, which will bring the
-  overlay back. Part 3 should measure how often, and how far off, a click is.
-- **`field` and `wipe` pair up only at the same block height.** `wipe` clears the layer at Minecraft's feet, and V had
-  moved to ground a block lower. The field went with two fills at its absolute coordinates.
+  **For Part 3:** see the experiment below.
+- **`field` and `wipe` pair up only at the same block height.** Each fills the block holding the feet, and the street
+  crosses the boundary at y 6: the field went in with V's feet a little above 6.0, and `wipe` ran with them below it.
+  The field went with two fills at its absolute coordinates.
 - **Latency samples from sets of several commands are wrong.** Each Enter replaces the mark, so a section is timed
   from the last Enter before it, not from the command that made it: `tnt-ahead` gave 16 ms. Single commands measure
   it, as above.
@@ -369,3 +371,33 @@ held item now stays steady at north, with no jump.
   only on dedicated servers.
 - **Explosions put up to 63 MB a second of particles through the render ring,** which the link steps over without a
   measurable cost.
+
+## Minecraft's eye among blocks
+
+Step 2 left one question that matters for Part 3's clicks: when Minecraft's eye leaves V's camera, and where a click
+then lands. On 2026-10-03 at 00:21 the agent ran `mclink` with `tools/mclink/eye.txt` against Minecraft, without
+Cyberpunk. For this run `mclink`'s status line also gives Minecraft's eye, and its height above the feet. The script
+holds Minecraft's player at chosen feet, places blocks around it with commands, and reads the eye every 0.2 to 0.3 s:
+
+| Phase | The eye above the feet | So |
+|---|---|---|
+| A: open space, feet at 6.14 | 1.62 throughout | standing: the eye at V's camera |
+| B: a stone layer at y 6 around the feet, standing still | 1.62 for 3.5 s | being inside blocks alone changes nothing |
+| B: then 6 teleports north through the layer, and still | 1.62, then 0.47 and 0.40 for about 0.75 s, then 1.17, 1.45 and 1.62 | step 2's drop: a short crawl after teleports inside blocks |
+| C: on top of the layer, feet at 7.05 | 1.62 | standing |
+| D: open air, one stone block above, at y 7 | 0.40 for as long as it's there | Minecraft's crawl pose: a standing or crouching player wouldn't fit |
+
+- **Clicks follow the eye.** The same right click, 30° down, placed stone 0.7 m ahead while crawling under the block
+  (at x −291, z 1999), and 2.8 m ahead standing in the open (x −285, z 1997). Both are exactly where a ray from that
+  eye meets the floor.
+- **Commands work from the held feet, not from our floor.** With a fresh floor at 6.14 and the feet held 0.34 below it,
+  at 5.80, `/setblock ~ ~-1 ~` changed the block at y 4 (Minecraft: `Changed the block at -271, 4, 2000`), from the
+  feet. From the floor it would have been y 5.
+- **The in-block overlay** shows only while the eye is inside a block, so in a one-block layer at the feet, only
+  during the short crawl.
+
+**What it means for Part 3:** building on the open street is unaffected. Minecraft's eye stays at V's camera, and
+clicks land where V aims. Clicks go wrong only where V is inside or under Minecraft's blocks: for about a second after
+walking through blocks, and for as long as a block overhangs 1 to 2 m above the feet. Cyberpunk doesn't collide with
+Minecraft's blocks, and that's the project's PhysX work, not this spike's. So Part 3 builds on the open street, and
+its results say where clicks stray.
