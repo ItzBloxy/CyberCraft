@@ -32,6 +32,18 @@ std::optional<Atlas> Fail(std::string& aError, std::string aWhy)
 	aError = std::move(aWhy);
 	return std::nullopt;
 }
+
+// Four RGBA8 texels averaged channel by channel, rounded to nearest.
+uint32_t Average(uint32_t aA, uint32_t aB, uint32_t aC, uint32_t aD)
+{
+	uint32_t out = 0;
+	for (uint32_t shift = 0; shift < 32; shift += 8)
+	{
+		const uint32_t sum = ((aA >> shift) & 0xFF) + ((aB >> shift) & 0xFF) + ((aC >> shift) & 0xFF) + ((aD >> shift) & 0xFF);
+		out |= ((sum + 2) / 4) << shift;
+	}
+	return out;
+}
 }
 
 std::optional<uint16_t> Atlas::BlockId(std::string_view aName) const
@@ -110,6 +122,47 @@ std::optional<Atlas> ParseAtlas(std::span<const uint8_t> aBytes, std::string& aE
 	}
 	atlas.texels.resize(texelCount);
 	std::memcpy(atlas.texels.data(), aBytes.data() + at, texelCount * 4);
+	return atlas;
+}
+
+std::optional<Atlas> AtlasFromRgba(uint32_t aWidth, uint32_t aHeight, std::span<const uint8_t> aRgba, std::string& aError)
+{
+	const uint64_t bytes = uint64_t(aWidth) * aHeight * 4;
+	if (aWidth == 0 || aHeight == 0 || aRgba.size() < bytes)
+	{
+		return Fail(aError, std::format("a {} x {} atlas needs {} bytes of pixels, and has {}", aWidth, aHeight, bytes, aRgba.size()));
+	}
+	Atlas  atlas;
+	size_t texelCount = 0;
+	atlas.width = aWidth;
+	atlas.height = aHeight;
+	for (uint32_t level = 0; level < kMinecraftAtlasLevels; ++level)
+	{
+		atlas.levelOffsets.push_back(uint32_t(texelCount));
+		texelCount += size_t(std::max(1u, aWidth >> level)) * std::max(1u, aHeight >> level);
+	}
+	atlas.texels.resize(texelCount);
+	std::memcpy(atlas.texels.data(), aRgba.data(), size_t(bytes));
+	for (uint32_t level = 1; level < kMinecraftAtlasLevels; ++level)
+	{
+		const uint32_t  aboveWidth = std::max(1u, aWidth >> (level - 1));
+		const uint32_t  aboveHeight = std::max(1u, aHeight >> (level - 1));
+		const uint32_t  width = std::max(1u, aWidth >> level);
+		const uint32_t  height = std::max(1u, aHeight >> level);
+		const uint32_t* above = atlas.texels.data() + atlas.levelOffsets[level - 1];
+		uint32_t*       out = atlas.texels.data() + atlas.levelOffsets[level];
+		for (uint32_t y = 0; y < height; ++y)
+		{
+			const size_t row0 = size_t(y * 2) * aboveWidth;
+			const size_t row1 = size_t(std::min(y * 2 + 1, aboveHeight - 1)) * aboveWidth;
+			for (uint32_t x = 0; x < width; ++x)
+			{
+				const uint32_t x0 = x * 2;
+				const uint32_t x1 = std::min(x0 + 1, aboveWidth - 1);
+				out[size_t(y) * width + x] = Average(above[row0 + x0], above[row0 + x1], above[row1 + x0], above[row1 + x1]);
+			}
+		}
+	}
 	return atlas;
 }
 }

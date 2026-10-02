@@ -56,3 +56,52 @@ TEST(AtlasRefusesBrokenFiles)
 
 	CHECK(!cpmc::ParseAtlas({}, error));
 }
+
+TEST(AtlasFromMinecraftsPixelsHalvesFiveTimes)
+{
+	// 5 x 3 texels, each with its own red: level 1 is 2 x 1, its last column and row of the level above unused, then
+	// 1 x 1 three times, each the one row of the level above used twice.
+	std::vector<uint8_t> rgba;
+	for (uint8_t i = 0; i < 15; ++i)
+	{
+		rgba.insert(rgba.end(), { uint8_t(i * 10), 0, 0, 255 });
+	}
+	std::string error;
+	const auto  atlas = cpmc::AtlasFromRgba(5, 3, rgba, error);
+	CHECK(atlas.has_value());
+	CHECK_EQ(atlas->width, 5u);
+	CHECK_EQ(atlas->height, 3u);
+	CHECK_EQ(atlas->Levels(), 5u);
+	CHECK(atlas->levelOffsets == std::vector<uint32_t>({ 0, 15, 17, 18, 19 }));
+	CHECK_EQ(atlas->texels.size(), size_t(20));
+	CHECK_EQ(atlas->texels[6], 0xFF00003Cu);   // level 0 is the pixels: red 60 in the low byte
+	CHECK_EQ(atlas->texels[15], 0xFF00001Eu);  // (0 + 10 + 50 + 60) / 4
+	CHECK_EQ(atlas->texels[16], 0xFF000032u);  // (20 + 30 + 70 + 80) / 4
+	CHECK_EQ(atlas->texels[17], 0xFF000028u);  // (30 + 50 + 30 + 50) / 4
+	CHECK_EQ(atlas->texels[19], 0xFF000028u);
+	CHECK(atlas->sprites.empty());
+	CHECK(atlas->blocks.empty());
+}
+
+TEST(AtlasFromMinecraftsPixelsAveragesEachChannel)
+{
+	// One opaque white texel and three transparent black ones: a quarter of each, rounded.
+	const std::vector<uint8_t> rgba = { 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+	std::string                error;
+	const auto                 atlas = cpmc::AtlasFromRgba(2, 2, rgba, error);
+	CHECK_EQ(atlas->texels[4], 0x40404040u);
+}
+
+TEST(AtlasFromMinecraftsPixelsAtStepOnesSize)
+{
+	// Step 1's atlas: 2048 x 2576, five levels as the shader finds them.
+	const std::vector<uint8_t> rgba(size_t(2048) * 2576 * 4, 0);
+	std::string                error;
+	const auto                 atlas = cpmc::AtlasFromRgba(2048, 2576, rgba, error);
+	CHECK(atlas.has_value());
+	CHECK(atlas->levelOffsets == std::vector<uint32_t>({ 0, 5'275'648, 6'594'560, 6'924'288, 7'006'720 }));
+	CHECK_EQ(atlas->texels.size(), size_t(7'027'328));
+	CHECK(!cpmc::AtlasFromRgba(2048, 2576, std::span(rgba).first(100), error));
+	CHECK(error.find("needs 21102592 bytes") != std::string::npos);
+	CHECK(!cpmc::AtlasFromRgba(0, 4, rgba, error));
+}

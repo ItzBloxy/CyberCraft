@@ -46,4 +46,12 @@ struct Atlas
 
 // Reads atlas.bin. Nothing, with aError saying why, if it isn't a complete atlas of the expected layout.
 std::optional<Atlas> ParseAtlas(std::span<const uint8_t> aBytes, std::string& aError);
+
+constexpr uint32_t kMinecraftAtlasLevels = 5;
+
+// Minecraft's atlas, as SkyCraft sends it (spike 4): RGBA8 rows, top first. Level 0 is the pixels as they are. Each
+// further level halves the last, rounding down to at least 1 texel, each texel the rounded average of the 2 x 2 above
+// it: an odd side's last row or column is left out, and a side of 1 is used twice. It has no sprites or blocks:
+// Minecraft's vertices carry their own UVs. Nothing, with aError saying why, if a side is 0 or aRgba is short.
+std::optional<Atlas> AtlasFromRgba(uint32_t aWidth, uint32_t aHeight, std::span<const uint8_t> aRgba, std::string& aError);
 }
