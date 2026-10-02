@@ -51,6 +51,9 @@ public:
 	virtual void Log(const std::string&) {}
 };
 
+// A render message type's name, for reports: "section", "atlas patch" and so on, and "other" from Link::kTypes - 1 on.
+const char* RenderTypeName(size_t aType);
+
 class Link
 {
 public:
@@ -84,6 +87,7 @@ public:
 		bool     inWorld = false;
 		bool     screenOpen = false;
 		Vec3d    minecraftFeet;        // Minecraft axes
+		Vec3d    minecraftEye;         // Minecraft axes
 		uint64_t minecraftFrames = 0;  // its frame counter
 		// The game side
 		bool     inGame = false;
@@ -98,6 +102,7 @@ public:
 		std::array<uint64_t, kTypes> messages{};
 		std::array<uint64_t, kTypes> bytes{};
 		uint64_t                     drainedBytes = 0;
+		double                       drainMs = 0.0;  // the last update's drain
 		uint64_t                     resyncs = 0;
 		std::string                  lastResync;
 		uint64_t                     rejected = 0;  // messages whose payload failed its layout's checks

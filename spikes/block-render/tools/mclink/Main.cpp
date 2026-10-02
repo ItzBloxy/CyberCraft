@@ -57,13 +57,6 @@ bool WriteDds(const std::string& aPath, uint32_t aWidth, uint32_t aHeight, const
 	return bool(out);
 }
 
-const char* TypeName(size_t aType)
-{
-	static const char* names[Link::kTypes] = { "pad",    "atlas",  "section", "clear-all", "texture", "avatar", "scene",
-		                                       "atlas patch", "lights", "ragdoll", "solids",    "dug",     "other" };
-	return names[std::min(aType, Link::kTypes - 1)];
-}
-
 // What Minecraft sends, reported as it comes.
 struct Report : LinkSink
 {
@@ -174,7 +167,8 @@ void PrintStatus(const Link::Status& aStatus, const Report& aReport)
 	{
 		if (s.messages[type])
 		{
-			types += std::format("{}{} {} ({:.2f} MB)", types.empty() ? "" : ", ", s.messages[type], TypeName(type), double(s.bytes[type]) / 1048576.0);
+			types += std::format("{}{} {} ({:.2f} MB)", types.empty() ? "" : ", ", s.messages[type], RenderTypeName(type),
+			                     double(s.bytes[type]) / 1048576.0);
 		}
 	}
 	Say("render ring: {:.2f} MB; {}", double(s.drainedBytes) / 1048576.0, types.empty() ? "no messages" : types);

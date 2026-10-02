@@ -35,6 +35,9 @@ struct FakeMinecraft
 		state.seq += 2;
 		state.flags = aFlags;
 		state.x = -119.5;
+		state.eyeX = -119.5;
+		state.eyeY = 7.76;
+		state.eyeZ = 2007.5;
 		state.frameCounter += 1;
 		std::memcpy(base + proto::kOffMcState, &state, sizeof state);
 	}
@@ -240,6 +243,27 @@ TEST(LinkSeesMinecraftComeAndGo)
 	CHECK(!link.State().minecraft);
 	CHECK(!link.State().inWorld);
 	CHECK(sink.Logged("Minecraft has gone"));
+}
+
+TEST(LinkReportsMinecraftsEyeAndTheDrainTime)
+{
+	FakeMinecraft minecraft;
+	Link          link(minecraft.base);
+	Sink          sink;
+	minecraft.Beat(77, 1000);
+	minecraft.State(proto::kMcInWorld);
+	link.Update(At(1.0), kSettings, sink);
+	CHECK_NEAR(link.State().minecraftEye.x, -119.5, 1e-9);
+	CHECK_NEAR(link.State().minecraftEye.y, 7.76, 1e-9);
+	CHECK(link.State().drainMs >= 0.0);
+}
+
+TEST(LinkNamesTheRenderTypes)
+{
+	CHECK_STR(RenderTypeName(proto::kRenSection), "section");
+	CHECK_STR(RenderTypeName(proto::kRenAtlasRegion), "atlas patch");
+	CHECK_STR(RenderTypeName(Link::kTypes - 1), "other");
+	CHECK_STR(RenderTypeName(99), "other");
 }
 
 TEST(LinkTeleportsMinecraftsEyeToTheCamera)

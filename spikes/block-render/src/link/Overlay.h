@@ -24,7 +24,7 @@ public:
 	// aControl: the OverlayCtl; aHeaders: the 3 slot headers; aPixels: slot 0's pixels; aSlotBytes: bytes per slot.
 	OverlayReader(uint8_t* aControl, uint8_t* aHeaders, uint8_t* aPixels, uint64_t aSlotBytes);
 
-	// When Minecraft connects or comes back: the state to 0, and our front to slot 2. Minecraft's writer starts at 1.
+	// For a new Minecraft process: the state to 0, and our front to slot 2. Its writer starts over at slot 1.
 	void Reset();
 
 	// The newest image, if Minecraft has published one since the last call. A slot index of 3, or a size out of range

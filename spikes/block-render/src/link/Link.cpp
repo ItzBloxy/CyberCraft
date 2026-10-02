@@ -3,6 +3,7 @@
 #include "link/Floor.h"
 #include "link/Mapping.h"
 
+#include <chrono>
 #include <cmath>
 #include <format>
 
@@ -20,6 +21,13 @@ double Distance(const Vec3d& aA, const Vec3d& aB)
 {
 	return std::sqrt((aA.x - aB.x) * (aA.x - aB.x) + (aA.y - aB.y) * (aA.y - aB.y) + (aA.z - aB.z) * (aA.z - aB.z));
 }
+}
+
+const char* RenderTypeName(size_t aType)
+{
+	static const char* const names[Link::kTypes] = { "pad",         "atlas",  "section", "clear-all", "texture", "avatar", "scene",
+		                                             "atlas patch", "lights", "ragdoll", "solids",    "dug",     "other" };
+	return names[aType < Link::kTypes ? aType : Link::kTypes - 1];
 }
 
 Link::Link(uint8_t* aBase)
@@ -73,6 +81,7 @@ void Link::Update(const Frame& aFrame, const LinkSettings& aSettings, LinkSink& 
 	if (mc)
 	{
 		status_.minecraftFeet = { mc->x, mc->y, mc->z };
+		status_.minecraftEye = { mc->eyeX, mc->eyeY, mc->eyeZ };
 		status_.minecraftFrames = mc->frameCounter;
 	}
 
@@ -155,8 +164,10 @@ void Link::Update(const Frame& aFrame, const LinkSettings& aSettings, LinkSink& 
 		}
 	});
 
+	const auto drainStart = std::chrono::steady_clock::now();
 	const auto drained = DrainByteRing(base_ + proto::kOffRenderRing, proto::kRenRingDataBytes, aSettings.ringBudget,
 	                                   [&](const RingMessage& aMessage) { return Take(aMessage, aSettings, aSink); });
+	status_.drainMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - drainStart).count();
 	status_.drainedBytes += drained.bytes;
 	if (drained.resynced)
 	{
