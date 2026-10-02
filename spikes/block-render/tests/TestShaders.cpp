@@ -71,6 +71,9 @@ TEST(ShadersCompileFromTheShaderFile)
 		CHECK_EQ(ConstantBufferSize(shaders->predlss, "Frame"), UINT(sizeof(cpmc::FrameConstants)));
 		CHECK_EQ(ConstantBufferSize(shaders->gbuffer, "Frame"), UINT(sizeof(cpmc::FrameConstants)));
 		CHECK_EQ(ConstantBufferSize(shaders->depth, "Frame"), UINT(sizeof(cpmc::FrameConstants)));
+		CHECK(!shaders->hudVertex.empty());
+		CHECK(!shaders->hud.empty());
+		CHECK_EQ(ConstantBufferSize(shaders->hud, "Hud"), UINT(sizeof(cpmc::HudConstants)));
 	}
 }
 
@@ -95,6 +98,17 @@ TEST(ShadersWriteTheGbuffer)
 	{
 		CHECK_EQ(Outputs(shaders->gbuffer), 4u);  // the base colour, normals, material values and motion vectors
 		CHECK_EQ(Outputs(shaders->depth), 0u);    // depth only
+	}
+}
+
+TEST(ShadersDrawTheHud)
+{
+	std::string error;
+	const auto  shaders = cpmc::CompileBlockShaders(ShaderSource(), error);
+	CHECK(shaders.has_value());
+	if (shaders)
+	{
+		CHECK_EQ(Outputs(shaders->hud), 1u);  // the back buffer
 	}
 }
 

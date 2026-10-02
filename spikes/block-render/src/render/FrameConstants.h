@@ -27,4 +27,14 @@ struct SectionConstants
 	float unused;
 };
 static_assert(sizeof(SectionConstants) == 16);
+
+// The HUD pass's root constants, in b1 where the blocks have SectionConstants.
+struct HudConstants
+{
+	uint32_t width = 0;     // the image's
+	uint32_t height = 0;
+	uint32_t scale = 1;     // back-buffer pixels per image texel, each way
+	uint32_t bottomUp = 0;  // 1 if its rows are stored bottom-up
+};
+static_assert(sizeof(HudConstants) == 16);
 }

@@ -177,3 +177,33 @@ void DepthPS(VSOut i)
         discard;
     }
 }
+
+// Spike 4: Minecraft's HUD image (its hotbar, crosshair, chat, hand and held item), drawn over the finished frame at
+// Present with premultiplied-alpha blending. The image is RGBA8 with premultiplied alpha, one texel per uint (red in the
+// low byte), its rows stored as Minecraft sent them. Each texel covers hudInfo.z by hudInfo.z back-buffer pixels from
+// the top left, and nothing shows outside the image. src/render/Hud.cpp's HudTexel does the same arithmetic.
+cbuffer Hud : register(b1)
+{
+    uint4 hudInfo;  // the image's width and height; back-buffer pixels per texel; 1 if its rows are stored bottom-up
+};
+
+StructuredBuffer<uint> hudImage : register(t1);
+
+// One triangle covering the screen, from the vertex index alone.
+float4 HudVS(uint id : SV_VertexID) : SV_Position
+{
+    const float2 corner = float2((id << 1) & 2, id & 2);  // (0, 0), (2, 0), (0, 2)
+    return float4(corner * float2(2.0, -2.0) + float2(-1.0, 1.0), 0.0, 1.0);
+}
+
+float4 HudPS(float4 position : SV_Position) : SV_Target0
+{
+    const uint2 texel = (uint2)position.xy / max(hudInfo.z, 1u);
+    if (texel.x >= hudInfo.x || texel.y >= hudInfo.y)
+    {
+        return float4(0.0, 0.0, 0.0, 0.0);
+    }
+    const uint row = hudInfo.w != 0 ? hudInfo.y - 1 - texel.y : texel.y;
+    const uint packed = hudImage[row * hudInfo.x + texel.x];
+    return float4(packed & 0xFF, (packed >> 8) & 0xFF, (packed >> 16) & 0xFF, packed >> 24) / 255.0;
+}

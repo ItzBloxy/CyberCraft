@@ -54,6 +54,17 @@ std::optional<BlockShaders> CompileBlockShaders(std::string_view aSource, std::s
 	{
 		return std::nullopt;
 	}
-	return BlockShaders{ std::move(*vertex), std::move(*present), std::move(*predlss), std::move(*gbuffer), std::move(*depth) };
+	auto hudVertex = CompileShader(aSource, "blocks.hlsl", "HudVS", "vs_5_1", aError);
+	if (!hudVertex)
+	{
+		return std::nullopt;
+	}
+	auto hud = CompileShader(aSource, "blocks.hlsl", "HudPS", "ps_5_1", aError);
+	if (!hud)
+	{
+		return std::nullopt;
+	}
+	return BlockShaders{ std::move(*vertex), std::move(*present), std::move(*predlss), std::move(*gbuffer),
+		                 std::move(*depth), std::move(*hudVertex), std::move(*hud) };
 }
 }
