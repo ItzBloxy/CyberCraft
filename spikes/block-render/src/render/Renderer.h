@@ -61,6 +61,7 @@ public:
 		uint64_t    skipped = 0;
 		uint64_t    lateCamera = 0;  // present: drawn with the same DLSS frame as the draw before; gbuffer: skipped,
 		                             // because the frame's camera came after its G-buffer
+		uint64_t    partial = 0;     // gbuffer: drawn into the G-buffer only, as the tagged depth's state wasn't known
 		std::string lastSkip;
 		double      gpuMsAverage = -1.0;
 		double      gpuMsWorst = -1.0;
@@ -152,7 +153,7 @@ private:
 	// BaseConstants, plus the image's size, the jitter and the motion: predlss and gbuffer draw at the render size
 	FrameConstants     JitteredConstants(const CameraFrame& aCamera, const SlConstants& aGame, const sl::Extent& aExtent) const;
 	void               DrawSections(ID3D12GraphicsCommandList* aList, const CameraFrame& aCamera, uint64_t aCompleted);
-	void               Skip(const std::string& aWhy);
+	void               Skip(const std::string& aWhy, bool aCounts = true);  // aCounts: toward the skips in a row
 	void               Fail(const std::string& aWhy);  // logs, and switches drawing off
 	void               ReleaseTracking();               // if predlss or gbuffer asked for it
 	uint64_t           Signal();

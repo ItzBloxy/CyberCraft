@@ -22655,7 +22655,7 @@ The version goes to 0.8.0.
 - Modify: `tests/TestStatus.cpp`, `src/Status.h`, `src/Status.cpp`, `src/render/Renderer.h`, `src/render/Renderer.cpp`,
   `src/Plugin.cpp`, `CMakeLists.txt`, `tools/blockrender_hud/init.lua`
 
-- [ ] **Step 1: Edit `tests/TestStatus.cpp` to add the failing test**
+- [x] **Step 1: Edit `tests/TestStatus.cpp` to add the failing test**
 
 ```cpp
 	          "structure=cube 10.00 23.00 7.00 11.00 24.00 8.00\n");
@@ -22677,7 +22677,7 @@ TEST(StatusCountsFramesDrawnWithoutTheTaggedDepth)
 }
 ```
 
-- [ ] **Step 2: Build; it must fail**
+- [x] **Step 2: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -22686,7 +22686,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `'framesPartial': is not a member of 'cpmc::StatusReport'`.
 
-- [ ] **Step 3: Edit `src/Status.h` for the frames without the tagged depth**
+- [x] **Step 3: Edit `src/Status.h` for the frames without the tagged depth**
 
 ```cpp
 	uint64_t               framesDrawn = 0;    // in the last second
@@ -22696,7 +22696,7 @@ Expected: `'framesPartial': is not a member of 'cpmc::StatusReport'`.
 	uint64_t               framesPartial = 0;  // of those, gbuffer's drawn into the G-buffer but not the tagged depth
 ```
 
-- [ ] **Step 4: Edit `src/Status.cpp` to say how many**
+- [x] **Step 4: Edit `src/Status.cpp` to say how many**
 
 ```cpp
 	out += std::format("frames={} drawn, {} skipped{}, {} with a late camera (last second)\n", aReport.framesDrawn,
@@ -22710,7 +22710,7 @@ Expected: `'framesPartial': is not a member of 'cpmc::StatusReport'`.
 	                   aReport.lateCamera);
 ```
 
-- [ ] **Step 5: Build and run the tests; they must pass**
+- [x] **Step 5: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -22720,7 +22720,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `112 test(s), 0 failure(s)`.
 
-- [ ] **Step 6: Edit `src/render/Renderer.h` for skips that don't count, and the count of partial frames**
+- [x] **Step 6: Edit `src/render/Renderer.h` for skips that don't count, and the count of partial frames**
 
 ```cpp
 		                             // because the frame's camera came after its G-buffer
@@ -22738,7 +22738,7 @@ Expected: no error or warning lines, then `112 test(s), 0 failure(s)`.
 	void               Skip(const std::string& aWhy, bool aCounts = true);  // aCounts: toward the skips in a row
 ```
 
-- [ ] **Step 7: Edit `src/render/Renderer.cpp` to draw without the tagged depth, and to let menus be**
+- [x] **Step 7: Edit `src/render/Renderer.cpp` to draw without the tagged depth, and to let menus be**
 
 ```cpp
 void Renderer::Skip(const std::string& aWhy)
@@ -22843,7 +22843,7 @@ void Renderer::OnSubmitted(ID3D12CommandQueue*, UINT, ID3D12CommandList* const*)
 void Renderer::OnSubmitted(ID3D12CommandQueue*, UINT, ID3D12CommandList* const*)
 ```
 
-- [ ] **Step 8: Edit `src/Plugin.cpp` to read the overlay's requests too, and for the status and the version**
+- [x] **Step 8: Edit `src/Plugin.cpp` to read the overlay's requests too, and for the status and the version**
 
 ```cpp
 // BlockRender: spike 3's RED4ext plugin. It hooks the game's Streamline calls and D3D12 to map Cyberpunk's frame
@@ -22916,7 +22916,7 @@ void RunRequest(const std::filesystem::path& aFolder, bool aWholeLine)
 	aInfo->version = RED4EXT_V1_SEMVER(0, 8, 0);
 ```
 
-- [ ] **Step 9: Edit `CMakeLists.txt` for the version**
+- [x] **Step 9: Edit `CMakeLists.txt` for the version**
 
 ```cmake
 project(BlockRender VERSION 0.7.0 LANGUAGES C CXX)
@@ -22925,7 +22925,7 @@ project(BlockRender VERSION 0.7.0 LANGUAGES C CXX)
 project(BlockRender VERSION 0.8.0 LANGUAGES C CXX)
 ```
 
-- [ ] **Step 10: Edit `tools/blockrender_hud/init.lua` to add the buttons**
+- [x] **Step 10: Edit `tools/blockrender_hud/init.lua` to add the buttons**
 
 ```lua
 -- time as CET sees it, which works without BlockRender too and goes into frames.txt here as well. Delete this folder
@@ -22978,14 +22978,14 @@ end
         if status == nil then
 ```
 
-- [ ] **Step 11: Check the overlay's Lua**
+- [x] **Step 11: Check the overlay's Lua**
 
 ```bash
 luac -p /d/Cyberpunk-Minecraft/spikes/block-render/tools/blockrender_hud/init.lua && echo "syntax ok"
 ```
 Expected: `syntax ok`.
 
-- [ ] **Step 12: Build; it must compile without warnings, and the tests still pass**
+- [x] **Step 12: Build; it must compile without warnings, and the tests still pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -22995,7 +22995,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `112 test(s), 0 failure(s)`.
 
-- [ ] **Step 13: Check the DLL's exports and imports**
+- [x] **Step 13: Check the DLL's exports and imports**
 
 ```bash
 DUMPBIN="/c/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/dumpbin.exe"
@@ -23005,7 +23005,7 @@ B=/d/Cyberpunk-Minecraft/spikes/block-render/build/RelWithDebInfo/BlockRender.dl
 ```
 Expected: exactly `Main`, `Query` and `Supports`, then `D3DCOMPILER_47.dll` and `d3d12.dll`.
 
-- [ ] **Step 14: Commit**
+- [x] **Step 14: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \

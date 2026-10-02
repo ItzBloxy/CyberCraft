@@ -32,7 +32,8 @@ std::string FormatStatus(const StatusReport& aReport)
 {
 	std::string out;
 	out += std::format("mode={}\n", aReport.mode);
-	out += std::format("frames={} drawn, {} skipped{}, {} with a late camera (last second)\n", aReport.framesDrawn,
+	out += std::format("frames={} drawn{}, {} skipped{}, {} with a late camera (last second)\n", aReport.framesDrawn,
+	                   aReport.framesPartial == 0 ? "" : std::format(" ({} without the tagged depth)", aReport.framesPartial),
 	                   aReport.framesSkipped, aReport.lastSkip.empty() ? "" : " (" + OneLine(aReport.lastSkip) + ")",
 	                   aReport.lateCamera);
 	out += std::format("blocks={} in {} sections, {} vertices\n", aReport.blocks, aReport.sections, aReport.vertices);

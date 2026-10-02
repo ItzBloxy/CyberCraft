@@ -21,6 +21,7 @@ struct StatusReport
 
 	std::string            mode = "off";
 	uint64_t               framesDrawn = 0;    // in the last second
+	uint64_t               framesPartial = 0;  // of those, gbuffer's drawn into the G-buffer but not the tagged depth
 	uint64_t               framesSkipped = 0;  // in the last second
 	std::string            lastSkip;           // why the latest skipped frame was skipped
 	uint64_t               lateCamera = 0;     // frames drawn with the previous frame's camera, in the last second

@@ -1,7 +1,7 @@
 -- BlockRender HUD: what BlockRender (spike 3 of D:\Cyberpunk-Minecraft) is doing, from the status.txt it writes into
 -- this folder once a second, plus V's position, heading and Minecraft block, and the nearest structure, and the frame
--- time as CET sees it, which works without BlockRender too and goes into frames.txt here as well. Delete this folder
--- to remove it.
+-- time as CET sees it, which works without BlockRender too and goes into frames.txt here as well. Its buttons switch
+-- BlockRender's drawing mode, through blockrender.request in this folder. Delete this folder to remove it.
 local status = nil       -- status.txt's lines, except the structures
 local structures = {}    -- { name, min = { x, y, z }, max = { x, y, z } }, in world coordinates
 local player = nil       -- the lines about V
@@ -11,6 +11,22 @@ local frameLine = nil                                  -- the last whole second'
 local fontScale = 0.8    -- the window's text, against CET's own size
 
 local atan2 = math.atan2 or function(y, x) return math.atan(y, x) end
+
+-- The drawing modes the buttons switch between, as blockrender.request names them.
+local modes = {
+    { name = "off", label = "Off" },
+    { name = "predlss", label = "Before DLSS" },
+    { name = "gbuffer", label = "G-buffer" },
+}
+
+-- Sends BlockRender a command. It reads blockrender.request in this folder once a second, once the line is whole.
+local function request(command)
+    local file = io.open("blockrender.request", "w")
+    if file ~= nil then
+        file:write(command, "\n")
+        file:close()
+    end
+end
 
 -- A status line as the window shows it: a long line splits at each "; ", with the later parts indented.
 local function displayLines(line)
@@ -107,6 +123,14 @@ registerForEvent("onDraw", function()
         if ImGui.SetWindowFontScale then
             ImGui.SetWindowFontScale(fontScale)
         end
+        ImGui.Text("Draw:")
+        for _, mode in ipairs(modes) do
+            ImGui.SameLine()
+            if ImGui.Button(mode.label) then
+                request("mode " .. mode.name)
+            end
+        end
+        ImGui.Separator()
         if status == nil then
             ImGui.Text("no status.txt yet: is BlockRender loaded?")
         else

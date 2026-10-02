@@ -604,11 +604,11 @@ bool Renderer::EnsureDepthTarget(uint32_t aWidth, uint32_t aHeight)
 	return true;
 }
 
-void Renderer::Skip(const std::string& aWhy)
+void Renderer::Skip(const std::string& aWhy, bool aCounts)
 {
 	++stats_.skipped;
 	stats_.lastSkip = aWhy;
-	if (++consecutiveSkips_ == kSkipsBeforeOff)
+	if (aCounts && ++consecutiveSkips_ == kSkipsBeforeOff)
 	{
 		Fail(std::format("{} frames in a row were skipped ({})", kSkipsBeforeOff, aWhy));
 	}
@@ -1003,7 +1003,8 @@ void Renderer::SeeGbufferSubmission(UINT aCount, ID3D12CommandList* const* aList
 			if (!gbufferFrame_.decided)
 			{
 				gbufferFrame_.decided = true;
-				Skip(gbufferFrame_.seen ? "the G-buffer's end wasn't found" : "no G-buffer list was seen in this frame");
+				// The game draws some frames differently, as a menu opens: they're skipped, but don't switch drawing off.
+				Skip(gbufferFrame_.seen ? "the G-buffer's end wasn't found" : "no G-buffer list was seen in this frame", false);
 			}
 			continue;
 		}
@@ -1233,7 +1234,7 @@ ID3D12CommandList* Renderer::RecordGbuffer(ID3D12CommandQueue* aQueue)
 	if (!latest_.list || latestSubmitted_)
 	{
 		++stats_.lateCamera;  // this frame's evaluate, which brings its camera, hasn't come yet
-		Skip("the frame's camera came after its G-buffer");
+		Skip("the frame's camera came after its G-buffer", false);
 		return nullptr;
 	}
 	if (!latest_.constants)
@@ -1261,16 +1262,19 @@ ID3D12CommandList* Renderer::RecordGbuffer(ID3D12CommandQueue* aQueue)
 		Skip("the G-buffer and the tagged buffers aren't the ones watched");
 		return nullptr;
 	}
-	static constexpr const char* kNames[kWatched] = { "base colour", "normals", "material values", "G-buffer's depth",
-		                                              "motion vectors", "tagged depth" };
-	for (size_t k = 0; k < kWatched; ++k)
+	static constexpr const char* kNames[kTaggedDepth] = { "base colour", "normals", "material values", "G-buffer's depth",
+		                                                  "motion vectors" };
+	for (size_t k = 0; k < kTaggedDepth; ++k)
 	{
-		if (!gbufferFrame_.before[k] && (k != kTaggedDepth || gbufferDepth_))
+		if (!gbufferFrame_.before[k])
 		{
 			Skip(std::format("the state of the {} before the G-buffer's end isn't known", kNames[k]));
 			return nullptr;
 		}
 	}
+	// The game copies the G-buffer's depth into the tagged depth before the end, except in a few frames, such as while
+	// the Skip Time screen opens. Those frames get the blocks in the G-buffer only.
+	const bool intoTaggedDepth = gbufferDepth_ && gbufferFrame_.before[kTaggedDepth].has_value();
 	if (!atlasBuffer_ || completed < atlasReady_)
 	{
 		Skip("the atlas isn't on the GPU yet");
@@ -1282,7 +1286,7 @@ ID3D12CommandList* Renderer::RecordGbuffer(ID3D12CommandQueue* aQueue)
 		Skip("the camera isn't understood");
 		return nullptr;
 	}
-	if (!EnsureGbufferPipeline(camera->reversedDepth) || (gbufferDepth_ && !EnsureDepthPipeline(camera->reversedDepth)))
+	if (!EnsureGbufferPipeline(camera->reversedDepth) || (intoTaggedDepth && !EnsureDepthPipeline(camera->reversedDepth)))
 	{
 		return nullptr;
 	}
@@ -1318,7 +1322,7 @@ ID3D12CommandList* Renderer::RecordGbuffer(ID3D12CommandQueue* aQueue)
 		                         { targets[2], *gbufferFrame_.before[kMaterial], D3D12_RESOURCE_STATE_RENDER_TARGET },
 		                         { motion, *gbufferFrame_.before[kMotion], D3D12_RESOURCE_STATE_RENDER_TARGET },
 		                         { gbufferDepth, *gbufferFrame_.before[kGbufferDepth], D3D12_RESOURCE_STATE_DEPTH_WRITE } };
-	if (gbufferDepth_)
+	if (intoTaggedDepth)
 	{
 		wanted.push_back({ taggedDepth, *gbufferFrame_.before[kTaggedDepth], D3D12_RESOURCE_STATE_DEPTH_WRITE });
 	}
@@ -1354,7 +1358,7 @@ ID3D12CommandList* Renderer::RecordGbuffer(ID3D12CommandQueue* aQueue)
 	list->SetGraphicsRootShaderResourceView(3, atlasBuffer_->GetGPUVirtualAddress());
 	list->SetGraphicsRootShaderResourceView(4, atlasBuffer_->GetGPUVirtualAddress());  // t2: only step 2's shader reads it
 	DrawSections(list, *camera, completed);
-	if (gbufferDepth_)
+	if (intoTaggedDepth)
 	{
 		// The game copied the G-buffer's depth into the tagged depth before our list, so the blocks go in there too.
 		const D3D12_CPU_DESCRIPTOR_HANDLE taggedDsv = Offset(dsvHeap_->GetCPUDescriptorHandleForHeapStart(), kTaggedDepthDsv, dsvIncrement_);
@@ -1379,6 +1383,10 @@ ID3D12CommandList* Renderer::RecordGbuffer(ID3D12CommandQueue* aQueue)
 		return nullptr;
 	}
 	++recordings_;
+	if (gbufferDepth_ && !intoTaggedDepth)
+	{
+		++stats_.partial;
+	}
 	t_insertedSlot = slot;
 	return list;
 }

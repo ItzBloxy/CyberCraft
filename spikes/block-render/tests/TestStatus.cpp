@@ -29,3 +29,14 @@ TEST(StatusWritesOneLinePerItem)
 	          "request=place cube: placed at block (10, 7, -24)\n"
 	          "structure=cube 10.00 23.00 7.00 11.00 24.00 8.00\n");
 }
+
+TEST(StatusCountsFramesDrawnWithoutTheTaggedDepth)
+{
+	cpmc::StatusReport report;
+	report.mode = "gbuffer";
+	report.framesDrawn = 70;
+	report.framesPartial = 3;
+	const std::string status = cpmc::FormatStatus(report);
+	CHECK(status.find("frames=70 drawn (3 without the tagged depth), 0 skipped, 0 with a late camera (last second)\n") !=
+	      std::string::npos);
+}

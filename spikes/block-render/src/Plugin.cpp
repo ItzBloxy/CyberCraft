@@ -1,7 +1,8 @@
 // BlockRender: spike 3's RED4ext plugin. It hooks the game's Streamline calls and D3D12 to map Cyberpunk's frame
 // (step 1: the frame log and the dumps), and draws Minecraft blocks into it (step 2: on the finished frame; step 3:
-// before DLSS). Commands come through blockrender.request in its folder, and status.txt in the overlay's folder says
-// what it's doing. See docs/superpowers/specs/2026-10-01-block-render-design.md.
+// before DLSS; step 4: into the G-buffer). Commands come through blockrender.request, in its folder or the overlay's,
+// and status.txt in the overlay's folder says what it's doing. See
+// docs/superpowers/specs/2026-10-01-block-render-design.md.
 #include <RED4ext/RED4ext.hpp>
 
 #include "LogQueue.h"
@@ -37,7 +38,7 @@ namespace
 using Clock = std::chrono::steady_clock;
 using namespace std::chrono_literals;
 
-constexpr const char* kVersion = "0.7.0";
+constexpr const char* kVersion = "0.8.0";
 
 RED4ext::v1::PluginHandle g_handle = nullptr;
 const RED4ext::v1::Sdk*   g_sdk = nullptr;
@@ -185,15 +186,22 @@ void Set(const cpmc::Request& aRequest)
 	                                                              : "set: " + error);
 }
 
-void RunRequest()
+// The command in aFolder's blockrender.request, if there is one: in the plugin's folder, where the agent writes it, or
+// the overlay's, where its buttons do. The overlay can't rename a finished file into place, so there a command counts
+// only once its line ends (aWholeLine).
+void RunRequest(const std::filesystem::path& aFolder, bool aWholeLine)
 {
-	const std::filesystem::path path = g_pluginDir / "blockrender.request";
+	const std::filesystem::path path = aFolder / "blockrender.request";
 	std::error_code             error;
 	if (!std::filesystem::exists(path, error))
 	{
 		return;
 	}
 	const std::string text = ReadSmallFile(path);
+	if (aWholeLine && (text.empty() || text.back() != '\n'))
+	{
+		return;  // still being written: read it next second
+	}
 	std::filesystem::remove(path, error);
 	std::string                         why;
 	const std::optional<cpmc::Request> request = cpmc::ParseRequest(text, why);
@@ -290,6 +298,7 @@ void WriteStatus()
 	cpmc::StatusReport          report;
 	report.mode = g_renderer->ModeName();
 	report.framesDrawn = stats.drawn;
+	report.framesPartial = stats.partial;
 	report.framesSkipped = stats.skipped;
 	report.lastSkip = stats.lastSkip;
 	report.lateCamera = stats.lateCamera;
@@ -350,7 +359,8 @@ bool OnUpdate(RED4ext::CGameApplication*)
 			PatchLate();
 			CheckDevice();
 		}
-		RunRequest();
+		RunRequest(g_pluginDir, false);
+		RunRequest(g_hudDir, true);
 	}
 	const auto [time, folderName] = Timestamps();
 	if (g_frameLog->Capturing())
@@ -441,7 +451,7 @@ RED4EXT_C_EXPORT void RED4EXT_CALL Query(RED4ext::v1::PluginInfo* aInfo)
 {
 	aInfo->name = L"BlockRender";
 	aInfo->author = L"Cyberpunk-Minecraft";
-	aInfo->version = RED4EXT_V1_SEMVER(0, 7, 0);
+	aInfo->version = RED4EXT_V1_SEMVER(0, 8, 0);
 	aInfo->runtime = RED4EXT_V1_RUNTIME_VERSION_LATEST;
 	aInfo->sdk = RED4EXT_V1_SDK_VERSION_CURRENT;
 }
