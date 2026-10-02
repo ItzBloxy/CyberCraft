@@ -24,8 +24,8 @@ The unit tests play Minecraft's side in plain memory. Step 1 then checks the lin
 **Tech stack:**
 - C++20, MSVC 14.44 (Visual Studio 2022), CMake 3.31 (bundled with Visual Studio);
 - SkyCraft's protocol header (version 11, MIT), and Win32 shared memory;
-- Minecraft 26.3, Fabric Loader 0.19.5, Fabric API 0.161.0+26.3 and `skycraft-fabric-0.1.2.jar`, in the user's
-  Modrinth instance.
+- Minecraft 26.3, Fabric Loader 0.19.5, Fabric API for 26.3 (SkyCraft takes any version) and
+  `skycraft-fabric-0.1.2.jar`, in the user's Modrinth instance.
 
 **Spec:** [docs/superpowers/specs/2026-10-02-minecraft-link-design.md](../specs/2026-10-02-minecraft-link-design.md)
 
@@ -50,13 +50,15 @@ Task 12 closes Part 1 and plans Part 2.
   - Tasks 1 to 10 were then replayed in a fresh clone by a script that applied every file step exactly as written,
     and checked every build, test and `mclink` step's expected result. The results:
     - zero compiler warnings at `/W4`;
-    - 171 C++ tests passing;
+    - 175 C++ tests passing;
     - the replayed files identical to the scratch clone's.
   - Before this plan was written, `mclink` also ran against a stand-in for SkyCraft's Java side. That covered the
     commands' T, chat, text and Enter handshake, the floor, sections, an explosion and a HUD image.
+  - A deep review then checked every task against the spec, SkyCraft's protocol header and its Java and Skyrim
+    sides. "Changes from the deep review", at the end, lists what it changed.
 
   So a failure while following the plan most likely means a transcription slip: compare against the plan's code first.
-- **Test counts:** 112 at the start. Then 123, 130, 134, 138, 143, 151, 155, 167 and 171 after Tasks 2 to 10.
+- **Test counts:** 112 at the start. Then 123, 130, 134, 138, 143, 151, 155, 171 and 175 after Tasks 2 to 10.
 - **What only Minecraft can test:** the link against SkyCraft's real mod, in Task 11, with the user.
 - **The user and Minecraft:**
   - **The user does everything in Minecraft and the Modrinth App:** adding Fabric API, setting the instance's Java
@@ -105,7 +107,7 @@ all.
 ```bash
 cd /d/Cyberpunk-Minecraft && git switch spike/minecraft-link && git status --short && git log --oneline -1
 ```
-Expected: no changed files, and this plan's own commit at the top.
+Expected: no changed files, and this plan's commits (`minecraft-link plan: …`) at the top.
 
 - [ ] **Step 2: Download the header and the licence**
 
@@ -2644,8 +2646,10 @@ All of it once a frame (the spec's "The link" and "Blocks"): the heartbeat, Mine
 teleports by step and rate, the floor once Minecraft is there, typed commands, explosions, the render ring within its
 budget, and HUD images on request. The tests give it a fake Minecraft in plain memory, laid out as the mapping.
 
-Writing it settled one detail the spec left loose: what a bad message does to the ring. The last step records it in the
-spec's "Changes while planning", with the other corrections planning Part 1 found.
+Writing it settled one detail the spec left loose: what a bad message does to the ring. The deep review changed one
+rule SkyCraft's own game side follows: the overlay's swap starts over only for a new Minecraft process, since starting
+it over for Minecraft coming back can leave both sides on one slot. The last step records both in the spec's "Changes
+while planning", with the other corrections planning Part 1 found.
 
 **Files:**
 - Create: `src/link/Link.h`, `src/link/Link.cpp`, `tests/TestLink.cpp`
@@ -2755,6 +2759,10 @@ struct FakeMinecraft
 		hudBack = old & 3;
 	}
 
+	// The overlay's middle slot, and the slot a HUD image's pixels are in.
+	uint32_t Middle() { return *reinterpret_cast<uint32_t*>(base + proto::kOffOverlayCtl) & 3; }
+	uint32_t SlotOf(const uint8_t* aPixels) { return uint32_t((aPixels - (base + proto::kOffOverlayPixels)) / proto::kOverlaySlotBytes); }
+
 	uint8_t* base = nullptr;
 	uint32_t hudBack = 1;
 };
@@ -2765,28 +2773,44 @@ struct Sink : LinkSink
 	void Section(SectionMesh&& aMesh) override { sections.push_back(std::move(aMesh)); }
 	void ClearAll() override { ++clears; }
 	void Explosion(const proto::McEvent& aEvent) override { explosions.push_back(aEvent); }
-	void Hud(const HudFrame& aFrame) override { huds.push_back({ aFrame.width, aFrame.height }); }
+	void Hud(const HudFrame& aFrame) override
+	{
+		huds.push_back({ aFrame.width, aFrame.height });
+		hudPixels = aFrame.pixels;
+	}
 	void Log(const std::string& aLine) override { log.push_back(aLine); }
 
-	bool Logged(const std::string& aStart) const
+	int Count(const std::string& aStart) const  // log lines starting with aStart
 	{
+		int count = 0;
 		for (const auto& line : log)
 		{
 			if (line.rfind(aStart, 0) == 0)
 			{
-				return true;
+				++count;
 			}
 		}
-		return false;
+		return count;
 	}
+
+	bool Logged(const std::string& aStart) const { return Count(aStart) > 0; }
 
 	std::vector<std::pair<uint32_t, uint32_t>> atlases;
 	std::vector<SectionMesh>                   sections;
 	int                                        clears = 0;
 	std::vector<proto::McEvent>                explosions;
 	std::vector<std::pair<uint32_t, uint32_t>> huds;
+	const uint8_t*                             hudPixels = nullptr;  // the last HUD image's
 	std::vector<std::string>                   log;
 };
+
+// The overlay's three slots stay apart: Minecraft's back slot, the middle, and the one the link took last.
+bool SlotsApart(FakeMinecraft& aMinecraft, const Sink& aSink)
+{
+	const uint32_t taken = aMinecraft.SlotOf(aSink.hudPixels);
+	const uint32_t middle = aMinecraft.Middle();
+	return taken != middle && taken != aMinecraft.hudBack && middle != aMinecraft.hudBack;
+}
 
 // V at spike 3's corner, looking north: feet on the road at z 6.14, the camera 1.62 m above.
 GamePose Corner(double aEast = 0.0, double aUp = 0.0)
@@ -2802,6 +2826,13 @@ Link::Frame At(double aNow, std::optional<GamePose> aPose = Corner(), bool aLink
 	frame.pose = aPose;
 	frame.linked = aLinked;
 	frame.buildMode = true;
+	return frame;
+}
+
+Link::Frame HudAt(double aNow)  // a frame that takes HUD images
+{
+	Link::Frame frame = At(aNow);
+	frame.takeHud = true;
 	return frame;
 }
 
@@ -3033,7 +3064,7 @@ TEST(LinkPassesOnExplosionsAndHudImages)
 	Sink          sink;
 	minecraft.Beat(77, 1000);
 	minecraft.Explode(-117.0f, 6.0f, 2010.0f, 4.0f);
-	link.Update(At(1.0), kSettings, sink);  // Minecraft connects: the overlay's swap starts over
+	link.Update(At(1.0), kSettings, sink);  // Minecraft connects
 	CHECK_EQ(sink.explosions.size(), size_t(1));
 	CHECK_EQ(sink.explosions[0].a, -117.0f);
 	CHECK_EQ(sink.explosions[0].d, 4.0f);
@@ -3048,6 +3079,91 @@ TEST(LinkPassesOnExplosionsAndHudImages)
 	CHECK_EQ(sink.huds.size(), size_t(1));
 	CHECK_EQ(sink.huds[0].first, 1280u);
 	CHECK_EQ(link.State().hudImages, 1ull);
+}
+
+TEST(LinkKeepsAnImagePublishedBeforeItSawMinecraft)
+{
+	// SkyCraft ships an image left from before as soon as it relinks, which can be before the link first sees it.
+	FakeMinecraft minecraft;
+	Link          link(minecraft.base);
+	Sink          sink;
+	minecraft.Beat(77, 1000);
+	minecraft.PublishHud(1280, 720);
+	link.Update(HudAt(1.0), kSettings, sink);
+	CHECK_EQ(sink.huds.size(), size_t(1));
+	CHECK(SlotsApart(minecraft, sink));
+	minecraft.PublishHud(1280, 720);
+	minecraft.Beat(77, 1100);
+	link.Update(HudAt(1.1), kSettings, sink);
+	CHECK_EQ(sink.huds.size(), size_t(2));
+	CHECK(SlotsApart(minecraft, sink));
+}
+
+TEST(LinkKeepsTheSwapWhenMinecraftComesBack)
+{
+	FakeMinecraft minecraft;
+	Link          link(minecraft.base);
+	Sink          sink;
+	minecraft.Beat(77, 1000);
+	link.Update(HudAt(1.0), kSettings, sink);
+	minecraft.PublishHud(1280, 720);
+	minecraft.Beat(77, 1100);
+	link.Update(HudAt(1.1), kSettings, sink);
+	CHECK_EQ(sink.huds.size(), size_t(1));
+	link.Update(HudAt(5.0), kSettings, sink);  // no heartbeat for 3.9 s: gone
+	CHECK(!link.State().minecraft);
+	minecraft.Beat(77, 5100);  // back: the same process, its writer's slot where it was
+	link.Update(HudAt(5.1), kSettings, sink);
+	minecraft.PublishHud(1280, 720);
+	minecraft.Beat(77, 5200);
+	link.Update(HudAt(5.2), kSettings, sink);
+	CHECK_EQ(sink.huds.size(), size_t(2));
+	CHECK(SlotsApart(minecraft, sink));
+}
+
+TEST(LinkStartsTheSwapOverForANewMinecraft)
+{
+	FakeMinecraft minecraft;
+	Link          link(minecraft.base);
+	Sink          sink;
+	minecraft.Beat(77, 1000);
+	link.Update(HudAt(1.0), kSettings, sink);
+	minecraft.PublishHud(1280, 720);
+	minecraft.Beat(77, 1100);
+	link.Update(HudAt(1.1), kSettings, sink);
+	CHECK_EQ(sink.huds.size(), size_t(1));
+	minecraft.hudBack = 1;  // Minecraft restarted: a new process, its writer starting over
+	minecraft.Beat(78, 2000);
+	link.Update(HudAt(2.0), kSettings, sink);
+	CHECK(sink.Logged("Minecraft is there (process 78)"));
+	minecraft.PublishHud(1280, 720);
+	minecraft.Beat(78, 2100);
+	link.Update(HudAt(2.1), kSettings, sink);
+	CHECK_EQ(sink.huds.size(), size_t(2));
+	CHECK(SlotsApart(minecraft, sink));
+}
+
+TEST(LinkLogsRingProblemsOnceASecond)
+{
+	FakeMinecraft minecraft;
+	Link          link(minecraft.base);
+	Sink          sink;
+	minecraft.Send(proto::kRenAtlas, Atlas2x2());
+	for (int i = 0; i < 3; ++i)
+	{
+		minecraft.Send(proto::kRenSection, SectionPayload(i, 3, 100));  // each claims 100 vertices, and carries 3
+	}
+	link.Update(At(1.0), kSettings, sink);
+	CHECK_EQ(link.State().rejected, 3ull);
+	CHECK_EQ(sink.Count("render ring:"), 1);
+	CHECK(sink.Logged("render ring: 3 rejected messages or resyncs since the last report; the last: section 2 0 0"));
+	minecraft.Send(proto::kRenSection, SectionPayload(5, 3, 100));
+	link.Update(At(1.5), kSettings, sink);
+	CHECK_EQ(link.State().rejected, 4ull);
+	CHECK_EQ(sink.Count("render ring:"), 1);  // within the second: counted, not logged
+	link.Update(At(2.1), kSettings, sink);
+	CHECK_EQ(sink.Count("render ring:"), 2);  // logged once the second has passed
+	CHECK(sink.Logged("render ring: section 5 0 0 claims 100 vertices"));
 }
 
 TEST(LinkMenuFlagFollowsBuildMode)
@@ -3174,8 +3290,9 @@ public:
 
 	void Update(const Frame& aFrame, const LinkSettings& aSettings, LinkSink& aSink);
 
+	// Push may be called from any thread. Everything else, from the thread that calls Update.
 	bool Type(std::string_view aCommandOrName, std::string& aError);  // queues a command, or a named set
-	bool Push(const proto::InputEvent& aEvent);                        // the input ring, from any thread; false if dropped
+	bool Push(const proto::InputEvent& aEvent);                        // the input ring; false if dropped
 	void RequestFloor();                                               // a fresh floor at the next update
 
 	static constexpr size_t kTypes = 13;  // the render ring's message types, 0 to 11, and 12 for any other
@@ -3238,6 +3355,9 @@ private:
 	bool                  teleportDue_ = true;
 	double                lastTeleportAt_ = -1e9;
 	bool                  floorRequested_ = false;
+	uint64_t              problemsLogged_ = 0;  // resyncs and rejected messages already logged
+	double                problemLoggedAt_ = -1e9;
+	std::string           lastProblem_;
 };
 }
 ```
@@ -3289,8 +3409,17 @@ void Link::Update(const Frame& aFrame, const LinkSettings& aSettings, LinkSink& 
 	if (there && (!wasThere_ || pid != lastPid_))
 	{
 		// Minecraft (re)connected. A new Minecraft sends its clear, atlas and sections by itself; the game side sends
-		// the floor and a teleport, and restarts the overlay's swap, as SkyCraft's Game.cpp does.
-		overlay_.Reset();
+		// the floor and a teleport.
+		if (lastPid_ != 0 && pid != lastPid_)
+		{
+			// A new Minecraft process: its overlay writer starts over at slot 1, so the swap does too. Its first image
+			// comes once it's in its world, long after this. SkyCraft's Game.cpp also resets for the first Minecraft
+			// it sees, and for one coming back, but neither needs it: Mapping::Open reset the swap before Minecraft
+			// could see this game side, and Minecraft starts its writer over when it does; one coming back kept its
+			// slots. A reset then could undo an image Minecraft has just published (it ships one left from before as
+			// soon as it relinks), leaving its writer and our reader on one slot.
+			overlay_.Reset();
+		}
 		status_.floorSent = false;
 		teleportDue_ = true;
 		aSink.Log(std::format("Minecraft is there (process {})", pid));
@@ -3400,7 +3529,18 @@ void Link::Update(const Frame& aFrame, const LinkSettings& aSettings, LinkSink& 
 	{
 		++status_.resyncs;
 		status_.lastResync = drained.why;
-		aSink.Log("render ring: " + drained.why);
+		lastProblem_ = drained.why;
+	}
+	// Resyncs and rejected messages: counted each time, logged at most once a second, so a broken stream can't flood
+	// the log.
+	const uint64_t problems = status_.resyncs + status_.rejected;
+	if (problems > problemsLogged_ && aFrame.now - problemLoggedAt_ >= 1.0)
+	{
+		const uint64_t fresh = problems - problemsLogged_;
+		aSink.Log(fresh == 1 ? "render ring: " + lastProblem_
+		                     : std::format("render ring: {} rejected messages or resyncs since the last report; the last: {}", fresh, lastProblem_));
+		problemsLogged_ = problems;
+		problemLoggedAt_ = aFrame.now;
 	}
 
 	if (aFrame.takeHud && there)
@@ -3423,6 +3563,7 @@ bool Link::Take(const RingMessage& aMessage, const LinkSettings& aSettings, Link
 	const auto  reject = [&] {
         ++status_.rejected;
         status_.lastRejected = error;
+        lastProblem_ = error;
 	};
 	switch (aMessage.type)
 	{
@@ -3528,7 +3669,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
   && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
   ./build/RelWithDebInfo/render_tests.exe | tail -1
 ```
-Expected: no error or warning lines, then `167 test(s), 0 failure(s)`.
+Expected: no error or warning lines, then `171 test(s), 0 failure(s)`.
 
 - [ ] **Step 8: Edit `docs/superpowers/specs/2026-10-02-minecraft-link-design.md` for the changes while planning**
 
@@ -3551,6 +3692,40 @@ Expected: no error or warning lines, then `167 test(s), 0 failure(s)`.
     still sound. Both are counted, and logged once a second;
 ```
 ```markdown
+  - **back:** a new heartbeat or process ID. Minecraft sends its clear, atlas and sections again by itself. The link
+    sends the floor and a teleport, and resets the overlay's triple buffer, as SkyCraft's `Game.cpp` does;
+```
+```markdown
+  - **back:** a new heartbeat or process ID. Minecraft sends its clear, atlas and sections again by itself. The link
+    sends the floor and a teleport. It resets the overlay's triple buffer only for a new Minecraft process, whose
+    writer starts over (see "Changes while planning");
+```
+```markdown
+  - the plugin and `mclink` each refuse while another live game side holds it, and retry once a second;
+```
+```markdown
+  - the plugin refuses while another live game side holds it, and retries once a second. `mclink` refuses to start,
+    and says why;
+```
+```markdown
+  It resets when Minecraft connects or comes back.
+```
+```markdown
+  Link resets it only for a new Minecraft process (see "Changes while planning").
+```
+```markdown
+- **The protocol:** the overlay's triple buffer is read, as SkyCraft's `Link::AcquireOverlayFrame` reads it, and reset
+  when Minecraft comes back. `SkyState`'s viewport asks for the back buffer's size over `hudscale` (2), 1280×720,
+  instead of 0. The GUI then looks as Minecraft's automatic scale would make it at 2560×1440, with a quarter of the
+  bandwidth.
+```
+```markdown
+- **The protocol:** the overlay's triple buffer is read, as SkyCraft's `Link::AcquireOverlayFrame` reads it, and reset
+  for a new Minecraft process (see "Changes while planning"). `SkyState`'s viewport asks for the back buffer's size
+  over `hudscale` (2), 1280×720, instead of 0. The GUI then looks as Minecraft's automatic scale would make it at
+  2560×1440, with a quarter of the bandwidth.
+```
+```markdown
 - **Minimizing:** `Window.onFramebufferResize` ignores a 0×0 size, and `renderFrame` reconfigures the GPU surface only
   when the window isn't minimized, which SkyCraft's mixin denies while linked.
 ```
@@ -3570,6 +3745,13 @@ Writing and verifying Part 1's code corrected these details. The sections above 
 - **"Ahead" is level:** `^ ^ ^4` follows the look's pitch as well as its yaw, so whenever V looked down, `tnt-ahead`,
   `wall` and `tnt-cube` would have built underground. Their commands start with `rotated ~ 0`, which keeps the yaw and
   levels the pitch.
+- **The overlay's reset:** SkyCraft's `Game.cpp` resets the overlay's triple buffer whenever Minecraft connects or
+  comes back. The link resets it only for a new Minecraft process, whose writer starts over at slot 1 and publishes
+  only once it's in its world. The first Minecraft the link sees needs no reset: `Mapping::Open` reset the buffer
+  before Minecraft could see the new game side, and Minecraft starts its writer over when it does. One coming back
+  kept its slots. A reset in either case could undo an image Minecraft had just published (it ships one left from
+  before as soon as it relinks), leaving its writer and the link's reader on one slot, with torn images from then on.
+- **`mclink` refuses rather than retries,** as its own section says; "Safety" had it retrying like the plugin.
 - **`mclink`'s input:** a script, one action a line (`tools/mclink/McLinkScript.h`), so step 1's runs can change
   without a rebuild.
 ```
@@ -4093,7 +4275,8 @@ struct Report : LinkSink
 
 	void Log(const std::string& aLine) override { Say("{}", aLine); }
 
-	// The section's blocks, as the extent of its vertices, and the atlas texel its first vertex's UV lands on.
+	// The section's blocks, as the extent of its vertices, and the atlas texel at the centre of its first triangle's UVs:
+	// inside that face's sprite, where a corner's UV can land on the next sprite over.
 	void Describe(const SectionMesh& aMesh) const
 	{
 		if (aMesh.vertices.empty())
@@ -4115,11 +4298,12 @@ struct Report : LinkSink
 		std::string sample;
 		if (!atlas.empty())
 		{
-			const Vertex&  v = aMesh.vertices[0];
-			const uint32_t x = std::min(uint32_t(std::clamp(v.u, 0.0f, 1.0f) * atlasWidth), atlasWidth - 1);
-			const uint32_t y = std::min(uint32_t(std::clamp(v.v, 0.0f, 1.0f) * atlasHeight), atlasHeight - 1);
+			const float    u = (aMesh.vertices[0].u + aMesh.vertices[1].u + aMesh.vertices[2].u) / 3.0f;
+			const float    v = (aMesh.vertices[0].v + aMesh.vertices[1].v + aMesh.vertices[2].v) / 3.0f;
+			const uint32_t x = std::min(uint32_t(std::clamp(u, 0.0f, 1.0f) * atlasWidth), atlasWidth - 1);
+			const uint32_t y = std::min(uint32_t(std::clamp(v, 0.0f, 1.0f) * atlasHeight), atlasHeight - 1);
 			const uint8_t* texel = &atlas[(size_t(y) * atlasWidth + x) * 4];
-			sample = std::format("; its first vertex's texel ({}, {}) is rgba({}, {}, {}, {})", x, y, texel[0], texel[1], texel[2], texel[3]);
+			sample = std::format("; its first triangle's texel ({}, {}) is rgba({}, {}, {}, {})", x, y, texel[0], texel[1], texel[2], texel[3]);
 		}
 		const std::string dropped = aMesh.translucentDropped ? std::format(" ({} translucent triangles dropped)", aMesh.translucentDropped) : "";
 		Say("section {} {} {}: {} vertices{}, blocks x {:.2f} to {:.2f}, y {:.2f} to {:.2f}, z {:.2f} to {:.2f}{}", aMesh.x, aMesh.y, aMesh.z,
@@ -4417,9 +4601,12 @@ click right
 wait 1
 save-hud hud.dds
 # TNT on the stone (only the player collides with the floor, so it needs a block under it): an explosion event, and
-# the section again.
+# the section again, now empty.
 type /summon tnt ~2 ~1 ~
 wait 6
+# A block that stays, for the second run to find: gold, 6 west of the feet, in the same section.
+type /setblock ~-6 ~ ~ minecraft:gold_block
+wait 1
 # Unlinking holds Minecraft's player; linking again teleports it back.
 link off
 wait 2
@@ -4474,7 +4661,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
   && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
   ./build/RelWithDebInfo/render_tests.exe | tail -1
 ```
-Expected: no error or warning lines, then `171 test(s), 0 failure(s)`.
+Expected: no error or warning lines, then `175 test(s), 0 failure(s)`.
 
 - [ ] **Step 11: Run mclink without Minecraft; it must start and stop cleanly**
 
@@ -4525,7 +4712,8 @@ Expected: `ea429c73dcec49d39b6a0bb9b17ad08a6b0290a39a96ccf6f6c07d581cf992d9`, th
 - [ ] **Step 2: Ask the user to finish the instance and start Minecraft**
 
 In the Modrinth App, the user:
-1. adds Fabric API 0.161.0+26.3 to the instance (its Content tab);
+1. adds Fabric API to the instance (its Content tab): the newest for 26.3, which was 0.161.0+26.3 on 2026-10-02.
+   SkyCraft takes any version;
 2. sets the instance's Java arguments to `--enable-native-access=ALL-UNNAMED -Dskycraft.quitWithSkyrim=false` (its
    settings, Java and memory);
 3. starts the instance, and says when Minecraft reaches its title screen.
@@ -4539,7 +4727,7 @@ L="/c/Users/BLOXY/AppData/Roaming/ModrinthApp/profiles/CyberCraft/logs/latest.lo
   && grep -E "Loading [0-9]+ mods|- (skycraft|fabric-api) |SkyCraft:" "$L" | head -12
 ```
 Expected:
-- the mods loaded, with `skycraft 0.1.2` and `fabric-api 0.161.0+26.3` among them;
+- the mods loaded, with `skycraft 0.1.2` and `fabric-api …+26.3` among them;
 - `SkyCraft: can't open Skyrim's shared memory yet (Windows error 2: Skyrim hasn't created it yet)`: waiting for a
   game side.
 
@@ -4549,6 +4737,9 @@ Expected:
 cd /d/Cyberpunk-Minecraft/spikes/block-render && mkdir -p build/step1 && cd build/step1 \
   && ../RelWithDebInfo/mclink.exe ../../tools/mclink/step1.txt | tee step1.log; echo "exit: ${PIPESTATUS[0]}"
 ```
+It takes about a minute once Minecraft is in its world, and up to four if Minecraft creates its world first: give the
+command 5 minutes, more than the shell's default timeout of 2.
+
 Expected, against the spec's "Step 1":
 - **The link:** `Minecraft is there (process …)`. Minecraft's log shows `SkyCraft: linked to Skyrim (pid …)`,
   `SkyCraft: game window hidden …`, and `SkyCraft: creating mirror world` the first time, or
@@ -4559,13 +4750,15 @@ Expected, against the spec's "Step 1":
   - `typed:` for `/gamemode creative` and the `/setblock`;
   - then `section -8 0 125` with blocks from x -118.00 to -117.00, y 6.00 to 7.00 and z 2007.00 to 2008.00: the stone,
     2 east of the feet;
-  - its first vertex's texel isn't transparent.
+  - its first triangle's texel is stone's: opaque (alpha 255) and grey, with r, g and b equal or nearly so.
 - **The click:** after it, `section -8 0 125` again, now also covering x -120 to -119, y 6 to 7 and z 2006 to 2007:
   the block placed on the floor where the crosshair met it.
 - **The HUD image:** `HUD images: 1280 x 720, rows bottom-up`. It's saved to `hud.dds`, with `0 with a colour above
   their alpha`.
-- **TNT:** it lands on the stone, then `explosion at` about -117.5 7.0 2007.5, radius 4.0, and `section -8 0 125`
-  again, with the stone and the clicked block gone.
+- **TNT:** it lands on the stone, then `explosion at -117.5 7.1 2007.5, radius 4.0` (TNT explodes 0.06 above its
+  feet), and `section -8 0 125: removed`: the stone and the clicked block are gone, and nothing else was in it.
+- **A block that stays:** `typed:` for the gold block's `/setblock`, then `section -8 0 125` with blocks from
+  x -126.00 to -125.00, y 6.00 to 7.00 and z 2007.00 to 2008.00.
 - **Unlinking and linking again:** the last status is in game, with at least 2 teleports.
 - **Traffic:** the lines every 5 seconds show Minecraft's frames a second near 60 (paced to `mclink`), the render
   ring's MB a second, and HUD images a second.
@@ -4591,8 +4784,8 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render/build/step1 \
   && ../RelWithDebInfo/mclink.exe ../../tools/mclink/again.txt | tee again.log; echo "exit: ${PIPESTATUS[0]}"
 ```
 Expected:
-- `Minecraft is there`, then `clear all`, `atlas: …`, and `section -8 0 125` again: Step 4's blocks are still in
-  SkyCraft's world, and Minecraft sends everything again to a new game side;
+- `Minecraft is there`, then `clear all`, `atlas: …`, and `section -8 0 125` with the gold block again (x -126.00 to
+  -125.00): Minecraft sends everything again to a new game side, but only sections with blocks in them;
 - HUD images again;
 - `exit: 0`.
 
@@ -4632,7 +4825,7 @@ cd /d/Cyberpunk-Minecraft && git add docs/spikes/2026-10-02-minecraft-link-resul
 
 - [ ] **Step 1: Add "How Part 1 went" to this plan**
 
-Below this task: what ran as written, what changed, and what step 1 found.
+At the end, after "Changes from the deep review": what ran as written, what changed, and what step 1 found.
 
 - [ ] **Step 2: Plan Part 2**
 
@@ -4646,3 +4839,52 @@ cd /d/Cyberpunk-Minecraft && git add docs/superpowers \
   && git commit -q -m "minecraft-link plan: Part 1 closed, Part 2 planned" \
        -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
 ```
+
+---
+
+## Changes from the deep review
+
+On 2026-10-02 the user asked for a deep review of this plan. It read every task against the spec, SkyCraft's protocol
+header, and SkyCraft's Java and Skyrim sides at `bfcaf17`, then replayed the changed plan in a fresh clone. It
+changed:
+- **The overlay's reset (Task 9):** the link started the HUD image's triple buffer over whenever Minecraft appeared,
+  as SkyCraft's `Game.cpp` does. But SkyCraft ships an image left from before as soon as it relinks, which can be
+  before the link first sees it. And a Minecraft coming back after a stall keeps its slots. A reset then leaves
+  Minecraft's writer and the link's reader on one slot, with torn images from then on. Task 11's second run
+  (`again.txt`) could have hit it. The link now resets only for a new Minecraft process. Three tests pin it: an image
+  published before the link saw Minecraft, Minecraft coming back, and a new Minecraft.
+- **Ring problems logged once a second (Task 9):** the spec's "Safety" asks for it. The link logged each resync at
+  once, which a broken stream would repeat every frame, and never logged rejected messages. Both are now logged at
+  most once a second, with a count, and a test pins it.
+- **Sampling the atlas (Task 10):** `mclink` reported the texel at a section's first vertex's UV. That's a sprite's
+  corner, and the far corners land on the next sprite over. It now samples the centre of the first triangle's UVs,
+  so Task 11 can check that the stone's texel is stone's: opaque grey.
+- **Step 1's second run (Tasks 10 and 11):** Step 4's TNT destroys both of its blocks, and SkyCraft resends only
+  sections with blocks in them (`resendEverything`). So the second run would have found no section at all, where
+  Step 6 expected Step 4's blocks. `step1.txt` now places a gold block after the explosion, out of its reach, for the
+  second run to find, and Step 4 expects the TNT's section to come as removed.
+- **Task 11:** step 1's run can take up to four minutes, over the shell's default timeout, so it says to allow five.
+  Fabric API isn't pinned to one version, since SkyCraft's jar takes any. The explosion prints at y 7.1, not 7.0:
+  TNT explodes 0.06 above its feet.
+- **Smaller:**
+  - Task 1's branch check expects the plan's commits at the top;
+  - `Link.h` says which calls may come from other threads: only `Push`;
+  - the spec's "Safety" now agrees with its `mclink` section: `mclink` refuses to start, rather than retrying.
+
+It also checked these against SkyCraft's code, and found them right:
+- **The floor:** SkyCraft stores a region's triangles as they arrive (`readTris`). Only voxel regions mark a region
+  known (`readRegion`). So the triangle-only floor is clickable, the player stays pinned (`holdUntilReady`), and
+  explosions stay vanilla, since `SkyDigBlast` needs known regions.
+- **The rings:** SkyCraft's render ring writer pads and limits its messages as the reader expects (`writeRender`). Its
+  event writer drops events rather than lapping the reader (`pushEvent`).
+- **Sections:** `WorldExporter`'s vertex is x, y, z, u, v, then r, g, b, a, the light and the flags, as the tests
+  write it.
+- **Task 11's expectations:**
+  - SkyCraft's log lines: `linked to Skyrim`, `Skyrim link up` and `down`, `Skyrim instance changed`, `creating` or
+    `opening mirror world`, and `game window hidden`;
+  - SkyCraft opens its world while the game side isn't in game (`MirrorWorld`), so `wait-world` before `link on`
+    works;
+  - its teleports wait for the in-game flag, so nothing moves before linking;
+  - a click's hit normal faces the ray (`SkyRay`), so the block goes on top of the floor, at y 6;
+  - vanilla TNT breaks the stone under it, and the clicked block;
+  - `fabric.mod.json` needs Fabric Loader 0.19.5 or newer and Java 25, which the instance has.
