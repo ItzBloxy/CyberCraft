@@ -1,5 +1,7 @@
 #include "Requests.h"
 
+#include "link/Commands.h"
+
 #include <algorithm>
 #include <charconv>
 #include <cmath>
@@ -68,6 +70,19 @@ std::optional<Request> Fail(std::string& aError, std::string aWhy)
 	aError = std::move(aWhy);
 	return std::nullopt;
 }
+
+std::string_view Trim(std::string_view aText)
+{
+	while (!aText.empty() && IsSpace(aText.front()))
+	{
+		aText.remove_prefix(1);
+	}
+	while (!aText.empty() && IsSpace(aText.back()))
+	{
+		aText.remove_suffix(1);
+	}
+	return aText;
+}
 }
 
 std::optional<Request> ParseRequest(std::string_view aText, std::string& aError)
@@ -79,14 +94,40 @@ std::optional<Request> ParseRequest(std::string_view aText, std::string& aError)
 	}
 	const std::string_view command = words[0];
 	const size_t           arguments = words.size() - 1;
-	if (command == "log" || command == "clear" || command == "reload")
+	if (command == "log" || command == "clear" || command == "reload" || command == "floor")
 	{
 		if (arguments != 0)
 		{
 			return Fail(aError, std::string(command) + " takes nothing after it");
 		}
-		const Request::Kind kind = command == "log" ? Request::Kind::Log : command == "clear" ? Request::Kind::Clear : Request::Kind::Reload;
+		const Request::Kind kind = command == "log"     ? Request::Kind::Log
+		                           : command == "clear" ? Request::Kind::Clear
+		                           : command == "floor" ? Request::Kind::Floor
+		                                                : Request::Kind::Reload;
 		return Request{ kind };
+	}
+	if (command == "link")
+	{
+		if (arguments != 1 || !OneOf(words[1], { "on", "off" }))
+		{
+			return Fail(aError, "link takes on or off");
+		}
+		return Request{ Request::Kind::Link, std::string(words[1]) };
+	}
+	if (command == "mc")
+	{
+		// The rest of the line, verbatim: a Minecraft command keeps its own spacing.
+		const std::string_view rest = Trim(aText.substr(size_t(command.data() - aText.data()) + command.size()));
+		if (rest.empty())
+		{
+			return Fail(aError, "mc takes a set's name, or a command starting with /");
+		}
+		std::string why;
+		if (!link::ValidCommandOrSet(rest, why))
+		{
+			return Fail(aError, "mc: " + why);
+		}
+		return Request{ Request::Kind::Mc, std::string(rest) };
 	}
 	if (command == "dump")
 	{

@@ -72,23 +72,35 @@ bool ValidCommand(std::string_view aCommand, std::string& aError)
 	return true;
 }
 
+bool ValidCommandOrSet(std::string_view aCommandOrName, std::string& aError)
+{
+	if (NamedCommands(aCommandOrName))
+	{
+		return true;
+	}
+	if (aCommandOrName.empty() || aCommandOrName.front() != '/')
+	{
+		aError = std::format("\"{}\" is neither a command nor a set (creative, tnt-kit, tnt-ahead, wall, tnt-cube, field, wipe)",
+		                     aCommandOrName);
+		return false;
+	}
+	return ValidCommand(aCommandOrName, aError);
+}
+
 bool CommandTyper::Queue(std::string_view aCommandOrName, std::string& aError)
 {
+	if (!ValidCommandOrSet(aCommandOrName, aError))
+	{
+		return false;
+	}
 	if (const auto named = NamedCommands(aCommandOrName))
 	{
 		queue_.insert(queue_.end(), named->begin(), named->end());
-		return true;
 	}
-	if (!ValidCommand(aCommandOrName, aError))
+	else
 	{
-		if (aCommandOrName.empty() || aCommandOrName.front() != '/')
-		{
-			aError = std::format("\"{}\" is neither a command nor a set (creative, tnt-kit, tnt-ahead, wall, tnt-cube, field, wipe)",
-			                     aCommandOrName);
-		}
-		return false;
+		queue_.emplace_back(aCommandOrName);
 	}
-	queue_.emplace_back(aCommandOrName);
 	return true;
 }
 

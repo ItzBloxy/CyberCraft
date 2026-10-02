@@ -95,3 +95,34 @@ TEST(SettingsReadDredAndDebugLayer)
 	const cpmc::PluginSettings off = cpmc::ParseSettings("dred = 0\ndebuglayer = yes\nother = 1\ndred\n= 1\n");
 	CHECK(!off.dred && !off.debugLayer);
 }
+
+TEST(RequestsForTheLink)
+{
+	std::string error;
+	const auto  on = cpmc::ParseRequest("link on\n", error);
+	CHECK(on.has_value());
+	CHECK(on->kind == cpmc::Request::Kind::Link);
+	CHECK_STR(on->what, "on");
+	CHECK_STR(cpmc::ParseRequest("link off", error)->what, "off");
+	CHECK(!cpmc::ParseRequest("link", error));
+	CHECK(!cpmc::ParseRequest("link maybe", error));
+	CHECK(cpmc::ParseRequest("floor", error)->kind == cpmc::Request::Kind::Floor);
+	CHECK(!cpmc::ParseRequest("floor now", error));
+}
+
+TEST(RequestsTypeIntoMinecraft)
+{
+	std::string error;
+	const auto  set = cpmc::ParseRequest("mc tnt-cube\n", error);
+	CHECK(set.has_value());
+	CHECK(set->kind == cpmc::Request::Kind::Mc);
+	CHECK_STR(set->what, "tnt-cube");
+	// A command, verbatim to the end of the line, but for the spaces around it.
+	const auto command = cpmc::ParseRequest("  mc /execute rotated ~ 0 positioned ^ ^ ^4 run setblock ~ ~ ~ stone \r\n", error);
+	CHECK_STR(command->what, "/execute rotated ~ 0 positioned ^ ^ ^4 run setblock ~ ~ ~ stone");
+	CHECK(!cpmc::ParseRequest("mc", error));
+	CHECK(!cpmc::ParseRequest("mc explode", error));
+	CHECK(error.find("neither a command nor a set") != std::string::npos);
+	CHECK(!cpmc::ParseRequest("mc /say a\nb", error));  // one line only
+	CHECK(error.find("printable ASCII") != std::string::npos);
+}

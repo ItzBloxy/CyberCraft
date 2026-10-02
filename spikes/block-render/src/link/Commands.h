@@ -25,6 +25,9 @@ std::optional<std::vector<std::string>> NamedCommands(std::string_view aName);
 // A command starts with '/', is printable ASCII, and is at most 256 characters (Minecraft's chat limit).
 bool ValidCommand(std::string_view aCommand, std::string& aError);
 
+// A valid command, or the name of a set. False, with aError, for anything else.
+bool ValidCommandOrSet(std::string_view aCommandOrName, std::string& aError);
+
 class CommandTyper
 {
 public:
