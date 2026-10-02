@@ -8,16 +8,17 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(REPO_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../..")
 set(RED4EXT_SDK_DIR "${REPO_ROOT}/extern/RED4ext.SDK" CACHE PATH "RED4ext.SDK checkout")
 set(STREAMLINE_DIR "${REPO_ROOT}/extern/streamline-2.7.2" CACHE PATH "Streamline 2.7.2 headers")
+set(SKYCRAFT_DIR "${REPO_ROOT}/extern/skycraft" CACHE PATH "SkyCraft's protocol header")
 set(CP2077_DIR "" CACHE PATH "Cyberpunk 2077 folder; when set, each build copies the plugin into red4ext/plugins/BlockRender")
 
-# Shared settings. Streamline's headers are SYSTEM, which keeps their warnings out of ours.
+# Shared settings. Streamline's and SkyCraft's headers are SYSTEM, which keeps their warnings out of ours.
 add_library(render_settings INTERFACE)
 target_compile_options(render_settings INTERFACE
 	$<$<COMPILE_LANGUAGE:CXX>:/W4 /permissive- /utf-8 /EHsc /Zc:__cplusplus>
 	$<$<COMPILE_LANGUAGE:C>:/W4 /utf-8>)
 target_compile_definitions(render_settings INTERFACE WIN32_LEAN_AND_MEAN NOMINMAX)
 target_include_directories(render_settings INTERFACE src)
-target_include_directories(render_settings SYSTEM INTERFACE "${STREAMLINE_DIR}/include")
+target_include_directories(render_settings SYSTEM INTERFACE "${STREAMLINE_DIR}/include" "${SKYCRAFT_DIR}")
 
 # Everything that doesn't need RED4ext or the running game.
 add_library(render_core STATIC
