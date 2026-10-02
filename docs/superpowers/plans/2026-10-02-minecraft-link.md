@@ -30,9 +30,10 @@ The unit tests play Minecraft's side in plain memory. Step 1 then checks the lin
 **Spec:** [docs/superpowers/specs/2026-10-02-minecraft-link-design.md](../specs/2026-10-02-minecraft-link-design.md)
 
 **Parts 2 and 3:** each planned from what the step before found, as spike 3 planned its parts.
-- **Part 2** is step 2 in the game: Tasks 13 to 28, which Task 12 planned from step 1's findings. The plugin's link,
-  the renderer's changes, the HUD pass, the status and the overlay, then the game run.
-- **Part 3** is step 3: input, which Task 28 plans once step 2 has run.
+- **Part 2** is step 2 in the game: Tasks 13 to 29, which Task 12 planned from step 1's findings, all but Task 28,
+  which step 2's run added. The plugin's link, the renderer's changes, the HUD pass, the status and the overlay, then
+  the game run and what it found.
+- **Part 3** is step 3: input, which Task 29 plans once step 2 has run.
 
 Task 12 closes Part 1 and plans Part 2.
 
@@ -4922,7 +4923,8 @@ On 2026-10-02, inline, as the user asked.
 
 ## Part 2: step 2, the link in the game
 
-Tasks 13 to 28, planned after Part 1 closed (see "How Part 1 went"), from step 1's findings.
+Tasks 13 to 29, planned after Part 1 closed (see "How Part 1 went"), from step 1's findings. Task 28 came later,
+from what step 2's run found.
 
 **Goal:** BlockRender 0.9.0, linked in the game to SkyCraft's Minecraft. Minecraft's player follows V, Minecraft's
 blocks are drawn into Night City's G-buffer with Minecraft's own atlas, and Minecraft's HUD is drawn over the finished
@@ -4954,6 +4956,8 @@ every expected result:
 - `luac` accepting the overlay;
 - the replayed files identical to the scratch clone's.
 
+Task 28 was replayed the same way from the end of Task 26 (`a95b990`).
+
 Tasks 22 to 24, the renderer's and the plugin's code, have no unit tests: only the game can test them, in Task 27.
 The overlay's buttons were run once with CET stubbed out, writing the requests they should.
 
@@ -4961,8 +4965,8 @@ The overlay's buttons were run once with CET stubbed out, writing the requests t
 Among them: the mapping is made at the game's first update, not at load, and HUD pixels outside the image show
 nothing.
 
-**Test counts:** 175 at the start. Then 178, 181, 189, 190, 192, 196, 199, 201 and 203 after Tasks 13 to 21, and 203
-from then on. The Python count is spike 3's 22 until Task 26, then 25.
+**Test counts:** 175 at the start. Then 178, 181, 189, 190, 192, 196, 199, 201 and 203 after Tasks 13 to 21, 203 until
+Task 28, and 204 after it. The Python count is spike 3's 22 until Task 26, then 25.
 
 **The commands and rules** in "Before you start" apply here too. Part 2 also goes into the game:
 - **The user does everything in the game,** as in Minecraft: launching it, loading saves, moving, pressing keys,
@@ -4992,6 +4996,7 @@ from then on. The Python count is spike 3's 22 until Task 26, then 25.
 | `src/Plugin.cpp` | The link once a frame, what it hands on, the requests and settings, and the status's link lines |
 | `tools/blockrender_hud/init.lua` | The overlay's Link, Unlink, HUD and command buttons |
 | `tools/status_watch.py`, `tools/test_status_watch.py` | Readings of the status over time, for the game run |
+| `src/link/Look.*` | Minecraft's yaw, kept within 180° of the last (Task 28, from step 2's run) |
 | `CMakeLists.txt` | The new sources and tests, and version 0.9.0 |
 | `tests/TestPendingSections.cpp`, `tests/TestHud.cpp`, `tests/TestMeasurements.cpp`, `tests/TestProcessUsage.cpp` | One test file per new unit; the changed units' tests grow in their own files |
 
@@ -5009,7 +5014,7 @@ offsets the renderer uploads.
 **Files:**
 - Modify: `tests/TestAtlas.cpp`, `src/render/Atlas.h`, `src/render/Atlas.cpp`
 
-- [ ] **Step 1: Edit `tests/TestAtlas.cpp` to test atlases from Minecraft's pixels**
+- [x] **Step 1: Edit `tests/TestAtlas.cpp` to test atlases from Minecraft's pixels**
 
 ```cpp
 	CHECK(!cpmc::ParseAtlas({}, error));
@@ -5069,7 +5074,7 @@ TEST(AtlasFromMinecraftsPixelsAtStepOnesSize)
 }
 ```
 
-- [ ] **Step 2: Build; it must fail**
+- [x] **Step 2: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -5078,7 +5083,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `error C2039: 'AtlasFromRgba': is not a member of 'cpmc'`.
 
-- [ ] **Step 3: Edit `src/render/Atlas.h` to declare `AtlasFromRgba`**
+- [x] **Step 3: Edit `src/render/Atlas.h` to declare `AtlasFromRgba`**
 
 ```cpp
 std::optional<Atlas> ParseAtlas(std::span<const uint8_t> aBytes, std::string& aError);
@@ -5095,7 +5100,7 @@ constexpr uint32_t kMinecraftAtlasLevels = 5;
 std::optional<Atlas> AtlasFromRgba(uint32_t aWidth, uint32_t aHeight, std::span<const uint8_t> aRgba, std::string& aError);
 ```
 
-- [ ] **Step 4: Edit `src/render/Atlas.cpp` to build the levels**
+- [x] **Step 4: Edit `src/render/Atlas.cpp` to build the levels**
 
 ```cpp
 	aError = std::move(aWhy);
@@ -5171,7 +5176,7 @@ std::optional<Atlas> AtlasFromRgba(uint32_t aWidth, uint32_t aHeight, std::span<
 }
 ```
 
-- [ ] **Step 5: Build and run the tests; they must pass**
+- [x] **Step 5: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -5181,7 +5186,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `178 test(s), 0 failure(s)`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -5202,7 +5207,7 @@ puts it in the renderer.
 - Create: `src/render/PendingSections.h`, `src/render/PendingSections.cpp`, `tests/TestPendingSections.cpp`
 - Modify: `CMakeLists.txt`
 
-- [ ] **Step 1: Write the failing test, `tests/TestPendingSections.cpp`**
+- [x] **Step 1: Write the failing test, `tests/TestPendingSections.cpp`**
 
 ```cpp
 #include "Harness.h"
@@ -5265,7 +5270,7 @@ TEST(PendingSectionsClear)
 }
 ```
 
-- [ ] **Step 2: Edit `CMakeLists.txt` to add the test**
+- [x] **Step 2: Edit `CMakeLists.txt` to add the test**
 
 ```cmake
 	tests/TestMcLinkScript.cpp
@@ -5277,7 +5282,7 @@ TEST(PendingSectionsClear)
 	tools/mclink/McLinkScript.cpp
 ```
 
-- [ ] **Step 3: Build; it must fail**
+- [x] **Step 3: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -5286,7 +5291,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `error C1083: Cannot open include file: 'render/PendingSections.h'`.
 
-- [ ] **Step 4: Write `src/render/PendingSections.h`**
+- [x] **Step 4: Write `src/render/PendingSections.h`**
 
 ```cpp
 #pragma once
@@ -5317,7 +5322,7 @@ private:
 }
 ```
 
-- [ ] **Step 5: Write `src/render/PendingSections.cpp`**
+- [x] **Step 5: Write `src/render/PendingSections.cpp`**
 
 ```cpp
 #include "render/PendingSections.h"
@@ -5348,7 +5353,7 @@ void PendingSections::Clear()
 }
 ```
 
-- [ ] **Step 6: Edit `CMakeLists.txt` to add the source**
+- [x] **Step 6: Edit `CMakeLists.txt` to add the source**
 
 ```cmake
 	src/link/Link.cpp
@@ -5360,7 +5365,7 @@ void PendingSections::Clear()
 )
 ```
 
-- [ ] **Step 7: Build and run the tests; they must pass**
+- [x] **Step 7: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -5370,7 +5375,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `181 test(s), 0 failure(s)`.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -5402,7 +5407,7 @@ The HUD pass's pure parts (the spec's "The HUD"), so the tests pin them:
 - Create: `src/render/Hud.h`, `src/render/Hud.cpp`, `tests/TestHud.cpp`
 - Modify: `CMakeLists.txt`
 
-- [ ] **Step 1: Write the failing test, `tests/TestHud.cpp`**
+- [x] **Step 1: Write the failing test, `tests/TestHud.cpp`**
 
 ```cpp
 #include "Harness.h"
@@ -5511,7 +5516,7 @@ TEST(HudSlotsReplaceTheWaitingImageWhenTheGpuHasTheRest)
 }
 ```
 
-- [ ] **Step 2: Edit `CMakeLists.txt` to add the test**
+- [x] **Step 2: Edit `CMakeLists.txt` to add the test**
 
 ```cmake
 	tests/TestPendingSections.cpp
@@ -5521,7 +5526,7 @@ TEST(HudSlotsReplaceTheWaitingImageWhenTheGpuHasTheRest)
 	tests/TestHud.cpp
 ```
 
-- [ ] **Step 3: Build; it must fail**
+- [x] **Step 3: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -5530,7 +5535,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `error C1083: Cannot open include file: 'render/Hud.h'`.
 
-- [ ] **Step 4: Write `src/render/Hud.h`**
+- [x] **Step 4: Write `src/render/Hud.h`**
 
 ```cpp
 #pragma once
@@ -5600,7 +5605,7 @@ private:
 }
 ```
 
-- [ ] **Step 5: Write `src/render/Hud.cpp`**
+- [x] **Step 5: Write `src/render/Hud.cpp`**
 
 ```cpp
 #include "render/Hud.h"
@@ -5711,7 +5716,7 @@ void HudSlots::Reading(uint32_t aSlot, uint64_t aFence)
 }
 ```
 
-- [ ] **Step 6: Edit `CMakeLists.txt` to add the source**
+- [x] **Step 6: Edit `CMakeLists.txt` to add the source**
 
 ```cmake
 	src/render/PendingSections.cpp
@@ -5723,7 +5728,7 @@ void HudSlots::Reading(uint32_t aSlot, uint64_t aFence)
 )
 ```
 
-- [ ] **Step 7: Build and run the tests; they must pass**
+- [x] **Step 7: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -5733,7 +5738,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `189 test(s), 0 failure(s)`.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -5757,7 +5762,7 @@ The tests check that both compile, that `Hud` matches `HudConstants`, and that `
 - Modify: `tests/TestShaders.cpp`, `shaders/blocks.hlsl`, `src/render/FrameConstants.h`, `src/render/Shaders.h`,
   `src/render/Shaders.cpp`
 
-- [ ] **Step 1: Edit `tests/TestShaders.cpp` to test the HUD's shaders**
+- [x] **Step 1: Edit `tests/TestShaders.cpp` to test the HUD's shaders**
 
 ```cpp
 		CHECK_EQ(ConstantBufferSize(shaders->depth, "Frame"), UINT(sizeof(cpmc::FrameConstants)));
@@ -5786,7 +5791,7 @@ TEST(ShadersDrawTheHud)
 TEST(ShadersReportCompileErrors)
 ```
 
-- [ ] **Step 2: Build; it must fail**
+- [x] **Step 2: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -5795,7 +5800,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `error C2039: 'hudVertex': is not a member of 'cpmc::BlockShaders'`.
 
-- [ ] **Step 3: Edit `shaders/blocks.hlsl` to add the HUD's shaders**
+- [x] **Step 3: Edit `shaders/blocks.hlsl` to add the HUD's shaders**
 
 ```hlsl
         discard;
@@ -5838,7 +5843,7 @@ float4 HudPS(float4 position : SV_Position) : SV_Target0
 }
 ```
 
-- [ ] **Step 4: Edit `src/render/FrameConstants.h` to add the HUD's constants**
+- [x] **Step 4: Edit `src/render/FrameConstants.h` to add the HUD's constants**
 
 ```cpp
 static_assert(sizeof(SectionConstants) == 16);
@@ -5857,7 +5862,7 @@ struct HudConstants
 static_assert(sizeof(HudConstants) == 16);
 ```
 
-- [ ] **Step 5: Edit `src/render/Shaders.h` to hold the HUD's shaders**
+- [x] **Step 5: Edit `src/render/Shaders.h` to hold the HUD's shaders**
 
 ```cpp
 	std::vector<uint8_t> vertex;   // BlocksVS
@@ -5876,7 +5881,7 @@ static_assert(sizeof(HudConstants) == 16);
 	std::vector<uint8_t> hud;        // HudPS
 ```
 
-- [ ] **Step 6: Edit `src/render/Shaders.cpp` to compile them**
+- [x] **Step 6: Edit `src/render/Shaders.cpp` to compile them**
 
 ```cpp
 	return BlockShaders{ std::move(*vertex), std::move(*present), std::move(*predlss), std::move(*gbuffer), std::move(*depth) };
@@ -5896,7 +5901,7 @@ static_assert(sizeof(HudConstants) == 16);
 		                 std::move(*depth), std::move(*hudVertex), std::move(*hud) };
 ```
 
-- [ ] **Step 7: Build and run the tests; they must pass**
+- [x] **Step 7: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -5906,7 +5911,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `190 test(s), 0 failure(s)`.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -5928,7 +5933,7 @@ reason in the status. The new settings (`translucent`, `teleportstep`, `teleport
 - Modify: `tests/TestRequests.cpp`, `src/link/Commands.h`, `src/link/Commands.cpp`, `src/Requests.h`,
   `src/Requests.cpp`
 
-- [ ] **Step 1: Edit `tests/TestRequests.cpp` to test the link's requests**
+- [x] **Step 1: Edit `tests/TestRequests.cpp` to test the link's requests**
 
 ```cpp
 	CHECK(!off.dred && !off.debugLayer);
@@ -5970,7 +5975,7 @@ TEST(RequestsTypeIntoMinecraft)
 }
 ```
 
-- [ ] **Step 2: Build; it must fail**
+- [x] **Step 2: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -5979,7 +5984,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `error C2065: 'Link': undeclared identifier`.
 
-- [ ] **Step 3: Edit `src/link/Commands.h` to declare `ValidCommandOrSet`**
+- [x] **Step 3: Edit `src/link/Commands.h` to declare `ValidCommandOrSet`**
 
 ```cpp
 bool ValidCommand(std::string_view aCommand, std::string& aError);
@@ -5991,7 +5996,7 @@ bool ValidCommand(std::string_view aCommand, std::string& aError);
 bool ValidCommandOrSet(std::string_view aCommandOrName, std::string& aError);
 ```
 
-- [ ] **Step 4: Edit `src/link/Commands.cpp` to define it, and queue through it**
+- [x] **Step 4: Edit `src/link/Commands.cpp` to define it, and queue through it**
 
 ```cpp
 bool CommandTyper::Queue(std::string_view aCommandOrName, std::string& aError)
@@ -6044,7 +6049,7 @@ bool CommandTyper::Queue(std::string_view aCommandOrName, std::string& aError)
 	}
 ```
 
-- [ ] **Step 5: Edit `src/Requests.h` to add the requests**
+- [x] **Step 5: Edit `src/Requests.h` to add the requests**
 
 ```cpp
 //   set <name> <value>         (name: lower-case letters, digits, '.' and '_'; value: a finite number)
@@ -6074,7 +6079,7 @@ bool CommandTyper::Queue(std::string_view aCommandOrName, std::string& aError)
 	std::string what;          // the dump target, mode, structure, setting name, on or off, or what to type
 ```
 
-- [ ] **Step 6: Edit `src/Requests.cpp` to parse them**
+- [x] **Step 6: Edit `src/Requests.cpp` to parse them**
 
 ```cpp
 #include "Requests.h"
@@ -6148,7 +6153,7 @@ std::string_view Trim(std::string_view aText)
 		return Request{ Request::Kind::Mc, std::string(rest) };
 ```
 
-- [ ] **Step 7: Build and run the tests; they must pass**
+- [x] **Step 7: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -6158,7 +6163,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `192 test(s), 0 failure(s)`.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -6184,7 +6189,7 @@ The spec's "Measurements", as pure classes on times in seconds:
 - Create: `src/Measurements.h`, `src/Measurements.cpp`, `tests/TestMeasurements.cpp`
 - Modify: `CMakeLists.txt`
 
-- [ ] **Step 1: Write the failing test, `tests/TestMeasurements.cpp`**
+- [x] **Step 1: Write the failing test, `tests/TestMeasurements.cpp`**
 
 ```cpp
 #include "Harness.h"
@@ -6260,7 +6265,7 @@ TEST(BurstsCoverTheSecondAfterTheirStart)
 }
 ```
 
-- [ ] **Step 2: Edit `CMakeLists.txt` to add the test**
+- [x] **Step 2: Edit `CMakeLists.txt` to add the test**
 
 ```cmake
 	tests/TestHud.cpp
@@ -6270,7 +6275,7 @@ TEST(BurstsCoverTheSecondAfterTheirStart)
 	tests/TestMeasurements.cpp
 ```
 
-- [ ] **Step 3: Build; it must fail**
+- [x] **Step 3: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -6279,7 +6284,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `error C1083: Cannot open include file: 'Measurements.h'`.
 
-- [ ] **Step 4: Write `src/Measurements.h`**
+- [x] **Step 4: Write `src/Measurements.h`**
 
 ```cpp
 #pragma once
@@ -6375,7 +6380,7 @@ private:
 }
 ```
 
-- [ ] **Step 5: Write `src/Measurements.cpp`**
+- [x] **Step 5: Write `src/Measurements.cpp`**
 
 ```cpp
 #include "Measurements.h"
@@ -6466,7 +6471,7 @@ std::optional<BurstReport> BurstWindow::Frame(double aNow, const BurstFrame& aFr
 }
 ```
 
-- [ ] **Step 6: Edit `CMakeLists.txt` to add the source**
+- [x] **Step 6: Edit `CMakeLists.txt` to add the source**
 
 ```cmake
 	src/render/Hud.cpp
@@ -6478,7 +6483,7 @@ std::optional<BurstReport> BurstWindow::Frame(double aNow, const BurstFrame& aFr
 )
 ```
 
-- [ ] **Step 7: Build and run the tests; they must pass**
+- [x] **Step 7: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -6488,7 +6493,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `196 test(s), 0 failure(s)`.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -6509,7 +6514,7 @@ tries again each second until that works, and starts over when the ID changes. T
 - Create: `src/ProcessUsage.h`, `src/ProcessUsage.cpp`, `tests/TestProcessUsage.cpp`
 - Modify: `CMakeLists.txt`
 
-- [ ] **Step 1: Write the failing test, `tests/TestProcessUsage.cpp`**
+- [x] **Step 1: Write the failing test, `tests/TestProcessUsage.cpp`**
 
 ```cpp
 #include "Harness.h"
@@ -6551,7 +6556,7 @@ TEST(ProcessWatchFollowsAProcessById)
 }
 ```
 
-- [ ] **Step 2: Edit `CMakeLists.txt` to add the test**
+- [x] **Step 2: Edit `CMakeLists.txt` to add the test**
 
 ```cmake
 	tests/TestMeasurements.cpp
@@ -6561,7 +6566,7 @@ TEST(ProcessWatchFollowsAProcessById)
 	tests/TestProcessUsage.cpp
 ```
 
-- [ ] **Step 3: Build; it must fail**
+- [x] **Step 3: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -6570,7 +6575,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `error C1083: Cannot open include file: 'ProcessUsage.h'`.
 
-- [ ] **Step 4: Write `src/ProcessUsage.h`**
+- [x] **Step 4: Write `src/ProcessUsage.h`**
 
 ```cpp
 #pragma once
@@ -6621,7 +6626,7 @@ private:
 }
 ```
 
-- [ ] **Step 5: Write `src/ProcessUsage.cpp`**
+- [x] **Step 5: Write `src/ProcessUsage.cpp`**
 
 ```cpp
 #include "ProcessUsage.h"
@@ -6694,7 +6699,7 @@ void ProcessWatch::Sample(uint32_t aPid, double aNow)
 }
 ```
 
-- [ ] **Step 6: Edit `CMakeLists.txt` to add the source**
+- [x] **Step 6: Edit `CMakeLists.txt` to add the source**
 
 ```cmake
 	src/Measurements.cpp
@@ -6706,7 +6711,7 @@ void ProcessWatch::Sample(uint32_t aPid, double aNow)
 )
 ```
 
-- [ ] **Step 7: Build and run the tests; they must pass**
+- [x] **Step 7: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -6716,7 +6721,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `199 test(s), 0 failure(s)`.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -6741,7 +6746,7 @@ process, as the link has done since Part 1's deep review.
 - Modify: `tests/TestLink.cpp`, `src/link/Link.h`, `src/link/Link.cpp`, `src/link/Overlay.h`,
   `tools/mclink/Main.cpp`
 
-- [ ] **Step 1: Edit `tests/TestLink.cpp` to test the eye, the drain's time and the names**
+- [x] **Step 1: Edit `tests/TestLink.cpp` to test the eye, the drain's time and the names**
 
 ```cpp
 		state.x = -119.5;
@@ -6780,7 +6785,7 @@ TEST(LinkNamesTheRenderTypes)
 	CHECK_STR(RenderTypeName(99), "other");
 ```
 
-- [ ] **Step 2: Build; it must fail**
+- [x] **Step 2: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -6789,7 +6794,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `error C2039: 'minecraftEye': is not a member of 'cpmc::link::Link::Status'`.
 
-- [ ] **Step 3: Edit `src/link/Link.h` to add them**
+- [x] **Step 3: Edit `src/link/Link.h` to add them**
 
 ```cpp
 class Link
@@ -6815,7 +6820,7 @@ class Link
 		double                       drainMs = 0.0;  // the last update's drain
 ```
 
-- [ ] **Step 4: Edit `src/link/Link.cpp` to fill them in**
+- [x] **Step 4: Edit `src/link/Link.cpp` to fill them in**
 
 ```cpp
 #include <cmath>
@@ -6859,7 +6864,7 @@ const char* RenderTypeName(size_t aType)
 	status_.drainMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - drainStart).count();
 ```
 
-- [ ] **Step 5: Edit `src/link/Overlay.h` to say when the reset runs**
+- [x] **Step 5: Edit `src/link/Overlay.h` to say when the reset runs**
 
 ```cpp
 	// When Minecraft connects or comes back: the state to 0, and our front to slot 2. Minecraft's writer starts at 1.
@@ -6868,7 +6873,7 @@ const char* RenderTypeName(size_t aType)
 	// For a new Minecraft process: the state to 0, and our front to slot 2. Its writer starts over at slot 1.
 ```
 
-- [ ] **Step 6: Edit `tools/mclink/Main.cpp` to use the link's names**
+- [x] **Step 6: Edit `tools/mclink/Main.cpp` to use the link's names**
 
 ```cpp
 }
@@ -6889,7 +6894,7 @@ const char* TypeName(size_t aType)
 			                     double(s.bytes[type]) / 1048576.0);
 ```
 
-- [ ] **Step 7: Build and run the tests; they must pass**
+- [x] **Step 7: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -6899,7 +6904,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `201 test(s), 0 failure(s)`.
 
-- [ ] **Step 8: Run mclink without Minecraft; it must start and stop cleanly**
+- [x] **Step 8: Run mclink without Minecraft; it must start and stop cleanly**
 
 ```bash
 cd /d/Cyberpunk-Minecraft/spikes/block-render && printf 'status\nquit\n' > build/selfcheck.txt \
@@ -6911,7 +6916,7 @@ Expected: `exit: 0`, then lines like these (the process ID varies):
 [   0.00] Minecraft: absent, feet 0.000 0.000 0.000, frame 0
 ```
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -6944,7 +6949,7 @@ doesn't count. The plugin fills it all in, in Task 24.
 **Files:**
 - Modify: `tests/TestStatus.cpp`, `src/Status.h`, `src/Status.cpp`
 
-- [ ] **Step 1: Edit `tests/TestStatus.cpp` to test the link's lines**
+- [x] **Step 1: Edit `tests/TestStatus.cpp` to test the link's lines**
 
 ```cpp
 	      std::string::npos);
@@ -7052,7 +7057,7 @@ TEST(StatusWritesTheLinkWithMinecraftAbsent)
 }
 ```
 
-- [ ] **Step 2: Build; it must fail**
+- [x] **Step 2: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -7061,7 +7066,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `error C2039: 'LinkReport': is not a member of 'cpmc'`.
 
-- [ ] **Step 3: Edit `src/Status.h` to add the link's report**
+- [x] **Step 3: Edit `src/Status.h` to add the link's report**
 
 ```cpp
 #include "Coords.h"
@@ -7166,7 +7171,7 @@ struct LinkReport
 // "structure=<name> <min x> <min y> <min z> <max x> <max y> <max z>".
 ```
 
-- [ ] **Step 4: Edit `src/Status.cpp` to write its lines**
+- [x] **Step 4: Edit `src/Status.cpp` to write its lines**
 
 ```cpp
 	return aText;
@@ -7258,7 +7263,7 @@ std::string FormatLink(const LinkReport& aLink)
 	}
 ```
 
-- [ ] **Step 5: Build and run the tests; they must pass**
+- [x] **Step 5: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -7268,7 +7273,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `203 test(s), 0 failure(s)`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -7295,7 +7300,7 @@ The renderer's side of the spec's "Blocks" and "Measurements", without the HUD (
 **Files:**
 - Modify: `src/render/Renderer.h`, `src/render/Renderer.cpp`
 
-- [ ] **Step 1: Edit `src/render/Renderer.h`**
+- [x] **Step 1: Edit `src/render/Renderer.h`**
 
 ```cpp
 #include "render/Gpu.h"
@@ -7378,7 +7383,7 @@ The renderer's side of the spec's "Blocks" and "Measurements", without the HUD (
 	uint64_t updateSamples_ = 0;
 ```
 
-- [ ] **Step 2: Edit `src/render/Renderer.cpp`**
+- [x] **Step 2: Edit `src/render/Renderer.cpp`**
 
 ```cpp
 #include "hooks/D3D12Hooks.h"
@@ -7557,7 +7562,7 @@ void Renderer::Upload()
 	watch_.reset();
 ```
 
-- [ ] **Step 3: Build and run the tests; they must pass**
+- [x] **Step 3: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -7567,7 +7572,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `203 test(s), 0 failure(s)`.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -7599,7 +7604,7 @@ The spec's "The HUD", in the renderer:
 **Files:**
 - Modify: `src/render/Renderer.h`, `src/render/Renderer.cpp`
 
-- [ ] **Step 1: Edit `src/render/Renderer.h`**
+- [x] **Step 1: Edit `src/render/Renderer.h`**
 
 ```cpp
 #include "render/Gpu.h"
@@ -7693,7 +7698,7 @@ The spec's "The HUD", in the renderer:
 	uint64_t                                                   hudGpuSamples_ = 0;
 ```
 
-- [ ] **Step 2: Edit `src/render/Renderer.cpp`**
+- [x] **Step 2: Edit `src/render/Renderer.cpp`**
 
 ```cpp
 	depthPipeline_.Reset();
@@ -8128,7 +8133,7 @@ void Renderer::Shutdown()
 	sections_.clear();
 ```
 
-- [ ] **Step 3: Build and run the tests; they must pass**
+- [x] **Step 3: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -8138,7 +8143,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `203 test(s), 0 failure(s)`.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -8190,7 +8195,7 @@ The whole file follows; its unchanged functions are spike 3's as they were.
 **Files:**
 - Modify: `src/Plugin.cpp`, `CMakeLists.txt`
 
-- [ ] **Step 1: Write `src/Plugin.cpp`**
+- [x] **Step 1: Write `src/Plugin.cpp`**
 
 ```cpp
 // BlockRender: spike 3's RED4ext plugin, linked to Minecraft by spike 4. It hooks the game's Streamline calls and D3D12
@@ -9082,7 +9087,7 @@ RED4EXT_C_EXPORT uint32_t RED4EXT_CALL Supports()
 }
 ```
 
-- [ ] **Step 2: Edit `CMakeLists.txt` for version 0.9.0**
+- [x] **Step 2: Edit `CMakeLists.txt` for version 0.9.0**
 
 ```cmake
 project(BlockRender VERSION 0.8.0 LANGUAGES C CXX)
@@ -9091,7 +9096,7 @@ project(BlockRender VERSION 0.8.0 LANGUAGES C CXX)
 project(BlockRender VERSION 0.9.0 LANGUAGES C CXX)
 ```
 
-- [ ] **Step 3: Build and run the tests; they must pass**
+- [x] **Step 3: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -9101,7 +9106,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `203 test(s), 0 failure(s)`.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -9122,7 +9127,7 @@ Part 3.
 **Files:**
 - Modify: `tools/blockrender_hud/init.lua`
 
-- [ ] **Step 1: Edit `tools/blockrender_hud/init.lua` to add the buttons**
+- [x] **Step 1: Edit `tools/blockrender_hud/init.lua` to add the buttons**
 
 ```lua
 -- BlockRender HUD: what BlockRender (spike 3 of D:\Cyberpunk-Minecraft) is doing, from the status.txt it writes into
@@ -9201,14 +9206,14 @@ local hudNext = { ["never"] = 1, ["in build mode"] = 2, ["always"] = 0 }
         ImGui.Separator()
 ```
 
-- [ ] **Step 2: Check the overlay's syntax**
+- [x] **Step 2: Check the overlay's syntax**
 
 ```bash
 luac -p /d/Cyberpunk-Minecraft/spikes/block-render/tools/blockrender_hud/init.lua && echo "syntax ok"
 ```
 Expected: `syntax ok`. (`luac` is Lua 5.4's; CET runs LuaJIT, and the overlay uses nothing that differs between them.)
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -9228,7 +9233,7 @@ plugin last wrote `status.txt`, the status lines whose key matches a pattern, an
 **Files:**
 - Create: `tools/status_watch.py`, `tools/test_status_watch.py`
 
-- [ ] **Step 1: Write the failing test, `tools/test_status_watch.py`**
+- [x] **Step 1: Write the failing test, `tools/test_status_watch.py`**
 
 ```python
 import status_watch
@@ -9257,14 +9262,14 @@ def test_without_a_status_it_says_so(tmp_path):
     assert status_watch.sample(tmp_path, "frame", 0.0) == ["status.txt missing"]
 ```
 
-- [ ] **Step 2: Run the new tool's test; it must fail**
+- [x] **Step 2: Run the new tool's test; it must fail**
 
 ```bash
 cd /d/Cyberpunk-Minecraft/spikes/block-render/tools && uv run --no-project -q --with pytest pytest -q -p no:cacheprovider test_status_watch.py 2>&1 | grep -E "^E |error in"
 ```
 Expected: `E   ModuleNotFoundError: No module named 'status_watch'`, then `1 error in ...`.
 
-- [ ] **Step 3: Write `tools/status_watch.py`**
+- [x] **Step 3: Write `tools/status_watch.py`**
 
 ```python
 """Watch BlockRender's status in the game: every interval, the time, how long ago the plugin last wrote status.txt, the
@@ -9320,14 +9325,14 @@ if __name__ == "__main__":
     main(sys.argv)
 ```
 
-- [ ] **Step 4: Run the tools' tests; they must pass**
+- [x] **Step 4: Run the tools' tests; they must pass**
 
 ```bash
 cd /d/Cyberpunk-Minecraft/spikes/block-render/tools && uv run --no-project -q --with numpy --with pillow --with pytest pytest -q -p no:cacheprovider 2>&1 | tail -1
 ```
 Expected: `25 passed`, spike 3's 22 and these 3.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -9374,7 +9379,7 @@ as a new task, and is measured again.
 **Files:**
 - Modify: `docs/spikes/2026-10-02-minecraft-link-results.md`
 
-- [ ] **Step 1: Deploy (the game must not be running)**
+- [x] **Step 1: Deploy (the game must not be running)**
 
 ```bash
 tasklist | grep -i -c "cyberpunk2077.exe"
@@ -9396,7 +9401,7 @@ Expected:
 
 The second configure clears `CP2077_DIR` again.
 
-- [ ] **Step 2: Load, at the corner, without Minecraft**
+- [x] **Step 2: Load, at the corner, without Minecraft**
 
 Ask the user to check that Minecraft isn't running, then to launch the game, load the free-roam save, go to the
 corner, and stand still with open street ahead. Then read the log's first lines and the status. Expected:
@@ -9408,7 +9413,7 @@ corner, and stand still with open street ahead. Then read the log's first lines 
 
 Then the first frame rate, Cyberpunk without Minecraft: five readings, with `frame|processes`.
 
-- [ ] **Step 3: Start Minecraft**
+- [x] **Step 3: Start Minecraft**
 
 Ask the user to start the `CyberCraft` instance from the Modrinth App, and to say when its window has gone: SkyCraft
 hides it once it links. Then read Minecraft's side, the log and the status. Expected:
@@ -9422,7 +9427,7 @@ hides it once it links. Then read Minecraft's side, the log and the status. Expe
 
 Then five readings: Minecraft running, not linked.
 
-- [ ] **Step 4: Link**
+- [x] **Step 4: Link**
 
 Ask the user to open CET's overlay and click Link. Expected within two seconds:
 - `request=link on: Minecraft's player follows V; drawing is gbuffer`, and `mode=gbuffer`;
@@ -9434,7 +9439,7 @@ Then ask the user to walk about 20 m along the street and back, watching `positi
 eye follows the camera, at most 10 teleports a second, and the floor's epoch goes up once V is 16 m from its centre.
 Then five readings, linked and idle, with `frame|processes|link`.
 
-- [ ] **Step 5: The HUD**
+- [x] **Step 5: The HUD**
 
 Ask the user to click the HUD button once, so it says `HUD: always`. Expected:
 - `request=set hud 2`, and `hud=always, scale 2, showing`, with about as many images received and drawn a second as
@@ -9448,7 +9453,7 @@ does it stay steady, or flicker, smear or lag? The game runs with frame generati
 Present. If it isn't steady, ask the user to turn frame generation off in the game's graphics settings, look again,
 and turn it back on. Note what each showed.
 
-- [ ] **Step 6: Building by command**
+- [x] **Step 6: Building by command**
 
 With V standing still and open street ahead:
 1. ask the user to click `wall` in the overlay. Expected in the log: the link's typing lines, then a `latency:` line
@@ -9460,7 +9465,7 @@ With V standing still and open street ahead:
    around V's feet. Ask for a screenshot;
 4. send `mc wipe`. Expected: the layer and what's left of the wall gone, and a burst.
 
-- [ ] **Step 7: Latency**
+- [x] **Step 7: Latency**
 
 With V standing still, send these two alternately, five times each, each once the last one's `latency:` line is in
 the log:
@@ -9472,13 +9477,13 @@ Expected: a `latency:` line for each, and `latency=` in the status with the last
 halves: Minecraft's, from the Enter to the section's arrival, and ours, from the arrival to the first list that draws
 it, in milliseconds and frames. Ours is what the spike's question means by "a frame or two".
 
-- [ ] **Step 8: Bursts**
+- [x] **Step 8: Bursts**
 
 Send `mc tnt-cube`, then `mc field`, and after each, wait for its bursts in the log. `tnt-cube` sets off 125 TNT one
 after another, so it gives several. Expected: each burst's sections, MB, worst drain, worst `Update` and worst frame.
 A worst frame well above the frames around it is a hitch: see the top of this task. Then send `mc wipe`.
 
-- [ ] **Step 9: Frame rates, CPU and memory, with the HUD**
+- [x] **Step 9: Frame rates, CPU and memory, with the HUD**
 
 Five readings with `frame|processes|hud` for each:
 1. `set hud 0`: the HUD off;
@@ -9489,7 +9494,7 @@ Five readings with `frame|processes|hud` for each:
 
 Wait three seconds after each request before reading.
 
-- [ ] **Step 10: Focus**
+- [x] **Step 10: Focus**
 
 Start a recording of a minute, in the background:
 ```bash
@@ -9502,7 +9507,7 @@ when they're back. Once the recording ends, read `build/focus.log` and Minecraft
 - **or it paused:** the status grows older while the user was away, Minecraft's side shows `Skyrim link down` 8
   seconds in, and `Skyrim link up` on return. Then the link must come back by itself, with the blocks and the HUD.
 
-- [ ] **Step 11: Minecraft closed and reopened while linked**
+- [x] **Step 11: Minecraft closed and reopened while linked**
 
 Send `mc wall`, then `mc /save-all flush`, so the wall is on disk. Ask the user to stop Minecraft from the Modrinth
 App. Expected within 3 seconds: `Minecraft absent` in the status, `link: Minecraft has gone` in the log, the wall
@@ -9512,14 +9517,14 @@ still drawn, and the HUD gone. Then ask the user to start the instance again. Ex
   floor;
 - the wall drawn again, and the HUD back once Minecraft is in its world.
 
-- [ ] **Step 12: Clean up**
+- [x] **Step 12: Clean up**
 
 Send `mc wipe`, `set hud 1`, `link off` and `mode off`, each once the last shows in the status. Expected:
 `mode=off`, `link=not linked`, and no errors in the log. Then ask the user to quit the game, and to stop Minecraft
 from the Modrinth App. BlockRender 0.9.0 stays installed. Like 0.8.0, nothing shows until the user links or picks a
 drawing mode.
 
-- [ ] **Step 13: Record the results, and commit**
+- [x] **Step 13: Record the results, and commit**
 
 Add step 2 to `docs/spikes/2026-10-02-minecraft-link-results.md`, as step 1 is there:
 - the game's settings and the build;
@@ -9539,15 +9544,187 @@ cd /d/Cyberpunk-Minecraft && git add docs/spikes \
 
 ---
 
-### Task 28: Close Part 2, and plan Part 3
+### Task 28: Minecraft's yaw turns through north smoothly (0.9.1)
 
-- [ ] **Step 1: Add "How Part 2 went" to this plan**
+Added after step 2's run, which found the held item in Minecraft's HUD jumping whenever V turned through north
+(heading 350 to 10), and nowhere else:
+- **The cause:** the link sent Minecraft's yaw in (−180°, 180°], so it jumped from 180 to −180 facing north.
+- **Why it showed:** SkyCraft puts the yaw straight into the player's `yRot` (`SkyClient.java`), and Minecraft's own
+  yaw never wraps. Minecraft sways the first-person hand by the yaw's change, so a whole turn in one frame swung the
+  held item, which then settled.
+
+`LookFromForward` now returns the yaw within 180° of the last, in no fixed range, as Minecraft's own is: turning
+through north goes 179, 180, 181. BlockRender becomes 0.9.1, so the log tells the builds apart.
+
+**Files:**
+- Modify: `tests/TestLook.cpp`, `src/link/Look.h`, `src/link/Look.cpp`, `src/Plugin.cpp`, `CMakeLists.txt`,
+  `docs/superpowers/specs/2026-10-02-minecraft-link-design.md`, `docs/spikes/2026-10-02-minecraft-link-results.md`
+
+- [x] **Step 1: Edit `tests/TestLook.cpp` to test turning through north**
+
+```cpp
+TEST(LookTeleportTargetPutsTheEyeAtTheCamera)
+```
+```cpp
+TEST(LookTurnsThroughNorthWithoutAJump)
+{
+	// Each yaw is the one within 180 degrees of the last, as Minecraft's own: it never jumps a whole turn facing north.
+	CHECK_NEAR(LookFromForward(ForwardFromLook({ 181.0f, 0.0f }), 179.0f)->yaw, 181.0, 1e-3);
+	CHECK_NEAR(LookFromForward(ForwardFromLook({ 179.0f, 0.0f }), -179.0f)->yaw, -181.0, 1e-3);
+	CHECK_NEAR(LookFromForward(ForwardFromLook({ 181.0f, 0.0f }), 539.0f)->yaw, 541.0, 1e-3);  // a turn and more on
+	CHECK_NEAR(LookFromForward(ForwardFromLook({ -10.0f, 0.0f }), 10.0f)->yaw, -10.0, 1e-3);
+}
+
+TEST(LookTeleportTargetPutsTheEyeAtTheCamera)
+```
+
+- [x] **Step 2: Build and run the tests; the new one must fail**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | grep -E "^FAIL|test\(s\)"
+```
+Expected: `FAIL LookTurnsThroughNorthWithoutAJump`, then `204 test(s), 3 failure(s)`.
+
+- [x] **Step 3: Edit `src/link/Look.h` to say how the yaw goes on**
+
+```cpp
+// 0.001 of its length), the yaw is aLastYaw. Nothing for a zero vector. The yaw comes out in (-180, 180].
+```
+```cpp
+// 0.001 of its length), the yaw is aLastYaw. Nothing for a zero vector. The yaw is the one within 180 degrees of
+// aLastYaw, in no fixed range, as Minecraft's own: Minecraft sways its first-person hand by the yaw's change, so a
+// yaw that wrapped from 180 to -180 facing north swung the held item.
+```
+
+- [x] **Step 4: Edit `src/link/Look.cpp` to keep the yaw within 180 degrees of the last**
+
+```cpp
+		yaw = float(std::atan2(-x, z) * kDegrees);
+		if (yaw <= -180.0f)
+		{
+			yaw += 360.0f;
+		}
+```
+```cpp
+		// The turn from the last yaw, within 180 degrees either way (a half turn goes up).
+		double turn = std::fmod(std::atan2(-x, z) * kDegrees - aLastYaw, 360.0);
+		if (turn > 180.0)
+		{
+			turn -= 360.0;
+		}
+		else if (turn <= -180.0)
+		{
+			turn += 360.0;
+		}
+		yaw = float(aLastYaw + turn);
+```
+
+- [x] **Step 5: Edit `src/Plugin.cpp` for version 0.9.1**
+
+```cpp
+constexpr const char* kVersion = "0.9.0";
+```
+```cpp
+constexpr const char* kVersion = "0.9.1";
+```
+```cpp
+	aInfo->version = RED4EXT_V1_SEMVER(0, 9, 0);
+```
+```cpp
+	aInfo->version = RED4EXT_V1_SEMVER(0, 9, 1);
+```
+
+- [x] **Step 6: Edit `CMakeLists.txt` for version 0.9.1**
+
+```cmake
+project(BlockRender VERSION 0.9.0 LANGUAGES C CXX)
+```
+```cmake
+project(BlockRender VERSION 0.9.1 LANGUAGES C CXX)
+```
+
+- [x] **Step 7: Edit `docs/superpowers/specs/2026-10-02-minecraft-link-design.md` for the yaw**
+
+```markdown
+    straight up or down, where the forward vector's horizontal length is under 0.001, the last yaw is kept;
+```
+```markdown
+    straight up or down, where the forward vector's horizontal length is under 0.001, the last yaw is kept;
+  - the yaw is the one within 180° of the last, in no fixed range, as Minecraft's own is (see "Changes from step 2");
+```
+```markdown
+  plugin only kept the heartbeat.
+```
+```markdown
+  plugin only kept the heartbeat.
+
+## Changes from step 2
+
+Step 2's game run, in Part 2 of the plan, found these. The sections above already include them.
+- **The yaw never wraps.** It was in (−180°, 180°], so it jumped from 180 to −180 whenever V turned through north.
+  SkyCraft puts it straight into the player's yaw, where Minecraft's own never wraps, and Minecraft sways the
+  first-person hand by the yaw's change. So the held item in the HUD swung and settled, at north only. Each yaw
+  is now the one within 180° of the last.
+```
+
+- [x] **Step 8: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `204 test(s), 0 failure(s)`.
+
+- [x] **Step 9: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render docs/superpowers/specs \
+  && git commit -q -m "minecraft-link: Minecraft's yaw turns through north smoothly (0.9.1)" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+- [x] **Step 10: Deploy (the game must not be running)**
+
+Run Task 27 Step 1's two commands. Expected: `0`, then the plugin's and the overlay's folders, and `installed`.
+
+- [x] **Step 11: In the game: turn through north**
+
+Minecraft can keep running from step 2, or the user starts the `CyberCraft` instance again. Ask the user to:
+1. launch the game, load the free-roam save, and stand anywhere outdoors;
+2. open CET's overlay, click Link, then the HUD button until it reads `HUD: always`;
+3. turn slowly through heading 0 several times, both ways, then quickly once, watching the held item.
+
+Expected:
+- `BlockRender 0.9.1 loaded` in the log;
+- the held item sways at north as it does at every other heading, without the jump.
+
+Then send `set hud 1`, `link off` and `mode off`, each once the last shows in the status.
+
+- [x] **Step 12: Record the check, and commit**
+
+Add the fix and the check to step 2's results in `docs/spikes/2026-10-02-minecraft-link-results.md`, then commit:
+```bash
+cd /d/Cyberpunk-Minecraft && git add docs/spikes \
+  && git commit -q -m "minecraft-link: the yaw fix, checked in the game" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 29: Close Part 2, and plan Part 3
+
+- [x] **Step 1: Add "How Part 2 went" to this plan**
 
 At the end: what ran as written, what changed, and what step 2 found.
 
 - [ ] **Step 2: Plan Part 3**
 
-Use superpowers:writing-plans to add Part 3's tasks, from Task 29 on, to this plan: step 3 in the game, input. Verify
+Use superpowers:writing-plans to add Part 3's tasks, from Task 30 on, to this plan: step 3 in the game, input. Verify
 them as Part 2's were. Changes to the spec found while planning go in its "Changes while planning".
 
 - [ ] **Step 3: Commit**
@@ -9557,3 +9734,36 @@ cd /d/Cyberpunk-Minecraft && git add docs/superpowers \
   && git commit -q -m "minecraft-link plan: Part 2 closed, Part 3 planned" \
        -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
 ```
+
+---
+
+## How Part 2 went
+
+On 2026-10-02 and 03, inline, as the user asked.
+- **Tasks 13 to 26 ran as written,** in the repo, by the runner that replayed them (`tools/plans/run_plan.py`,
+  execute mode). Every build that had to fail failed with its expected message, and every count matched: 175 to 203
+  C++ tests, and 25 Python ones, with no warnings. `mclink`'s self-check found Minecraft absent, and `luac` took the
+  overlay. The 14 commits run from `372e718` to `a95b990`, and their 40 files are identical to the verified scratch
+  copy's.
+- **Task 27 ran as written,** with the user: [step 2's results](../../spikes/2026-10-02-minecraft-link-results.md).
+  Every check passed. It departed from the plan in four places:
+  - **`wipe` missed the field,** which had gone a block higher than V's feet. Two fills at its absolute coordinates
+    cleared it;
+  - **`/save-all` doesn't exist in singleplayer.** Minecraft had written the wall to disk at once anyway;
+  - **`field` wasn't repeated for Step 8's bursts:** Step 6 had measured it, and a second would have gone a block off
+    the same way;
+  - **Step 13's results were written after Task 28's code,** so the user could check the fix in the same sitting.
+- **Task 28 was added for the one defect step 2 found:** the held item jumped whenever V turned through north. It was
+  written test-first, replayed from `a95b990`, executed (`e1f1c06`, BlockRender 0.9.1), and checked in the game
+  (`2c35e2b`). The runner gained three step kinds for it: a test that must fail when run, steps done by hand, which
+  stop the run, and ticking a task only up to its commit.
+- **What step 2 found, for Part 3** (the results have the numbers):
+  - **the link, the blocks and the HUD work in the game as designed:** our half of the latency is under a frame,
+    bursts don't hitch, and the HUD costs 0.25 ms a frame at `hudscale 2`;
+  - **Minecraft's player isn't always at V's feet.** It stands on our floor, which stays flat at the height it was
+    sent with, so where the street dips, commands land a block higher, and V can stand inside Minecraft's blocks.
+    Minecraft then drops to crouching or crawling, which moves its eye off V's camera, and the HUD shows its in-block
+    overlay. Clicks cast from Minecraft's eye, so Part 3 has to settle first how often that happens, and where clicks
+    land;
+  - **latency samples from sets of several commands are wrong,** since each Enter replaces the mark. A click is one
+    input, but the same rule applies to clicks in quick succession.
