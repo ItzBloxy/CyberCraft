@@ -23030,12 +23030,12 @@ If drawing skips frames in play, the status says why: stop there, and fix it in 
 **Files:**
 - Modify: `docs/spikes/2026-10-01-block-render-results.md`
 
-- [ ] **Step 1: Deploy (the game must not be running)**
+- [x] **Step 1: Deploy (the game must not be running)**
 
 Run Task 44 Step 1's two commands. Expected: `0`, then the plugin's folder with `BlockRender.dll`, `BlockRender.pdb`,
 `shaders`, `atlas.bin` and `atlas.json`, the overlay's folder with `init.lua`, and `installed`.
 
-- [ ] **Step 2: Load, at the corner**
+- [x] **Step 2: Load, at the corner**
 
 Ask the user to launch the game, load the free-roam save, go to the corner, face south-west, and stand still. Then
 read the log's first lines and the status. Expected:
@@ -23043,59 +23043,59 @@ read the log's first lines and the status. Expected:
 - in the status, `mode=off`, `tracking off` and `all hooks on`;
 - in the overlay's window, a row of buttons: Off, Before DLSS and G-buffer.
 
-- [ ] **Step 3: The overlay's buttons**
+- [x] **Step 3: The overlay's buttons**
 
 Ask the user to open CET's overlay and click G-buffer. Expected within two seconds: `request=mode gbuffer` and
 `mode=gbuffer` in the status. Then send `place cube`, wait three seconds, and read the status five times, a second
 apart. Expected: frames drawn at the frame rate, none skipped, and no late cameras.
 
-- [ ] **Step 4: The Skip Time screen**
+- [x] **Step 4: The Skip Time screen**
 
 Ask the user to open the Skip Time screen, wait a few seconds, and close it without skipping. Then to skip an hour.
 Read the status every half second throughout. Expected:
 - `mode=gbuffer` throughout, and the cube still there after;
 - while the screen opens, maybe some frames drawn without the tagged depth, or skipped as having no G-buffer.
 
-- [ ] **Step 5: Step 3 and step 4, side by side**
+- [x] **Step 5: Step 3 and step 4, side by side**
 
 By day, with the cube in view, ask the user to click Before DLSS and take a screenshot, then G-buffer and take another,
 from the same view.
 
-- [ ] **Step 6: The stencil class**
+- [x] **Step 6: The stencil class**
 
 Ask the user to watch the cube while `set stencil` goes through 1, 2, 20 (0x14, poles) and back to 0, three seconds
 each. Note what changes with each: the light, decals on the ground, reflections. Settle on the value that looks like
 the game's own surfaces.
 
-- [ ] **Step 7: Steady, and no trails**
+- [x] **Step 7: Steady, and no trails**
 
 Ask the user to stand still and watch the cube's edges, then to strafe left and right past it. Expected: steady edges,
 and no trails. Then repeat the strafing with `set gbmotion 0`, and again with `set gbdepth 0`, setting each back to 1
 after. Note what each changes: trails mean the blocks need their own motion vectors; smearing or ghosting at the
 edges means DLSS needs their depth.
 
-- [ ] **Step 8: Turning fast**
+- [x] **Step 8: Turning fast**
 
 Record the status twice a second while the user turns fast, sprints and strafes for about 15 seconds, as in Task 51
 Step 5. Expected: no skipped frames and no late cameras. Ask whether the cube flickered.
 
-- [ ] **Step 9: The light**
+- [x] **Step 9: The light**
 
 Ask the user to `place cube` in a building's shadow and again in the sun (it lands in front of V), with screenshots.
 Expected: shadowed and sunlit like the buildings around it. If the weather allows, check fog or rain on it too. Run 8
 saw it lit at night.
 
-- [ ] **Step 10: More blocks, and the timings**
+- [x] **Step 10: More blocks, and the timings**
 
 At an open spot, `place house`, and ask the user to walk around it, with a screenshot. Then back at the corner, with
 the same view, `clear`, then `place field 10000` and read the status five times, then `clear`, `place field 100000`,
 and five times again. Note the GPU time and the frame time of each.
 
-- [ ] **Step 11: Clean up**
+- [x] **Step 11: Clean up**
 
 Send `clear`, then `mode off`, two seconds apart. Expected: `mode=off` and `tracking off`, and no errors in the log.
 
-- [ ] **Step 12: Record the results, and commit**
+- [x] **Step 12: Record the results, and commit**
 
 In `docs/spikes/2026-10-01-block-render-results.md`, add what run 9 found:
 - the buttons, and the Skip Time screen;

@@ -8,7 +8,8 @@ ray tracing, HDR and VSync off, Reflex on, on a 239 Hz display. The builds:
 - **0.4.0** for run 5: plus Tasks 45 and 46, to find what the hooks cost;
 - **0.5.0** for run 6: plus Task 48's fix;
 - **0.6.0** for run 7: plus Task 50, which tracks every list again while drawing before DLSS;
-- **0.7.0** for run 8: Part 3's Tasks 53 to 56, for step 4.
+- **0.7.0** for run 8: Part 3's Tasks 53 to 56, for step 4;
+- **0.8.0** for run 9: plus Task 58, which lets menus be and gives the overlay buttons for the drawing modes.
 
 The user played; the agent sent requests through `blockrender.request` and read the logs, `status.txt`, the frame
 logs and the dumps. Plan: [2026-10-01-block-render.md](../superpowers/plans/2026-10-01-block-render.md).
@@ -32,8 +33,12 @@ logs and the dumps. Plan: [2026-10-01-block-render.md](../superpowers/plans/2026
 - **Step 3, blocks before DLSS: pass.** They sit under the HUD and the menus, tone mapped with the scene. They're
   steady standing still, leave no trails moving, and don't flicker turning fast (run 7). 100,000 of them cost
   0.03 ms of GPU time.
-- **Step 4, blocks in the G-buffer: under way.** The game lights the blocks by day and at night, and drawing them costs
-  nothing measurable (run 8). The Skip Time screen switched drawing off, which the next task fixes.
+- **Step 4, blocks in the G-buffer: pass, except shadows.** The game lights the blocks as its own, in the sun, in a
+  building's shadow, at sunset and at night, and its haze and ambient occlusion fall on them (runs 8 and 9). They're
+  steady, leave no trails and don't flicker turning fast, writing their own motion vectors and tagged depth, which
+  both turned out to be needed. 100,000 of them cost 0.06 ms of GPU time, and the frame time doesn't rise. But they
+  cast no shadows, and block no light: they aren't in the game's shadow maps, so a house's floor is sunlit through
+  its roof.
 - **BlockRender costs nothing measurable, after a fix.**
   - **Run 4:** the hooks doubled the frame time with drawing off: 26.5 ms against 13.6 ms without BlockRender.
   - **Run 5 found the cause:** the Streamline hooks' readability checks, whose `VirtualQuery` walked gigabytes of the
@@ -52,8 +57,9 @@ logs and the dumps. Plan: [2026-10-01-block-render.md](../superpowers/plans/2026
 | 6 | 00:30 | 0.5.0: plus Task 48 | At the same corner: what BlockRender costs after the fix, step 3 again up to 100,000 blocks, and a flicker turning fast |
 | 7 | 00:56 | 0.6.0: plus Task 50 | At the same corner: drawing before DLSS with every list tracked, turning fast, then four frame logs |
 | 8 | 01:50 | 0.7.0: Tasks 53 to 56 | Step 4 at the same corner, by day and at night; the Skip Time screen switched drawing off |
+| 9 | 02:15 | 0.8.0: plus Task 58 | Step 4 again: the overlay's buttons, the Skip Time screen, the side-by-side, the stencil, the motion and depth switches, fast turns, shadow and sun, the house and the timings |
 
-Runs 5 to 8 were after midnight, on 2026-10-02.
+Runs 5 to 9 were after midnight, on 2026-10-02.
 
 **Run 1's two problems,** which Task 28 fixed:
 - **Frame tokens:** the game calls `slGetNewFrameToken` about 8 times a frame (720 a second at 90 fps), from three
@@ -517,3 +523,58 @@ Run 8 stopped there for the next task's fix:
 - frames that the game draws without a G-buffer, its end or the frame's camera are skipped, but don't count toward
   the 30 that switch drawing off;
 - the overlay gets buttons for the drawing modes.
+
+### Run 9: step 4, with menus that don't stop it
+
+BlockRender 0.8.0 (plus Task 58), at the same corner, with the same save.
+
+**The fix.**
+- **The overlay's buttons:** the user clicked G-buffer, and drawing was on within a second.
+- **The Skip Time screen:** 91 readings over a minute, while the user opened and closed it and skipped an hour.
+  Drawing stayed on, and the cube was there and lit after the skip. As the screen opened and closed, 1 or 2 frames a
+  second were skipped, because the base colour's state before the G-buffer's end wasn't known in them. Those were
+  scattered among drawn frames, so they never added up to the 30 that switch drawing off.
+
+**Step 3 and step 4, side by side,** from the same view by day. Before DLSS, the cube has Minecraft's flat face shading
+and looks pasted on. In the G-buffer, the game's sun lights its top, its sides fall into soft shade, and the ground
+darkens where it meets the curb. The user's word: "holy improvement".
+
+**The settings settled live:**
+- **`stencil`:** 0, 1, 2, 20 and 24 looked the same. 182, the trees' class, changed the cube at some angles: likely
+  foliage's light through leaves, which might suit leaf blocks later. Blocks stay at 0, the buildings' class.
+- **`gbmotion`:** strafing past the cube, with everything on: no trails. With `gbmotion 0`, subtle trails: the
+  camera's motion that the game fills in before our list is the ground's, not the blocks'.
+- **`gbdepth`:** with `gbdepth 0`, heavy ghosting: a car driving behind the cube showed through it, since DLSS's depth
+  didn't have the cube. Both stay on.
+
+**Turning fast:** 183 readings over two minutes of fast turns, sprinting and strafing. No frame was skipped, none had a
+late camera, and none went without the tagged depth. Frames took 11 to 17 ms averaged over a second.
+
+**The light:**
+- **In a building's shadow,** the cube takes the shade's cool sky light, like the ground and the wall beside it.
+- **In the low sun,** its top catches the warm light like the road, and the faces turned away take the sky's blue.
+- **No shadows:** the blocks cast none, and block no light. Inside the house the floor is sunlit through the roof,
+  while the walls' inner faces are dim only because they face away from the sun. The game's shadow maps are drawn from
+  its own geometry, likely in the 11-list submission after the G-buffer, and the blocks aren't in them.
+- **The grid:** blocks sit on Minecraft's whole metres, so on the game's ground they float a few centimetres or sink up
+  to 0.6 m, and the ground hides what's sunk.
+
+**The house:** 176 blocks, lit like the street: planks, logs and cobblestone, glass frames to see through, and the
+bush's leaves cut out cleanly.
+
+**The timings** (at the corner, the same view as step 3's, five readings each):
+
+| Blocks | Sections | Vertices | Our GPU time | Frame time (the plugin's / CET's) |
+|---|---|---|---|---|
+| none | 0 | 0 | 0.011 ms | 14.7 / 14.7 to 14.8 ms |
+| 10,003 | 12 | 31,116 | 0.056 to 0.094 ms | 12.3 to 12.9 ms |
+| 100,001 | 81 | 267,432 | 0.059 to 0.060 ms | 11.8 ms (85 fps) |
+
+Two passes cost about twice step 3's one. The frame got faster with the field, which fills much of the view: its depth
+likely spares the game's later passes the scene behind it.
+
+**At this scale,** the user found that the 100,000-block field, surprisingly, at times looks like it belongs. Its
+terraces take the evening sun and haze like the city around them, and the game's rooftops and machinery pass
+through the terrain where the depths cross.
+
+Clean up: `mode=off`, tracking off, no errors in the log, and no safety stop in the whole run.
