@@ -33,7 +33,7 @@ and Part 3 into the game's G-buffer (step 4).
 **Spec:** [docs/superpowers/specs/2026-10-01-block-render-design.md](../specs/2026-10-01-block-render-design.md)
 
 **Parts 2 and 3:** Part 2 is step 3 (blocks before DLSS): Tasks 35 to 52, which Task 34 planned from step 1's
-findings. Part 3 is step 4 (blocks in the G-buffer): Tasks 53 to 58, which Task 52 planned once step 3 had run in
+findings. Part 3 is step 4 (blocks in the G-buffer): Tasks 53 to 60, which Task 52 planned once step 3 had run in
 the game.
 
 ---
@@ -19722,7 +19722,8 @@ committing.
 
 ## Part 3: step 4, blocks in the G-buffer
 
-Tasks 53 to 58, planned after Part 2 closed (see "How Part 2 went").
+Tasks 53 to 60, planned after Part 2 closed (see "How Part 2 went"). Run 8 found the Skip Time screen switching
+drawing off, so Tasks 58 and 59 were added to fix that and finish step 4's run.
 
 **Goal:** draw the blocks into the game's G-buffer, so that the game lights, shadows and fogs them as its own
 geometry. Then run step 4 in the game with the user, and answer the spike's question.
@@ -19742,19 +19743,19 @@ geometry. Then run step 4 in the game with the user, and answer the spike's ques
 - **The blocks write what the G-buffer holds** (Task 55): the base colour as Minecraft shows it, the face's
   world-space normal, the material values, and the motion vectors. A second pass writes their depth into the tagged
   depth, which the game copied from the G-buffer's depth just before the end.
-- **The game run settles the rest live** (Task 57): the stencil class, whether the blocks need their own motion vectors
-  and tagged depth, and their material values.
+- **The game runs settle the rest live** (Tasks 57 and 59): the stencil class, whether the blocks need their own motion
+  vectors and tagged depth, and their material values.
 
 **Already verified:** as in Parts 1 and 2, all the code was compiled and tested in the scratch clone first. Tasks 53
-to 56 were then replayed in a fresh clone from the end of Part 2, applying every step as written and checking every
-expected result:
+to 56 were then replayed in a fresh clone from the end of Part 2, and Task 58 from the end of Task 57, applying every
+step as written and checking every expected result:
 - zero compiler warnings;
-- 111 C++ tests passing;
+- 112 C++ tests passing;
 - the DLL exporting exactly `Main`, `Query` and `Supports`;
 - the replayed files identical to the scratch clone's.
 
-**Test counts:** the C++ count goes 105 from Task 53, 110 from Task 54, then 111 from Task 55 on. The Python tools
-don't change.
+**Test counts:** the C++ count goes 105 from Task 53, 110 from Task 54, 111 from Task 55, then 112 from Task 58 on.
+The Python tools don't change.
 
 **The commands and rules** in "Before you start" apply here too: the game and the user, deploying, and no faults.
 
@@ -22541,12 +22542,12 @@ If drawing skips frames, the status says why: stop there, and fix it in a new ta
 **Files:**
 - Modify: `docs/spikes/2026-10-01-block-render-results.md`
 
-- [ ] **Step 1: Deploy (the game must not be running)**
+- [x] **Step 1: Deploy (the game must not be running)**
 
 Run Task 44 Step 1's two commands. Expected: `0`, then the plugin's folder with `BlockRender.dll`, `BlockRender.pdb`,
 `shaders`, `atlas.bin` and `atlas.json`, the overlay's folder with `init.lua`, and `installed`.
 
-- [ ] **Step 2: Load, at the corner**
+- [x] **Step 2: Load, at the corner**
 
 Ask the user to launch the game, load the free-roam save, go to the corner, face south-west, and stand still. Then
 read the log's first lines and the status. Expected:
@@ -22555,7 +22556,7 @@ read the log's first lines and the status. Expected:
 
 Read the status's `frame=` line and `frames.txt` five times each, a second apart: the idle frame time.
 
-- [ ] **Step 3: The cube, in the G-buffer**
+- [x] **Step 3: The cube, in the G-buffer**
 
 Send `mode gbuffer` and `place cube`, wait three seconds, and read the status. Expected:
 - `mode=gbuffer` and `tracking on`;
@@ -22570,11 +22571,15 @@ Read five times. Then ask the user to look at the cube, with a screenshot. Expec
 Ask the user to keep the same view. Send `mode predlss`, and ask for a screenshot; then `mode gbuffer` again, and ask
 for another.
 
+Run 8 stopped before this step to fix the Skip Time screen (Task 58); Task 59 does it.
+
 - [ ] **Step 5: The stencil class**
 
 Ask the user to watch the cube while `set stencil` goes through 1, 2, 20 (0x14, poles) and back to 0, three seconds
 each. Note what changes with each: the light, the ground's decals, reflections. Settle on the value that looks like
 the game's own surfaces.
+
+Run 8 stopped before this step to fix the Skip Time screen (Task 58); Task 59 does it.
 
 - [ ] **Step 6: Steady, and no trails**
 
@@ -22583,10 +22588,14 @@ and no trails. Then repeat the strafing with `set gbmotion 0`, and again with `s
 after. Note what each changes: trails mean the blocks need their own motion vectors; smearing or ghosting at the
 edges means DLSS needs their depth.
 
+Run 8 stopped before this step to fix the Skip Time screen (Task 58); Task 59 does it.
+
 - [ ] **Step 7: Turning fast**
 
 Record the status twice a second while the user turns fast, sprints and strafes for about 15 seconds, as in Task 51
 Step 5. Expected: no skipped frames and no late cameras. Ask whether the cube flickered.
+
+Run 8 stopped before this step to fix the Skip Time screen (Task 58); Task 59 does it.
 
 - [ ] **Step 8: The light**
 
@@ -22594,17 +22603,21 @@ Ask the user to place a cube in a building's shadow and in the sun (`place cube`
 use the game's Skip Time to the night, near street lights, with screenshots. Expected: shadowed, sunlit and lamp-lit
 like the buildings around it. If the weather allows, check fog or rain on it too.
 
+Run 8 saw the cube lit at night, then stopped to fix the Skip Time screen (Task 58); Task 59 does the rest.
+
 - [ ] **Step 9: More blocks, and the timings**
 
 At an open spot, `place house`, and ask the user to walk around it, with a screenshot. Then back at the corner, with
 the same view, `clear`, then `place field 10000` and read the status five times, then `clear`, `place field 100000`,
 and five times again. Note the GPU time and the frame time of each.
 
-- [ ] **Step 10: Clean up**
+Run 8 stopped before this step to fix the Skip Time screen (Task 58); Task 59 does it.
+
+- [x] **Step 10: Clean up**
 
 Send `clear`, then `mode off`, two seconds apart. Expected: `mode=off` and `tracking off`, and no errors in the log.
 
-- [ ] **Step 11: Record the results, and commit**
+- [x] **Step 11: Record the results, and commit**
 
 In `docs/spikes/2026-10-01-block-render-results.md`, add step 4:
 - whether the game lights, shadows and fogs the blocks, from the screenshots;
@@ -22622,7 +22635,486 @@ cd /d/Cyberpunk-Minecraft && git add docs/spikes \
 
 ---
 
-### Task 58: Close Part 3, and the spike
+### Task 58: Menus don't switch G-buffer drawing off, and the overlay switches modes
+
+Run 8 found G-buffer drawing switched off whenever the Skip Time screen opened. For a moment the game still draws the
+world, but without its copy into the tagged depth before the G-buffer's end. So the tagged depth's state there isn't
+known, each frame was skipped, and 30 in a row switch drawing off. Three changes:
+- **Without the tagged depth:** when only its state is unknown, the blocks still go into the G-buffer, and the frame
+  leaves the tagged depth alone. The status counts those frames.
+- **Skips that aren't faults:** a frame without a G-buffer, without its end, or whose camera came late is still
+  skipped and counted, but no longer counts toward the 30 that switch drawing off. Those are frames the game draws
+  differently, not something going wrong.
+- **Buttons in the overlay** switch the drawing mode: Off, Before DLSS and G-buffer. CET keeps a mod's files inside its
+  own folder, so the overlay writes `blockrender.request` there, and the plugin reads that one too. The overlay can't
+  rename a finished file into place, so a command there counts only once its line ends.
+
+The version goes to 0.8.0.
+
+**Files:**
+- Modify: `tests/TestStatus.cpp`, `src/Status.h`, `src/Status.cpp`, `src/render/Renderer.h`, `src/render/Renderer.cpp`,
+  `src/Plugin.cpp`, `CMakeLists.txt`, `tools/blockrender_hud/init.lua`
+
+- [ ] **Step 1: Edit `tests/TestStatus.cpp` to add the failing test**
+
+```cpp
+	          "structure=cube 10.00 23.00 7.00 11.00 24.00 8.00\n");
+}
+```
+```cpp
+	          "structure=cube 10.00 23.00 7.00 11.00 24.00 8.00\n");
+}
+
+TEST(StatusCountsFramesDrawnWithoutTheTaggedDepth)
+{
+	cpmc::StatusReport report;
+	report.mode = "gbuffer";
+	report.framesDrawn = 70;
+	report.framesPartial = 3;
+	const std::string status = cpmc::FormatStatus(report);
+	CHECK(status.find("frames=70 drawn (3 without the tagged depth), 0 skipped, 0 with a late camera (last second)\n") !=
+	      std::string::npos);
+}
+```
+
+- [ ] **Step 2: Build; it must fail**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C" | sort -u | head -3
+```
+Expected: `'framesPartial': is not a member of 'cpmc::StatusReport'`.
+
+- [ ] **Step 3: Edit `src/Status.h` for the frames without the tagged depth**
+
+```cpp
+	uint64_t               framesDrawn = 0;    // in the last second
+```
+```cpp
+	uint64_t               framesDrawn = 0;    // in the last second
+	uint64_t               framesPartial = 0;  // of those, gbuffer's drawn into the G-buffer but not the tagged depth
+```
+
+- [ ] **Step 4: Edit `src/Status.cpp` to say how many**
+
+```cpp
+	out += std::format("frames={} drawn, {} skipped{}, {} with a late camera (last second)\n", aReport.framesDrawn,
+	                   aReport.framesSkipped, aReport.lastSkip.empty() ? "" : " (" + OneLine(aReport.lastSkip) + ")",
+	                   aReport.lateCamera);
+```
+```cpp
+	out += std::format("frames={} drawn{}, {} skipped{}, {} with a late camera (last second)\n", aReport.framesDrawn,
+	                   aReport.framesPartial == 0 ? "" : std::format(" ({} without the tagged depth)", aReport.framesPartial),
+	                   aReport.framesSkipped, aReport.lastSkip.empty() ? "" : " (" + OneLine(aReport.lastSkip) + ")",
+	                   aReport.lateCamera);
+```
+
+- [ ] **Step 5: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `112 test(s), 0 failure(s)`.
+
+- [ ] **Step 6: Edit `src/render/Renderer.h` for skips that don't count, and the count of partial frames**
+
+```cpp
+		                             // because the frame's camera came after its G-buffer
+		std::string lastSkip;
+```
+```cpp
+		                             // because the frame's camera came after its G-buffer
+		uint64_t    partial = 0;     // gbuffer: drawn into the G-buffer only, as the tagged depth's state wasn't known
+		std::string lastSkip;
+```
+```cpp
+	void               Skip(const std::string& aWhy);
+```
+```cpp
+	void               Skip(const std::string& aWhy, bool aCounts = true);  // aCounts: toward the skips in a row
+```
+
+- [ ] **Step 7: Edit `src/render/Renderer.cpp` to draw without the tagged depth, and to let menus be**
+
+```cpp
+void Renderer::Skip(const std::string& aWhy)
+{
+	++stats_.skipped;
+	stats_.lastSkip = aWhy;
+	if (++consecutiveSkips_ == kSkipsBeforeOff)
+```
+```cpp
+void Renderer::Skip(const std::string& aWhy, bool aCounts)
+{
+	++stats_.skipped;
+	stats_.lastSkip = aWhy;
+	if (aCounts && ++consecutiveSkips_ == kSkipsBeforeOff)
+```
+```cpp
+				gbufferFrame_.decided = true;
+				Skip(gbufferFrame_.seen ? "the G-buffer's end wasn't found" : "no G-buffer list was seen in this frame");
+```
+```cpp
+				gbufferFrame_.decided = true;
+				// The game draws some frames differently, as a menu opens: they're skipped, but don't switch drawing off.
+				Skip(gbufferFrame_.seen ? "the G-buffer's end wasn't found" : "no G-buffer list was seen in this frame", false);
+```
+```cpp
+		Skip("the frame's camera came after its G-buffer");
+```
+```cpp
+		Skip("the frame's camera came after its G-buffer", false);
+```
+```cpp
+	static constexpr const char* kNames[kWatched] = { "base colour", "normals", "material values", "G-buffer's depth",
+		                                              "motion vectors", "tagged depth" };
+	for (size_t k = 0; k < kWatched; ++k)
+	{
+		if (!gbufferFrame_.before[k] && (k != kTaggedDepth || gbufferDepth_))
+		{
+			Skip(std::format("the state of the {} before the G-buffer's end isn't known", kNames[k]));
+			return nullptr;
+		}
+	}
+```
+```cpp
+	static constexpr const char* kNames[kTaggedDepth] = { "base colour", "normals", "material values", "G-buffer's depth",
+		                                                  "motion vectors" };
+	for (size_t k = 0; k < kTaggedDepth; ++k)
+	{
+		if (!gbufferFrame_.before[k])
+		{
+			Skip(std::format("the state of the {} before the G-buffer's end isn't known", kNames[k]));
+			return nullptr;
+		}
+	}
+	// The game copies the G-buffer's depth into the tagged depth before the end, except in a few frames, such as while
+	// the Skip Time screen opens. Those frames get the blocks in the G-buffer only.
+	const bool intoTaggedDepth = gbufferDepth_ && gbufferFrame_.before[kTaggedDepth].has_value();
+```
+```cpp
+	if (!EnsureGbufferPipeline(camera->reversedDepth) || (gbufferDepth_ && !EnsureDepthPipeline(camera->reversedDepth)))
+```
+```cpp
+	if (!EnsureGbufferPipeline(camera->reversedDepth) || (intoTaggedDepth && !EnsureDepthPipeline(camera->reversedDepth)))
+```
+```cpp
+	if (gbufferDepth_)
+	{
+		wanted.push_back({ taggedDepth, *gbufferFrame_.before[kTaggedDepth], D3D12_RESOURCE_STATE_DEPTH_WRITE });
+```
+```cpp
+	if (intoTaggedDepth)
+	{
+		wanted.push_back({ taggedDepth, *gbufferFrame_.before[kTaggedDepth], D3D12_RESOURCE_STATE_DEPTH_WRITE });
+```
+```cpp
+	if (gbufferDepth_)
+	{
+		// The game copied the G-buffer's depth into the tagged depth before our list, so the blocks go in there too.
+```
+```cpp
+	if (intoTaggedDepth)
+	{
+		// The game copied the G-buffer's depth into the tagged depth before our list, so the blocks go in there too.
+```
+```cpp
+	++recordings_;
+	t_insertedSlot = slot;
+	return list;
+}
+
+void Renderer::OnSubmitted(ID3D12CommandQueue*, UINT, ID3D12CommandList* const*)
+```
+```cpp
+	++recordings_;
+	if (gbufferDepth_ && !intoTaggedDepth)
+	{
+		++stats_.partial;
+	}
+	t_insertedSlot = slot;
+	return list;
+}
+
+void Renderer::OnSubmitted(ID3D12CommandQueue*, UINT, ID3D12CommandList* const*)
+```
+
+- [ ] **Step 8: Edit `src/Plugin.cpp` to read the overlay's requests too, and for the status and the version**
+
+```cpp
+// BlockRender: spike 3's RED4ext plugin. It hooks the game's Streamline calls and D3D12 to map Cyberpunk's frame
+// (step 1: the frame log and the dumps), and draws Minecraft blocks into it (step 2: on the finished frame; step 3:
+// before DLSS). Commands come through blockrender.request in its folder, and status.txt in the overlay's folder says
+// what it's doing. See docs/superpowers/specs/2026-10-01-block-render-design.md.
+```
+```cpp
+// BlockRender: spike 3's RED4ext plugin. It hooks the game's Streamline calls and D3D12 to map Cyberpunk's frame
+// (step 1: the frame log and the dumps), and draws Minecraft blocks into it (step 2: on the finished frame; step 3:
+// before DLSS; step 4: into the G-buffer). Commands come through blockrender.request, in its folder or the overlay's,
+// and status.txt in the overlay's folder says what it's doing. See
+// docs/superpowers/specs/2026-10-01-block-render-design.md.
+```
+```cpp
+constexpr const char* kVersion = "0.7.0";
+```
+```cpp
+constexpr const char* kVersion = "0.8.0";
+```
+```cpp
+void RunRequest()
+{
+	const std::filesystem::path path = g_pluginDir / "blockrender.request";
+	std::error_code             error;
+	if (!std::filesystem::exists(path, error))
+	{
+		return;
+	}
+	const std::string text = ReadSmallFile(path);
+	std::filesystem::remove(path, error);
+```
+```cpp
+// The command in aFolder's blockrender.request, if there is one: in the plugin's folder, where the agent writes it, or
+// the overlay's, where its buttons do. The overlay can't rename a finished file into place, so there a command counts
+// only once its line ends (aWholeLine).
+void RunRequest(const std::filesystem::path& aFolder, bool aWholeLine)
+{
+	const std::filesystem::path path = aFolder / "blockrender.request";
+	std::error_code             error;
+	if (!std::filesystem::exists(path, error))
+	{
+		return;
+	}
+	const std::string text = ReadSmallFile(path);
+	if (aWholeLine && (text.empty() || text.back() != '\n'))
+	{
+		return;  // still being written: read it next second
+	}
+	std::filesystem::remove(path, error);
+```
+```cpp
+	report.framesSkipped = stats.skipped;
+```
+```cpp
+	report.framesPartial = stats.partial;
+	report.framesSkipped = stats.skipped;
+```
+```cpp
+		RunRequest();
+```
+```cpp
+		RunRequest(g_pluginDir, false);
+		RunRequest(g_hudDir, true);
+```
+```cpp
+	aInfo->version = RED4EXT_V1_SEMVER(0, 7, 0);
+```
+```cpp
+	aInfo->version = RED4EXT_V1_SEMVER(0, 8, 0);
+```
+
+- [ ] **Step 9: Edit `CMakeLists.txt` for the version**
+
+```cmake
+project(BlockRender VERSION 0.7.0 LANGUAGES C CXX)
+```
+```cmake
+project(BlockRender VERSION 0.8.0 LANGUAGES C CXX)
+```
+
+- [ ] **Step 10: Edit `tools/blockrender_hud/init.lua` to add the buttons**
+
+```lua
+-- time as CET sees it, which works without BlockRender too and goes into frames.txt here as well. Delete this folder
+-- to remove it.
+```
+```lua
+-- time as CET sees it, which works without BlockRender too and goes into frames.txt here as well. Its buttons switch
+-- BlockRender's drawing mode, through blockrender.request in this folder. Delete this folder to remove it.
+```
+```lua
+local atan2 = math.atan2 or function(y, x) return math.atan(y, x) end
+```
+```lua
+local atan2 = math.atan2 or function(y, x) return math.atan(y, x) end
+
+-- The drawing modes the buttons switch between, as blockrender.request names them.
+local modes = {
+    { name = "off", label = "Off" },
+    { name = "predlss", label = "Before DLSS" },
+    { name = "gbuffer", label = "G-buffer" },
+}
+
+-- Sends BlockRender a command. It reads blockrender.request in this folder once a second, once the line is whole.
+local function request(command)
+    local file = io.open("blockrender.request", "w")
+    if file ~= nil then
+        file:write(command, "\n")
+        file:close()
+    end
+end
+```
+```lua
+        if ImGui.SetWindowFontScale then
+            ImGui.SetWindowFontScale(fontScale)
+        end
+        if status == nil then
+```
+```lua
+        if ImGui.SetWindowFontScale then
+            ImGui.SetWindowFontScale(fontScale)
+        end
+        ImGui.Text("Draw:")
+        for _, mode in ipairs(modes) do
+            ImGui.SameLine()
+            if ImGui.Button(mode.label) then
+                request("mode " .. mode.name)
+            end
+        end
+        ImGui.Separator()
+        if status == nil then
+```
+
+- [ ] **Step 11: Check the overlay's Lua**
+
+```bash
+luac -p /d/Cyberpunk-Minecraft/spikes/block-render/tools/blockrender_hud/init.lua && echo "syntax ok"
+```
+Expected: `syntax ok`.
+
+- [ ] **Step 12: Build; it must compile without warnings, and the tests still pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `112 test(s), 0 failure(s)`.
+
+- [ ] **Step 13: Check the DLL's exports and imports**
+
+```bash
+DUMPBIN="/c/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/dumpbin.exe"
+B=/d/Cyberpunk-Minecraft/spikes/block-render/build/RelWithDebInfo/BlockRender.dll
+"$DUMPBIN" -nologo -exports "$B" | grep -E " (Main|Query|Supports) = "; \
+  "$DUMPBIN" -nologo -dependents "$B" | grep -iE "d3d|dxgi|sl\."
+```
+Expected: exactly `Main`, `Query` and `Supports`, then `D3DCOMPILER_47.dll` and `d3d12.dll`.
+
+- [ ] **Step 14: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "block-render: menus don't switch G-buffer drawing off, and the overlay switches modes (0.8.0)" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 59: In the game: step 4, with menus that don't stop it
+
+Run 9, with BlockRender 0.8.0, at run 3's corner (x −116.6, y −2005.2, facing south-west, heading about 220), with the
+same save. First Task 58's fix: the overlay's buttons, and the Skip Time screen. Then the rest of step 4, which run 8
+didn't reach. The commands are Task 44's. The settings to settle live:
+- **`stencil`:** the class the game's passes see the blocks as. Buildings carry 0, bare dirt 1 and roads 2.
+- **`gbmotion`:** whether the blocks need motion vectors of their own, or the game's are enough.
+- **`gbdepth`:** whether the blocks need to be in the tagged depth, which DLSS reads.
+- **`roughness`, `metalness` and `materialb`:** how the light falls on them.
+
+If drawing skips frames in play, the status says why: stop there, and fix it in a new task before going on.
+
+**Files:**
+- Modify: `docs/spikes/2026-10-01-block-render-results.md`
+
+- [ ] **Step 1: Deploy (the game must not be running)**
+
+Run Task 44 Step 1's two commands. Expected: `0`, then the plugin's folder with `BlockRender.dll`, `BlockRender.pdb`,
+`shaders`, `atlas.bin` and `atlas.json`, the overlay's folder with `init.lua`, and `installed`.
+
+- [ ] **Step 2: Load, at the corner**
+
+Ask the user to launch the game, load the free-roam save, go to the corner, face south-west, and stand still. Then
+read the log's first lines and the status. Expected:
+- `BlockRender 0.8.0 loaded`;
+- in the status, `mode=off`, `tracking off` and `all hooks on`;
+- in the overlay's window, a row of buttons: Off, Before DLSS and G-buffer.
+
+- [ ] **Step 3: The overlay's buttons**
+
+Ask the user to open CET's overlay and click G-buffer. Expected within two seconds: `request=mode gbuffer` and
+`mode=gbuffer` in the status. Then send `place cube`, wait three seconds, and read the status five times, a second
+apart. Expected: frames drawn at the frame rate, none skipped, and no late cameras.
+
+- [ ] **Step 4: The Skip Time screen**
+
+Ask the user to open the Skip Time screen, wait a few seconds, and close it without skipping. Then to skip an hour.
+Read the status every half second throughout. Expected:
+- `mode=gbuffer` throughout, and the cube still there after;
+- while the screen opens, maybe some frames drawn without the tagged depth, or skipped as having no G-buffer.
+
+- [ ] **Step 5: Step 3 and step 4, side by side**
+
+By day, with the cube in view, ask the user to click Before DLSS and take a screenshot, then G-buffer and take another,
+from the same view.
+
+- [ ] **Step 6: The stencil class**
+
+Ask the user to watch the cube while `set stencil` goes through 1, 2, 20 (0x14, poles) and back to 0, three seconds
+each. Note what changes with each: the light, decals on the ground, reflections. Settle on the value that looks like
+the game's own surfaces.
+
+- [ ] **Step 7: Steady, and no trails**
+
+Ask the user to stand still and watch the cube's edges, then to strafe left and right past it. Expected: steady edges,
+and no trails. Then repeat the strafing with `set gbmotion 0`, and again with `set gbdepth 0`, setting each back to 1
+after. Note what each changes: trails mean the blocks need their own motion vectors; smearing or ghosting at the
+edges means DLSS needs their depth.
+
+- [ ] **Step 8: Turning fast**
+
+Record the status twice a second while the user turns fast, sprints and strafes for about 15 seconds, as in Task 51
+Step 5. Expected: no skipped frames and no late cameras. Ask whether the cube flickered.
+
+- [ ] **Step 9: The light**
+
+Ask the user to `place cube` in a building's shadow and again in the sun (it lands in front of V), with screenshots.
+Expected: shadowed and sunlit like the buildings around it. If the weather allows, check fog or rain on it too. Run 8
+saw it lit at night.
+
+- [ ] **Step 10: More blocks, and the timings**
+
+At an open spot, `place house`, and ask the user to walk around it, with a screenshot. Then back at the corner, with
+the same view, `clear`, then `place field 10000` and read the status five times, then `clear`, `place field 100000`,
+and five times again. Note the GPU time and the frame time of each.
+
+- [ ] **Step 11: Clean up**
+
+Send `clear`, then `mode off`, two seconds apart. Expected: `mode=off` and `tracking off`, and no errors in the log.
+
+- [ ] **Step 12: Record the results, and commit**
+
+In `docs/spikes/2026-10-01-block-render-results.md`, add what run 9 found:
+- the buttons, and the Skip Time screen;
+- the side-by-side screenshots, and the light in shadow, in the sun and in any weather;
+- the stencil class, and what `gbmotion` and `gbdepth` showed;
+- turning fast: skips and late cameras;
+- the timings at 10,000 and 100,000 blocks;
+- the verdict for step 4.
+
+Then commit:
+```bash
+cd /d/Cyberpunk-Minecraft && git add docs/spikes \
+  && git commit -q -m "block-render: step 4's results" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 60: Close Part 3, and the spike
 
 **Files:**
 - Modify: `docs/superpowers/plans/2026-10-01-block-render.md` (this plan),
@@ -22630,16 +23122,15 @@ cd /d/Cyberpunk-Minecraft && git add docs/spikes \
 
 - [ ] **Step 1: Add "How Part 3 went" to this plan**
 
-Add a section after Task 58, as Parts 1 and 2 closed. Cover:
-- what Task 57 found, and the fixes, if any;
+Add a section after Task 60, as Parts 1 and 2 closed. Cover:
+- what Tasks 57 and 59 found, and Task 58's fix, and any more;
 - any amendments made along the way;
 - what the spike answers: can Night City show Minecraft's blocks at a player's building scale, at an acceptable frame
   rate and with a believable look? Say what a SkyCraft for Cyberpunk would build on, and what it still has to solve.
 
 - [ ] **Step 2: Bring the results' verdict up to date**
 
-In `docs/spikes/2026-10-01-block-render-results.md`, retitle it for steps 1 to 4, and put the spike's answer at the top
-of the verdict.
+In `docs/spikes/2026-10-01-block-render-results.md`, put the spike's answer at the top of the verdict.
 
 - [ ] **Step 3: Commit**
 

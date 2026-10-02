@@ -533,7 +533,8 @@ starts, and again on `reload`. A compile error is logged, and the previous pipel
   - our GPU time and the frame time, as the average and the worst over that second;
   - the last request's result, and where each structure is.
 - **`blockrender_hud`** (CET Lua) shows that, plus V's position and heading, the block V stands on in Minecraft
-  coordinates, and the distance to the nearest structure.
+  coordinates, and the distance to the nearest structure. Its buttons switch the drawing mode: off, before DLSS or
+  into the G-buffer.
 - **CET's own frame time:** the overlay also times frames itself, from CET's `onUpdate`, and writes the average and
   the worst into `frames.txt` once a second. That works without BlockRender, for measuring what the hooks cost.
 
@@ -648,7 +649,9 @@ records why.
 ## Requests
 
 `blockrender.request` sits in the plugin's folder. It's written atomically (to a temporary name, then renamed) and
-checked once a second. Each file holds one command. Unknown commands are logged and ignored.
+checked once a second. Each file holds one command. Unknown commands are logged and ignored. The overlay's buttons
+write one into the overlay's folder, which the plugin checks too: CET keeps a mod's files inside its own folder, and
+can't rename a file into place, so a command there counts only once its line ends.
 
 | Command | Does |
 |---|---|
@@ -703,7 +706,8 @@ checked once a second. Each file holds one command. Unknown commands are logged 
     `sl.interposer.dll`.
 - **Checks before every draw.** The tagged buffers and the G-buffer pass must match what step 1 found: formats, sizes,
   and the main depth buffer. If they don't, that frame is skipped and counted. 30 skipped frames in a
-  row switch the mode off, and log why.
+  row switch the mode off, and log why. A frame that the game draws without a G-buffer, its end or the frame's
+  camera, as when a menu opens, is skipped but doesn't count toward them.
 - **Barriers.** We only move resources whose current state we know, and put each back exactly as it was.
 - **If the GPU crashes.**
   - With `dred = 1`, Microsoft's DRED is switched on when the device is created. After a device-removed crash, the
@@ -903,6 +907,14 @@ The sixth run measured the fix: 13.5 ms idle, against 13.6 ms without BlockRende
 - **Step 3's drawing tracks every list again.** The game rotates through more DLSS lists than the four watched, so a
   list that dropped out was recorded untracked, and its frame was skipped: a flicker when turning fast. Tracking every
   list costs about 0.1 ms a frame. The seventh run skipped no frame in three minutes of fast turns.
+
+The eighth run, step 4, found the game lighting the blocks, but the Skip Time screen switching drawing off. It led
+to Task 58:
+- **Without the tagged depth:** while the screen opens, the game's frames don't copy into the tagged depth before the
+  G-buffer's end. When only the tagged depth's state is unknown, the blocks still go into the G-buffer.
+- **Frames the game draws differently,** without a G-buffer, its end or the frame's camera, are skipped but don't
+  switch drawing off.
+- **The overlay's buttons** switch the drawing mode.
 
 What else the runs found goes in the results, `docs/spikes/2026-10-01-block-render-results.md`.
 
