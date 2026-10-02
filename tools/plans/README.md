@@ -20,7 +20,9 @@ scratchpad while in use; this is a copy, so the next spike can start from them. 
   boxes before its commit. It checks each build's expected failure or test count, with no warnings, `mclink`'s
   self-check, the overlay's Lua syntax (`luac -p`), and the tools' Python tests, failing or passing. Under `%TEMP%`,
   MSBuild doesn't track header changes (MSB8029), so a replay rebuilds from clean after a step changes a header.
-  `replay|execute <plan> <repo> [first task] [last task] [first step]` resumes a stopped run at its step.
+  `replay|execute <plan> <repo> [first task] [last task] [first step]` resumes a stopped run at its step. A unit test
+  can be made to fail when run (not only to fail to compile), and a run stops at the first step done by hand (a
+  deploy, the game, a record). Executing ticks a task only up to its commit, with `tick_steps.py`.
 - **`replay.py`, `execute.py`** (spike 3): the same, in two scripts, with spike 3's step kinds; they also check the
   DLL's exports.
 - **`tick.py`, `tick_steps.py`:** tick a whole task, or single steps.

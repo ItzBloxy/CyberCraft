@@ -19,6 +19,8 @@ end = tasks[index + 1].start() if index + 1 < len(tasks) else len(text)
 section = text[start:end]
 for step in steps:
     old = f"- [ ] **Step {step}:"
+    if section.count(old) == 0 and section.count(f"- [x] **Step {step}:") == 1:
+        continue  # ticked already
     if section.count(old) != 1:
         sys.exit(f"Task {task}: '{old}' occurs {section.count(old)} times")
     section = section.replace(old, f"- [x] **Step {step}:")

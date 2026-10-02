@@ -12,6 +12,8 @@ expectation it states.
   from clean after a step changes a header.
 - "Run mclink without Minecraft": it must open the mapping, find Minecraft absent, and exit 0.
 - "Check the overlay's syntax": `luac -p` must accept the CET overlay.
+- "Build and run the tests; the new one must fail": a clean build whose test output has the plan's expected lines.
+- "Deploy", "In the game" and "Record" steps are done by hand: the run stops at the first.
 - "Run the new tool's test; it must fail": pytest must stop on the plan's missing module. "Run the tools' tests; they
   must pass": all of `tools/`'s Python tests, with the plan's count.
 - Commits use the plan's messages. Executing ticks the task's boxes first.
@@ -94,6 +96,9 @@ for step in planlib.read_plan(plan_path):
         planlib.apply(step, repo)
         headers_changed = headers_changed or any(path.endswith(".h") for path in step.paths())
         say(label)
+    elif title.startswith(("Deploy", "In the game", "Record")):
+        say(label + " (by hand: the run stops here)")
+        break
     elif title.startswith("Check the branch"):
         say(label + " (skipped)")
     elif title.startswith("Download the header and the licence"):
@@ -111,6 +116,15 @@ for step in planlib.read_plan(plan_path):
         if f"\n{total}\n" not in step.body:
             fail(step, f"{total} bytes in all")
         say(f"{label}: copied, {len(expected)} hashes and {total} bytes match")
+    elif title.startswith("Build and run the tests; the new one must fail"):  # before "must fail": it builds
+        code, lines = build()
+        if code != 0 or lines:
+            fail(step, f"exit {code}:\n" + "\n".join(lines[:30]))
+        _, out = run([str(project / "build" / "RelWithDebInfo" / "render_tests.exe")], project)
+        expected = re.findall(r"`([^`]+)`", step.body.split("Expected", 1)[1].split("\n", 1)[0])
+        if not expected or any(text not in out for text in expected):
+            fail(step, f"expected {expected}, tests said:\n{out[-1500:]}")
+        say(f"{label}: {', '.join(expected)}, as expected")
     elif "must fail" in title and "uild" in title:
         code, lines = build()
         expected = re.search(r"Expected: `([^`]+)`", step.body).group(1)
@@ -157,7 +171,10 @@ for step in planlib.read_plan(plan_path):
         say(f"{label}: {lines[0].strip()} / {lines[1].strip()[:40]}")
     elif title.startswith("Commit"):
         if mode == "execute":
-            run(["uv", "run", "--no-project", "-q", "python", str(HERE / "tick.py"), str(plan_path), str(step.task)], repo, check=True)
+            # The task's steps up to this commit: a task can go on past it, by hand (a deploy, the game).
+            done = [str(number) for number in range(1, step.number + 1)]
+            run(["uv", "run", "--no-project", "-q", "python", str(HERE / "tick_steps.py"), str(plan_path), str(step.task)] + done,
+                repo, check=True)
         messages = re.findall(r'-m "([^"]+)"', step.body)
         paths = [path for path in re.search(r"git add ([^&\n]+)", step.body).group(1).split() if path != "\\"]
         run(["git", "add", "--"] + paths, repo, check=True)
