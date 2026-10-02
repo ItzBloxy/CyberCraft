@@ -8,6 +8,7 @@
 #include "render/FrameConstants.h"
 #include "render/Gbuffer.h"
 #include "render/Gpu.h"
+#include "render/Hud.h"
 #include "render/PendingSections.h"
 #include "render/Shaders.h"
 #include "world/BlockWorld.h"
@@ -71,6 +72,14 @@ public:
 	std::optional<TimedUpload> TakeTimedUpload();  // once it has been drawn; then it's done
 	uint64_t                   Presents() const { return presents_.load(); }  // the game's frames so far
 
+	// The HUD (the spec's "The HUD"), from the main thread. SetHud says whether the HUD pass draws at Present, in any
+	// drawing mode; the first time it's wanted, the shaders are compiled if drawing hasn't. SetHudImage copies an image
+	// (RGBA8, premultiplied alpha) into an upload buffer the GPU has finished with, for the next pass: false, and
+	// counted as dropped, if none is free, or before the renderer has made its objects.
+	void    SetHud(bool aWanted);
+	bool    SetHudImage(uint32_t aWidth, uint32_t aHeight, bool aBottomUp, const uint8_t* aRgba);
+	HudSize BackBufferSize() const { return { backWidth_.load(), backHeight_.load() }; }  // as the last Present saw it
+
 	struct Stats
 	{
 		uint64_t    drawn = 0;
@@ -91,6 +100,17 @@ public:
 		uint32_t    atlasWidth = 0;  // 0 before there's an atlas
 		uint32_t    atlasHeight = 0;
 		uint32_t    atlasLevels = 0;
+		uint64_t    hudReceived = 0;  // images SetHudImage took
+		uint64_t    hudDropped = 0;   // and couldn't
+		uint64_t    hudBytes = 0;     // of the images taken
+		uint64_t    hudDrawn = 0;     // HUD passes
+		uint64_t    hudSkipped = 0;
+		std::string hudLastSkip;
+		double      hudCopyMsAverage = -1.0;  // SetHudImage's copy
+		double      hudGpuMsAverage = -1.0;   // the pass, on the GPU
+		uint32_t    hudWidth = 0;  // the image drawn; 0 before one
+		uint32_t    hudHeight = 0;
+		bool        hudBottomUp = false;
 	};
 	Stats TakeStats();  // since the last call
 	void  Shutdown();   // waits for the GPU, then releases everything
@@ -161,6 +181,13 @@ private:
 	};
 
 	// All with the mutex held.
+	void               PresentBlocks(IDXGISwapChain* aSwapChain);  // mode present: the blocks, over the finished frame
+	void               PresentHud(IDXGISwapChain* aSwapChain);     // Minecraft's HUD, over that
+	bool               OnMainQueue(IDXGISwapChain* aSwapChain);    // whether the swap chain presents on the main queue
+	bool               EnsureHudObjects();                         // the HUD pass's lists and timing queries
+	bool               EnsureHudPipeline(DXGI_FORMAT aFormat);
+	void               HudSkip(const std::string& aWhy);  // counted apart: the HUD never switches drawing off
+	void               ReadHudTimings(uint32_t aSlot);
 	void               Upload();         // Update's work
 	bool               EnsureObjects();  // false until the main queue is known, or if creating them failed
 	bool               EnsurePipeline(DXGI_FORMAT aFormat, bool aReversed);
@@ -298,5 +325,39 @@ private:
 	int64_t  lastPresent_ = 0;
 	double   updateMsSum_ = 0.0;
 	uint64_t updateSamples_ = 0;
+
+	// The HUD (SetHud, SetHudImage and the HUD pass)
+	struct HudImage
+	{
+		uint32_t width = 0;
+		uint32_t height = 0;
+		bool     bottomUp = false;
+	};
+	std::atomic<bool>                                          hudWanted_{ false };
+	bool                                                       hudShadersFailed_ = false;  // main thread: not again until a reload
+	std::atomic<uint32_t>                                      backWidth_{ 0 };
+	std::atomic<uint32_t>                                      backHeight_{ 0 };
+	HudSlots                                                   hudSlots_;
+	std::array<gpu::ComPtr<ID3D12Resource>, HudSlots::kSlots> hudUploads_;
+	std::array<uint8_t*, HudSlots::kSlots>                     hudMapped_{};
+	std::array<uint64_t, HudSlots::kSlots>                     hudUploadBytes_{};
+	std::array<HudImage, HudSlots::kSlots>                     hudSlotImages_{};
+	gpu::ComPtr<ID3D12Resource>                                hudImage_;  // in GPU memory: what the pass draws
+	uint64_t                                                   hudImageBytes_ = 0;
+	bool                                                       hudImageReadable_ = false;  // copied into, and a shader resource
+	HudImage                                                   hudShown_;
+	gpu::ComPtr<ID3D12PipelineState>                           hudPipeline_;
+	DXGI_FORMAT                                                hudPipelineFormat_ = DXGI_FORMAT_UNKNOWN;
+	std::array<gpu::ComPtr<ID3D12CommandAllocator>, kSlots>    hudAllocators_;
+	std::array<gpu::ComPtr<ID3D12GraphicsCommandList>, kSlots> hudLists_;
+	std::array<uint64_t, kSlots>                               hudSlotFence_{};
+	uint64_t                                                   hudRecordings_ = 0;
+	gpu::ComPtr<ID3D12QueryHeap>                               hudQueries_;
+	gpu::ComPtr<ID3D12Resource>                                hudTimings_;  // readback: kSlots x 2 timestamps
+	uint64_t*                                                  hudTimingsMapped_ = nullptr;
+	double                                                     hudCopyMsSum_ = 0.0;
+	uint64_t                                                   hudCopySamples_ = 0;
+	double                                                     hudGpuMsSum_ = 0.0;
+	uint64_t                                                   hudGpuSamples_ = 0;
 };
 }

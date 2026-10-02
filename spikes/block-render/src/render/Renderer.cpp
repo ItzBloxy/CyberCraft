@@ -237,6 +237,81 @@ bool Renderer::ReloadShaders(std::string& aError)
 	predlssPipeline_.Reset();
 	gbufferPipeline_.Reset();
 	depthPipeline_.Reset();
+	hudPipeline_.Reset();
+	hudShadersFailed_ = false;
+	return true;
+}
+
+void Renderer::SetHud(bool aWanted)
+{
+	if (aWanted && !hudWanted_.load())
+	{
+		bool haveShaders = false;
+		{
+			std::lock_guard lock(mutex_);
+			haveShaders = shaders_.has_value();
+		}
+		std::string error;
+		if (!haveShaders && (hudShadersFailed_ || !ReloadShaders(error)))
+		{
+			if (!hudShadersFailed_)
+			{
+				hudShadersFailed_ = true;
+				log_.Push("renderer: the HUD needs the shaders, which didn't compile: " + error);
+			}
+			return;
+		}
+	}
+	hudWanted_ = aWanted;
+}
+
+bool Renderer::SetHudImage(uint32_t aWidth, uint32_t aHeight, bool aBottomUp, const uint8_t* aRgba)
+{
+	const uint64_t bytes = uint64_t(aWidth) * aHeight * 4;
+	uint32_t       slot = 0;
+	{
+		std::lock_guard               lock(mutex_);
+		const std::optional<uint32_t> writable = fence_ && bytes > 0 ? hudSlots_.BeginWrite(fence_->GetCompletedValue()) : std::nullopt;
+		if (!writable)
+		{
+			++stats_.hudDropped;
+			return false;
+		}
+		slot = *writable;
+		if (hudUploadBytes_[slot] < bytes)
+		{
+			// The GPU has finished with this slot, so its buffer can go at once.
+			if (hudMapped_[slot])
+			{
+				hudUploads_[slot]->Unmap(0, nullptr);
+				hudMapped_[slot] = nullptr;
+			}
+			hudUploadBytes_[slot] = 0;
+			hudUploads_[slot] = gpu::MakeBuffer(device_, bytes, D3D12_HEAP_TYPE_UPLOAD, D3D12_RESOURCE_STATE_GENERIC_READ);
+			void* mapped = nullptr;
+			if (!hudUploads_[slot] || FAILED(hudUploads_[slot]->Map(0, nullptr, &mapped)))
+			{
+				hudUploads_[slot].Reset();
+				hudSlots_.Abandon(slot);
+				++stats_.hudDropped;
+				return false;
+			}
+			hudUploads_[slot]->SetName(L"BlockRender HUD upload");
+			hudMapped_[slot] = static_cast<uint8_t*>(mapped);
+			hudUploadBytes_[slot] = bytes;
+		}
+	}
+	// Without the lock: the slot is ours until EndWrite.
+	const auto start = std::chrono::steady_clock::now();
+	std::memcpy(hudMapped_[slot], aRgba, size_t(bytes));
+	const double    ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+	std::lock_guard lock(mutex_);
+	hudSlotImages_[slot] = { aWidth, aHeight, aBottomUp };
+	hudSlots_.EndWrite(slot);
+	++stats_.hudReceived;
+	stats_.hudBytes += bytes;
+	hudCopyMsSum_ += ms;
+	++hudCopySamples_;
 	return true;
 }
 
@@ -812,6 +887,11 @@ Renderer::Stats Renderer::TakeStats()
 	stats.gpuMsAverage = gpuSamples_ ? gpuMsSum_ / double(gpuSamples_) : -1.0;
 	stats.frameMsAverage = frameSamples_ ? frameMsSum_ / double(frameSamples_) : -1.0;
 	stats.updateMsAverage = updateSamples_ ? updateMsSum_ / double(updateSamples_) : -1.0;
+	stats.hudCopyMsAverage = hudCopySamples_ ? hudCopyMsSum_ / double(hudCopySamples_) : -1.0;
+	stats.hudGpuMsAverage = hudGpuSamples_ ? hudGpuMsSum_ / double(hudGpuSamples_) : -1.0;
+	stats.hudWidth = hudShown_.width;
+	stats.hudHeight = hudShown_.height;
+	stats.hudBottomUp = hudShown_.bottomUp;
 	stats.pending = pending_.Size();
 	if (atlas_)
 	{
@@ -825,8 +905,8 @@ Renderer::Stats Renderer::TakeStats()
 		stats.vertices += gpuSection.vertices;
 	}
 	stats_ = {};
-	gpuMsSum_ = frameMsSum_ = updateMsSum_ = 0.0;
-	gpuSamples_ = frameSamples_ = updateSamples_ = 0;
+	gpuMsSum_ = frameMsSum_ = updateMsSum_ = hudCopyMsSum_ = hudGpuMsSum_ = 0.0;
+	gpuSamples_ = frameSamples_ = updateSamples_ = hudCopySamples_ = hudGpuSamples_ = 0;
 	return stats;
 }
 
@@ -1479,6 +1559,12 @@ void Renderer::OnPresent(IDXGISwapChain* aSwapChain)
 {
 	const int64_t now = Now();
 	++presents_;
+	DXGI_SWAP_CHAIN_DESC swapChainDesc{};
+	if (SUCCEEDED(aSwapChain->GetDesc(&swapChainDesc)))
+	{
+		backWidth_ = swapChainDesc.BufferDesc.Width;
+		backHeight_ = swapChainDesc.BufferDesc.Height;
+	}
 	std::lock_guard lock(mutex_);
 	if (lastPresent_ != 0)
 	{
@@ -1488,10 +1574,30 @@ void Renderer::OnPresent(IDXGISwapChain* aSwapChain)
 		stats_.frameMsWorst = std::max(stats_.frameMsWorst, ms);
 	}
 	lastPresent_ = now;
-	if (mode_.load() != Mode::Present)
+	if (mode_.load() == Mode::Present)
 	{
-		return;
+		PresentBlocks(aSwapChain);
 	}
+	if (hudWanted_.load())
+	{
+		PresentHud(aSwapChain);
+	}
+}
+
+bool Renderer::OnMainQueue(IDXGISwapChain* aSwapChain)
+{
+	if (aSwapChain != checkedSwapChain_)
+	{
+		checkedSwapChain_ = aSwapChain;
+		swapChainOnMainQueue_ = d3d::PresentQueue(aSwapChain) == queue_;
+		log_.Push(std::format("renderer: swap chain 0x{:x} presents on {}", reinterpret_cast<uintptr_t>(aSwapChain),
+		                      swapChainOnMainQueue_ ? "the main queue" : "another queue"));
+	}
+	return swapChainOnMainQueue_;
+}
+
+void Renderer::PresentBlocks(IDXGISwapChain* aSwapChain)
+{
 	if (!EnsureObjects())
 	{
 		return Skip("not ready: the main queue isn't known yet");
@@ -1501,14 +1607,7 @@ void Renderer::OnPresent(IDXGISwapChain* aSwapChain)
 	{
 		return Fail(std::format("the device was removed (0x{:08x})", uint32_t(device_->GetDeviceRemovedReason())));
 	}
-	if (aSwapChain != checkedSwapChain_)
-	{
-		checkedSwapChain_ = aSwapChain;
-		swapChainOnMainQueue_ = d3d::PresentQueue(aSwapChain) == queue_;
-		log_.Push(std::format("renderer: swap chain 0x{:x} presents on {}", reinterpret_cast<uintptr_t>(aSwapChain),
-		                      swapChainOnMainQueue_ ? "the main queue" : "another queue"));
-	}
-	if (!swapChainOnMainQueue_)
+	if (!OnMainQueue(aSwapChain))
 	{
 		return Skip("the swap chain presents on another queue than DLSS's");
 	}
@@ -1612,6 +1711,241 @@ void Renderer::OnPresent(IDXGISwapChain* aSwapChain)
 	consecutiveSkips_ = 0;
 }
 
+bool Renderer::EnsureHudObjects()
+{
+	if (hudTimingsMapped_)
+	{
+		return true;
+	}
+	const D3D12_QUERY_HEAP_DESC queryDesc{ D3D12_QUERY_HEAP_TYPE_TIMESTAMP, kSlots * 2, 0 };
+	if (!hudTimings_)
+	{
+		hudTimings_ = gpu::MakeBuffer(device_, kSlots * 2 * sizeof(uint64_t), D3D12_HEAP_TYPE_READBACK, D3D12_RESOURCE_STATE_COPY_DEST);
+	}
+	if (!hudTimings_ || (!hudQueries_ && FAILED(device_->CreateQueryHeap(&queryDesc, IID_PPV_ARGS(&hudQueries_)))))
+	{
+		return false;
+	}
+	for (uint32_t slot = 0; slot < kSlots; ++slot)
+	{
+		if (hudLists_[slot])
+		{
+			continue;
+		}
+		if (FAILED(device_->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&hudAllocators_[slot]))) ||
+		    FAILED(device_->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, hudAllocators_[slot].Get(), nullptr,
+		                                      IID_PPV_ARGS(&hudLists_[slot]))))
+		{
+			hudLists_[slot].Reset();
+			return false;
+		}
+		d3d::Original().close(hudLists_[slot].Get());
+		hudLists_[slot]->SetName(L"BlockRender HUD");
+	}
+	void* mapped = nullptr;
+	if (FAILED(hudTimings_->Map(0, nullptr, &mapped)))
+	{
+		return false;
+	}
+	hudTimings_->SetName(L"BlockRender HUD timings");
+	hudTimingsMapped_ = static_cast<uint64_t*>(mapped);  // last: mapped timings mean everything is ready
+	return true;
+}
+
+bool Renderer::EnsureHudPipeline(DXGI_FORMAT aFormat)
+{
+	if (hudPipeline_ && hudPipelineFormat_ == aFormat)
+	{
+		return true;
+	}
+	if (!shaders_)
+	{
+		return false;
+	}
+	D3D12_GRAPHICS_PIPELINE_STATE_DESC desc{};
+	desc.pRootSignature = rootSignature_.Get();
+	desc.VS = { shaders_->hudVertex.data(), shaders_->hudVertex.size() };
+	desc.PS = { shaders_->hud.data(), shaders_->hud.size() };
+	D3D12_RENDER_TARGET_BLEND_DESC& blend = desc.BlendState.RenderTarget[0];
+	blend.BlendEnable = TRUE;  // premultiplied alpha, as SkyCraft composites the image
+	blend.SrcBlend = D3D12_BLEND_ONE;
+	blend.DestBlend = D3D12_BLEND_INV_SRC_ALPHA;
+	blend.BlendOp = D3D12_BLEND_OP_ADD;
+	blend.SrcBlendAlpha = D3D12_BLEND_ONE;
+	blend.DestBlendAlpha = D3D12_BLEND_INV_SRC_ALPHA;
+	blend.BlendOpAlpha = D3D12_BLEND_OP_ADD;
+	blend.LogicOp = D3D12_LOGIC_OP_NOOP;
+	blend.RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
+	desc.SampleMask = UINT_MAX;
+	desc.RasterizerState = BlockRasterizer(0);  // one triangle: nothing to cull
+	desc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+	desc.NumRenderTargets = 1;
+	desc.RTVFormats[0] = aFormat;
+	desc.SampleDesc.Count = 1;
+	gpu::ComPtr<ID3D12PipelineState> pipeline;
+	if (FAILED(device_->CreateGraphicsPipelineState(&desc, IID_PPV_ARGS(&pipeline))))
+	{
+		return false;
+	}
+	pipeline->SetName(L"BlockRender HUD pipeline");
+	hudPipeline_ = pipeline;
+	hudPipelineFormat_ = aFormat;
+	return true;
+}
+
+void Renderer::HudSkip(const std::string& aWhy)
+{
+	++stats_.hudSkipped;
+	stats_.hudLastSkip = aWhy;
+}
+
+void Renderer::ReadHudTimings(uint32_t aSlot)
+{
+	const uint64_t begin = hudTimingsMapped_[aSlot * 2];
+	const uint64_t end = hudTimingsMapped_[aSlot * 2 + 1];
+	if (end > begin && timestampFrequency_ > 0)
+	{
+		hudGpuMsSum_ += double(end - begin) * 1000.0 / double(timestampFrequency_);
+		++hudGpuSamples_;
+	}
+}
+
+void Renderer::PresentHud(IDXGISwapChain* aSwapChain)
+{
+	if (!EnsureObjects() || !EnsureHudObjects())
+	{
+		return HudSkip("not ready: the main queue isn't known yet");
+	}
+	const uint64_t completed = fence_->GetCompletedValue();
+	if (completed == UINT64_MAX)
+	{
+		return HudSkip("the device was removed");
+	}
+	if (!OnMainQueue(aSwapChain))
+	{
+		return HudSkip("the swap chain presents on another queue than the main one");
+	}
+	gpu::ComPtr<IDXGISwapChain3> swapChain;
+	gpu::ComPtr<ID3D12Resource>  backBuffer;
+	if (FAILED(aSwapChain->QueryInterface(IID_PPV_ARGS(&swapChain))) ||
+	    FAILED(swapChain->GetBuffer(swapChain->GetCurrentBackBufferIndex(), IID_PPV_ARGS(&backBuffer))))
+	{
+		return HudSkip("no back buffer");
+	}
+	const D3D12_RESOURCE_DESC target = backBuffer->GetDesc();
+	if (!EnsureHudPipeline(target.Format))
+	{
+		return HudSkip(std::format("no HUD pipeline for {}", DxgiFormatName(target.Format)));
+	}
+	const uint32_t slot = uint32_t(hudRecordings_ % kSlots);
+	if (completed < hudSlotFence_[slot])
+	{
+		return HudSkip("the GPU is still busy with an earlier frame");
+	}
+	if (hudSlotFence_[slot] != 0)
+	{
+		ReadHudTimings(slot);
+	}
+	const std::optional<uint32_t> taken = hudSlots_.TakeNewest();
+	if (!taken && !hudImageReadable_)
+	{
+		return HudSkip("no image yet");
+	}
+	uint64_t copyBytes = 0;
+	if (taken)
+	{
+		const HudImage& image = hudSlotImages_[*taken];
+		copyBytes = uint64_t(image.width) * image.height * 4;
+		if (hudImageBytes_ < copyBytes)
+		{
+			if (hudImage_)
+			{
+				Retire(hudImage_);
+			}
+			hudImage_ = gpu::MakeBuffer(device_, copyBytes, D3D12_HEAP_TYPE_DEFAULT, D3D12_RESOURCE_STATE_COMMON);
+			hudImageBytes_ = hudImage_ ? copyBytes : 0;
+			hudImageReadable_ = false;
+			if (!hudImage_)
+			{
+				hudSlots_.Reading(*taken, 0);  // never read: free again
+				return HudSkip("couldn't create the HUD image's buffer");
+			}
+			hudImage_->SetName(L"BlockRender HUD image");
+		}
+	}
+
+	// Our own list: calls the hooks watch go through their originals, so nothing of ours reaches the tracker.
+	const bool                 wasReadable = hudImageReadable_;  // as the buffer is now, grown or not
+	const HudImage             wasShown = hudShown_;
+	const d3d::Originals&      original = d3d::Original();
+	ID3D12GraphicsCommandList* list = hudLists_[slot].Get();
+	if (FAILED(hudAllocators_[slot]->Reset()) || FAILED(original.reset(list, hudAllocators_[slot].Get(), hudPipeline_.Get())))
+	{
+		if (taken)
+		{
+			hudSlots_.Reading(*taken, 0);
+		}
+		return HudSkip("couldn't reset its command list");
+	}
+	list->EndQuery(hudQueries_.Get(), D3D12_QUERY_TYPE_TIMESTAMP, slot * 2);
+	if (taken)
+	{
+		const D3D12_RESOURCE_STATES  before = hudImageReadable_ ? D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE : D3D12_RESOURCE_STATE_COMMON;
+		const D3D12_RESOURCE_BARRIER toCopy = Transition(hudImage_.Get(), before, D3D12_RESOURCE_STATE_COPY_DEST);
+		original.resourceBarrier(list, 1, &toCopy);
+		list->CopyBufferRegion(hudImage_.Get(), 0, hudUploads_[*taken].Get(), 0, copyBytes);
+		const D3D12_RESOURCE_BARRIER toRead =
+		    Transition(hudImage_.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+		original.resourceBarrier(list, 1, &toRead);
+		hudImageReadable_ = true;
+		hudShown_ = hudSlotImages_[*taken];
+	}
+	const D3D12_RESOURCE_BARRIER toTarget = Transition(backBuffer.Get(), D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET);
+	original.resourceBarrier(list, 1, &toTarget);
+	const D3D12_CPU_DESCRIPTOR_HANDLE rtv = Offset(rtvHeap_->GetCPUDescriptorHandleForHeapStart(), kBackBufferRtv, rtvIncrement_);
+	original.createRtv(device_, backBuffer.Get(), nullptr, rtv);
+	original.omSetRenderTargets(list, 1, &rtv, FALSE, nullptr);
+	const D3D12_VIEWPORT viewport{ 0.0f, 0.0f, float(target.Width), float(target.Height), 0.0f, 1.0f };
+	const D3D12_RECT     scissor{ 0, 0, LONG(target.Width), LONG(target.Height) };
+	list->RSSetViewports(1, &viewport);
+	list->RSSetScissorRects(1, &scissor);
+	list->SetGraphicsRootSignature(rootSignature_.Get());
+	list->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+	list->SetGraphicsRootConstantBufferView(0, constants_->GetGPUVirtualAddress());  // b0: the HUD's shaders don't read it
+	const uint32_t     scale = HudScaleFor(uint32_t(target.Width), target.Height, hudShown_.width, hudShown_.height);
+	const HudConstants hud{ hudShown_.width, hudShown_.height, scale, hudShown_.bottomUp ? 1u : 0u };
+	list->SetGraphicsRoot32BitConstants(1, 4, &hud, 0);
+	for (UINT parameter = 2; parameter < 5; ++parameter)  // t0 to t2: the image, which HudPS reads as t1
+	{
+		list->SetGraphicsRootShaderResourceView(parameter, hudImage_->GetGPUVirtualAddress());
+	}
+	original.drawInstanced(list, 3, 1, 0, 0);
+	const D3D12_RESOURCE_BARRIER toPresent = Transition(backBuffer.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT);
+	original.resourceBarrier(list, 1, &toPresent);
+	list->EndQuery(hudQueries_.Get(), D3D12_QUERY_TYPE_TIMESTAMP, slot * 2 + 1);
+	list->ResolveQueryData(hudQueries_.Get(), D3D12_QUERY_TYPE_TIMESTAMP, slot * 2, 2, hudTimings_.Get(), slot * 2 * sizeof(uint64_t));
+	if (FAILED(original.close(list)))
+	{
+		hudImageReadable_ = wasReadable;  // nothing of the list ran
+		hudShown_ = wasShown;
+		if (taken)
+		{
+			hudSlots_.Reading(*taken, 0);
+		}
+		return HudSkip("couldn't close its command list");
+	}
+	ID3D12CommandList* lists[] = { list };
+	original.executeCommandLists(queue_, 1, lists);
+	const uint64_t fence = Signal();
+	hudSlotFence_[slot] = fence;
+	if (taken)
+	{
+		hudSlots_.Reading(*taken, fence);
+	}
+	++hudRecordings_;
+	++stats_.hudDrawn;
+}
+
 void Renderer::Shutdown()
 {
 	mode_ = Mode::Off;
@@ -1639,6 +1973,28 @@ void Renderer::Shutdown()
 		timings_->Unmap(0, nullptr);
 		timingsMapped_ = nullptr;
 	}
+	hudWanted_ = false;
+	for (uint32_t slot = 0; slot < HudSlots::kSlots; ++slot)
+	{
+		if (hudMapped_[slot])
+		{
+			hudUploads_[slot]->Unmap(0, nullptr);
+			hudMapped_[slot] = nullptr;
+		}
+		hudUploads_[slot].Reset();
+		hudUploadBytes_[slot] = 0;
+	}
+	if (hudTimingsMapped_)
+	{
+		hudTimings_->Unmap(0, nullptr);
+		hudTimingsMapped_ = nullptr;
+	}
+	hudImage_.Reset();
+	hudPipeline_.Reset();
+	hudLists_ = {};
+	hudAllocators_ = {};
+	hudQueries_.Reset();
+	hudTimings_.Reset();
 	sections_.clear();
 	pending_.Clear();
 	watch_.reset();
