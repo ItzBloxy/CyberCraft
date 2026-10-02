@@ -144,11 +144,14 @@ images.
   nearest-texel sampling then picks a transparent texel just outside the face's UVs, which keeps its colour. On
   Minecraft's opaque screen that can't be seen.
   - **For Part 2:** the HUD pass blends as premultiplied, as planned. Such a pixel adds its colour over Night City,
-    close to what vanilla shows there. The spec's "no pixel has a colour above its alpha" gets corrected while
-    planning Part 2.
+    close to what vanilla shows there. The spec's "no pixel has a colour above its alpha", and risk 13's fallback
+    (below), get corrected while planning Part 2.
 - **The HUD image includes Minecraft's first-person view:** its hands and held items (the stone, the shield), not just
-  the GUI. SkyCraft's `FrameExporter` reads back Minecraft's whole main target. Part 2 has to decide whether those
-  are drawn over V's own first-person view.
+  the GUI, since SkyCraft's `FrameExporter` reads back Minecraft's whole main target. The spec's "The HUD" expects
+  that ("the hand and the held item"), though Task 11 didn't list it. Step 2 shows how they look over V's own view.
+- **Risk 13's fallback doesn't apply.** The spec says that if step 1 finds any pixel with a colour above its alpha,
+  the blend changes to straight alpha. That rule assumed an image that isn't premultiplied at all. This one is, but
+  for one texel, and straight alpha would darken all of its translucent edges, so the HUD pass stays premultiplied.
 - **Animated textures fill the render ring.** SkyCraft plays 56 animated sprites (water, lava, fire and others), and
   sends each one's frame as an atlas patch: about 8 MB a second, every second. The link steps over them, and
   draining costs nothing measurable. Applying them would animate water and lava in Night City: later work, not this
