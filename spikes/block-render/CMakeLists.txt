@@ -91,6 +91,14 @@ if(CP2077_DIR)
 		VERBATIM)
 endif()
 
+# mclink: a console stand-in for the game's side of SkyCraft's protocol, run against the real Minecraft.
+add_executable(mclink
+	tools/mclink/Main.cpp
+	tools/mclink/McLinkScript.cpp
+)
+target_include_directories(mclink PRIVATE tools/mclink)
+target_link_libraries(mclink PRIVATE render_core winmm)
+
 # Unit tests: no game needed. They run in this folder, so tests can find shaders/.
 enable_testing()
 add_executable(render_tests
@@ -129,6 +137,9 @@ add_executable(render_tests
 	tests/TestCommands.cpp
 	tests/TestMapping.cpp
 	tests/TestLink.cpp
+	tests/TestMcLinkScript.cpp
+	tools/mclink/McLinkScript.cpp
 )
+target_include_directories(render_tests PRIVATE tools/mclink)
 target_link_libraries(render_tests PRIVATE render_core)
 add_test(NAME render_tests COMMAND render_tests WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")

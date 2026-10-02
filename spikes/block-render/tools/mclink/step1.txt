@@ -1,0 +1,35 @@
+# Spike 4's step 1 (the spec's "Step 1"): BlockRender's link code against SkyCraft's mod, without Cyberpunk.
+# Start Minecraft first; it links within a second of this starting, then opens (or creates) its SkyCraft world.
+status
+wait-world 180
+link on
+wait 2
+# The pinned player: after the teleport, Minecraft's feet stay at the target.
+hold-check 10
+save-atlas atlas.dds
+# Typed commands: a stone block 2 east of the feet, in section -8 0 125.
+type creative
+type /setblock ~2 ~ ~ minecraft:stone
+wait 1
+# A click on the floor: stone in the first slot, slot 1 picked, then a right click looking 60 degrees down.
+type /item replace entity @s hotbar.0 with minecraft:stone
+key 30
+look 180 60
+wait 0.5
+click right
+wait 1
+save-hud hud.dds
+# TNT on the stone (only the player collides with the floor, so it needs a block under it): an explosion event, and
+# the section again, now empty.
+type /summon tnt ~2 ~1 ~
+wait 6
+# A block that stays, for the second run to find: gold, 6 west of the feet, in the same section.
+type /setblock ~-6 ~ ~ minecraft:gold_block
+wait 1
+# Unlinking holds Minecraft's player; linking again teleports it back.
+link off
+wait 2
+link on
+wait 2
+status
+quit

@@ -1,0 +1,6 @@
+# Step 1, again: a new game side. Minecraft must send everything again: its clear, its atlas, and its sections.
+wait-world 30
+link on
+wait 3
+status
+quit
