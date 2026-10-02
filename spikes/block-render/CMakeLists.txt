@@ -53,6 +53,7 @@ add_library(render_core STATIC
 	src/link/Look.cpp
 	src/link/Commands.cpp
 	src/link/Mapping.cpp
+	src/link/Link.cpp
 )
 target_link_libraries(render_core PUBLIC render_settings d3dcompiler dxguid advapi32)
 
@@ -127,6 +128,7 @@ add_executable(render_tests
 	tests/TestLook.cpp
 	tests/TestCommands.cpp
 	tests/TestMapping.cpp
+	tests/TestLink.cpp
 )
 target_link_libraries(render_tests PRIVATE render_core)
 add_test(NAME render_tests COMMAND render_tests WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")

@@ -410,7 +410,7 @@ spikes/block-render/
   - a slot index of 3 is refused;
   - width and height from 1 to 3840 and 2160.
 
-  It resets when Minecraft connects or comes back.
+  Link resets it only for a new Minecraft process (see "Changes while planning").
 - **`Floor`:** the clear message, and one triangle message per region, from a centre, a height and an epoch.
 - **`Look`:**
   - yaw = atan2(−x, z) and pitch = −asin(y), in degrees, from V's camera's forward vector in Minecraft's axes. Looking
@@ -536,7 +536,8 @@ A console program around the same `link/` code, standing in for Cyberpunk:
 - **Minecraft coming and going:**
   - **gone:** its heartbeat stops for 3 s, and the status says so. Build mode ends, typing stops, and the blocks stay;
   - **back:** a new heartbeat or process ID. Minecraft sends its clear, atlas and sections again by itself. The link
-    sends the floor and a teleport, and resets the overlay's triple buffer, as SkyCraft's `Game.cpp` does;
+    sends the floor and a teleport. It resets the overlay's triple buffer only for a new Minecraft process, whose
+    writer starts over (see "Changes while planning");
   - **a restarted Cyberpunk:** it finds the mapping still there if Minecraft holds it, resets its own regions and
     writes its new process ID. Minecraft sees the change and sends everything again.
 - **Events:** the event ring is drained every frame. Explosions (`kEvExplosion`, centre and radius) are logged with
@@ -633,9 +634,9 @@ A console program around the same `link/` code, standing in for Cyberpunk:
   |---|---|---|
   | `creative` | `/gamemode creative` | Creative mode |
   | `tnt-kit` | `/give @s tnt 64`, `/give @s flint_and_steel` | TNT and a lighter in the inventory |
-  | `tnt-ahead` | `/gamemode creative`, `/execute anchored eyes positioned ^ ^ ^4 run summon tnt` | Primed TNT 4 blocks ahead of the eye |
-  | `wall` | `/execute positioned ^ ^ ^4 run fill ~-2 ~ ~ ~2 ~3 ~ stone_bricks` | A stone-brick wall 5 wide and 4 tall, 4 blocks ahead, running east to west |
-  | `tnt-cube` | `/gamemode creative`, `/execute positioned ^ ^ ^6 run fill ~-2 ~ ~-2 ~2 ~4 ~2 tnt`, `/execute positioned ^ ^ ^6 run summon tnt ~ ~5 ~` | 125 TNT, 5×5×5, 6 blocks ahead, set off by primed TNT on top: the worst burst |
+  | `tnt-ahead` | `/gamemode creative`, `/execute rotated ~ 0 positioned ^ ^ ^4 run setblock ~ ~-1 ~ stone`, `/execute rotated ~ 0 positioned ^ ^ ^4 run summon tnt` | Primed TNT on a stone block, 4 blocks ahead |
+  | `wall` | `/execute rotated ~ 0 positioned ^ ^ ^4 run fill ~-2 ~ ~ ~2 ~3 ~ stone_bricks` | A stone-brick wall 5 wide and 4 tall, 4 blocks ahead, running east to west |
+  | `tnt-cube` | `/gamemode creative`, `/execute rotated ~ 0 positioned ^ ^ ^6 run fill ~-2 ~ ~-2 ~2 ~4 ~2 tnt`, `/execute rotated ~ 0 positioned ^ ^ ^6 run summon tnt ~ ~5 ~` | 125 TNT, 5×5×5, 6 blocks ahead, set off by primed TNT on top: the worst burst |
   | `field` | `/fill ~-63 ~ ~-63 ~64 ~ ~64 grass_block` | A 128×128 layer at V's feet, 16,384 blocks in one fill, 64 to 81 sections at once |
   | `wipe` | `/fill ~-63 ~ ~-63 ~64 ~ ~64 air`, `/fill ~-16 ~ ~-16 ~15 ~31 ~15 air` | The field's layer, then 32×32×32 around V, the largest fill one command allows |
 
@@ -813,7 +814,9 @@ plugin's folder or the overlay's. New and changed commands:
     - a section's header (16 bytes) plus vertices × 32;
     - an atlas's header (8 bytes) plus w × h × 4, with w and h from 1 to 16,384;
     - section coordinates within ±2,000,000 across and ±256 up;
-  - a message that fails skips the ring to its head, counted and logged once a second;
+  - a message whose framing doesn't fit (its header, or its length) skips the ring to its head, since nothing after
+    it can be trusted. One whose payload fails its own checks is dropped by itself, as the framing around it is
+    still sound. Both are counted, and logged once a second;
   - a HUD image needs a slot index from 0 to 2, and a width and height from 1 to 3840 and 2160, so it fits its
     slot. The pixels are copied out of the slot before use.
 - **The HUD pass never switches block drawing off.** It skips a frame it can't draw (no back buffer, another queue,
@@ -827,7 +830,8 @@ plugin's folder or the overlay's. New and changed commands:
 - **Off by default.** Until the user links or presses F8, the plugin only keeps the mapping's heartbeat, and the hook
   passes everything through. Drawing stays as spike 3 left it, off until switched on.
 - **Two game sides never share the mapping:**
-  - the plugin and `mclink` each refuse while another live game side holds it, and retry once a second;
+  - the plugin refuses while another live game side holds it, and retries once a second. `mclink` refuses to start,
+    and says why;
   - a mapping of the wrong size is refused too, so nothing is read past its end.
 - **Memory:** the mapping commits 191 MB of the pagefile when it's made. Only the pages written are ever touched: the
   headers, the rings in use, and the overlay slots Minecraft fills.
@@ -1028,9 +1032,9 @@ the scope too much. The evidence said it wouldn't, by much:
   minimized: the HUD shows what the window was for. That also avoids a path nobody has tried: a minimized window
   SkyCraft reports as not minimized. `-Dskycraft.showWindow=true` is gone from the JVM arguments.
 - **The protocol:** the overlay's triple buffer is read, as SkyCraft's `Link::AcquireOverlayFrame` reads it, and reset
-  when Minecraft comes back. `SkyState`'s viewport asks for the back buffer's size over `hudscale` (2), 1280×720,
-  instead of 0. The GUI then looks as Minecraft's automatic scale would make it at 2560×1440, with a quarter of the
-  bandwidth.
+  for a new Minecraft process (see "Changes while planning"). `SkyState`'s viewport asks for the back buffer's size
+  over `hudscale` (2), 1280×720, instead of 0. The GUI then looks as Minecraft's automatic scale would make it at
+  2560×1440, with a quarter of the bandwidth.
 - **Components:**
   - `link/Overlay`, the triple buffer's reader;
   - `render/Hud`, the pass's rules;
@@ -1063,3 +1067,25 @@ the scope too much. The evidence said it wouldn't, by much:
   320×240 GUI pixels.
 - **Minimizing:** `Window.onFramebufferResize` ignores a 0×0 size, and `renderFrame` reconfigures the GPU surface only
   when the window isn't minimized, which SkyCraft's mixin denies while linked.
+
+## Changes while planning
+
+Writing and verifying Part 1's code corrected these details. The sections above already include them.
+- **Rejected messages:** only a message whose framing doesn't fit the ring moves the tail to the head. One whose
+  payload fails its checks (a section claiming more vertices than it carries, say) is dropped by itself.
+- **TNT needs a block under it:** in SkyCraft, only the local player collides with the floor's triangles. Every other
+  entity collides only with voxel regions (`BlockCollisionsMixin`), and this spike never sends any. So TNT summoned in
+  the air falls through the floor into the void, and explodes far below. `tnt-ahead` puts a stone block under its TNT,
+  and step 1's TNT lands on a block. Dropped items fall through the floor too.
+- **"Ahead" is level:** `^ ^ ^4` follows the look's pitch as well as its yaw, so whenever V looked down, `tnt-ahead`,
+  `wall` and `tnt-cube` would have built underground. Their commands start with `rotated ~ 0`, which keeps the yaw and
+  levels the pitch.
+- **The overlay's reset:** SkyCraft's `Game.cpp` resets the overlay's triple buffer whenever Minecraft connects or
+  comes back. The link resets it only for a new Minecraft process, whose writer starts over at slot 1 and publishes
+  only once it's in its world. The first Minecraft the link sees needs no reset: `Mapping::Open` reset the buffer
+  before Minecraft could see the new game side, and Minecraft starts its writer over when it does. One coming back
+  kept its slots. A reset in either case could undo an image Minecraft had just published (it ships one left from
+  before as soon as it relinks), leaving its writer and the link's reader on one slot, with torn images from then on.
+- **`mclink` refuses rather than retries,** as its own section says; "Safety" had it retrying like the plugin.
+- **`mclink`'s input:** a script, one action a line (`tools/mclink/McLinkScript.h`), so step 1's runs can change
+  without a rebuild.
