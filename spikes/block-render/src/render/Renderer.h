@@ -8,6 +8,7 @@
 #include "render/FrameConstants.h"
 #include "render/Gbuffer.h"
 #include "render/Gpu.h"
+#include "render/PendingSections.h"
 #include "render/Shaders.h"
 #include "world/BlockWorld.h"
 #include "world/Vertex.h"
@@ -47,13 +48,28 @@ public:
 	bool         SetMode(std::string_view aMode, std::string& aError);
 	std::string  ModeName() const;
 	bool         LoadAtlas(std::string& aError);  // atlas.bin, from the plugin's folder
-	const Atlas* AtlasData() const;               // null until loaded; it stays valid, since the atlas is loaded once
+	void         SetAtlas(Atlas aAtlas);          // Minecraft's, say: replaces any atlas, and is uploaded at the next Update
+	// Null until loaded. Valid until the next LoadAtlas or SetAtlas, so fetch it again each time it's needed.
+	const Atlas* AtlasData() const;
 	bool         ReloadShaders(std::string& aError);
 	// brightness, tolerance, cull, origin.x/y/z; for predlss, exposure, jittersign and mvsign; for gbuffer, stencil,
 	// metalness, roughness, materialb, gbmotion and gbdepth
 	bool         Set(std::string_view aName, double aValue, std::string& aError);
 	void         UploadSection(const SectionPos& aSection, std::vector<Vertex> aVertices);  // no vertices: remove it
-	void         Update();  // uploads, and frees what the GPU has finished with
+	void         ClearSections();  // every section, and every upload waiting
+	void         Update();         // uploads, and frees what the GPU has finished with
+
+	// Latency (the spec's "Measurements"): the next upload of aSection is timed, from its submission to the first list
+	// recorded that draws it. It replaces any section still being timed.
+	struct TimedUpload
+	{
+		double   submitted = 0.0;  // SteadySeconds()
+		double   drawn = 0.0;
+		uint64_t drawnFrame = 0;  // Presents() then
+	};
+	void                       TimeUpload(const SectionPos& aSection);
+	std::optional<TimedUpload> TakeTimedUpload();  // once it has been drawn; then it's done
+	uint64_t                   Presents() const { return presents_.load(); }  // the game's frames so far
 
 	struct Stats
 	{
@@ -69,6 +85,12 @@ public:
 		double      frameMsWorst = -1.0;
 		size_t      sections = 0;
 		size_t      vertices = 0;
+		double      updateMsAverage = -1.0;  // Update's CPU time
+		double      updateMsWorst = -1.0;
+		size_t      pending = 0;  // uploads waiting
+		uint32_t    atlasWidth = 0;  // 0 before there's an atlas
+		uint32_t    atlasHeight = 0;
+		uint32_t    atlasLevels = 0;
 	};
 	Stats TakeStats();  // since the last call
 	void  Shutdown();   // waits for the GPU, then releases everything
@@ -139,6 +161,7 @@ private:
 	};
 
 	// All with the mutex held.
+	void               Upload();         // Update's work
 	bool               EnsureObjects();  // false until the main queue is known, or if creating them failed
 	bool               EnsurePipeline(DXGI_FORMAT aFormat, bool aReversed);
 	bool               EnsurePredlssPipeline(bool aReversed);
@@ -229,8 +252,19 @@ private:
 	uint64_t                                                       atlasReady_ = 0;
 	bool                                                           atlasUploaded_ = false;
 	std::map<SectionPos, SectionGpu>                               sections_;
-	std::vector<std::pair<SectionPos, std::vector<Vertex>>>        pending_;
+	PendingSections                                                pending_;
 	std::vector<std::pair<gpu::ComPtr<ID3D12Resource>, uint64_t>> retired_;
+
+	struct UploadWatch  // the section TimeUpload times
+	{
+		SectionPos            section;
+		uint64_t              ready = 0;  // its upload's fence value, once submitted
+		std::optional<double> submitted;
+		std::optional<double> drawn;
+		uint64_t              drawnFrame = 0;
+	};
+	std::optional<UploadWatch> watch_;
+	std::atomic<uint64_t>      presents_{ 0 };
 
 	gpu::ComPtr<ID3D12Resource>              depthCopy_;
 	uint64_t                                 depthCopyBytes_ = 0;
@@ -262,5 +296,7 @@ private:
 	double   frameMsSum_ = 0.0;
 	uint64_t frameSamples_ = 0;
 	int64_t  lastPresent_ = 0;
+	double   updateMsSum_ = 0.0;
+	uint64_t updateSamples_ = 0;
 };
 }

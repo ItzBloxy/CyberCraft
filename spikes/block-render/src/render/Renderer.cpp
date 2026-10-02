@@ -1,5 +1,6 @@
 #include "render/Renderer.h"
 
+#include "Measurements.h"
 #include "hooks/D3D12Hooks.h"
 #include "log/DdsWriter.h"
 #include "log/FrameLogData.h"
@@ -9,6 +10,7 @@
 #include <dxgi1_4.h>
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstring>
 #include <format>
@@ -203,6 +205,13 @@ bool Renderer::LoadAtlas(std::string& aError)
 	return true;
 }
 
+void Renderer::SetAtlas(Atlas aAtlas)
+{
+	std::lock_guard lock(mutex_);
+	atlas_ = std::move(aAtlas);
+	atlasUploaded_ = false;
+}
+
 const Atlas* Renderer::AtlasData() const
 {
 	std::lock_guard lock(mutex_);
@@ -306,7 +315,36 @@ bool Renderer::Set(std::string_view aName, double aValue, std::string& aError)
 void Renderer::UploadSection(const SectionPos& aSection, std::vector<Vertex> aVertices)
 {
 	std::lock_guard lock(mutex_);
-	pending_.emplace_back(aSection, std::move(aVertices));
+	pending_.Put(aSection, std::move(aVertices));
+}
+
+void Renderer::ClearSections()
+{
+	std::lock_guard lock(mutex_);
+	for (auto& [section, gpuSection] : sections_)
+	{
+		Retire(gpuSection.buffer);
+	}
+	sections_.clear();
+	pending_.Clear();
+}
+
+void Renderer::TimeUpload(const SectionPos& aSection)
+{
+	std::lock_guard lock(mutex_);
+	watch_ = UploadWatch{ aSection };
+}
+
+std::optional<Renderer::TimedUpload> Renderer::TakeTimedUpload()
+{
+	std::lock_guard lock(mutex_);
+	if (!watch_ || !watch_->submitted || !watch_->drawn)
+	{
+		return std::nullopt;
+	}
+	const TimedUpload timed{ *watch_->submitted, *watch_->drawn, watch_->drawnFrame };
+	watch_.reset();
+	return timed;
 }
 
 bool Renderer::EnsureObjects()
@@ -658,7 +696,17 @@ void Renderer::ReadTimings(uint32_t aSlot)
 
 void Renderer::Update()
 {
+	const auto      start = std::chrono::steady_clock::now();
 	std::lock_guard lock(mutex_);
+	Upload();
+	const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+	updateMsSum_ += ms;
+	++updateSamples_;
+	stats_.updateMsWorst = std::max(stats_.updateMsWorst, ms);
+}
+
+void Renderer::Upload()
+{
 	if ((!fence_ && mode_.load() == Mode::Off) || !EnsureObjects())
 	{
 		return;  // nothing is created until drawing is first switched on
@@ -670,7 +718,7 @@ void Renderer::Update()
 	}
 	std::erase_if(retired_, [completed](const auto& aEntry) { return aEntry.second <= completed; });
 	const bool atlasDue = atlas_ && !atlasUploaded_;
-	if ((pending_.empty() && !atlasDue) || completed < uploadFence_)
+	if ((pending_.Size() == 0 && !atlasDue) || completed < uploadFence_)
 	{
 		return;
 	}
@@ -712,12 +760,18 @@ void Renderer::Update()
 		atlasReady_ = ready;
 		atlasUploaded_ = true;
 	}
-	for (auto& [section, vertices] : pending_)
+	bool watched = false;
+	for (auto& [section, vertices] : pending_.Take())
 	{
 		if (const auto found = sections_.find(section); found != sections_.end())
 		{
 			Retire(found->second.buffer);
 			sections_.erase(found);
+		}
+		if (watch_ && !watch_->submitted && watch_->section == section)
+		{
+			watch_->ready = ready;
+			watched = true;
 		}
 		if (vertices.empty())
 		{
@@ -733,11 +787,14 @@ void Renderer::Update()
 			sections_[section] = std::move(gpuSection);
 		}
 	}
-	pending_.clear();
 	original.close(uploadList_.Get());
 	ID3D12CommandList* lists[] = { uploadList_.Get() };
 	original.executeCommandLists(queue_, 1, lists);
 	uploadFence_ = Signal();
+	if (watched)
+	{
+		watch_->submitted = SteadySeconds();
+	}
 	for (auto& buffer : staging)
 	{
 		retired_.emplace_back(std::move(buffer), uploadFence_);
@@ -754,14 +811,22 @@ Renderer::Stats Renderer::TakeStats()
 	Stats stats = stats_;
 	stats.gpuMsAverage = gpuSamples_ ? gpuMsSum_ / double(gpuSamples_) : -1.0;
 	stats.frameMsAverage = frameSamples_ ? frameMsSum_ / double(frameSamples_) : -1.0;
+	stats.updateMsAverage = updateSamples_ ? updateMsSum_ / double(updateSamples_) : -1.0;
+	stats.pending = pending_.Size();
+	if (atlas_)
+	{
+		stats.atlasWidth = atlas_->width;
+		stats.atlasHeight = atlas_->height;
+		stats.atlasLevels = atlas_->Levels();
+	}
 	stats.sections = sections_.size();
 	for (const auto& [section, gpuSection] : sections_)
 	{
 		stats.vertices += gpuSection.vertices;
 	}
 	stats_ = {};
-	gpuMsSum_ = frameMsSum_ = 0.0;
-	gpuSamples_ = frameSamples_ = 0;
+	gpuMsSum_ = frameMsSum_ = updateMsSum_ = 0.0;
+	gpuSamples_ = frameSamples_ = updateSamples_ = 0;
 	return stats;
 }
 
@@ -820,6 +885,11 @@ void Renderer::DrawSections(ID3D12GraphicsCommandList* aList, const CameraFrame&
 		if (!Visible(aCamera.cameraToClip, { offset.x, offset.y - 16.0, offset.z }, { offset.x + 16.0, offset.y, offset.z + 16.0 }))
 		{
 			continue;
+		}
+		if (watch_ && watch_->submitted && !watch_->drawn && watch_->section == section && watch_->ready == gpuSection.ready)
+		{
+			watch_->drawn = SteadySeconds();  // the first list that draws the timed upload
+			watch_->drawnFrame = presents_.load();
 		}
 		const float sectionConstants[4] = { float(offset.x), float(offset.y), float(offset.z), 0.0f };
 		aList->SetGraphicsRoot32BitConstants(1, 4, sectionConstants, 0);
@@ -1407,7 +1477,8 @@ void Renderer::OnSubmitted(ID3D12CommandQueue*, UINT, ID3D12CommandList* const*)
 
 void Renderer::OnPresent(IDXGISwapChain* aSwapChain)
 {
-	const int64_t   now = Now();
+	const int64_t now = Now();
+	++presents_;
 	std::lock_guard lock(mutex_);
 	if (lastPresent_ != 0)
 	{
@@ -1569,7 +1640,8 @@ void Renderer::Shutdown()
 		timingsMapped_ = nullptr;
 	}
 	sections_.clear();
-	pending_.clear();
+	pending_.Clear();
+	watch_.reset();
 	retired_.clear();
 	oldDepthCopies_.clear();
 	lists_ = {};
