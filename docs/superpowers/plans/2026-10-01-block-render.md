@@ -23120,7 +23120,7 @@ cd /d/Cyberpunk-Minecraft && git add docs/spikes \
 - Modify: `docs/superpowers/plans/2026-10-01-block-render.md` (this plan),
   `docs/spikes/2026-10-01-block-render-results.md`
 
-- [ ] **Step 1: Add "How Part 3 went" to this plan**
+- [x] **Step 1: Add "How Part 3 went" to this plan**
 
 Add a section after Task 60, as Parts 1 and 2 closed. Cover:
 - what Tasks 57 and 59 found, and Task 58's fix, and any more;
@@ -23128,11 +23128,11 @@ Add a section after Task 60, as Parts 1 and 2 closed. Cover:
 - what the spike answers: can Night City show Minecraft's blocks at a player's building scale, at an acceptable frame
   rate and with a believable look? Say what a SkyCraft for Cyberpunk would build on, and what it still has to solve.
 
-- [ ] **Step 2: Bring the results' verdict up to date**
+- [x] **Step 2: Bring the results' verdict up to date**
 
 In `docs/spikes/2026-10-01-block-render-results.md`, put the spike's answer at the top of the verdict.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add docs/superpowers/plans docs/spikes \
@@ -23146,3 +23146,64 @@ Use superpowers:finishing-a-development-branch.
 
 ---
 
+
+### How Part 3 went (2026-10-02)
+
+`docs/spikes/2026-10-01-block-render-results.md` has the results. In short:
+- **Tasks 53 to 56** ran as written, offline (0.7.0): 111 C++ tests, no warnings, and the same three exports.
+- **Run 8 (Task 57)** drew the cube into the G-buffer from the first frame: no frame skipped in play, no late camera,
+  no measurable cost, and the game lit the cube by day and at night. But opening the Skip Time screen switched drawing
+  off, twice. For a moment its frames leave the tagged depth's state unknown before the G-buffer's end, and 30 skipped
+  frames in a row trip the safety switch.
+- **Task 58 (0.8.0)** draws into the G-buffer when only the tagged depth's state is unknown. Frames that the game draws
+  without a G-buffer, its end or the frame's camera no longer count toward the safety switch. And at the user's
+  request, the overlay got buttons for the drawing modes.
+- **Run 9 (Task 59)** finished step 4:
+  - the buttons worked, and the Skip Time screen no longer stopped drawing;
+  - the game lit the blocks in sun, in shade, at sunset and at night, with its haze and ambient occlusion;
+  - both of the blocks' own motion vectors and tagged depth turned out to be needed, and stencil class 0 stays;
+  - fast turns skipped no frame, and 100,000 blocks cost 0.06 ms of GPU time;
+  - the blocks cast no shadows.
+
+**Amendments along the way:**
+- **New tasks:** Tasks 58 and 59 were added after run 8, and closing Part 3 moved from Task 58 to Task 60. Run 8's
+  steps 4 to 9 went to run 9.
+- **The scratch builds:** under %TEMP%, MSBuild doesn't track header changes (MSB8029). A stale object made the tests
+  crash while Task 53 was verified, so the scratch builds and the replays now rebuild from clean after a header
+  changes. The repo's own builds were never affected.
+- **Run 7's frame logs:** the first was taken during a fight, so three more were taken standing still. All agreed.
+
+**What the spike answers:**
+
+> Can Night City show Minecraft's blocks, at the scale a player builds, with an acceptable frame rate and a believable
+> look?
+
+**Yes, except for shadows.**
+- **The scale and the frame rate:** 100,000 blocks drawn into the G-buffer cost 0.06 ms of GPU time, and the frame time
+  didn't rise. Once their readability checks stopped walking the game's heaps, the hooks cost nothing measurable.
+- **The look:** in the G-buffer, the game's lighting takes the blocks for its own geometry. Sun, shade, sky light,
+  sunset, night, haze and ambient occlusion fall on them as on the street around them, and DLSS keeps them steady,
+  since they write their own motion vectors and depth. The user found a 100,000-block field at times looked like it
+  belonged.
+- **The gap:** the blocks cast no shadows and block no light, because they aren't in the game's shadow maps. A house's
+  floor is sunlit through its roof.
+
+**What a SkyCraft for Cyberpunk would build on:**
+- the Streamline hooks, for each frame's camera, jitter and tagged buffers;
+- tracking every command list, about 0.1 ms a frame, to find the G-buffer, its end, and the states there;
+- our own list just before the G-buffer's end, writing its targets, the stencil class, the motion vectors and the
+  tagged depth;
+- SkyCraft's vertex format and section meshes, and the atlas from the player's own Minecraft, sRGB-encoded as the
+  G-buffer stores colours.
+
+**What it still has to solve:**
+- **Shadows:** the blocks need to go into the game's shadow maps too, likely the 11-list submission after the G-buffer
+  that run 7's frame logs found, so that they cast shadows and block light.
+- **The grid against the ground:** blocks sit on whole metres, and the game's ground doesn't. A build needs a ground
+  level chosen for it, or the game's terrain hidden where blocks replace it.
+- **The rest of Minecraft:** translucent blocks (water, stained glass, ice), which a G-buffer can't take, so they'd be
+  drawn before DLSS as in step 3; entities, items and the hand; and Minecraft's own lights, such as torches.
+- **Collision:** NPCs, cars and bullets pass through blocks. Spike 1 read the game's collision; adding to it is still
+  open.
+- **Game patches:** all of this follows 2.31's frame. A patch that moves the G-buffer's end would show in the status
+  as skipped frames, with the reason.

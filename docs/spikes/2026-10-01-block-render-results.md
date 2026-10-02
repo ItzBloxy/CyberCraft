@@ -16,6 +16,12 @@ logs and the dumps. Plan: [2026-10-01-block-render.md](../superpowers/plans/2026
 
 ## Verdict
 
+**The spike's answer: yes, except for shadows.** Night City can show Minecraft's blocks at the scale a player builds,
+at an acceptable frame rate and with a believable look. Drawn into the game's G-buffer, 100,000 blocks cost 0.06 ms
+of GPU time and no frame time, and the game lights, hazes and shades them as its own geometry, steady under DLSS.
+They cast no shadows yet, and block no light: they aren't in the game's shadow maps. The plan's "How Part 3 went"
+says what a SkyCraft for Cyberpunk would build on, and what it still has to solve.
+
 - **Step 1, the frame map: pass.**
   - The plugin sees the game's device and swap chain being made.
   - Streamline's camera is the game's camera, in world coordinates.
