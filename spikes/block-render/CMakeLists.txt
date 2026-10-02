@@ -52,8 +52,9 @@ add_library(render_core STATIC
 	src/link/Floor.cpp
 	src/link/Look.cpp
 	src/link/Commands.cpp
+	src/link/Mapping.cpp
 )
-target_link_libraries(render_core PUBLIC render_settings d3dcompiler dxguid)
+target_link_libraries(render_core PUBLIC render_settings d3dcompiler dxguid advapi32)
 
 # The RED4ext SDK, header-only. SYSTEM keeps its warnings out of ours.
 set(RED4EXT_HEADER_ONLY ON CACHE BOOL "" FORCE)
@@ -125,6 +126,7 @@ add_executable(render_tests
 	tests/TestFloor.cpp
 	tests/TestLook.cpp
 	tests/TestCommands.cpp
+	tests/TestMapping.cpp
 )
 target_link_libraries(render_tests PRIVATE render_core)
 add_test(NAME render_tests COMMAND render_tests WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
