@@ -186,7 +186,8 @@ and Minecraft's. Plan: Task 27, and Task 28 for the one fix.
 ### Verdict
 
 **Step 2: pass.** Every check passed. One defect was found and fixed: the held item in Minecraft's HUD jumped whenever
-V turned through north, because the yaw the link sent wrapped there. Task 28 (0.9.1) fixes it.
+V turned through north, because the yaw the link sent wrapped there. Task 28 (0.9.1) fixed it, checked in the
+game the next day.
 - **Loading:** BlockRender loaded hooked, and made the mapping at the game's first update, 15 s after load.
 - **Minecraft linking:** Minecraft, started at the corner, linked at once and hid its window. It opened SkyCraft's
   world, and sent its atlas, which took 11.8 ms to build.
@@ -338,9 +339,15 @@ happen.
 `mc wipe`, `set hud 1`, `link off` and `mode off`: drawing off, unlinked, and no error lines in BlockRender's log for
 the whole session.
 
+### The yaw fix, checked
+
+On 2026-10-03 at 00:11, BlockRender 0.9.1 (Task 28, `e1f1c06`) loaded with no error lines, and Minecraft linked
+again. With the HUD always on, the user turned through heading 0 several times, both ways, slowly and quickly: the
+held item now stays steady at north, with no jump.
+
 ### Surprises, and what they mean for Part 3
 
-- **The held item jumped at north.** The yaw wrapped; Task 28 fixes it (see "The HUD").
+- **The held item jumped at north.** The yaw wrapped; Task 28 fixed it (see "The HUD" and "The yaw fix, checked").
 - **Minecraft's player stands on our floor, not at V's feet.** The floor is flat at the height it was sent with, and
   moves only at 16 m or a metre's change. Where the street dips below it, Minecraft's player stands on the floor:
   - **commands work from there:** `field` filled at y 6, a block higher than V's feet (5.92). So V stood in the
