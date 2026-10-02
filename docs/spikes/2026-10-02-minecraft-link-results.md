@@ -1,4 +1,7 @@
-# Minecraft link: step 1's results
+# Minecraft link: results, steps 1 and 2
+
+Step 1 ran BlockRender's link code against Minecraft without Cyberpunk; step 2, further down ("Step 2: in the game"),
+ran it in the game.
 
 Date: 2026-10-02. No Cyberpunk: `mclink`, BlockRender's link code in a console program, ran against the user's
 Minecraft with SkyCraft's unchanged mod. The versions:
@@ -168,3 +171,194 @@ images.
   keep a colour, as Minecraft's straight-alpha textures do, so `atlas.png` looks as if sprites bleed into their
   surroundings. The PNGs are pixel-identical to the DDS files. `*.alpha.png`, or a viewer that reads the DDS's alpha,
   shows them as they are.
+
+## Step 2: in the game
+
+Date: 2026-10-02, 16:00 to 16:41. The versions:
+- **BlockRender 0.9.0:** the plan's Tasks 13 to 26 (`a95b990`), with 203 C++ and 25 Python tests passing;
+- **Cyberpunk 2077 2.31:** spike 3's settings (DLSS Quality at 2560 × 1440, frame generation, ray tracing, Reflex);
+- **Minecraft and SkyCraft:** as in step 1, in the same instance and world.
+
+The run was at spike 3's corner (world x −116.6, y −2005.2), in free roam, by day. The user played, clicked the
+overlay's buttons, and started and stopped Minecraft. The agent sent requests, and read the status, BlockRender's log
+and Minecraft's. Plan: Task 27, and Task 28 for the one fix.
+
+### Verdict
+
+**Step 2: pass.** Every check passed. One defect was found and fixed: the held item in Minecraft's HUD jumped whenever
+V turned through north, because the yaw the link sent wrapped there. Task 28 (0.9.1) fixes it.
+- **Loading:** BlockRender loaded hooked, and made the mapping at the game's first update, 15 s after load.
+- **Minecraft linking:** Minecraft, started at the corner, linked at once and hid its window. It opened SkyCraft's
+  world, and sent its atlas, which took 11.8 ms to build.
+- **Linking:** Link pinned Minecraft's eye exactly at V's camera, switched drawing to the G-buffer, and sent the floor
+  at V's feet. Step 1's gold block appeared on the street where step 1 left it. Walking, the eye followed V's camera
+  within 0.07 m on average, at most 0.44 m at full speed, and the floor moved three times.
+- **The HUD:** Minecraft's hotbar, crosshair and held item over Night City: sharp, the right way up, at the size
+  planned. It was steady while turning, with frame generation on, except at north (the fix above).
+- **Building by command:** `wall`, `tnt-ahead`, `field` and `wipe` built and blew up where they should, and the
+  blocks were lit and shadowed as the game's own surfaces are. Minecraft's chat replies showed in the HUD.
+- **Latency:** Minecraft's half averaged 68 ms, from a command's Enter to its section arriving. Ours averaged 20 ms,
+  0.8 frames, from arrival to the first list that drew it.
+- **Bursts:** neither the field (81 sections at once) nor 125 TNT hitched a frame.
+- **Frame rates:** Minecraft running costs Cyberpunk about 2 ms a frame. Linking, drawing and the HUD add little on
+  top: the HUD 0.25 ms at `hudscale 2`, and 1.6 ms at `hudscale 1`.
+- **Focus:** with Claude Code in front, Cyberpunk kept running at full rate, and the link stayed up.
+- **Minecraft closed and reopened:** the blocks stayed while it was gone. A new Minecraft process linked again, and
+  sent its atlas and the saved wall. The HUD came back.
+
+### Loading, and Minecraft
+
+- **BlockRender:** `BlockRender 0.9.0 loaded (game 2.3.1), hooked` at 16:00:06.3, and `the mapping: created` at
+  16:00:21.5, at the game's first update. The status, without Minecraft: drawing off, not linked, Minecraft absent,
+  V's camera at Minecraft −116.60 7.74 2005.22.
+- **Minecraft:** started from the Modrinth App, it logged `linked to Skyrim (pid 3248)` (Cyberpunk's), `Skyrim link
+  up`, `game window hidden` and `opening mirror world` at 16:03:16 to 16:03:19. Then `sent 2048x2576 texture atlas
+  to Skyrim (ok)` at 16:03:21, and step 1's gold block's section.
+- **BlockRender:** `Minecraft is there (process 31420)`, `Minecraft cleared its sections` and `Minecraft's atlas: 2048
+  x 2576, 5 levels, built in 11.8 ms`. Risk 5, a long frame for the atlas's levels, doesn't happen.
+- **The status:** Minecraft in its world at 68 frames a second, Cyberpunk's 68, since it paces to `SkyState`. Atlas
+  patches at 7.7 MB a second. The gold block waited: the renderer uploads nothing until drawing is first switched on.
+
+### Linking, and walking
+
+- **Link** (the overlay's button) at 16:05:10:
+  - **the request:** `link on: Minecraft's player follows V; drawing is gbuffer`, and the floor at height 6.14;
+  - **Minecraft's side:** `collision cleared (epoch 1)` and `teleported to -116.596 6.124 2005.221`;
+  - **the status:** 66 frames drawn into the G-buffer a second, none skipped, none with a late camera. The gold
+    block's section was uploaded (36 vertices, 0.009 ms of GPU time), and Minecraft's eye was at V's camera to the
+    hundredth.
+- **The gold block** stood on the street about 9 m from the corner, in Minecraft's texture, lit by the sun like the
+  road. It cast no shadow, as spike 3 found for all blocks.
+- **The walk:** 33 m along the street and back, recorded twice a second:
+  - **the eye:** 0.07 m from V's camera on average. The most, 0.44 m, came at full speed with 10 teleports a second,
+    the cap;
+  - **the floor:** moved at 16 m (epochs 2, 3 and 4), following the street down to 5.94 m.
+
+### The HUD
+
+- **`HUD: always`** (the overlay's button) showed Minecraft's hotbar, its white crosshair and the held stone.
+  - **The status:** 64 images a second, received and drawn, matching the game's 64 frames, 1280 × 720, rows
+    bottom-up. Copying one took 0.17 ms on the main thread, and the pass 0.13 ms on the GPU.
+  - **The size:** the hotbar spans about 1,090 screen pixels: Minecraft's 182 GUI pixels × 6, its GUI scale 3,
+    doubled.
+  - **No health or hunger bars:** the player is in creative.
+- **Turning:** steady, with frame generation on, except at north. Turning through heading 0 (350 to 10), the held
+  item jumped, and only the held item: the hotbar and crosshair stayed put, and heading 180 was fine all round.
+  - **The cause:** the link's yaw was in (−180°, 180°], so it wrapped from 180 to −180 facing north. SkyCraft sets
+    the player's yaw to it every frame, where Minecraft's own yaw never wraps. Minecraft sways the first-person hand
+    by the yaw's change, so the hand swung a whole turn's worth and settled.
+  - **The fix:** Task 28 keeps the yaw within 180° of the last, as Minecraft's own is. SkyCraft's own Skyrim side
+    wraps the same way, at Skyrim's north.
+- **Dropped images:** 9 of 62 HUD images were dropped in the second the user took a screenshot, and none in any
+  other reading.
+
+### Building by command
+
+| Command | What happened | Burst |
+|---|---|---|
+| `wall` (the button) | Chat: `Successfully filled 20 block(s)`. 5 × 4 stone bricks, 4 m ahead, sharp, sunlit and shaded like the street | 1 section, worst `Update` 0.74 ms, worst frame 14.3 ms |
+| `mc tnt-ahead` | 3 commands typed in 0.1 s; the TNT went off 4.0 s after the summon, at −118.4 6.1 2006.4, and chipped the wall's near end (stone bricks resist TNT) | 1 section each; worst frames 16.2 and 17.3 ms |
+| `mc field` | A grass layer 128 blocks square, the game's palm shadows falling on it. 81 sections, 202,968 vertices, 0.065 ms of GPU time | 81 sections, 13.6 MB; worst drain 0.12 ms, worst `Update` 9.6 ms, worst frame 19.9 ms |
+| `mc wipe` | The wall went, but not the field: see "Surprises" | 8 sections; worst `Update` 8.5 ms, worst frame 21.4 ms |
+
+`wall` always runs east to west, so facing about west it stood edge-on beside V at first.
+
+### Latency
+
+Ten single commands with V standing still, putting a gold or a diamond block 3 m ahead in turn, each sent once the
+last one's sample was in the log:
+
+| | Samples | Average |
+|---|---|---|
+| Minecraft's half: Enter to the section's arrival | 60, 75, 61, 75, 75, 60, 75, 75, 61, 61 ms | 68 ms |
+| Ours: arrival to the first list that draws it | 2, 24, 23, 23, 23, 23, 23, 24, 8, 23 ms; 1 frame, or 0 twice | 20 ms, 0.8 frames |
+
+Minecraft's half falls in two clusters, about 60 and 75 ms, a Minecraft frame apart. Ours is within a frame, inside
+the spike question's "a frame or two". Enter to the drawn frame is about 90 ms; the game shows a frame a frame or two
+after drawing it, as always. The status's own average mixes in the sets' samples, which are wrong (see "Surprises").
+
+### Bursts
+
+- **`field`:** 81 sections and 13.6 MB within a second. Its worst frame, 19.9 ms, is within the frame-to-frame
+  variation at rest (worst frames up to 20 ms), and the worst `Update` was 9.6 ms on the main thread.
+- **`tnt-cube`:** 125 TNT went off over 2 s, flung up to 70 blocks in the empty world, so only 4 sections changed.
+  The explosions' particles filled the per-frame scene messages: 34 MB in one second and 63 MB in the next. The link
+  stepped over them, the worst drain 0.007 ms, and the worst frame was 16.1 ms in both seconds.
+
+Neither hitches a frame, so the spec's fix for bursts (sections suballocated from a few large buffers, and an upload
+budget a frame) isn't needed.
+
+### Frame rates, CPU and memory
+
+Five readings a second apart for each, at different spots, so the comparisons are approximate:
+
+| Condition | Frame time | CET's fps | Cyberpunk's CPU | Minecraft's CPU, memory |
+|---|---|---|---|---|
+| Minecraft closed | 12.7 to 13.3 ms | 76 to 79 | 3.4 to 4.1 cores | |
+| Minecraft running, not linked | 14.7 to 15.5 ms | 64 to 70 | 2.3 to 4.6 cores | 0.3 to 0.9 cores, 2.1 GB |
+| Linked and idle (one block drawn) | 14.6 to 15.0 ms | 67 to 68 | 2.3 to 4.1 cores | 0.4 to 0.6 cores, 2.3 GB |
+| The HUD off | 14.3 to 14.5 ms | 69 to 70 | 2.7 to 3.8 cores | 0.6 cores, 2.1 GB |
+| The HUD at `hudscale 2` | 14.5 to 14.7 ms | 68 to 69 | 3.3 to 4.0 cores | 0.6 to 0.7 cores, 2.1 GB |
+| The HUD at `hudscale 1` | 15.6 to 16.1 ms | 62 to 64 | 1.7 to 4.3 cores | 0.6 to 0.9 cores, 2.4 GB |
+
+- **Minecraft running costs Cyberpunk about 2 ms a frame,** linked or not. Linking and drawing in the G-buffer add
+  nothing measurable on top.
+- **The HUD costs about 0.25 ms a frame at `hudscale 2`:** a 0.17 ms copy and a 0.12 ms pass. At `hudscale 1` it's
+  about 1.6 ms: 14 MB images, a 0.72 ms copy and a 0.61 ms pass, nearly 900 MB a second through the triple buffer.
+  Minecraft reads its frame back whether the HUD is taken or not, so its side doesn't change.
+- **`hudscale 1` halves the HUD on screen:** the instance's GUI scale is fixed at 3, not automatic. The held item gets
+  sharper.
+- **Cyberpunk's working set** was 7.5 to 7.8 GB, then fell to 4.1 GB while Minecraft grew to 2.4 GB at `hudscale 1`.
+  That's Windows trimming it, so the working set isn't a steady measure of memory.
+
+### Focus
+
+Recorded twice a second for a minute while the user spent 20 s in Claude Code on the second monitor: the status stayed
+under 1.0 s old, frames held at 14 to 15.5 ms, the link stayed in game with Minecraft's heartbeat fresh, and
+Minecraft's log has no `link down`. Cyberpunk keeps running at full rate behind another window, so risk 2 doesn't
+happen.
+
+### Minecraft closed and reopened
+
+- **Saving:** `mc wall` put up a wall to come back. `/save-all` isn't a singleplayer command (`Unknown or incomplete
+  command`), but Minecraft wrote the wall's region file 0.08 s after the fill. The 5-minute autosave at 16:38:21 found
+  nothing left to write.
+- **Stopped** from the Modrinth App: `link: Minecraft has gone` at 16:38:43, 3 s after its last heartbeat. The wall
+  stayed, the HUD went, and the link stayed in game.
+- **Started again:**
+  - **BlockRender:** `Minecraft is there (process 15660)` and a fresh floor at V's feet at 16:39:18. Then
+    `Minecraft cleared its sections`, and its atlas again, built in 18.9 ms;
+  - **Minecraft's side:** it linked to the same Cyberpunk, teleported its player to V, opened its world, and sent the
+    wall's section: the same 348 vertices, from disk;
+  - **the HUD:** back at 75 images a second, none dropped, so the triple buffer started over cleanly for the new
+    process.
+
+### Clean up
+
+`mc wipe`, `set hud 1`, `link off` and `mode off`: drawing off, unlinked, and no error lines in BlockRender's log for
+the whole session.
+
+### Surprises, and what they mean for Part 3
+
+- **The held item jumped at north.** The yaw wrapped; Task 28 fixes it (see "The HUD").
+- **Minecraft's player stands on our floor, not at V's feet.** The floor is flat at the height it was sent with, and
+  moves only at 16 m or a metre's change. Where the street dips below it, Minecraft's player stands on the floor:
+  - **commands work from there:** `field` filled at y 6, a block higher than V's feet (5.92). So V stood in the
+    grass, and only 3 of the wall's 4 rows showed above it;
+  - **Minecraft's pose changes:** with its player inside a block, Minecraft drops to crouching or crawling for a
+    second or two after V stops, and the crawling eye, 0.4 m up, is inside the block. The HUD then shows Minecraft's
+    in-block overlay, dirt for grass. As the user put it, that's Minecraft working as intended without collision, in
+    a world where nothing is ever inside a block.
+
+  **For Part 3:** clicks cast from Minecraft's eye, which is at V's camera only while Minecraft's player stands. And
+  V can walk into any block it places, since Cyberpunk doesn't collide with Minecraft's blocks, which will bring the
+  overlay back. Part 3 should measure how often, and how far off, a click is.
+- **`field` and `wipe` pair up only at the same block height.** `wipe` clears the layer at Minecraft's feet, and V had
+  moved to ground a block lower. The field went with two fills at its absolute coordinates.
+- **Latency samples from sets of several commands are wrong.** Each Enter replaces the mark, so a section is timed
+  from the last Enter before it, not from the command that made it: `tnt-ahead` gave 16 ms. Single commands measure
+  it, as above.
+- **Minecraft saves changed chunks at once,** so stopping it from the Modrinth App loses little. `/save-all` exists
+  only on dedicated servers.
+- **Explosions put up to 63 MB a second of particles through the render ring,** which the link steps over without a
+  measurable cost.
