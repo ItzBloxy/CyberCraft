@@ -1,7 +1,9 @@
 # Minecraft link: design (spike 4)
 
 Date: 2026-10-02. Status: agreed with the user section by section in the brainstorm, after a scope pass the user asked
-for, with concrete evidence for each part. Written from that agreement for the user's review.
+for, with concrete evidence for each part. Then revised after a deep self-review, which checked its claims against
+SkyCraft's source, the user's Minecraft 26.3 jar, Cyberpunk's files and BlockRender's code. "Changes from the deep
+review", at the end, lists what changed.
 
 ## Purpose
 
@@ -11,8 +13,12 @@ read the game's collision, and spike 3 drew Minecraft's blocks into Night City's
 structures. Spike 4 connects the real Minecraft:
 
 > Can Night City show Minecraft's live world, streamed by SkyCraft's unchanged Fabric mod over shared memory, so that
-> blocks placed, broken or blown up appear within a frame or two? With the building done from inside Cyberpunk, and
-> both games at acceptable frame rates?
+> blocks placed, broken or blown up appear a frame or two after Minecraft changes them? With the building done from
+> inside Cyberpunk, and both games at acceptable frame rates?
+
+"After Minecraft changes them" matters. Minecraft acts on a click only in its next 20 Hz client tick (`startAttack`
+and `startUseItem` run from `handleKeybinds`, inside `tick()`), and on a typed command a tick or two later still. So
+latency is measured in two halves: Minecraft's own, and ours (see "Measurements").
 
 It answers that in three steps, each tested against something real (see "The steps"):
 1. BlockRender's link code, run as a console stand-in, against the real Minecraft, without Cyberpunk.
@@ -33,7 +39,8 @@ It answers that in three steps, each tested against something real (see "The ste
 - **Build mode on F8.** In build mode the mouse buttons, the wheel and the keys 1 to 9 go only to Minecraft, so V
   doesn't shoot, aim or switch weapons. Everything else stays Cyberpunk's. Outside build mode nothing is forwarded.
 - **A Modrinth instance.** The user runs Minecraft from their own Modrinth App, with their own account, rather than
-  SkyCraft's Prism bundle or a build from source.
+  SkyCraft's Prism bundle or a build from source. It runs with `-Dskycraft.quitWithSkyrim=false`. Otherwise
+  Minecraft saves and quits 5 s after the game side's process ends: when `mclink` stops, and whenever Cyberpunk closes.
 - **Minecraft's window minimized, not hidden.** Both games share the main monitor (Cyberpunk borderless fullscreen,
   Minecraft windowed), and the second monitor shows Claude Code. `-Dskycraft.showWindow=true` stops the mod hiding the
   window, the user minimizes it, and brings it up to see the hotbar or chat.
@@ -69,7 +76,7 @@ and the user's 26.3 jar. SkyCraft's Skyrim side is 11,850 lines of C++.
 2. **The look.** `SkyClient.beginFrame` sets the player's yaw and pitch from `SkyState` every frame, unless a
    Minecraft screen is open. BlockRender's `PlayerLocator` already reads the camera's forward vector.
 3. **Blocks.** `RenVertex` matches BlockRender's `Vertex` byte for byte, so sections go straight to
-   `Renderer::UploadSection`. The jar has 1,300 block textures (105 animated) and 831 item textures, so the combined
+   `Renderer::UploadSection`. The jar has 1,300 block textures (105 with animation files) and 831 item textures, so the combined
    atlas is about 6 to 13 MB, under the ring's 32 MB message limit. Minecraft sends only the atlas's full-size level.
    If the ring fills, `SkyLink.writeRender` waits up to a second per message on Minecraft's render thread, so the ring
    must always be drained. Bursts are unmeasured: `Renderer::Update` makes two committed buffers per section on the
@@ -80,8 +87,8 @@ and the user's 26.3 jar. SkyCraft's Skyrim side is 11,850 lines of C++.
      - `InputBridge` takes text only while a screen is open.
 4. **Input.** Cyberpunk's executable reads the keyboard and mouse only through Raw Input. It imports
    `RegisterRawInputDevices`, `GetRawInputData`, `PeekMessageW`, `ClipCursor` and `SetCursorPos`, with XInput for
-   pads. It has no DirectInput and doesn't poll key states. So one import-table hook on `GetRawInputData` sees every key
-   and click, and BlockRender's `ImportPatch` already patches the executable's imports. SkyCraft's `Input.cpp` maps
+   pads. It imports no DirectInput and no key-state functions. So one import-table hook on `GetRawInputData` sees every
+   key and click the game reads, and BlockRender's `ImportPatch` already patches the executable's imports. SkyCraft's `Input.cpp` maps
    set-1 scan codes to SDL scancodes. Unproven: that rewriting the returned event stops Cyberpunk acting on it.
 5. **Puppeting.** FreeFly, which is installed, teleports V every frame from Lua with the `NoMovement` status effect. It
    adds the mouse's yaw back in every frame, so a per-frame teleport overrides V's turning; pitch is untouched.
@@ -121,7 +128,8 @@ and the user's 26.3 jar. SkyCraft's Skyrim side is 11,850 lines of C++.
   `mods\blockrender_hud\`. Drawing is off unless a request or a button switches it on. Spike 1's probe 0.4.0 and its
   overlay are installed too.
 - **Keys already taken:** CET's overlay is Shift+F6 (`bindings.json`), FreeFly is F7, and the probe dumps on F10.
-  Cyberpunk binds no F2, F6, F7, F8, F10, F11 or F12 (`r6\config\inputUserMappings.xml`), so F8 is free.
+  Cyberpunk binds no F2, F6, F7, F8, F10, F11 or F12 (`r6\config\inputUserMappings.xml`), so F8 is free. The user
+  hasn't rebound any key (`UserSettings.json`), so the defaults below hold.
 
 ### Cyberpunk's input
 
@@ -131,7 +139,8 @@ and the user's 26.3 jar. SkyCraft's Skyrim side is 11,850 lines of C++.
   - `XINPUT9_1_0`'s `XInputGetState`;
   - `HID.DLL`.
 
-  There's no DirectInput, no `GetRawInputBuffer`, and no polling of key states.
+  It imports no DirectInput, no `GetRawInputBuffer`, and no key-state function (`GetAsyncKeyState`, `GetKeyState`,
+  `GetKeyboardState`).
 - **The bindings that clash with Minecraft's building keys** (`inputUserMappings.xml`):
   - **mouse:** left is attack, right is aim, middle is the combat gadget or tag;
   - **the wheel** is next and previous weapon;
@@ -144,13 +153,19 @@ and the user's 26.3 jar. SkyCraft's Skyrim side is 11,850 lines of C++.
 
 ### Minecraft
 
-- **Minecraft 26.3** is installed in `%APPDATA%\.minecraft`. Its jar has 1,300 block textures (105 animated, 48 wider
-  than 16 pixels) and 831 item textures.
+- **Minecraft 26.3** is installed in `%APPDATA%\.minecraft`. Its jar has 1,300 block textures (105 with animation
+  files, 48 wider than 16 pixels) and 831 item textures.
+  - It acts on clicks in its 20 Hz client tick: `startAttack`, `startUseItem` and `continueAttack` are called from
+    `handleKeybinds`, which `tick()` calls.
+  - `renderFrame` calls `GameRenderer.render()` every frame. A minimized window only skips reconfiguring the GPU
+    surface.
+  - `/fill` is capped by the game rule `max_block_modifications`, 32,768 by default.
 - **The Modrinth App** is installed, with the user's account. The user makes the instance:
   - Minecraft 26.3, Fabric Loader 0.19.5, and Fabric API 0.161.0+26.3;
   - `skycraft-fabric-0.1.2.jar` in its `mods` folder;
-  - JVM arguments `--enable-native-access=ALL-UNNAMED -Dskycraft.showWindow=true`, and optionally
-    `-Dskycraft.quitWithSkyrim=false`. Without the last one, Minecraft saves and quits 5 s after Cyberpunk closes.
+  - JVM arguments `--enable-native-access=ALL-UNNAMED -Dskycraft.showWindow=true -Dskycraft.quitWithSkyrim=false`.
+    Without the last one, Minecraft saves and quits 5 s after the process in the header's game process ID ends
+    (`SkyClient.quitWithSkyrim`): `mclink`'s or Cyberpunk's.
 - **Java:** Minecraft 26.3 needs Java 25, which the Modrinth App provides. Temurin 25.0.2 is also on `PATH`.
 
 ### SkyCraft
@@ -186,13 +201,27 @@ the game's heartbeat is less than 8 s old (`SkyLink.active`). Once it's up:
   - `SkyCraft.configureServer` stops time, weather and mob spawning, and turns the movement check off;
   - each player gets a starter kit and a builder kit;
   - linking sets the instance's options: render and simulation distance 8, VSync off, a 260 fps limit, music off.
-- **Exporting** (`WorldExporter`, after each frame's render), in order:
-  1. on a new link, a new game process or a resource reload: a clear-all, the combined atlas, then every loaded
-     section that isn't air;
+- **Exporting** (`SkyClient.afterRender`, right after `GameRenderer.render()`, while its player is in a world), in
+  order:
+  1. on a new link, a new game process, a new world or a resource reload: a clear-all, the combined atlas, then every
+     loaded section that isn't air;
   2. each frame, dirty sections: the player's own edits first, up to 12 a frame within 3 ms;
-  3. animated-sprite patches, the world-entity table, and the avatar.
-- **Clicks on the game's ground:** the crosshair's ray hits the collision triangles (`SkyClip`). Without triangles, a
-  click in the void hits nothing.
+  3. animated-sprite patches, the world-entity table, the avatar, and the scene (other entities and particles). The
+     per-frame ones are written only if the ring has room, and dropped otherwise;
+  4. its HUD image (`FrameExporter`): read back from the GPU every frame at its window's size, and copied into the
+     overlay's slots. This spike doesn't use it, but Minecraft pays for it.
+- **Its own window still takes real input.** Only key states and the mouse grab are taken over, so keys and clicks
+  inside Minecraft's window reach its handlers. Brought up for a look, the window is safe to type into (chat, the
+  inventory), but a click in it can act in the world, as Minecraft treats the first click as grabbing the mouse and
+  later ones as attack or use.
+- **Clicks on the game's ground:**
+  - the crosshair's pick goes through `SkyClip` (`EntityPickMixin`) with no other condition, so triangles alone are
+    enough. Without triangles, a click in the void hits nothing;
+  - the cast is two-sided, with the normal turned to face the ray, so a triangle's winding doesn't matter;
+  - a block placed against a triangle goes in the cell at `floor(hit + normal × 0.4)`;
+  - attacking a triangle digs only if its flags say diggable (`SkyDigClient.attack`). Ours never do, so an attack
+    there does nothing;
+  - while linked, the server allows flight (`MinecraftServerFlightMixin`), so a player held in mid-air isn't kicked.
 - **Fields of `SkyState` it doesn't use:** `gameHour`, and `collisionEpoch` (the collision ring carries its own
   epochs). A viewport of 0 leaves Minecraft's window size alone.
 
@@ -279,7 +308,9 @@ spikes/block-render/
   src/input/Scancodes.*           set-1 scan codes to SDL scancodes (SkyCraft's table, credited)
   src/input/BuildMode.*           what each raw event does, in and out of build mode
   src/input/RawInputHook.*        the GetRawInputData import patch
+  src/input/FocusWatch.*          the thread that releases held inputs when the game loses the front
   src/render/Atlas.*              + an atlas from Minecraft's RGBA, with mip levels
+  src/render/PendingSections.*    the renderer's waiting uploads, the latest mesh per section
   src/render/Renderer.*           + SetAtlas, ClearSections, upload timing, and when an upload is first drawn
   src/Requests.*, Status.*, Plugin.cpp   + the new commands, the link's status, the update order
   tools/mclink/Main.cpp           the console stand-in
@@ -290,8 +321,9 @@ spikes/block-render/
 ## Build
 
 - **As in spike 3,** with three changes:
-  - `render_core` gains `link/`, `input/Scancodes` and `input/BuildMode`, so the unit tests reach them;
-  - `render_runtime` gains `input/RawInputHook`;
+  - `render_core` gains `link/`, `input/Scancodes`, `input/BuildMode` and `render/PendingSections`, so the unit tests
+    reach them. `FocusWatch`'s decision is a pure function there too;
+  - `render_runtime` gains `input/RawInputHook` and `FocusWatch`'s thread;
   - a new console target, `mclink`, links `render_core`.
 - **The protocol header** comes from `extern/skycraft/`.
 - **Versions:** BlockRender's version becomes 0.9.0, in the log line and in `Query`.
@@ -304,38 +336,48 @@ spikes/block-render/
 
 - **On load,** before the existing hooks:
   - creates the mapping (see "The link");
-  - patches `GetRawInputData`.
+  - patches `GetRawInputData`;
+  - starts the focus watch.
 
-  Neither does anything visible until the user links or presses F8.
+  None of them does anything visible until the user links or presses F8.
 - **Every frame, in `OnUpdate`,** in this order:
   1. requests, once a second;
   2. `Link::Update`, with V's pose from `LocatePlayer` (see "The link"). Spike 1 called the same script functions
      every frame without trouble;
   3. the frame log and the dumps;
-  4. the renderer's `Update`;
+  4. meshing spike 3's own structures, as before, and the renderer's `Update`;
   5. the log;
   6. the status, once a second.
-- **On unload:** build mode off, the import patch put back, and the mapping unmapped. Minecraft sees the heartbeat stop.
+- **On unload:** build mode off, the focus watch stopped, the import patch put back, and the mapping unmapped.
+  Minecraft sees the heartbeat stop.
 
 ### `link/`
 
 - **`Mapping`:**
   - creates the named mapping with SkyCraft's access rules: this user, the system and administrators, at medium
     integrity, so an elevated game doesn't lock Minecraft out;
-  - finding it already there, resets the regions the game side owns, as SkyCraft's `Link::Create` does;
+  - **finding it already there** (Minecraft holds it open between game sides):
+    - refuses if the view is smaller than the layout, checked with `VirtualQuery`, since it would belong to something
+      else;
+    - refuses if another game side is still running: the header's game process ID is a live process other than this
+      one, and its heartbeat is under 3 s old;
+    - otherwise resets the regions the game side owns, as SkyCraft's `Link::Create` does;
   - writes the header, and the heartbeat;
   - reports Minecraft's process ID and heartbeat.
 
-  It takes the name as a parameter, so tests use their own.
+  It takes the name as a parameter, so tests use their own. A refusal is retried once a second, and the status says
+  why.
 - **`Rings`:** the seqlocked writes and reads, and both directions of the byte and event rings. These are pure
   functions on a span of bytes with acquire and release ordering, so they're tested on ordinary memory.
 - **`Messages`:** turns render messages into a section (coordinates and vertices) or an atlas, after checking each
   against its layout (see "Safety").
 - **`Floor`:** the clear message, and one triangle message per region, from a centre, a height and an epoch.
 - **`Look`:**
-  - yaw = atan2(−x, z) and pitch = −asin(y), in degrees, from V's camera's forward vector in Minecraft's axes;
+  - yaw = atan2(−x, z) and pitch = −asin(y), in degrees, from V's camera's forward vector in Minecraft's axes. Looking
+    straight up or down, where the forward vector's horizontal length is under 0.001, the last yaw is kept;
   - the teleport target: the camera's position in Minecraft's axes, less 1.62 blocks of height, Minecraft's standing
-    eye height, so Minecraft's eye is at V's camera.
+    eye height, so Minecraft's eye is at V's camera;
+  - if the camera can't be read, the last look is kept, and there's no teleport.
 - **`Commands`:** the typing state machine (see "Typed commands"), driven by `McState`'s flags.
 - **`Link`:** the per-frame logic, given the mapping, V's pose and the time. Its decisions (teleport or not, floor or
   not, what to type next) are testable with a fake pose and a mapping in memory.
@@ -347,6 +389,9 @@ spikes/block-render/
   hide, toggle, or leave and pass.
 - **`RawInputHook`:** the import patch. It calls the original, and applies the decision to the event it returns (see
   "Input").
+- **`FocusWatch`:** a small thread that checks, 10 times a second, whether the foreground window belongs to the game.
+  It runs on its own thread because nobody has checked whether Cyberpunk keeps calling `OnUpdate` while another
+  window is in front.
 
 ### The renderer and the atlas
 
@@ -354,10 +399,15 @@ spikes/block-render/
   (rounding down, at least 1 texel), by averaging 2×2 texels and clamping at odd edges. The shader already finds
   levels this way.
 - **`Renderer`:**
-  - **`SetAtlas`** replaces whatever atlas it has, from `atlas.bin` or Minecraft, and uploads it on the next `Update`;
-  - **`ClearSections`** removes every section;
+  - **`SetAtlas`** replaces whatever atlas it has, from `atlas.bin` or Minecraft, under the renderer's lock, and
+    uploads it on the next `Update`. Until now the atlas was loaded once, and `AtlasData()`'s pointer stayed valid for
+    good. Now it can change between frames, so the main thread fetches it again each time it needs it;
+  - **`UploadSection`** keeps only the latest mesh for each section while it waits (`PendingSections`). Until drawing
+    is first switched on, `Update` uploads nothing, and today every update queues another copy, which a linked
+    Minecraft would pile up;
+  - **`ClearSections`** removes every section, and every waiting upload;
   - **`Update`** reports its CPU time and its upload's fence;
-  - **drawing** notes when it first draws an upload, for latency.
+  - **drawing** notes when it first records a G-buffer list that draws an upload, for latency.
 
 ### Status and the overlay
 
@@ -386,14 +436,20 @@ A console program around the same `link/` code, standing in for Cyberpunk:
   - the atlas's size, saved as DDS with spike 3's writer for `view_dump.py` to turn into PNG;
   - each section, with a few vertices and the atlas texels their UVs land on;
   - explosions.
-- **It refuses to start** if the mapping already exists, which means a game side is running.
+- **It refuses to start** on the same rules as `Mapping`: if another game side (Cyberpunk, or another `mclink`) is
+  running, or the mapping found has the wrong size. Minecraft holding the mapping open isn't a reason. That's the
+  normal case when `mclink` starts again.
 
 ## The link
 
 - **The mapping** is created at load. Minecraft polls for it once a second, so it links whichever game starts first,
   and opens its world straight away. The in-game flag stays clear until the user links.
 - **Linking:**
-  - the overlay's Link button, `link on`, or the first F8 sets it, provided V is found;
+  - the overlay's Link button, `link on`, or the first F8 links. F8 arrives on the hook's thread, so it only asks, and
+    `Link::Update` links on the main thread, which `LocatePlayer` needs;
+  - the in-game flag is set while linked and V is found. It clears by itself when V isn't found (loading), and build
+    mode ends with it. At the main menu the stand-in V counts as found, which is harmless: Minecraft's player just
+    waits near the origin;
   - Link also switches drawing to `gbuffer` if it's off;
   - Unlink (`link off`) clears it and ends build mode. Minecraft then holds its player where it is, and the blocks
     stay drawn.
@@ -409,11 +465,14 @@ A console program around the same `link/` code, standing in for Cyberpunk:
   falling.
 - **The floor:**
   - flat triangles, two per region, at V's feet height, over 7 by 7 regions of 8 blocks centred on V (56 m square);
-  - sent on linking, when Minecraft comes back, and on a `floor` request;
+  - sent on linking, when Minecraft comes back, and on a `floor` request, but only while Minecraft is there. Until
+    then, it would only queue in a ring nobody reads;
   - sent again, with a new epoch whose clear message drops the old one, once V's feet are 16 m from the floor's centre
     or 1 m off its height.
 
-  It's what clicks hit: blocks placed on it sit at V's feet height, even where the street rises or dips.
+  It's what clicks hit. A block placed on it goes in the cell at `floor(hit + normal × 0.4)`, so its bottom sits on a
+  whole metre between 0.6 m below V's feet and 0.4 m above them. At spike 3's corner (feet at 6.14) that's 6.0. Blocks
+  stay at V's height even where the street rises or dips.
 - **Minecraft coming and going:**
   - **gone:** its heartbeat stops for 3 s, and the status says so. Build mode ends, typing stops, and the blocks stay;
   - **back:** a new heartbeat or process ID. Minecraft sends its clear, atlas and sections again by itself, and the
@@ -428,16 +487,21 @@ A console program around the same `link/` code, standing in for Cyberpunk:
 - **Draining:**
   - every frame in `Link::Update`, before the renderer's `Update`, whether drawing is on or off. Minecraft must never
     find the ring full;
-  - up to `ringmb` (16) MB a frame, checked between messages, so a big message is still taken whole;
-  - each payload is copied out before the tail moves on.
+  - up to `ringmb` (16) MB of sections and atlases a frame, checked between messages, so a big message is still taken
+    whole;
+  - the payloads taken are copied out before the tail moves on. Skipped messages are only stepped over, without
+    copying, and don't count toward `ringmb`. Explosions make the per-frame scene message large with particles.
 - **The atlas:** built into an `Atlas` with mip levels, and handed to `SetAtlas`.
   - Spike 3's own structures are cleared then, since their UVs belong to `atlas.bin`.
-  - While Minecraft's atlas is loaded, `place` and `field` are refused, and `clear` clears everything.
+  - While Minecraft's atlas is loaded, spike 3's `place` commands are refused, `place field <n>` included. `clear`
+    clears everything, but Minecraft's atlas stays.
 - **Sections:**
   - handed to `UploadSection` by their Minecraft section coordinates. Spike 3's renderer already places section
     (x, y, z) at Minecraft block (16x, 16y, 16z), which is world (16x, −16z, 16y);
   - a vertex count that isn't a multiple of 3 is cut down to one;
-  - no vertices removes the section, and clear-all removes every section.
+  - no vertices removes the section, and clear-all removes every section;
+  - a section that arrives before Minecraft's atlas is dropped and counted. Minecraft always sends its clear-all and
+    atlas first when it links, so one can only be left over from before the plugin started reading.
 - **Translucent triangles** (flag bit 1) are dropped and counted, since a G-buffer takes only opaque surfaces.
   `set translucent 1` draws them as cut-outs instead, to see where they are.
 - **What's ignored:** Minecraft's light values (the game lights the blocks) and its face shading (already removed by
@@ -472,15 +536,24 @@ A console program around the same `link/` code, standing in for Cyberpunk:
   into the ring, so no stale clicks wait for Minecraft. Minecraft disappearing, or Unlink, ends build mode.
 - **Leaving build mode** sends a release-all, and `SkyState`'s menu flag repeats it every frame while build mode is
   off. Nothing stays held down in Minecraft.
-- **Focus:** each frame, the plugin checks whether the foreground window belongs to the game's process.
-  - **When it stops being in front:** held inputs are released once, and nothing is forwarded until it's in front
-    again. Cyberpunk may have registered Raw Input to get it in the background too (`RIDEV_INPUTSINK`, not checked).
-    Without this rule, a click in Minecraft's own window would then also arrive through the ring.
+- **Focus:**
+  - **The hook forwards nothing unless the foreground window belongs to the game's process.** It checks before
+    forwarding each event. Cyberpunk may have registered Raw Input to get it in the background too
+    (`RIDEV_INPUTSINK`, not checked). Without this rule, a click in Minecraft's own window would then also arrive
+    through the ring.
+  - **`FocusWatch` releases held inputs once** when the game stops being in front. It doesn't rely on `OnUpdate`, so
+    a button held while Alt-Tabbing is let go even if Cyberpunk stops updating in the background.
   - **Build mode stays on,** so it's still on when the user comes back from Minecraft's window.
 - **The hotbar slot:** tracked from the forwarded keys and the wheel (up is the slot to the left, down the slot to the
-  right, wrapping at 1 and 9), and shown on the overlay.
-- **Threads:** the hook runs on whichever thread Cyberpunk reads input on. Build mode's state is atomic, and a mutex
-  guards writing into the input ring, which `Commands` shares.
+  right, wrapping at 1 and 9), and shown on the overlay. It's approximate: Minecraft can change the slot by itself,
+  for example when the middle button picks a block that's in another slot.
+- **What build mode takes from Cyberpunk:** every use of the mouse buttons and the wheel, not only combat. That
+  includes scrolling through dialogue choices, scanning and quickhacking, and the radial menu. F8 out of build mode
+  first. Interact (F) still works.
+- **Threads:** the hook runs on whichever thread Cyberpunk reads input on, and `FocusWatch` on its own.
+  - Build mode's state, whether Minecraft is in its world, and a link request from F8 are atomics. The main thread
+    keeps Minecraft's state current for the hook.
+  - A mutex guards writing into the input ring, which `Commands` and `FocusWatch` share.
 
 ### Typed commands
 
@@ -504,15 +577,16 @@ A console program around the same `link/` code, standing in for Cyberpunk:
   | `wall` | `/execute positioned ^ ^ ^4 run fill ~-2 ~ ~ ~2 ~3 ~ stone_bricks` | A stone-brick wall 5 wide and 4 tall, 4 blocks ahead, running east to west |
   | `tnt-cube` | `/gamemode creative`, `/execute positioned ^ ^ ^6 run fill ~-2 ~ ~-2 ~2 ~4 ~2 tnt`, `/execute positioned ^ ^ ^6 run summon tnt ~ ~5 ~` | 125 TNT, 5×5×5, 6 blocks ahead, set off by primed TNT on top: the worst burst |
   | `field` | `/fill ~-63 ~ ~-63 ~64 ~ ~64 grass_block` | A 128×128 layer at V's feet, 16,384 blocks in one fill, 64 to 81 sections at once |
-  | `clear` | `/fill ~-63 ~ ~-63 ~64 ~ ~64 air`, `/fill ~-16 ~ ~-16 ~15 ~31 ~15 air` | The field's layer, then 32×32×32 around V, the largest fill one command allows |
+  | `wipe` | `/fill ~-63 ~ ~-63 ~64 ~ ~64 air`, `/fill ~-16 ~ ~-16 ~15 ~31 ~15 air` | The field's layer, then 32×32×32 around V, the largest fill one command allows |
 
 ## Measurements
 
 - **The status, once a second:**
   - **the link:**
-    - the mapping, created or reused;
+    - the mapping, created or reused, or refused with the reason;
     - Minecraft's process ID and heartbeat age;
     - in world, and screen open;
+    - Minecraft's eye position, and V's camera, to compare;
     - its frame rate, from `frameCounter`;
     - linked;
     - teleports this second and the last target;
@@ -530,13 +604,20 @@ A console program around the same `link/` code, standing in for Cyberpunk:
   - **latency:** the last and the average (see below);
   - **processes:** CPU (as a share of one core) and working set, for Cyberpunk and for Minecraft (from `mcPid`).
 - **Latency:**
-  - each forwarded button press or number key, and each typed command's Enter, is a mark with its time;
+  - each forwarded button press, and each typed command's Enter, is a mark with its time;
   - the first section to arrive after a mark gives its arrival time;
   - that section's upload gives the submit time;
-  - the first frame that draws that upload gives the drawn time.
+  - the first G-buffer list recorded that draws that upload gives the drawn time. The game shows that frame a frame or
+    two later, as it does all its frames.
 
-  The total is reported in milliseconds and in Cyberpunk frames, per mark in the log. A mark with no section within a
-  second (a click that changes nothing) is dropped.
+  It's reported in two halves, in milliseconds and in Cyberpunk frames:
+  - **Minecraft's:** mark to arrival. That includes waiting for its next 20 Hz tick, and for a command, the chat screen
+    and the server's tick too;
+  - **ours:** arrival to drawn, the part the question's "a frame or two" is about.
+
+  Each mark goes in the log, and the status shows the last and the average. A mark with no section within a second (a
+  click that changes nothing, or the number keys, which only change the slot) is dropped. Marks are only meaningful
+  when nothing else is changing sections at the same time, so they're taken while V stands still.
 - **Bursts:** `tnt-cube` and `field`.
   - An explosion event or the command's Enter starts the window.
   - Then over the next second: sections, MB, drain time, `Update`'s time and the worst frame.
@@ -572,7 +653,7 @@ The user makes the Modrinth instance, starts Minecraft, and says when it's at it
 
 BlockRender 0.9.0, deployed. At spike 3's corner, with the same save:
 - **Linking:** Link pins Minecraft's player at V's camera. The overlay shows both positions.
-- **Building by command:** `wall`, `tnt-ahead`, `field` and `clear` change Night City where the commands put them,
+- **Building by command:** `wall`, `tnt-ahead`, `field` and `wipe` change Night City where the commands put them,
   and the blocks are lit as in spike 3.
 - **Latency** from a command's Enter to the frame that draws it.
 - **Bursts:** `tnt-cube` and `field`: the worst frame and `Update`'s time. If they hitch, the fix (see "Blocks"),
@@ -609,7 +690,7 @@ plugin's folder or the overlay's. New and changed commands:
 | `link on\|off` | Sets or clears the in-game flag, as the Link and Unlink buttons |
 | `build on\|off` | Build mode, as F8 |
 | `floor` | Sends a fresh floor around V |
-| `mc <name>` | Types a named set: `creative`, `tnt-kit`, `tnt-ahead`, `wall`, `tnt-cube`, `field` or `clear` |
+| `mc <name>` | Types a named set: `creative`, `tnt-kit`, `tnt-ahead`, `wall`, `tnt-cube`, `field` or `wipe` |
 | `mc /<command>` | Types that command, taken verbatim to the end of the line |
 | `place ...` | As before, but refused while Minecraft's atlas is loaded |
 | `clear` | As before, and also removes Minecraft's sections, which come back as they change, or when Minecraft next sends everything |
@@ -628,16 +709,22 @@ plugin's folder or the overlay's. New and changed commands:
 - **The hook passes through** anything it doesn't fully understand, and checks every size before reading or writing.
 - **The ring is always drained,** so Minecraft never stalls. If the mapping can't be created, the link is off, and the
   status and log say why.
-- **Nothing stays held.** Leaving build mode, focus loss and Minecraft going all release inputs. Menu keys always reach
-  the game.
+- **Nothing stays held.** Leaving build mode, focus loss (`FocusWatch`, on its own thread) and Minecraft going all
+  release inputs. Menu keys always reach the game.
 - **Off by default.** Until the user links or presses F8, the plugin only keeps the mapping's heartbeat, and the hook
   passes everything through. Drawing stays as spike 3 left it, off until switched on.
-- **Two game sides never share the mapping:** `mclink` refuses to run when it exists.
+- **Two game sides never share the mapping:**
+  - the plugin and `mclink` each refuse while another live game side holds it, and retry once a second;
+  - a mapping of the wrong size is refused too, so nothing is read past its end.
+- **Memory:** the mapping commits 191 MB of the pagefile when it's made. Only the pages written are ever touched: the
+  headers, the rings in use, and the overlay slots Minecraft fills.
 - **Builds:** a build that deploys runs only when `tasklist` shows no `Cyberpunk2077.exe`.
 
 ## Error handling
 
 - **The mapping can't be created:** logged, and the link is off.
+- **The mapping is refused** (another game side running, or the wrong size): retried once a second, with the reason
+  in the status.
 - **Minecraft's magic or version is wrong:** Minecraft refuses, and logs it, in its own log. The status shows Minecraft
   absent.
 - **A rejected message:** skipped as in "Safety", and counted.
@@ -661,13 +748,17 @@ plugin's folder or the overlay's. New and changed commands:
   - translucent triangles dropped, or kept with `translucent 1`.
 - **`Atlas`:** the levels' sizes for odd and non-square atlases, and averaged texels.
 - **`Floor`:** the messages byte for byte against `fake_skyrim.py`'s `floor_tris_payload`, and the regions covered.
-- **`Look`:** north, east, up and down to yaw and pitch, and the teleport target.
+- **`Look`:**
+  - north, east, up and down to yaw and pitch;
+  - the last yaw kept looking straight up or down;
+  - the teleport target.
 - **`Link`:**
   - teleports by step and rate;
-  - the floor moving with V;
-  - linking only with V found;
+  - the floor moving with V, sent only while Minecraft is there;
+  - linking only with V found, and F8's link request;
   - Minecraft coming and going;
-  - the menu flag following build mode.
+  - the menu flag following build mode;
+  - a section before Minecraft's atlas dropped, and skipped messages not counting toward `ringmb`.
 - **`Commands`:** a command typed against a fake `McState`, a screen already open, both timeouts, and rejected text.
 - **`Scancodes`:** the table, including extended keys.
 - **`BuildMode`:**
@@ -676,7 +767,13 @@ plugin's folder or the overlay's. New and changed commands:
   - F8's repeats;
   - no forwarding without Minecraft in its world, or while the game isn't in front.
 - **`RawInputHook`'s rewrites,** on synthetic `RAWINPUT` events: a cleared button keeps its movement, and a no-op key.
-- **`Mapping`:** created under a test name, reused, and its header.
+- **`FocusWatch`'s decision:** a release once on losing the front, and none while it stays lost.
+- **`Mapping`:**
+  - created under a test name, and its header;
+  - reused after a game side that has gone;
+  - refused while another live game side's heartbeat is fresh, and when the view is too small.
+- **The renderer's waiting uploads,** factored out of `Renderer` so they can be tested: one per section, the latest,
+  and none after `ClearSections`.
 - **The rest:** the new requests, and the status lines.
 
 ### `mclink`
@@ -699,7 +796,8 @@ Steps 2 and 3. Every step also checks that CET's overlay and spike 3's mode butt
 
    Step 3 checks each input, so the fallback is chosen per input.
 2. **Cyberpunk stops running while Minecraft's window is in front.** The heartbeat stops, Minecraft drops the link
-   after 8 s, and links again on return. That's acceptable for this spike: the user looks at Minecraft's window
+   after 8 s, and links again on return. Teleports and typed commands pause too. Held inputs are still released,
+   because `FocusWatch` runs on its own thread. That's acceptable for this spike: the user looks at Minecraft's window
    briefly, or reads the overlay's status instead.
 3. **Minecraft's spinning costs Cyberpunk frame time.** Step 2 measures it. If it does, Minecraft runs at below-normal
    priority. That's a Task Manager or launcher setting, since the mod is unchanged.
@@ -716,3 +814,68 @@ Steps 2 and 3. Every step also checks that CET's overlay and spike 3's mode butt
    is pinned at 0.1.2, and the game at 2.31.
 10. **The flat floor.** Blocks land at V's feet height, not the street's. That's known and accepted until Night City's
     collision comes.
+11. **A click inside Minecraft's own window acts in its world.** Its window still takes real input (see "SkyCraft's
+    mod, once linked"). The user brings it up to look, or to use chat and the inventory, not to click in the world.
+12. **Minecraft's HUD readback costs it frame time.** The mod reads its frame back every frame at its window's size,
+    whether or not anything uses it. Step 2 measures Minecraft's frame rate. If it suffers, the window is kept small:
+    the readback follows its size.
+
+## Changes from the deep review
+
+The user asked for a deep self-review of the first draft. Each claim was checked against its source: SkyCraft's code
+at `bfcaf17`, the user's 26.3 jar (with `javap`), Cyberpunk's files, and BlockRender 0.8.0's code. The sections above
+already include these changes.
+
+**Corrected:**
+- **The question's latency.** Minecraft acts on clicks only in its 20 Hz client tick, so "a frame or two" can only be
+  promised after Minecraft changes a block. Latency is now reported in two halves, Minecraft's and ours.
+- **`-Dskycraft.quitWithSkyrim=false` is required, not optional.** Without it Minecraft quits 5 s after the game
+  side's process ends, which would end step 1's restart check and every Cyberpunk restart.
+- **Reusing the mapping.** `mclink` refused whenever the mapping existed, but Minecraft keeps it open between game
+  sides, so `mclink` could never start twice. Both game sides now refuse only a live other game side, or a mapping of
+  the wrong size, and otherwise reset and reuse it.
+- **The renderer's waiting uploads.** While drawing is off, `Update` uploads nothing, and `UploadSection` queued every
+  update, so a linked Minecraft would have grown that list without limit. Now it keeps the latest mesh per section,
+  and `ClearSections` empties it.
+- **The atlas can change.** `AtlasData()` promised a pointer valid for good, since the atlas was loaded once.
+  `SetAtlas` now replaces it under the renderer's lock.
+- **Focus.** The check ran in `OnUpdate`, which may stop while Cyberpunk is in the background. The hook now checks the
+  foreground before forwarding each event, and `FocusWatch` releases held inputs from its own thread.
+- **F8 and threads.** F8 arrives on the hook's thread, but linking needs `LocatePlayer` on the main thread. F8 now
+  only asks, and the main thread links.
+- **Where a block lands on the floor:** the cell at `floor(hit + normal × 0.4)`, between 0.6 m below V's feet and
+  0.4 m above them, not "at V's feet height".
+- **Skipped messages.** The per-frame scene message carries every particle, so it grows during explosions. Skipped
+  messages are stepped over without copying, and don't count toward `ringmb`.
+- **Smaller fixes:**
+  - the floor goes out only while Minecraft is there;
+  - a section before Minecraft's atlas is dropped;
+  - looking straight up or down keeps the last yaw;
+  - the TNT command set `clear` became `wipe`, apart from the plugin's own `clear`;
+  - "place and field refused" now names spike 3's `place` commands;
+  - "no DirectInput" became "imports no DirectInput".
+
+**Added:**
+- **What else the mod does,** in "SkyCraft's mod, once linked":
+  - it reads back its HUD every frame at its window's size, which this spike doesn't use (risk 12);
+  - its window still takes real input, so a click in it can act in the world (risk 11);
+  - the per-frame scene message.
+- **What build mode takes from Cyberpunk:** every use of the mouse buttons and the wheel, dialogue choices included.
+- **The mapping's pagefile commit, 191 MB.**
+- **The status:** Minecraft's eye beside V's camera, and why a mapping was refused.
+
+**Checked, and found as written:**
+- **Clicks on the floor need only triangles:** the crosshair pick goes through `SkyClip` with no other condition.
+  The cast is two-sided, so winding doesn't matter, and only voxel messages mark regions known, so the player stays
+  held.
+- **A floating, held player isn't kicked:** the server allows flight while linked.
+- **Attacking our floor does nothing:** it digs only for diggable triangles.
+- **Minecraft keeps rendering, and so exporting, while minimized:** `renderFrame` calls `GameRenderer.render()` every
+  frame.
+- **The command sets fit:** `/fill` allows 32,768 blocks by default (`max_block_modifications`), and SkyCraft's world
+  is created with commands allowed.
+- **Chat opens one client tick after T:** `Gui.handleKeybinds`.
+- **The protocol's offsets and the mapping's size** were computed from the header.
+- **The vertex matches BlockRender's,** byte for byte.
+- **The user has rebound no Cyberpunk key,** so the default bindings hold.
+- **`mclink`'s atlas dump:** spike 3's DDS writer takes RGBA8, and `view_dump.py` decodes it.
