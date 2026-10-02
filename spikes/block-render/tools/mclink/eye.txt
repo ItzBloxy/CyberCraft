@@ -1,0 +1,165 @@
+# Spike 4, after step 2: where Minecraft's eye goes when its player stands among blocks, and where clicks land.
+# Minecraft running, no game side: mclink eye.txt. The results doc's "Minecraft's eye among blocks" has what it found.
+status
+wait-world 180
+# An empty area far from earlier builds, linked at feet 6.14, looking north and level.
+at -300.5 6.14 2000.5
+look 180 0
+link on
+wait 3
+type creative
+type /fill -310 0 1990 -270 12 2010 air
+type /item replace entity @s hotbar.0 with minecraft:stone
+key 30
+wait 1
+# A: open space.
+status
+status
+wait 0.2
+status
+wait 0.2
+status
+wait 0.2
+status
+wait 0.2
+status
+wait 0.2
+# B: a stone layer at y 6, so the feet (6.14) are 0.86 inside it, as in step 2's field. Standing still.
+type /fill -305 6 1995 -296 6 2005 stone
+wait 0.5
+status
+wait 0.3
+status
+wait 0.3
+status
+wait 0.3
+status
+wait 0.3
+status
+wait 0.3
+status
+wait 0.3
+status
+wait 0.3
+status
+wait 0.3
+status
+wait 0.3
+status
+wait 0.3
+# B: walking north through it at 5 m/s, then stopping.
+at -300.5 6.14 2001.0
+wait 0.1
+at -300.5 6.14 2001.5
+wait 0.1
+at -300.5 6.14 2002.0
+wait 0.1
+at -300.5 6.14 2002.5
+wait 0.1
+at -300.5 6.14 2003.0
+wait 0.1
+at -300.5 6.14 2003.5
+wait 0.1
+status
+wait 0.2
+status
+wait 0.2
+status
+wait 0.2
+status
+wait 0.2
+status
+wait 0.2
+status
+wait 0.2
+status
+wait 0.2
+status
+wait 0.2
+status
+wait 0.2
+status
+wait 0.2
+status
+wait 0.2
+status
+wait 0.2
+status
+wait 0.2
+status
+wait 0.2
+status
+wait 0.2
+save-hud inlayer.dds
+# C: on top of the layer, feet at 7.05.
+at -300.5 7.05 2003.5
+wait 0.5
+status
+wait 0.2
+status
+wait 0.2
+status
+wait 0.2
+status
+wait 0.2
+status
+wait 0.2
+# D: a low ceiling: a stone block at y 7, the feet at 6.14 below it in open air.
+at -290.5 6.14 2000.5
+wait 1
+type /setblock -291 7 2000 stone
+wait 0.5
+status
+wait 0.3
+status
+wait 0.3
+status
+wait 0.3
+status
+wait 0.3
+status
+wait 0.3
+status
+wait 0.3
+status
+wait 0.3
+status
+wait 0.3
+status
+wait 0.3
+status
+wait 0.3
+save-hud ceiling.dds
+# E: a click 30 degrees down from under the ceiling, placing stone on the floor ahead.
+look 180 30
+wait 0.5
+status
+click right
+wait 1
+# E: the same click standing in the open, 6 blocks east.
+at -284.5 6.14 2000.5
+look 180 30
+wait 1
+status
+click right
+wait 1
+# F: commands' position when the feet are below the floor: a fresh floor at 6.14, then the feet 0.34 lower.
+at -270.5 6.14 2000.5
+look 180 0
+wait 1
+floor
+wait 1
+at -270.5 5.80 2000.5
+wait 1
+status
+wait 0.3
+status
+wait 0.3
+status
+wait 0.3
+type /setblock ~ ~-1 ~ minecraft:gold_block
+wait 1
+link off
+wait 1
+status
+quit

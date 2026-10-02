@@ -156,9 +156,10 @@ struct Report : LinkSink
 void PrintStatus(const Link::Status& aStatus, const Report& aReport)
 {
 	const auto& s = aStatus;
-	Say("Minecraft: {}{}{}, feet {:.3f} {:.3f} {:.3f}, frame {}", s.minecraft ? std::format("process {}", s.minecraftPid) : "absent",
-	    s.inWorld ? ", in its world" : "", s.screenOpen ? ", a screen open" : "", s.minecraftFeet.x, s.minecraftFeet.y, s.minecraftFeet.z,
-	    s.minecraftFrames);
+	Say("Minecraft: {}{}{}, feet {:.3f} {:.3f} {:.3f}, eye {:.3f} ({:.2f} above the feet), frame {}",
+	    s.minecraft ? std::format("process {}", s.minecraftPid) : "absent", s.inWorld ? ", in its world" : "",
+	    s.screenOpen ? ", a screen open" : "", s.minecraftFeet.x, s.minecraftFeet.y, s.minecraftFeet.z, s.minecraftEye.y,
+	    s.minecraftEye.y - s.minecraftFeet.y, s.minecraftFrames);
 	Say("game side: {}, {} teleports (sequence {}) to {:.3f} {:.3f} {:.3f}, look {:.1f} {:.1f}, floor {} {}", s.inGame ? "in game" : "not in game",
 	    s.teleports, s.teleportSeq, s.target.x, s.target.y, s.target.z, s.look.yaw, s.look.pitch, s.floorEpoch,
 	    s.floorSent ? std::format("at height {:.2f}", s.floorCentre.y) : "not sent");
