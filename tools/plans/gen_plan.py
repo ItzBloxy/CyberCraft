@@ -1,4 +1,4 @@
-"""Build the block-render plan from its skeleton: every line "@@FILE <path>@@" becomes a fenced code block holding that
+"""Build a plan from its skeleton: every line "@@FILE <path>@@" becomes a fenced code block holding that
 file, exactly.
 
     uv run --no-project python gen_plan.py <skeleton.md>... <out.md>
@@ -39,7 +39,9 @@ def block(path, source):
         sys.exit(f"{path} at {source} doesn't end with a newline")
     longest = max((len(run) for run in re.findall(r"`+", text)), default=0)
     fence = "`" * max(3, longest + 1)
-    return f"{fence}{LANGUAGES[Path(path).suffix]}\n{text}{fence}\n"
+    name = Path(path)
+    language = "cmake" if name.name == "CMakeLists.txt" else "text" if name.suffix == ".txt" else LANGUAGES[name.suffix]
+    return f"{fence}{language}\n{text}{fence}\n"
 
 
 def expand(skeleton):

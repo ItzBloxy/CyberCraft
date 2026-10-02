@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Build and test the scratch copy of spikes/block-render. Usage: b.sh [project dir] [configure]
-B="${1:-/c/Users/BLOXY/AppData/Local/Temp/claude/D--Cyberpunk-Minecraft/406ecbf4-756f-4341-9425-42e5c95a5693/scratchpad/verify/spikes/block-render}"
+B="${1:-C:/Users/BLOXY/AppData/Local/Temp/claude/D--Cyberpunk-Minecraft/481b4399-87bb-45e6-bbd7-5974ab350345/scratchpad/verify/spikes/block-render}"
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
 CTEST="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/ctest.exe"
 cd "$B" || exit 1
