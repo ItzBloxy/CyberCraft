@@ -3,7 +3,8 @@
 Date: 2026-10-02. Status: agreed with the user section by section in the brainstorm, after a scope pass the user asked
 for, with concrete evidence for each part. Then revised after a deep self-review, which checked its claims against
 SkyCraft's source, the user's Minecraft 26.3 jar, Cyberpunk's files and BlockRender's code. "Changes from the deep
-review", at the end, lists what changed.
+review", at the end, lists what changed. Then the user asked why not use the HUD image Minecraft reads back anyway, and
+it was added. "Added after the review: Minecraft's HUD", at the very end, lists what that changed.
 
 ## Purpose
 
@@ -20,9 +21,12 @@ structures. Spike 4 connects the real Minecraft:
 and `startUseItem` run from `handleKeybinds`, inside `tick()`), and on a typed command a tick or two later still. So
 latency is measured in two halves: Minecraft's own, and ours (see "Measurements").
 
+Minecraft's HUD (the hotbar, the held item, chat) is drawn over Night City as well, from the image the mod reads back
+every frame anyway.
+
 It answers that in three steps, each tested against something real (see "The steps"):
 1. BlockRender's link code, run as a console stand-in, against the real Minecraft, without Cyberpunk.
-2. In the game: the link and the blocks, with Minecraft driven by commands typed from the overlay.
+2. In the game: the link, the blocks and the HUD, with Minecraft driven by commands typed from the overlay.
 3. In the game: input. In build mode, clicks place and break blocks where V looks, and Cyberpunk doesn't react to
    them.
 
@@ -31,8 +35,10 @@ It answers that in three steps, each tested against something real (see "The ste
 - **SkyCraft's mod, unchanged.** The user chose the released `skycraft-fabric-0.1.2.jar` over a trimmed fork or a mod
   of our own. Cyberpunk's side therefore plays Skyrim's part of the protocol. Once linked, the mod takes Minecraft
   over (see "SkyCraft's mod, once linked"), so the building is done from inside Cyberpunk, not in Minecraft's window.
-- **Scope: parts 0 to 4 of the scope pass:** running Minecraft, the link, the look, blocks, and input. The user picked
-  this after the scope pass. Puppeting, Minecraft's HUD in the frame and Night City's real collision come later.
+- **Scope: parts 0 to 4 and 7 of the scope pass:** running Minecraft, the link, the look, blocks, input, and
+  Minecraft's HUD. The user picked parts 0 to 4 after the scope pass. Part 7 was added after the deep review, when the
+  user asked why not use the HUD image Minecraft reads back anyway. Most of its plumbing turned out to exist already in
+  spike 3's `present` path. Puppeting and Night City's real collision come later.
 - **V walks, and Minecraft follows.** Until puppeting, Cyberpunk keeps movement and mouse look. BlockRender keeps
   Minecraft's player pinned at V's camera with teleports. A flat floor of collision triangles at V's feet gives clicks
   something to hit, since SkyCraft's world is an empty void.
@@ -41,9 +47,12 @@ It answers that in three steps, each tested against something real (see "The ste
 - **A Modrinth instance.** The user runs Minecraft from their own Modrinth App, with their own account, rather than
   SkyCraft's Prism bundle or a build from source. It runs with `-Dskycraft.quitWithSkyrim=false`. Otherwise
   Minecraft saves and quits 5 s after the game side's process ends: when `mclink` stops, and whenever Cyberpunk closes.
-- **Minecraft's window minimized, not hidden.** Both games share the main monitor (Cyberpunk borderless fullscreen,
-  Minecraft windowed), and the second monitor shows Claude Code. `-Dskycraft.showWindow=true` stops the mod hiding the
-  window, the user minimizes it, and brings it up to see the hotbar or chat.
+- **Minecraft's HUD drawn over Night City, and its window hidden.**
+  - **The first plan:** both games share the main monitor (Cyberpunk borderless fullscreen), and the second monitor
+    shows Claude Code. So the user would keep Minecraft's window minimized, and bring it up to see the hotbar or chat.
+  - **What changed it:** with the HUD drawn in the game, the window has nothing left to show. It stays hidden,
+    SkyCraft's own default, which also avoids an untested path: a minimized window that SkyCraft tells Minecraft isn't
+    minimized (see "Minecraft").
 - **Approach A: BlockRender grows two modules.** `link/` and `input/` go into BlockRender (0.9.0), which already has
   the renderer, import patching, requests, the status file and the overlay. A second plugin would need a cross-DLL
   interface for the renderer's sections and atlas. The link code also builds into `mclink.exe`, a console stand-in
@@ -100,13 +109,14 @@ and the user's 26.3 jar. SkyCraft's Skyrim side is 11,850 lines of C++.
    `Collision.cpp`, is 1,282 lines.
 7. **The HUD.** `FrameExporter` reads back Minecraft's whole frame (hand, HUD and screens on a transparent background)
    every frame: 2560×1440×4 = 14.7 MB, about 1.2 GB/s at 80 fps on each side. Spike 3's `present` mode already draws
-   on the back buffer. SkyCraft's `Overlay.cpp` is 410 lines (D3D11).
+   on the back buffer. SkyCraft's `Overlay.cpp` is 410 lines (D3D11). Added to this spike later (see "Added after the
+   review: Minecraft's HUD"), at half size: 3.7 MB a frame.
 
 ## Non-goals
 
 - **No puppeting:** V moves with Cyberpunk's own movement, and Minecraft's player follows by teleports.
-- **No Minecraft HUD in the frame:** the hotbar, chat and screens are seen in Minecraft's own window, when the user
-  brings it up.
+- **No using Minecraft's screens from Cyberpunk:** the HUD shows the inventory or chat if one opens, but working them
+  needs a forwarded cursor and more keys. No mouse cursor is drawn.
 - **No real collision:** only the flat floor of triangles. Minecraft's player never walks.
 - **No other Minecraft drawing:**
   - no entities, items, particles, the player's avatar, or the targeted block's outline;
@@ -114,7 +124,9 @@ and the user's 26.3 jar. SkyCraft's Skyrim side is 11,850 lines of C++.
   - no translucent blocks (water, stained glass, ice);
   - no Minecraft lights, and no shadows.
 - **No chat or screens from Cyberpunk's keyboard:** only the build-mode keys are forwarded, and commands come from the
-  overlay's buttons and requests.
+  overlay's buttons and requests. Their replies show in the HUD's chat.
+- **No exact copy of Minecraft's crosshair:** Minecraft draws it with an invert blend, which the transparent capture
+  can't keep, so it comes out plain white. SkyCraft redraws that patch with the invert blend; this spike doesn't.
 - **No changes to SkyCraft's mod,** and no gamepad.
 - **Only these versions:** game 2.31 (as spike 3), SkyCraft 0.1.2 with protocol version 11, Minecraft 26.3.
 
@@ -157,15 +169,22 @@ and the user's 26.3 jar. SkyCraft's Skyrim side is 11,850 lines of C++.
   files, 48 wider than 16 pixels) and 831 item textures.
   - It acts on clicks in its 20 Hz client tick: `startAttack`, `startUseItem` and `continueAttack` are called from
     `handleKeybinds`, which `tick()` calls.
-  - `renderFrame` calls `GameRenderer.render()` every frame. A minimized window only skips reconfiguring the GPU
+  - `renderFrame` calls `GameRenderer.render()` every frame. Being minimized only stops it reconfiguring the GPU
     surface.
+  - **Minimizing:** `Window.onFramebufferResize` ignores a 0×0 size, so a minimized window keeps its render target.
+    But while linked, SkyCraft reports the window as not minimized, so Minecraft would try to reconfigure its surface
+    at the minimized window's size, a path nobody has tried. That's one reason the window stays hidden (`SDL_HideWindow`
+    keeps its size).
   - `/fill` is capped by the game rule `max_block_modifications`, 32,768 by default.
+  - **The GUI scale it picks automatically** is the largest that still leaves at least 320×240 GUI pixels: 3 for
+    1280×720, and 6 for 2560×1440.
 - **The Modrinth App** is installed, with the user's account. The user makes the instance:
   - Minecraft 26.3, Fabric Loader 0.19.5, and Fabric API 0.161.0+26.3;
   - `skycraft-fabric-0.1.2.jar` in its `mods` folder;
-  - JVM arguments `--enable-native-access=ALL-UNNAMED -Dskycraft.showWindow=true -Dskycraft.quitWithSkyrim=false`.
-    Without the last one, Minecraft saves and quits 5 s after the process in the header's game process ID ends
-    (`SkyClient.quitWithSkyrim`): `mclink`'s or Cyberpunk's.
+  - JVM arguments `--enable-native-access=ALL-UNNAMED -Dskycraft.quitWithSkyrim=false`. Without the second, Minecraft
+    saves and quits 5 s after the process in the header's game process ID ends (`SkyClient.quitWithSkyrim`):
+    `mclink`'s or Cyberpunk's. Without `-Dskycraft.showWindow=true`, the window hides itself once linked. It's on screen
+    only until then, at the title screen.
 - **Java:** Minecraft 26.3 needs Java 25, which the Modrinth App provides. Temurin 25.0.2 is also on `PATH`.
 
 ### SkyCraft
@@ -183,7 +202,8 @@ and the user's 26.3 jar. SkyCraft's Skyrim side is 11,850 lines of C++.
 The game side creates the mapping, and Minecraft opens it, checking the magic and version. The link counts as up while
 the game's heartbeat is less than 8 s old (`SkyLink.active`). Once it's up:
 - **The window:** hidden with `SDL_HideWindow`, unless `-Dskycraft.showWindow=true`. Minecraft is told it's focused
-  and not minimized (`WindowMixin`), so it keeps running while minimized.
+  and not minimized (`WindowMixin`). `SkyState`'s viewport, when it isn't 0, resizes the window to that size
+  (`applyViewportSize`), and the HUD image follows the window's size.
 - **Rendering:** Minecraft's own level rendering is cancelled (`LevelRendererMixin`), so its window shows only the
   hand, the HUD and screens.
 - **Input:**
@@ -208,12 +228,13 @@ the game's heartbeat is less than 8 s old (`SkyLink.active`). Once it's up:
   2. each frame, dirty sections: the player's own edits first, up to 12 a frame within 3 ms;
   3. animated-sprite patches, the world-entity table, the avatar, and the scene (other entities and particles). The
      per-frame ones are written only if the ring has room, and dropped otherwise;
-  4. its HUD image (`FrameExporter`): read back from the GPU every frame at its window's size, and copied into the
-     overlay's slots. This spike doesn't use it, but Minecraft pays for it.
+  4. its HUD image (`FrameExporter`): the hand, HUD and screens on a transparent background. It's read back from the
+     GPU every frame at the window's size, asynchronously, so it's shipped about a frame later. The rows are bottom-up
+     (slot flag bit 0), RGBA8 with premultiplied alpha (as SkyCraft's `Overlay.cpp` notes). It's published through the
+     overlay's triple buffer (see "The protocol").
 - **Its own window still takes real input.** Only key states and the mouse grab are taken over, so keys and clicks
-  inside Minecraft's window reach its handlers. Brought up for a look, the window is safe to type into (chat, the
-  inventory), but a click in it can act in the world, as Minecraft treats the first click as grabbing the mouse and
-  later ones as attack or use.
+  inside Minecraft's window reach its handlers. A click in it can act in the world: Minecraft treats the first click
+  as grabbing the mouse, and later ones as attack or use. Hidden, as in this spike, nothing can click it.
 - **Clicks on the game's ground:**
   - the crosshair's pick goes through `SkyClip` (`EntityPickMixin`) with no other condition, so triangles alone are
     enough. Without triangles, a click in the void hits nothing;
@@ -223,7 +244,7 @@ the game's heartbeat is less than 8 s old (`SkyLink.active`). Once it's up:
     there does nothing;
   - while linked, the server allows flight (`MinecraftServerFlightMixin`), so a player held in mid-air isn't kicked.
 - **Fields of `SkyState` it doesn't use:** `gameHour`, and `collisionEpoch` (the collision ring carries its own
-  epochs). A viewport of 0 leaves Minecraft's window size alone.
+  epochs). A viewport of 0 would leave Minecraft's window size alone, but this spike sends the HUD's size.
 
 ## The protocol, as this spike uses it
 
@@ -236,14 +257,14 @@ Minecraft's (blocks, y up, z south). The mapping is `Local\SkyCraft_v1`, 200,327
 | `0x0` | `Header`: magic, version, both process IDs, both heartbeats | both | written and read |
 | `0x100` | `SkyState`, seqlocked | game → MC | written every frame |
 | `0x200` | `McState`, seqlocked | MC → game | read every frame |
-| `0x300`, `0x340` | the overlay's triple buffer | MC → game | unused |
+| `0x300`, `0x340` | the overlay's triple buffer: its state, and 3 slot headers | MC → game | read: the HUD |
 | `0x400` | `WaterGrid` | game → MC | unused (never written, so Minecraft sees none) |
 | `0x1000` | the input ring: 4,096 events of 16 bytes | game → MC | written |
 | `0x12000` | the actor table | game → MC | unused |
 | `0x17000` | the event ring: 512 events of 32 bytes | MC → game | drained, explosions logged |
 | `0x1C000` | the world entities | MC → game | unused |
 | `0x20000` | the collision ring, 32 MiB | game → MC | the floor's messages |
-| `0x2020000` | the overlay's pixels, 3 slots of 3840×2160×4 | MC → game | unused |
+| `0x2020000` | the overlay's pixels, 3 slots of 3840×2160×4 | MC → game | read: the HUD |
 | `0x7F0C000` | the render ring, 64 MiB | MC → game | drained every frame |
 
 - **The rings:** a head at `+0x0` written by the producer, a tail at `+0x40` written by the consumer, and data at
@@ -260,7 +281,8 @@ Minecraft's (blocks, y up, z south). The mapping is `Local\SkyCraft_v1`, 200,327
   - the position: the teleport target (see "The link");
   - yaw and pitch from V's camera;
   - `teleportSeq`;
-  - a viewport of 0 by 0, and `gameHour` 0.
+  - the viewport: the size the HUD image should be, the back buffer's size divided by `hudscale` (2): 1280×720 here;
+  - `gameHour` 0.
 - **`McState`, as read:**
   - the flags: in world, a screen open;
   - the position and eye;
@@ -273,6 +295,15 @@ Minecraft's (blocks, y up, z south). The mapping is `Local\SkyCraft_v1`, 200,327
   - scroll: a is notches × 120, positive up;
   - text: a is the code point, taken only while a screen is open;
   - release all.
+- **The overlay's triple buffer, as read** (SkyCraft's `Link::AcquireOverlayFrame`):
+  - its state at `0x300`: bits 0 to 1 hold the middle slot, and bit 2 says the middle slot holds a frame not yet read.
+    Minecraft writes into its own back slot, then swaps it into the middle with the bit set;
+  - the reader keeps a front slot. When the bit is set, it swaps its front slot into the middle (bit clear) and takes
+    the slot it gets back as its new front, which Minecraft won't touch until it's swapped out again;
+  - each slot has a 64-byte header at `0x340`: width, height, flags (bit 0: rows bottom-up) and a frame number. Its
+    pixels are at `0x2020000` plus the slot × 33,177,600;
+  - when Minecraft connects or comes back, the state goes to 0 and the reader's front to slot 2. Minecraft's writer
+    starts again at slot 1.
 - **Collision messages, as sent:**
   - clear: payload is the epoch;
   - triangles: a `ColRegion` header (the region's inclusive block box, the epoch, the count), then `ColTri`s (9 floats
@@ -301,6 +332,7 @@ spikes/block-render/
   src/link/Mapping.*              the shared mapping: create or reuse, reset, heartbeat, Minecraft's process
   src/link/Rings.*                the rings and seqlocked blocks, read and written on a span of bytes
   src/link/Messages.*             render messages, checked, into sections and an atlas
+  src/link/Overlay.*              the overlay's triple buffer: the newest HUD image, checked
   src/link/Floor.*                the floor's collision messages
   src/link/Look.*                 yaw, pitch and the teleport target, from V's camera
   src/link/Commands.*             typing commands into Minecraft's chat
@@ -311,7 +343,9 @@ spikes/block-render/
   src/input/FocusWatch.*          the thread that releases held inputs when the game loses the front
   src/render/Atlas.*              + an atlas from Minecraft's RGBA, with mip levels
   src/render/PendingSections.*    the renderer's waiting uploads, the latest mesh per section
-  src/render/Renderer.*           + SetAtlas, ClearSections, upload timing, and when an upload is first drawn
+  src/render/Hud.*                the HUD pass's rules: when it shows, and where each pixel samples the image
+  src/render/Renderer.*           + SetAtlas, ClearSections, upload timing, when an upload is first drawn, the HUD pass
+  shaders/blocks.hlsl             + the HUD's vertex and pixel shaders
   src/Requests.*, Status.*, Plugin.cpp   + the new commands, the link's status, the update order
   tools/mclink/Main.cpp           the console stand-in
   tools/blockrender_hud/init.lua  + Link, Unlink and the command buttons, and the link's status
@@ -321,8 +355,8 @@ spikes/block-render/
 ## Build
 
 - **As in spike 3,** with three changes:
-  - `render_core` gains `link/`, `input/Scancodes`, `input/BuildMode` and `render/PendingSections`, so the unit tests
-    reach them. `FocusWatch`'s decision is a pure function there too;
+  - `render_core` gains `link/`, `input/Scancodes`, `input/BuildMode`, `render/PendingSections` and `render/Hud`, so
+    the unit tests reach them. `FocusWatch`'s decision is a pure function there too;
   - `render_runtime` gains `input/RawInputHook` and `FocusWatch`'s thread;
   - a new console target, `mclink`, links `render_core`.
 - **The protocol header** comes from `extern/skycraft/`.
@@ -343,7 +377,7 @@ spikes/block-render/
 - **Every frame, in `OnUpdate`,** in this order:
   1. requests, once a second;
   2. `Link::Update`, with V's pose from `LocatePlayer` (see "The link"). Spike 1 called the same script functions
-     every frame without trouble;
+     every frame without trouble. It also hands the newest HUD image, if there is one, to the renderer;
   3. the frame log and the dumps;
   4. meshing spike 3's own structures, as before, and the renderer's `Update`;
   5. the log;
@@ -371,6 +405,12 @@ spikes/block-render/
   functions on a span of bytes with acquire and release ordering, so they're tested on ordinary memory.
 - **`Messages`:** turns render messages into a section (coordinates and vertices) or an atlas, after checking each
   against its layout (see "Safety").
+- **`Overlay`:** the triple buffer's reader. It takes the newest HUD image when there is one, as in "The protocol",
+  and checks it before use:
+  - a slot index of 3 is refused;
+  - width and height from 1 to 3840 and 2160.
+
+  It resets when Minecraft connects or comes back.
 - **`Floor`:** the clear message, and one triangle message per region, from a centre, a height and an epoch.
 - **`Look`:**
   - yaw = atan2(−x, z) and pitch = −asin(y), in degrees, from V's camera's forward vector in Minecraft's axes. Looking
@@ -407,7 +447,22 @@ spikes/block-render/
     Minecraft would pile up;
   - **`ClearSections`** removes every section, and every waiting upload;
   - **`Update`** reports its CPU time and its upload's fence;
-  - **drawing** notes when it first records a G-buffer list that draws an upload, for latency.
+  - **drawing** notes when it first records a G-buffer list that draws an upload, for latency;
+  - **`SetHudImage`** copies a HUD image into one of 3 upload buffers, one the GPU has finished with, and marks it as
+    the newest. It's called on the main thread;
+  - **the HUD pass** runs at Present, in any drawing mode, when `Hud` says the HUD shows (see "The HUD"). It records
+    one list onto the main queue just before Present, through spike 3's `present` path: the back buffer, its
+    barriers, and a pipeline for its format. The list copies the newest image into a buffer in GPU memory, if a new
+    one came, then draws one full-screen triangle with the HUD's shaders and premultiplied-alpha blending, without
+    depth. It has its own skip count, and never switches block drawing off.
+- **`Hud`:** the pass's pure parts: whether the HUD shows (the `hud` setting, build mode, Minecraft in its world, an
+  image received), and which image texel a back-buffer pixel takes (scaled by `hudscale`, flipped when the rows are
+  bottom-up, clamped to the image).
+- **The HUD's shaders,** in `blocks.hlsl`, with the existing root signature:
+  - the vertex shader makes one full-screen triangle from the vertex index;
+  - the pixel shader reads the image as a structured buffer of RGBA8 texels, the way the atlas is read, with no
+    texture or descriptor heap. It returns the texel as it is, since its alpha is premultiplied;
+  - the sizes and the flip come in as root constants.
 
 ### Status and the overlay
 
@@ -415,6 +470,7 @@ spikes/block-render/
 - **The overlay** gains:
   - Link and Unlink buttons;
   - the command buttons;
+  - a HUD button that cycles never, in build mode, and always;
   - a line showing build mode and the hotbar slot.
 
   The mode buttons stay.
@@ -428,14 +484,17 @@ A console program around the same `link/` code, standing in for Cyberpunk:
   - how long to run;
   - commands to type;
   - clicks or keys to send.
-- **It writes `SkyState`** at 60 Hz with that position, sends the floor, types its commands, and sends its inputs.
+- **It writes `SkyState`** at 60 Hz with that position and a 1280×720 viewport. It sends the floor, types its
+  commands, and sends its inputs.
 - **It reports:**
   - the link's state;
   - Minecraft's position and flags;
   - every message type, with counts and bytes;
   - the atlas's size, saved as DDS with spike 3's writer for `view_dump.py` to turn into PNG;
   - each section, with a few vertices and the atlas texels their UVs land on;
-  - explosions.
+  - explosions;
+  - HUD images: how many a second, their size and flags. The latest one is saved as DDS too, unflipped, with its
+    alpha.
 - **It refuses to start** on the same rules as `Mapping`: if another game side (Cyberpunk, or another `mclink`) is
   running, or the mapping found has the wrong size. Minecraft holding the mapping open isn't a reason. That's the
   normal case when `mclink` starts again.
@@ -454,7 +513,8 @@ A console program around the same `link/` code, standing in for Cyberpunk:
   - Unlink (`link off`) clears it and ends build mode. Minecraft then holds its player where it is, and the blocks
     stay drawn.
 - **`SkyState` once a frame,** so Minecraft paces to Cyberpunk's frames: yaw and pitch from V's camera every frame,
-  and the other fields as in "The protocol".
+  and the other fields as in "The protocol". The viewport comes from the back buffer's size, which the Present hook
+  sees, divided by `hudscale`. Minecraft resizes its hidden window to it.
 - **Teleports:**
   - the target: Minecraft's eye at V's camera;
   - `teleportSeq` goes up on linking, when Minecraft comes back, and when the camera is `teleportstep` (0.1 m) from
@@ -475,8 +535,8 @@ A console program around the same `link/` code, standing in for Cyberpunk:
   stay at V's height even where the street rises or dips.
 - **Minecraft coming and going:**
   - **gone:** its heartbeat stops for 3 s, and the status says so. Build mode ends, typing stops, and the blocks stay;
-  - **back:** a new heartbeat or process ID. Minecraft sends its clear, atlas and sections again by itself, and the
-    link sends the floor and a teleport, as SkyCraft's `Game.cpp` does;
+  - **back:** a new heartbeat or process ID. Minecraft sends its clear, atlas and sections again by itself. The link
+    sends the floor and a teleport, and resets the overlay's triple buffer, as SkyCraft's `Game.cpp` does;
   - **a restarted Cyberpunk:** it finds the mapping still there if Minecraft holds it, resets its own regions and
     writes its new process ID. Minecraft sees the change and sends everything again.
 - **Events:** the event ring is drained every frame. Explosions (`kEvExplosion`, centre and radius) are logged with
@@ -543,7 +603,7 @@ A console program around the same `link/` code, standing in for Cyberpunk:
     through the ring.
   - **`FocusWatch` releases held inputs once** when the game stops being in front. It doesn't rely on `OnUpdate`, so
     a button held while Alt-Tabbing is let go even if Cyberpunk stops updating in the background.
-  - **Build mode stays on,** so it's still on when the user comes back from Minecraft's window.
+  - **Build mode stays on,** so it's still on when the user comes back from another window.
 - **The hotbar slot:** tracked from the forwarded keys and the wheel (up is the slot to the left, down the slot to the
   right, wrapping at 1 and 9), and shown on the overlay. It's approximate: Minecraft can change the slot by itself,
   for example when the middle button picks a block that's in another slot.
@@ -579,6 +639,37 @@ A console program around the same `link/` code, standing in for Cyberpunk:
   | `field` | `/fill ~-63 ~ ~-63 ~64 ~ ~64 grass_block` | A 128×128 layer at V's feet, 16,384 blocks in one fill, 64 to 81 sections at once |
   | `wipe` | `/fill ~-63 ~ ~-63 ~64 ~ ~64 air`, `/fill ~-16 ~ ~-16 ~15 ~31 ~15 air` | The field's layer, then 32×32×32 around V, the largest fill one command allows |
 
+## The HUD
+
+- **What shows:** Minecraft's frame without its world:
+  - the hotbar with its selected slot, the hand and the held item;
+  - health, hunger and experience;
+  - chat, which includes the replies to typed commands;
+  - any open screen;
+  - its crosshair, in white (see "Non-goals").
+
+  No mouse cursor is drawn.
+- **When:** the `hud` setting.
+  - `0` never;
+  - `1` in build mode, the default;
+  - `2` always, while Minecraft is in its world.
+
+  Build mode is the default so the HUD never covers Cyberpunk's menus: the keys that open them leave build mode. The
+  overlay's HUD button cycles the three. Step 2 uses `2`, since build mode comes in step 3.
+- **Size:** the viewport asks for the back buffer's size divided by `hudscale` (2), 1280×720 here. The pass scales it
+  back up with whole texels. At 1280×720 Minecraft's automatic GUI scale is 3, so each GUI pixel lands on 6×6 screen
+  pixels, exactly as its automatic scale of 6 would at 2560×1440. `hudscale 1` asks for the full size, and 4 for a
+  quarter.
+- **The path:**
+  1. Minecraft reads back its frame, about a frame late;
+  2. the triple buffer;
+  3. while the HUD shows, `Link::Update` takes the newest on the main thread, and `SetHudImage` copies it into an upload
+     buffer: 3.7 MB at half size. While it doesn't, images are left unread in the triple buffer, where Minecraft keeps
+     replacing the middle slot, at no cost to us;
+  4. the HUD pass at Present copies it into GPU memory and draws it over the finished frame, over Cyberpunk's own HUD.
+- **Blending:** premultiplied alpha (one, and one minus the source's alpha), as SkyCraft composites it. The rows are
+  flipped when the slot says bottom-up.
+
 ## Measurements
 
 - **The status, once a second:**
@@ -601,6 +692,11 @@ A console program around the same `link/` code, standing in for Cyberpunk:
     - translucent triangles dropped;
     - `Update`'s CPU time (average and worst);
     - the renderer's existing figures: frames drawn and skipped, GPU time, frame time;
+  - **the HUD:**
+    - the `hud` setting and whether it's showing;
+    - images received and drawn this second, their size and MB a second;
+    - `SetHudImage`'s copy time;
+    - the pass's GPU time, and its skips with the reason;
   - **latency:** the last and the average (see below);
   - **processes:** CPU (as a share of one core) and working set, for Cyberpunk and for Minecraft (from `mcPid`).
 - **Latency:**
@@ -624,6 +720,8 @@ A console program around the same `link/` code, standing in for Cyberpunk:
   - The frame log can be armed alongside.
 - **Frame rates:** Cyberpunk without Minecraft, then linked and idle, building, and through bursts. Minecraft's frame
   rate and CPU throughout, since it spins waiting for `SkyState`.
+- **The HUD's cost:** both games' frame rates and our copy time with the HUD off, at `hudscale 2`, and at
+  `hudscale 1`.
 
 ## The steps
 
@@ -643,36 +741,46 @@ The user makes the Modrinth instance, starts Minecraft, and says when it's at it
   2. key 1 selects it;
   3. a right click, looking down at the floor, places a block in the expected cell.
 - **TNT:** a `/summon tnt` sends an explosion event and changed sections.
+- **The HUD image:**
+  - images arrive at 1280×720, the viewport asked for, with their bottom-up flag;
+  - the saved image shows the hotbar, the crosshair, and chat with the replies to the typed commands;
+  - its alpha is premultiplied: across the whole image, no pixel has a colour channel above its alpha. `mclink`
+    counts any that do.
 - **Coming and going:**
   - unlinking and linking again;
   - stopping `mclink`: Minecraft's link drops within 8 s;
-  - starting it again: Minecraft sends everything again.
-- **Traffic:** bytes and messages by type, and Minecraft's frame rate paced at 60 Hz.
+  - starting it again: Minecraft sends everything again, and HUD images resume.
+- **Traffic:** bytes and messages by type, HUD images a second, and Minecraft's frame rate paced at 60 Hz.
 
-### Step 2: in the game, the link and blocks
+### Step 2: in the game, the link, blocks and the HUD
 
 BlockRender 0.9.0, deployed. At spike 3's corner, with the same save:
 - **Linking:** Link pins Minecraft's player at V's camera. The overlay shows both positions.
+- **The HUD,** with `set hud 2`: Minecraft's hotbar, crosshair and chat drawn over Night City at the expected size,
+  sharp, and the right way up. The typed commands' replies show in its chat.
 - **Building by command:** `wall`, `tnt-ahead`, `field` and `wipe` change Night City where the commands put them,
   and the blocks are lit as in spike 3.
 - **Latency** from a command's Enter to the frame that draws it.
 - **Bursts:** `tnt-cube` and `field`: the worst frame and `Update`'s time. If they hitch, the fix (see "Blocks"),
   then measure again.
-- **Frame rates, CPU and memory:** Cyberpunk with Minecraft closed, linked and idle, building, and through bursts.
-- **Focus:** the user brings Minecraft's window up for 20 s, then returns. A background recorder of `status.txt`
-  shows whether Cyberpunk kept running and the link survived. If Cyberpunk pauses, Minecraft drops the link after
-  8 s and links again on return.
-- **Minecraft closed and reopened** while linked: its blocks come back.
+- **Frame rates, CPU and memory:**
+  - Cyberpunk with Minecraft closed, linked and idle, building, and through bursts;
+  - the HUD off, at `hudscale 2`, and at `hudscale 1`.
+- **Focus:** the user switches to another window (Claude Code, on the second monitor) for 20 s, then returns. They
+  do that between tests anyway. A background recorder of `status.txt` shows whether Cyberpunk kept running and the
+  link survived. If Cyberpunk pauses, Minecraft drops the link after 8 s and links again on return.
+- **Minecraft closed and reopened** while linked: its blocks come back, and so does the HUD.
 
 ### Step 3: in the game, input
 
-- **Build mode:** F8 turns it on, and the overlay shows it.
+- **Build mode:** F8 turns it on, the overlay shows it, and Minecraft's HUD appears (`hud 1`, the default).
 - **Blocking, input by input:** the left, right and middle buttons, the wheel, and each of 1 to 9. Does Minecraft act
-  (a block broken or placed, the slot changed), and does V stay still (no attack, aim, gadget, or weapon switch)? An
-  input Cyberpunk still reacts to gets the fallback (see "Risks"), and is checked again.
+  (a block broken or placed, the HUD's slot changed), and does V stay still (no attack, aim, gadget, or weapon
+  switch)? An input Cyberpunk still reacts to gets the fallback (see "Risks"), and is checked again. The overlay's
+  slot line should match the HUD's.
 - **Building:** placing and breaking blocks on the street by clicking. Walking (Minecraft's player follows), and
   building elsewhere. The floor moves to follow V.
-- **Leaving:** each menu key leaves build mode, and its menu takes clicks normally. F8 turns it back on.
+- **Leaving:** each menu key leaves build mode, the HUD goes, and the menu takes clicks normally. F8 turns it back on.
 - **Click latency.**
 - **Held inputs:** Alt-Tab with a button held releases it in Minecraft.
 
@@ -694,7 +802,7 @@ plugin's folder or the overlay's. New and changed commands:
 | `mc /<command>` | Types that command, taken verbatim to the end of the line |
 | `place ...` | As before, but refused while Minecraft's atlas is loaded |
 | `clear` | As before, and also removes Minecraft's sections, which come back as they change, or when Minecraft next sends everything |
-| `set <name> <value>` | Adds `translucent` (0 or 1), `teleportstep` (metres), `teleportrate` (per second) and `ringmb` |
+| `set <name> <value>` | Adds `translucent` (0 or 1), `teleportstep` (metres), `teleportrate` (per second), `ringmb`, `hud` (0 never, 1 in build mode, 2 always) and `hudscale` (1, 2 or 4) |
 
 ## Safety
 
@@ -705,7 +813,12 @@ plugin's folder or the overlay's. New and changed commands:
     - a section's header (16 bytes) plus vertices × 32;
     - an atlas's header (8 bytes) plus w × h × 4, with w and h from 1 to 16,384;
     - section coordinates within ±2,000,000 across and ±256 up;
-  - a message that fails skips the ring to its head, counted and logged once a second.
+  - a message that fails skips the ring to its head, counted and logged once a second;
+  - a HUD image needs a slot index from 0 to 2, and a width and height from 1 to 3840 and 2160, so it fits its
+    slot. The pixels are copied out of the slot before use.
+- **The HUD pass never switches block drawing off.** It skips a frame it can't draw (no back buffer, another queue,
+  no image yet) and counts it separately. Its draw reads only within the image: the texel it takes is clamped to the
+  image's size.
 - **The hook passes through** anything it doesn't fully understand, and checks every size before reading or writing.
 - **The ring is always drained,** so Minecraft never stalls. If the mapping can't be created, the link is off, and the
   status and log say why.
@@ -729,6 +842,7 @@ plugin's folder or the overlay's. New and changed commands:
   absent.
 - **A rejected message:** skipped as in "Safety", and counted.
 - **The atlas can't be built** (bad size): logged, and spike 3's atlas stays.
+- **A HUD image is refused:** counted, and the last good one stays on screen.
 - **A typed command times out:** the queue drops it, logs which step timed out, and goes on.
 - **The input ring is full:** the event is dropped and counted.
 - **A bad request:** logged.
@@ -747,6 +861,13 @@ plugin's folder or the overlay's. New and changed commands:
   - a vertex count cut down to a multiple of 3;
   - translucent triangles dropped, or kept with `translucent 1`.
 - **`Atlas`:** the levels' sizes for odd and non-square atlases, and averaged texels.
+- **`Overlay`:**
+  - taking a frame only when the unread bit is set, and swapping the front slot as SkyCraft's reader does;
+  - the reset;
+  - refusing slot index 3, and sizes out of range.
+- **`Hud`:**
+  - whether it shows, for each `hud` setting, with and without build mode, Minecraft and an image;
+  - the texel for a pixel at each `hudscale`, flipped and not, and clamped at the edges.
 - **`Floor`:** the messages byte for byte against `fake_skyrim.py`'s `floor_tris_payload`, and the regions covered.
 - **`Look`:**
   - north, east, up and down to yaw and pitch;
@@ -774,6 +895,8 @@ plugin's folder or the overlay's. New and changed commands:
   - refused while another live game side's heartbeat is fresh, and when the view is too small.
 - **The renderer's waiting uploads,** factored out of `Renderer` so they can be tested: one per section, the latest,
   and none after `ClearSections`.
+- **The shaders:** the HUD's compile, and a reflection check of their root constants' layout, as spike 3's tests do
+  for the others.
 - **The rest:** the new requests, and the status lines.
 
 ### `mclink`
@@ -795,10 +918,10 @@ Steps 2 and 3. Every step also checks that CET's overlay and spike 3's mode butt
      among them).
 
    Step 3 checks each input, so the fallback is chosen per input.
-2. **Cyberpunk stops running while Minecraft's window is in front.** The heartbeat stops, Minecraft drops the link
-   after 8 s, and links again on return. Teleports and typed commands pause too. Held inputs are still released,
-   because `FocusWatch` runs on its own thread. That's acceptable for this spike: the user looks at Minecraft's window
-   briefly, or reads the overlay's status instead.
+2. **Cyberpunk stops running while another window is in front,** such as Claude Code on the second monitor, which the
+   user answers in between tests. The heartbeat stops, Minecraft drops the link after 8 s, and links again on return.
+   Teleports and typed commands pause too. Held inputs are still released, because `FocusWatch` runs on its own
+   thread. That's acceptable for this spike, but step 2 says which it is.
 3. **Minecraft's spinning costs Cyberpunk frame time.** Step 2 measures it. If it does, Minecraft runs at below-normal
    priority. That's a Task Manager or launcher setting, since the mod is unchanged.
 4. **Bursts hitch.** Suballocation and an upload budget, inside the spike (see "Blocks").
@@ -815,10 +938,16 @@ Steps 2 and 3. Every step also checks that CET's overlay and spike 3's mode butt
 10. **The flat floor.** Blocks land at V's feet height, not the street's. That's known and accepted until Night City's
     collision comes.
 11. **A click inside Minecraft's own window acts in its world.** Its window still takes real input (see "SkyCraft's
-    mod, once linked"). The user brings it up to look, or to use chat and the inventory, not to click in the world.
-12. **Minecraft's HUD readback costs it frame time.** The mod reads its frame back every frame at its window's size,
-    whether or not anything uses it. Step 2 measures Minecraft's frame rate. If it suffers, the window is kept small:
-    the readback follows its size.
+    mod, once linked"). Hidden, as in this spike, it can't be clicked. If it's ever shown again
+    (`-Dskycraft.showWindow=true`), it's for looking, not clicking.
+12. **The HUD costs both games frame time.** Minecraft reads its frame back every frame at the viewport's size, and we
+    copy and upload each new image. At `hudscale 2` that's 3.7 MB an image. Step 2 measures both games with the HUD
+    off, at `hudscale 2` and at `hudscale 1`. `hudscale 4` quarters it again if needed, at the cost of a coarser HUD.
+13. **The image's alpha isn't premultiplied.** Its edges would then look wrong over Night City: too bright where it's
+    translucent. Step 1 counts any pixel with a colour above its alpha. If there are any, the blend changes to straight
+    alpha.
+14. **Minecraft's HUD covers Cyberpunk's.** Both draw at the bottom of the screen, and ours goes on top. It shows only
+    in build mode by default, and `hud 0` hides it.
 
 ## Changes from the deep review
 
@@ -857,7 +986,8 @@ already include these changes.
 
 **Added:**
 - **What else the mod does,** in "SkyCraft's mod, once linked":
-  - it reads back its HUD every frame at its window's size, which this spike doesn't use (risk 12);
+  - it reads back its HUD every frame at its window's size, which this spike didn't use at the time. It does now (see
+    "Added after the review: Minecraft's HUD");
   - its window still takes real input, so a click in it can act in the world (risk 11);
   - the per-frame scene message.
 - **What build mode takes from Cyberpunk:** every use of the mouse buttons and the wheel, dialogue choices included.
@@ -879,3 +1009,57 @@ already include these changes.
 - **The vertex matches BlockRender's,** byte for byte.
 - **The user has rebound no Cyberpunk key,** so the default bindings hold.
 - **`mclink`'s atlas dump:** spike 3's DDS writer takes RGBA8, and `view_dump.py` decodes it.
+
+## Added after the review: Minecraft's HUD
+
+**Why:** the user asked why not use the HUD image the mod reads back every frame anyway, or whether that would grow
+the scope too much. The evidence said it wouldn't, by much:
+- **Minecraft's side** already does all of it (`FrameExporter`).
+- **SkyCraft's Skyrim side** shows what drawing it takes (`Overlay.cpp`): one full-screen triangle at Present, point
+  sampling, premultiplied alpha, rows flipped.
+- **Spike 3's `present` path** already has the hard D3D12 parts: the back buffer, its barriers, a pipeline per format,
+  and our own list on the main queue just before Present.
+- **The shader** reads the image as a buffer, as it already reads the atlas, so the root signature doesn't change and
+  no textures or descriptor heaps come in.
+- **Size:** about 300 to 400 lines with tests, which is part 7 of the scope pass.
+
+**What it changed** (the sections above already include it):
+- **Decisions:** the scope is parts 0 to 4 and 7. Minecraft's window stays hidden, SkyCraft's default, instead of
+  minimized: the HUD shows what the window was for. That also avoids a path nobody has tried: a minimized window
+  SkyCraft reports as not minimized. `-Dskycraft.showWindow=true` is gone from the JVM arguments.
+- **The protocol:** the overlay's triple buffer is read, as SkyCraft's `Link::AcquireOverlayFrame` reads it, and reset
+  when Minecraft comes back. `SkyState`'s viewport asks for the back buffer's size over `hudscale` (2), 1280×720,
+  instead of 0. The GUI then looks as Minecraft's automatic scale would make it at 2560×1440, with a quarter of the
+  bandwidth.
+- **Components:**
+  - `link/Overlay`, the triple buffer's reader;
+  - `render/Hud`, the pass's rules;
+  - the renderer's `SetHudImage` and HUD pass;
+  - the HUD's shaders;
+  - the overlay's HUD button.
+- **A new section, "The HUD":** what shows, when (`hud`: never, in build mode by default, or always), the size, the
+  path and the blending.
+- **The steps:**
+  - step 1 checks the image: its size, its flag, how it looks, and that its alpha is premultiplied;
+  - step 2 shows it in game, and measures its cost on both games;
+  - step 3 uses it to see the hotbar while building;
+  - step 2's focus check now switches to another window (Claude Code), since Minecraft's window is hidden.
+- **Requests:** `set hud` and `set hudscale`.
+- **Safety and error handling:** the image's checks. The HUD pass skips its own frames, and never switches block
+  drawing off.
+- **Risks:**
+  - the HUD's cost (12);
+  - premultiplied alpha (13);
+  - covering Cyberpunk's HUD (14);
+  - focus (2), now about Claude Code's window.
+- **Non-goals:** using Minecraft's screens from Cyberpunk, a mouse cursor, and an exact inverted crosshair stay out.
+
+**Checked:**
+- **The triple buffer's rules:** in SkyCraft's `Link.cpp` (`AcquireOverlayFrame`, `ResetOverlay`) and `SkyLink.java`
+  (`publishOverlay`, and the writer restarting at slot 1).
+- **The image:** RGBA8, uploaded unconverted, premultiplied alpha, and a bottom-up flag, all from SkyCraft's
+  `Overlay.cpp`.
+- **The GUI scale:** Minecraft 26.3's automatic rule (`Window.calculateScale`) is the largest scale leaving at least
+  320×240 GUI pixels.
+- **Minimizing:** `Window.onFramebufferResize` ignores a 0×0 size, and `renderFrame` reconfigures the GPU surface only
+  when the window isn't minimized, which SkyCraft's mixin denies while linked.
