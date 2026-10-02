@@ -1,4 +1,4 @@
-# Block render: in-game results, steps 1 to 3
+# Block render: in-game results, steps 1 to 4
 
 Date: 2026-10-01. Game: Cyberpunk 2077 2.31 (Epic), DLSS Quality at 2560×1440 (render 1707×960), frame generation,
 ray tracing, HDR and VSync off, Reflex on, on a 239 Hz display. The builds:
@@ -7,7 +7,8 @@ ray tracing, HDR and VSync off, Reflex on, on a 239 Hz display. The builds:
 - **0.3.0** for run 4: Part 2's Tasks 35 to 43, for step 3;
 - **0.4.0** for run 5: plus Tasks 45 and 46, to find what the hooks cost;
 - **0.5.0** for run 6: plus Task 48's fix;
-- **0.6.0** for run 7: plus Task 50, which tracks every list again while drawing before DLSS.
+- **0.6.0** for run 7: plus Task 50, which tracks every list again while drawing before DLSS;
+- **0.7.0** for run 8: Part 3's Tasks 53 to 56, for step 4.
 
 The user played; the agent sent requests through `blockrender.request` and read the logs, `status.txt`, the frame
 logs and the dumps. Plan: [2026-10-01-block-render.md](../superpowers/plans/2026-10-01-block-render.md).
@@ -31,6 +32,8 @@ logs and the dumps. Plan: [2026-10-01-block-render.md](../superpowers/plans/2026
 - **Step 3, blocks before DLSS: pass.** They sit under the HUD and the menus, tone mapped with the scene. They're
   steady standing still, leave no trails moving, and don't flicker turning fast (run 7). 100,000 of them cost
   0.03 ms of GPU time.
+- **Step 4, blocks in the G-buffer: under way.** The game lights the blocks by day and at night, and drawing them costs
+  nothing measurable (run 8). The Skip Time screen switched drawing off, which the next task fixes.
 - **BlockRender costs nothing measurable, after a fix.**
   - **Run 4:** the hooks doubled the frame time with drawing off: 26.5 ms against 13.6 ms without BlockRender.
   - **Run 5 found the cause:** the Streamline hooks' readability checks, whose `VirtualQuery` walked gigabytes of the
@@ -48,8 +51,9 @@ logs and the dumps. Plan: [2026-10-01-block-render.md](../superpowers/plans/2026
 | 5 | 00:18 | 0.4.0: plus Tasks 45 and 46 | At the same corner: the hook groups switched off in turn found the Streamline hooks' cost |
 | 6 | 00:30 | 0.5.0: plus Task 48 | At the same corner: what BlockRender costs after the fix, step 3 again up to 100,000 blocks, and a flicker turning fast |
 | 7 | 00:56 | 0.6.0: plus Task 50 | At the same corner: drawing before DLSS with every list tracked, turning fast, then four frame logs |
+| 8 | 01:50 | 0.7.0: Tasks 53 to 56 | Step 4 at the same corner, by day and at night; the Skip Time screen switched drawing off |
 
-Runs 5 to 7 were just after midnight, on 2026-10-02.
+Runs 5 to 8 were after midnight, on 2026-10-02.
 
 **Run 1's two problems,** which Task 28 fixed:
 - **Frame tokens:** the game calls `slGetNewFrameToken` about 8 times a frame (720 a second at 90 fps), from three
@@ -480,3 +484,36 @@ corner. "For step 4" has what they show.
     passes and 36 to 42 dispatches, is likely the lighting.
 
   So blocks must be in the G-buffer before the 1-list submission, for the second queue's reads too.
+
+## Step 4: blocks in the G-buffer (run 8)
+
+BlockRender 0.7.0 (Tasks 53 to 56), at run 3's corner, with the same save. `gbuffer` puts a list of ours just before
+the list that ends the G-buffer. It draws the blocks into the G-buffer's targets, with their stencil class, then into
+the tagged depth.
+
+| State | Frame time (CET's) |
+|---|---|
+| idle | 13.3 to 13.6 ms |
+| the cube in the G-buffer, by day | 12.8 to 13.4 ms, 75 to 79 frames drawn a second, none skipped, no late camera |
+| the same, at night | 69 to 70 frames drawn a second, none skipped |
+
+Our GPU time is 0.014 ms by day and 0.024 ms at night, for both passes.
+
+**What the user saw:**
+- **The game lights the cube.** Its top is bright in the sun and its sides are in shade, like the scene around it,
+  where step 3's cube was flat and evenly bright. At night the user found it lit as properly.
+- **It sits a few centimetres above the road.** Blocks sit on Minecraft's whole-metre grid, so the cube's bottom is at
+  z 6.0, while the road beside the curb, where V stood at z 6.14, is lower. The ground under the cube darkens: most
+  likely the game's ambient occlusion, which then sees the cube's depth.
+
+**The Skip Time screen switched drawing off,** twice.
+- **While it opens,** the game still draws the world for a moment, but without its copy into the tagged depth before
+  the G-buffer's end, so the tagged depth's state there isn't known. Each such frame was skipped, and 30 in a row
+  switch drawing off.
+- **With the screen open,** a frame log shows no DLSS evaluate and no G-buffer: nothing to draw into.
+
+Run 8 stopped there for the next task's fix:
+- with only the tagged depth's state unknown, the blocks still go into the G-buffer, leaving the tagged depth;
+- frames that the game draws without a G-buffer, its end or the frame's camera are skipped, but don't count toward
+  the 30 that switch drawing off;
+- the overlay gets buttons for the drawing modes.
