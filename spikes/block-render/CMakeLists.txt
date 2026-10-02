@@ -54,6 +54,7 @@ add_library(render_core STATIC
 	src/link/Commands.cpp
 	src/link/Mapping.cpp
 	src/link/Link.cpp
+	src/render/PendingSections.cpp
 )
 target_link_libraries(render_core PUBLIC render_settings d3dcompiler dxguid advapi32)
 
@@ -138,6 +139,7 @@ add_executable(render_tests
 	tests/TestMapping.cpp
 	tests/TestLink.cpp
 	tests/TestMcLinkScript.cpp
+	tests/TestPendingSections.cpp
 	tools/mclink/McLinkScript.cpp
 )
 target_include_directories(render_tests PRIVATE tools/mclink)
