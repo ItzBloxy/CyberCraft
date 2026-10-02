@@ -25,11 +25,17 @@ std::optional<McLook> LookFromForward(const Vec3f& aForward, float aLastYaw)
 	float        yaw = aLastYaw;
 	if (std::sqrt(x * x + z * z) >= 0.001)
 	{
-		yaw = float(std::atan2(-x, z) * kDegrees);
-		if (yaw <= -180.0f)
+		// The turn from the last yaw, within 180 degrees either way (a half turn goes up).
+		double turn = std::fmod(std::atan2(-x, z) * kDegrees - aLastYaw, 360.0);
+		if (turn > 180.0)
 		{
-			yaw += 360.0f;
+			turn -= 360.0;
 		}
+		else if (turn <= -180.0)
+		{
+			turn += 360.0;
+		}
+		yaw = float(aLastYaw + turn);
 	}
 	return McLook{ yaw, float(-std::asin(std::clamp(y, -1.0, 1.0)) * kDegrees) };
 }

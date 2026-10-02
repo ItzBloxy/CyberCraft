@@ -18,7 +18,9 @@ struct McLook
 };
 
 // From a forward vector in the game's world axes, any length. Looking straight up or down (a horizontal part under
-// 0.001 of its length), the yaw is aLastYaw. Nothing for a zero vector. The yaw comes out in (-180, 180].
+// 0.001 of its length), the yaw is aLastYaw. Nothing for a zero vector. The yaw is the one within 180 degrees of
+// aLastYaw, in no fixed range, as Minecraft's own: Minecraft sways its first-person hand by the yaw's change, so a
+// yaw that wrapped from 180 to -180 facing north swung the held item.
 std::optional<McLook> LookFromForward(const Vec3f& aForward, float aLastYaw);
 
 // Where Minecraft's player's feet go (Minecraft axes) so that its eye is at aCamera (world axes).

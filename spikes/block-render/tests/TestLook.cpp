@@ -30,6 +30,15 @@ TEST(LookStraightUpOrDownKeepsTheYaw)
 	CHECK(!LookFromForward({ 0, 0, 0 }, 0).has_value());
 }
 
+TEST(LookTurnsThroughNorthWithoutAJump)
+{
+	// Each yaw is the one within 180 degrees of the last, as Minecraft's own: it never jumps a whole turn facing north.
+	CHECK_NEAR(LookFromForward(ForwardFromLook({ 181.0f, 0.0f }), 179.0f)->yaw, 181.0, 1e-3);
+	CHECK_NEAR(LookFromForward(ForwardFromLook({ 179.0f, 0.0f }), -179.0f)->yaw, -181.0, 1e-3);
+	CHECK_NEAR(LookFromForward(ForwardFromLook({ 181.0f, 0.0f }), 539.0f)->yaw, 541.0, 1e-3);  // a turn and more on
+	CHECK_NEAR(LookFromForward(ForwardFromLook({ -10.0f, 0.0f }), 10.0f)->yaw, -10.0, 1e-3);
+}
+
 TEST(LookTeleportTargetPutsTheEyeAtTheCamera)
 {
 	// V's camera at spike 3's corner, 1.62 m above the road at z 6.14.

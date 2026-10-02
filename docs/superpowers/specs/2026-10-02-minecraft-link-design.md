@@ -414,6 +414,7 @@ spikes/block-render/
 - **`Look`:**
   - yaw = atan2(−x, z) and pitch = −asin(y), in degrees, from V's camera's forward vector in Minecraft's axes. Looking
     straight up or down, where the forward vector's horizontal length is under 0.001, the last yaw is kept;
+  - the yaw is the one within 180° of the last, in no fixed range, as Minecraft's own is (see "Changes from step 2");
   - the teleport target: the camera's position in Minecraft's axes, less 1.62 blocks of height, Minecraft's standing
     eye height, so Minecraft's eye is at V's camera;
   - if the camera can't be read, V counts as not found: the in-game flag clears, the last look is kept, and there's no
@@ -1125,3 +1126,11 @@ Planning Part 2, after step 1, corrected these:
   sections are kept as they come, so they're there as soon as the user links. Drawing stays as spike 3 left it, so
   nothing shows until then, and the renderer uploads nothing until drawing is first switched on. "Safety" said the
   plugin only kept the heartbeat.
+
+## Changes from step 2
+
+Step 2's game run, in Part 2 of the plan, found these. The sections above already include them.
+- **The yaw never wraps.** It was in (−180°, 180°], so it jumped from 180 to −180 whenever V turned through north.
+  SkyCraft puts it straight into the player's yaw, where Minecraft's own never wraps, and Minecraft sways the
+  first-person hand by the yaw's change. So the held item in the HUD swung and settled, at north only. Each yaw
+  is now the one within 180° of the last.
