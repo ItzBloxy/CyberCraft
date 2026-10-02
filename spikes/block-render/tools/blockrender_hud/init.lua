@@ -1,9 +1,11 @@
--- BlockRender HUD: what BlockRender (spike 3 of D:\Cyberpunk-Minecraft) is doing, from the status.txt it writes into
--- this folder once a second, plus V's position, heading and Minecraft block, and the nearest structure, and the frame
--- time as CET sees it, which works without BlockRender too and goes into frames.txt here as well. Its buttons switch
--- BlockRender's drawing mode, through blockrender.request in this folder. Delete this folder to remove it.
+-- BlockRender HUD: what BlockRender (spikes 3 and 4 of D:\Cyberpunk-Minecraft) is doing, from the status.txt it writes
+-- into this folder once a second, plus V's position, heading and Minecraft block, and the nearest structure, and the
+-- frame time as CET sees it, which works without BlockRender too and goes into frames.txt here as well. Its buttons
+-- switch BlockRender's drawing mode, link it to Minecraft, type commands into Minecraft, and cycle when Minecraft's
+-- HUD shows, through blockrender.request in this folder. Delete this folder to remove it.
 local status = nil       -- status.txt's lines, except the structures
 local structures = {}    -- { name, min = { x, y, z }, max = { x, y, z } }, in world coordinates
+local hudSetting = nil   -- the hud line's setting: "never", "in build mode" or "always"
 local player = nil       -- the lines about V
 local sinceRead = 1.0
 local frames = { sum = 0.0, count = 0, worst = 0.0 }  -- this second's frame times, from onUpdate
@@ -18,6 +20,12 @@ local modes = {
     { name = "predlss", label = "Before DLSS" },
     { name = "gbuffer", label = "G-buffer" },
 }
+
+-- The named sets the buttons type into Minecraft's chat, as `mc <name>`.
+local sets = { "creative", "tnt-kit", "tnt-ahead", "wall", "tnt-cube", "field", "wipe" }
+
+-- The HUD button's cycle: after each `hud` setting, as the status names it, the one a click asks for.
+local hudNext = { ["never"] = 1, ["in build mode"] = 2, ["always"] = 0 }
 
 -- Sends BlockRender a command. It reads blockrender.request in this folder once a second, once the line is whole.
 local function request(command)
@@ -46,8 +54,10 @@ local function readStatus()
     end
     status = {}
     structures = {}
+    hudSetting = nil
     for line in file:lines() do
         local name, a, b, c, d, e, f = line:match("^structure=(%S+) (%S+) (%S+) (%S+) (%S+) (%S+) (%S+)$")
+        hudSetting = line:match("^hud=([^,]+),") or hudSetting
         if name ~= nil then
             table.insert(structures, {
                 name = name,
@@ -128,6 +138,30 @@ registerForEvent("onDraw", function()
             ImGui.SameLine()
             if ImGui.Button(mode.label) then
                 request("mode " .. mode.name)
+            end
+        end
+        ImGui.Text("Minecraft:")
+        ImGui.SameLine()
+        if ImGui.Button("Link") then
+            request("link on")
+        end
+        ImGui.SameLine()
+        if ImGui.Button("Unlink") then
+            request("link off")
+        end
+        local nextHud = hudNext[hudSetting]
+        if nextHud ~= nil then
+            -- "###hud" keeps the button's ID the same while its label changes.
+            ImGui.SameLine()
+            if ImGui.Button("HUD: " .. hudSetting .. "###hud") then
+                request("set hud " .. nextHud)
+            end
+        end
+        ImGui.Text("Type:")
+        for _, set in ipairs(sets) do
+            ImGui.SameLine()
+            if ImGui.Button(set) then
+                request("mc " .. set)
             end
         end
         ImGui.Separator()
