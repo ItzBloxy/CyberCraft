@@ -48,6 +48,7 @@ add_library(render_core STATIC
 	src/render/Gbuffer.cpp
 	src/link/Rings.cpp
 	src/link/Messages.cpp
+	src/link/Overlay.cpp
 )
 target_link_libraries(render_core PUBLIC render_settings d3dcompiler dxguid)
 
@@ -117,6 +118,7 @@ add_executable(render_tests
 	tests/TestGbuffer.cpp
 	tests/TestRings.cpp
 	tests/TestMessages.cpp
+	tests/TestOverlay.cpp
 )
 target_link_libraries(render_tests PRIVATE render_core)
 add_test(NAME render_tests COMMAND render_tests WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
