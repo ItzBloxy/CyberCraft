@@ -52,6 +52,13 @@ std::string FormatLink(const LinkReport& aLink)
 	                                  : "Minecraft absent";
 	out += std::format("link={}; the mapping {}; {}; {}\n", aLink.linked ? "linked" : "not linked", OneLine(aLink.mapping), minecraft,
 	                   aLink.inGame ? "in game" : "not in game");
+	out += std::format("build={}; {}; {} inputs forwarded to Minecraft and {} hidden from the game, the last: {}; {} dropped with the "
+	                   "input ring full; {}\n",
+	                   aLink.buildMode ? std::string("on") : "off: " + OneLine(aLink.buildWhy),
+	                   aLink.slot ? std::format("slot {}", *aLink.slot) : std::string("slot unknown until a number key"),
+	                   aLink.inputsForwarded, aLink.inputsHidden, OneLine(aLink.lastInput), aLink.inputsDropped,
+	                   aLink.inputHooked ? std::format("GetRawInputData hooked, {} keyboard and mouse events read", aLink.inputsRead)
+	                                     : std::string("GetRawInputData not hooked (see the log)"));
 	const std::string floor = aLink.floorSent ? std::format("floor {} at height {:.2f} around {:.1f} {:.1f}", aLink.floorEpoch,
 	                                                        aLink.floorCentre.y, aLink.floorCentre.x, aLink.floorCentre.z)
 	                                          : "floor not sent";
@@ -75,7 +82,7 @@ std::string FormatLink(const LinkReport& aLink)
 	out += aLink.latencyLast && aLink.latencyAverage
 	           ? std::format("latency=last: {}; average of {}: {}\n", Latency(*aLink.latencyLast), aLink.latencySamples,
 	                         Latency(*aLink.latencyAverage))
-	           : std::string("latency=no samples yet: type a command while V stands still\n");
+	           : std::string("latency=no samples yet: type a command, or click in build mode, while V stands still\n");
 	out += aLink.burst ? std::format("burst={}: {} sections, {:.2f} MB over {} frames; worst drain {:.3f} ms, update {:.3f} ms, "
 	                                 "frame {:.1f} ms\n",
 	                                 OneLine(aLink.burst->what), aLink.burst->sections, double(aLink.burst->bytes) / 1048576.0,

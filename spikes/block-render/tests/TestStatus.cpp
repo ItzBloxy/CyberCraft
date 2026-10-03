@@ -133,7 +133,35 @@ TEST(StatusWritesTheLinkWithMinecraftAbsent)
 	CHECK(Has(status, "hud=in build mode, scale 2, not showing; 0 images received (0.0 MB), 0 dropped and 0 drawn in the last "
 	                  "second, no image yet; copy not measured; pass not measured; 4 skipped (no image yet); 2 refused since the "
 	                  "start"));
-	CHECK(Has(status, "latency=no samples yet: type a command while V stands still"));
+	CHECK(Has(status, "latency=no samples yet: type a command, or click in build mode, while V stands still"));
 	CHECK(Has(status, "burst=none yet"));
 	CHECK(Has(status, "processes=Cyberpunk 50% of a core, 100 MB; Minecraft not running"));
+}
+
+TEST(StatusWritesBuildMode)
+{
+	cpmc::StatusReport report;
+	cpmc::LinkReport   link;
+	link.inputHooked = true;
+	link.buildMode = true;
+	link.slot = 3;
+	link.inputsRead = 5120;
+	link.inputsForwarded = 14;
+	link.inputsHidden = 15;
+	link.lastInput = "the right button up";
+	report.link = link;
+	CHECK(Has(cpmc::FormatStatus(report), "build=on; slot 3; 14 inputs forwarded to Minecraft and 15 hidden from the game, the last: "
+	                                      "the right button up; 0 dropped with the input ring full; GetRawInputData hooked, 5120 "
+	                                      "keyboard and mouse events read"));
+	link.inputHooked = false;
+	link.buildMode = false;
+	link.buildWhy = "Esc left it";
+	link.slot.reset();
+	link.inputsDropped = 2;
+	report.link = link;
+	const std::string status = cpmc::FormatStatus(report);
+	CHECK(Has(status, "build=off: Esc left it; slot unknown until a number key; 14 inputs forwarded to Minecraft and 15 hidden from "
+	                  "the game, the last: the right button up; 2 dropped with the input ring full; GetRawInputData not hooked (see "
+	                  "the log)"));
+	CHECK(status.find("link=") < status.find("build=") && status.find("build=") < status.find("positions="));
 }

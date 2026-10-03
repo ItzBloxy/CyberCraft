@@ -12,8 +12,8 @@ namespace cpmc
 {
 // What status.txt says (the spec's "Status and the overlay"). The plugin writes it once a second into the overlay's
 // folder; tools/blockrender_hud/init.lua shows it.
-// Spike 4's lines (the spec's "Measurements"): the link, the render ring, Minecraft's atlas, the HUD, latency, the last
-// burst, and both games' processes. "In the last second" is from one status to the next.
+// Spike 4's lines (the spec's "Measurements"): the link, build mode, the render ring, Minecraft's atlas, the HUD, latency,
+// the last burst, and both games' processes. "In the last second" is from one status to the next.
 struct LinkReport
 {
 	std::string          mapping = "not opened yet";  // created, reused, or refused and why
@@ -32,6 +32,16 @@ struct LinkReport
 	uint32_t             floorEpoch = 0;
 	bool                 floorSent = false;
 	Vec3d                floorCentre;  // Minecraft axes; y is the floor's height
+	// Build mode, and the GetRawInputData patch; counts since the start
+	bool               inputHooked = false;
+	bool               buildMode = false;
+	std::string        buildWhy;             // why it's off
+	std::optional<int> slot;                 // Minecraft's hotbar slot, once a number key has set it
+	uint64_t           inputsRead = 0;       // keyboard and mouse events
+	uint64_t           inputsForwarded = 0;  // to Minecraft
+	uint64_t           inputsHidden = 0;     // from the game
+	uint64_t           inputsDropped = 0;    // with the input ring full
+	std::string        lastInput;            // the last forwarded
 	// The render ring
 	double      ringMb = 0.0;            // in the last second
 	double      ringMbWorstFrame = 0.0;  // the most in one frame of it
@@ -101,7 +111,7 @@ struct StatusReport
 	std::optional<LinkReport> link;  // spike 4's lines, once the plugin has tried the mapping
 };
 
-// Lines of "key=value": mode, frames, blocks, gpu, frame, streamline, hooks, request; with a link, its lines (link,
+// Lines of "key=value": mode, frames, blocks, gpu, frame, streamline, hooks, request; with a link, its lines (link, build,
 // positions, ring, atlas, hud, latency, burst and processes); then one structure line per structure:
 // "structure=<name> <min x> <min y> <min z> <max x> <max y> <max z>".
 std::string FormatStatus(const StatusReport& aReport);
