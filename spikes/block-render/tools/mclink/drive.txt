@@ -1,0 +1,126 @@
+# Spike 5's step 1: build mode's drive against the real Minecraft, without the game (docs/superpowers/specs/
+# 2026-10-03-collision-and-movement-design.md, "Step 1"). Start Minecraft first: this waits for its world. The keys are
+# SDL scancodes, and the user's CyberCraft instance binds them: W 26 walks, Space 44 jumps, Left Shift 225 toggles
+# sprint, Left Ctrl 224 sneaks, and 1 (30) picks the first hotbar slot.
+status
+wait-world 180
+at -119.5 6.14 2007.5
+look 180 0
+link on
+wait 3
+type /gamemode creative
+type /item replace entity @s hotbar.0 with minecraft:stone 64
+key 30
+# Outside build mode the floor's voxels are known, so Minecraft lets its player go after the link's teleport.
+track 1
+# Build mode: one teleport to V's feet, then Minecraft drives, and the stand-in V follows it.
+build on
+track 2
+# Walk north for 2 s, then sprint for 2 s, then stop.
+down 26
+track 2
+key 225
+track 2
+up 26
+key 225
+track 1
+# Sneak: the eye drops to 1.27.
+down 224
+track 1.5
+up 224
+track 1
+# A wall of stone bricks 3 blocks north stops the walk.
+type /fill ~-2 ~ ~-3 ~2 ~2 ~-3 minecraft:stone_bricks
+down 26
+track 2
+up 26
+# Jump onto a gold block 3 blocks east.
+look 270 0
+type /setblock ~3 ~ ~ minecraft:gold_block
+down 26
+down 44
+track 1.5
+up 44
+up 26
+track 1
+# Fly: Space twice, then up for a second, down for a second, and Space twice again to fall back to the floor.
+look 180 0
+down 44
+wait 0.1
+up 44
+wait 0.1
+down 44
+wait 0.1
+up 44
+track 0.5
+down 44
+track 1
+up 44
+down 224
+track 1
+up 224
+down 44
+wait 0.1
+up 44
+wait 0.1
+down 44
+wait 0.1
+up 44
+track 2
+# Twenty right clicks while strafing east, looking north and down: a row of stone on the floor, 2 m apart.
+look 180 50
+down 7
+click right
+wait 0.45
+click right
+wait 0.45
+click right
+wait 0.45
+click right
+wait 0.45
+click right
+wait 0.45
+click right
+wait 0.45
+click right
+wait 0.45
+click right
+wait 0.45
+click right
+wait 0.45
+click right
+wait 0.45
+click right
+wait 0.45
+click right
+wait 0.45
+click right
+wait 0.45
+click right
+wait 0.45
+click right
+wait 0.45
+click right
+wait 0.45
+click right
+wait 0.45
+click right
+wait 0.45
+click right
+wait 0.45
+click right
+wait 0.45
+up 7
+track 1
+save-hud clicks.dds
+# Count the stone by removing it: Minecraft's chat says how many blocks it filled. Then clear the rest.
+look 180 0
+type /fill ~-48 ~-2 ~-6 ~4 ~2 ~1 minecraft:air replace minecraft:stone
+wait 1
+save-hud count.dds
+type /fill ~-56 ~-3 ~-8 ~4 ~5 ~8 minecraft:air
+# Build mode off: Minecraft lets go of everything, and follows the stand-in V by teleports again.
+build off
+track 1
+status
+quit

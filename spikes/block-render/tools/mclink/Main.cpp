@@ -1,10 +1,12 @@
-// mclink: a console stand-in for Cyberpunk's side of SkyCraft's protocol, for spike 4's step 1. It runs BlockRender's
-// link code against the real Minecraft, without the game (docs/superpowers/specs/2026-10-02-minecraft-link-design.md).
+// mclink: a console stand-in for Cyberpunk's side of SkyCraft's protocol, for spike 4's step 1 and spike 5's. It runs
+// BlockRender's link code against the real Minecraft, without the game (docs/superpowers/specs/2026-10-02-minecraft-
+// link-design.md and 2026-10-03-collision-and-movement-design.md).
 //
 //     mclink.exe <script.txt>
 //
-// It runs the script (McLinkScript.h) at 60 Hz with Minecraft's player pinned where the script says, and reports
-// what Minecraft sends. It refuses to start while another game side uses the mapping.
+// It runs the script (McLinkScript.h) at 60 Hz with a stand-in V where the script says, or, in build mode, where the
+// drive puts it, as the plugin teleports V. It reports what Minecraft sends, and refuses to start while another game
+// side uses the mapping.
 #include "McLinkScript.h"
 
 #include "Coords.h"
@@ -178,6 +180,23 @@ void PrintStatus(const Link::Status& aStatus, const Report& aReport)
 	    s.translucentDropped, aReport.sections);
 	Say("events: {} explosions, {} others; {} inputs dropped; {} commands waiting; {} HUD images, {} refused", s.explosions, s.otherEvents,
 	    s.inputsDropped, s.commandsWaiting, s.hudImages, s.hudRefused);
+	Say("drive: {}, teleport {} applied of {}; V's eye height {:.2f}; render delay {:.1f} ms, {} frames waited for a tick, {} targets skipped",
+	    DriveStateName(s.drive), s.teleportAck, s.teleportSeq, s.eyeHeight, s.renderDelayMs, s.waitedFrames, s.driveSkipped);
+}
+
+// Minecraft's player's flags, as words.
+std::string Flags(uint32_t aFlags)
+{
+	std::string words;
+	for (const auto& [flag, word] : { std::pair{ proto::kMcOnGround, "on ground" }, std::pair{ proto::kMcSneaking, "sneaking" },
+	                                  std::pair{ proto::kMcSprinting, "sprinting" }, std::pair{ proto::kMcFlying, "flying" } })
+	{
+		if (aFlags & flag)
+		{
+			words += std::string(words.empty() ? "" : ", ") + word;
+		}
+	}
+	return words.empty() ? "in the air" : words;
 }
 }
 
@@ -219,17 +238,20 @@ int main(int aArgc, char** aArgv)
 	LinkSettings settings;
 	settings.viewportWidth = 1280;
 	settings.viewportHeight = 720;
-	Vec3d  feet{ -119.5, 6.14, 2007.5 };  // where V stood at spike 3's corner
+	Vec3d  feet{ -119.5, 6.14, 2007.5 };  // the stand-in V's, where V stood at spike 3's corner; its eye 1.62 up
 	McLook look{ 180.0f, 0.0f };          // north
 	bool   linked = false;
-	bool   build = true;
+	bool   build = false;
 	bool   hud = true;
 
+	LARGE_INTEGER qpcRate;
+	QueryPerformanceFrequency(&qpcRate);
 	size_t   next = 0;
 	bool     begun = false;
 	double   begunAt = 0.0;
 	double   stray = 0.0;
 	uint64_t holdFrames = 0;
+	double   trackAt = 0.0;
 	int      exitCode = 0;
 	double   lastReport = 0.0;
 	uint64_t reportedFrames = 0;
@@ -244,15 +266,29 @@ int main(int aArgc, char** aArgv)
 			exitCode = 1;
 			break;
 		}
+		LARGE_INTEGER qpc;
+		QueryPerformanceCounter(&qpc);
 		Link::Frame frame;
 		frame.now = now;
 		frame.tickMs = GetTickCount64();
+		frame.qpc = qpc.QuadPart;
+		frame.qpcPerSecond = qpcRate.QuadPart;
 		frame.linked = linked;
 		frame.buildMode = build;
 		frame.takeHud = hud;
 		frame.pose = GamePose{ WorldFromMc(feet), WorldFromMc({ feet.x, feet.y + kEyeHeight, feet.z }), ForwardFromLook(look) };
 		link.Update(frame, settings, report);
 		const auto& state = link.State();
+		if (state.placeV)
+		{
+			feet = McFromWorld(*state.placeV);  // the stand-in V goes where the drive puts it, as the plugin teleports V
+		}
+		if (!state.endBuild.empty())
+		{
+			Say("build mode ends: {}", state.endBuild);
+			build = false;
+			link.Push({ proto::kInReleaseAll, 0, 0, 0, 0 });
+		}
 
 		if (now - lastReport >= 5.0)
 		{
@@ -280,7 +316,13 @@ int main(int aArgc, char** aArgv)
 			switch (action.kind)
 			{
 			case Action::Kind::Link: linked = action.on; break;
-			case Action::Kind::Build: build = action.on; break;
+			case Action::Kind::Build:
+				if (build && !action.on)
+				{
+					link.Push({ proto::kInReleaseAll, 0, 0, 0, 0 });  // as the plugin does when build mode ends
+				}
+				build = action.on;
+				break;
 			case Action::Kind::Hud: hud = action.on; break;
 			case Action::Kind::At: feet = { action.numbers[0], action.numbers[1], action.numbers[2] }; break;
 			case Action::Kind::Look: look = { float(action.numbers[0]), float(action.numbers[1]) }; break;
@@ -297,6 +339,11 @@ int main(int aArgc, char** aArgv)
 				link.Push({ proto::kInKey, uint16_t(action.numbers[0]), 1, 0, 0 });
 				link.Push({ proto::kInKey, uint16_t(action.numbers[0]), 0, 0, 0 });
 				break;
+			case Action::Kind::Down:
+			case Action::Kind::Up:
+				link.Push({ proto::kInKey, uint16_t(action.numbers[0]), action.kind == Action::Kind::Down ? 1 : 0, 0, 0 });
+				break;
+			case Action::Kind::Track: trackAt = now; break;
 			case Action::Kind::Click:
 				link.Push({ proto::kInMouseButton, uint16_t(action.numbers[0]), 1, 0, 0 });
 				link.Push({ proto::kInMouseButton, uint16_t(action.numbers[0]), 0, 0, 0 });
@@ -390,6 +437,20 @@ int main(int aArgc, char** aArgv)
 				Say("over {} s ({} frames in game), Minecraft's feet strayed at most {:.4f} blocks from the teleport target", action.numbers[0],
 				    holdFrames, stray);
 			}
+			break;
+		case Action::Kind::Track:
+			if (now >= trackAt)
+			{
+				trackAt += 0.25;
+				const double since = state.drive == DriveState::Off ? 0.0 : now - state.driveSince;
+				Say("track: Minecraft's feet {:.3f} {:.3f} {:.3f}, eye {:.2f} up, {}; teleport {} applied of {}; drive {}{}; V's feet "
+				    "{:.3f} {:.3f} {:.3f}; delay {:.1f} ms, {} frames waited, {} skipped",
+				    state.minecraftFeet.x, state.minecraftFeet.y, state.minecraftFeet.z, state.minecraftEye.y - state.minecraftFeet.y,
+				    Flags(state.minecraftFlags), state.teleportAck, state.teleportSeq, DriveStateName(state.drive),
+				    state.drive == DriveState::Off ? "" : std::format(" for {:.2f} s", since), feet.x, feet.y, feet.z, state.renderDelayMs,
+				    state.waitedFrames, state.driveSkipped);
+			}
+			done = elapsed >= action.numbers[0];
 			break;
 		case Action::Kind::Quit: next = script->size(); break;
 		default: done = true; break;

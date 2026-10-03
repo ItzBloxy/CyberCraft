@@ -9,17 +9,21 @@
 //   wait <seconds>                 pause
 //   wait-world [seconds]           until Minecraft is in its world (120 s unless given), or give up
 //   link on|off                    the in-game flag
-//   build on|off                   build mode: off sets SkyState's menu flag (on by default)
+//   build on|off                   build mode (off at first): on, Minecraft drives and the stand-in V follows; off, the
+//                                  menu flag is set and Minecraft lets go of everything
 //   hud on|off                     take HUD images (on by default)
-//   at <x> <y> <z>                 Minecraft's player's feet, in Minecraft blocks
+//   at <x> <y> <z>                 the stand-in V's feet, in Minecraft blocks
 //   look <yaw> <pitch>             Minecraft degrees
 //   type <command or set>          type it, and wait until it's typed (10 s at most)
-//   key <scancode>                 press and release an SDL scancode
+//   key <scancode>                 press and release an SDL scancode at once
+//   down <scancode>                press an SDL scancode, and hold it
+//   up <scancode>                  let it go
 //   click left|middle|right        press and release a mouse button
 //   floor                          send a fresh floor
 //   save-atlas <file.dds>          wait for Minecraft's atlas (30 s at most), and save it
 //   save-hud <file.dds>            wait for the next HUD image (5 s at most), save it top row first, and check its alpha
 //   hold-check <seconds>           how far Minecraft's feet stray from the last teleport target meanwhile
+//   track <seconds>                print Minecraft's player and the drive four times a second meanwhile
 //   status                         print the link's state
 //   quit                           stop here
 namespace cpmc::mclink
@@ -37,11 +41,14 @@ struct Action
 		Look,
 		Type,
 		Key,
+		Down,
+		Up,
 		Click,
 		Floor,
 		SaveAtlas,
 		SaveHud,
 		HoldCheck,
+		Track,
 		Status,
 		Quit,
 	};

@@ -139,12 +139,12 @@ std::optional<std::vector<Action>> ParseScript(std::string_view aText, std::stri
 				return fail("type takes a command or a set");
 			}
 		}
-		else if (verb == "key")
+		else if (verb == "key" || verb == "down" || verb == "up")
 		{
-			action.kind = Action::Kind::Key;
+			action.kind = verb == "key" ? Action::Kind::Key : verb == "down" ? Action::Kind::Down : Action::Kind::Up;
 			if (!numbers(1) || action.numbers[0] < 1 || action.numbers[0] > 511 || action.numbers[0] != std::floor(action.numbers[0]))
 			{
-				return fail("key takes an SDL scancode, 1 to 511");
+				return fail(std::format("{} takes an SDL scancode, 1 to 511", verb));
 			}
 		}
 		else if (verb == "click")
@@ -165,12 +165,12 @@ std::optional<std::vector<Action>> ParseScript(std::string_view aText, std::stri
 				return fail(std::format("{} takes a file", verb));
 			}
 		}
-		else if (verb == "hold-check")
+		else if (verb == "hold-check" || verb == "track")
 		{
-			action.kind = Action::Kind::HoldCheck;
+			action.kind = verb == "hold-check" ? Action::Kind::HoldCheck : Action::Kind::Track;
 			if (!numbers(1) || action.numbers[0] <= 0)
 			{
-				return fail("hold-check takes a number of seconds");
+				return fail(std::format("{} takes a number of seconds", verb));
 			}
 		}
 		else if (verb == "floor" || verb == "status" || verb == "quit")

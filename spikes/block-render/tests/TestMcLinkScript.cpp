@@ -2,8 +2,30 @@
 
 #include "McLinkScript.h"
 
+#include <fstream>
+#include <sstream>
+
 using namespace cpmc::mclink;
 using Kind = Action::Kind;
+
+TEST(ScriptsInTheRepoParse)
+{
+	// The tests run in spikes/block-render, where the scripts are.
+	for (const char* name : { "step1.txt", "again.txt", "eye.txt", "drive.txt", "relink.txt" })
+	{
+		std::ifstream     in(std::string("tools/mclink/") + name, std::ios::binary);
+		std::stringstream text;
+		text << in.rdbuf();
+		std::string error;
+		const auto  actions = ParseScript(text.str(), error);
+		CHECK(in.good() || in.eof());
+		CHECK(actions.has_value() && !actions->empty());
+		if (!actions)
+		{
+			std::printf("  %s: %s\n", name, error.c_str());
+		}
+	}
+}
 
 TEST(ScriptParsesEveryAction)
 {
@@ -60,6 +82,26 @@ quit
 	CHECK(a[14].kind == Kind::HoldCheck);
 	CHECK_EQ(a[14].numbers[0], 10.0);
 	CHECK(a[15].kind == Kind::Quit);
+}
+
+TEST(ScriptParsesHeldKeysAndTracking)
+{
+	std::string error;
+	const auto  actions = ParseScript("down 26\nwait 2\nup 26\ntrack 5\n", error);
+	CHECK(actions.has_value());
+	CHECK_EQ(actions->size(), size_t(4));
+	const auto& a = *actions;
+	CHECK(a[0].kind == Kind::Down);
+	CHECK_EQ(a[0].numbers[0], 26.0);
+	CHECK(a[2].kind == Kind::Up);
+	CHECK_EQ(a[2].numbers[0], 26.0);
+	CHECK(a[3].kind == Kind::Track);
+	CHECK_EQ(a[3].numbers[0], 5.0);
+	CHECK(!ParseScript("down 0", error).has_value());
+	CHECK(!ParseScript("up 600", error).has_value());
+	CHECK(!ParseScript("down", error).has_value());
+	CHECK(!ParseScript("track 0", error).has_value());
+	CHECK_STR(error, "line 1: track takes a number of seconds: \"track 0\"");
 }
 
 TEST(ScriptTypeKeepsTheWholeCommand)
