@@ -233,6 +233,10 @@ bool BuildMode::TurnOn(const Situation& aSituation)
 	{
 		why_ = aSituation.linked ? "V isn't found" : "it isn't linked";
 	}
+	else if (!aSituation.blocked.empty())
+	{
+		why_ = aSituation.blocked;
+	}
 	else
 	{
 		on_ = true;

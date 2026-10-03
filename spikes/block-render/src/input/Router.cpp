@@ -43,6 +43,10 @@ void Router::Inspect(void* aData, uint32_t aBytes)
 		++read_;
 		RAWMOUSE mouse;
 		std::memcpy(&mouse, body, sizeof mouse);
+		if (!(mouse.usFlags & MOUSE_MOVE_ABSOLUTE))
+		{
+			mouseX_ += mouse.lLastX;
+		}
 		if ((mouse.usButtonFlags & kTaken) == 0)
 		{
 			return;
@@ -91,25 +95,31 @@ void Router::SetLink(link::Link* aLink)
 	link_ = aLink;
 }
 
-void Router::Update(bool aLinked, const link::Link::Status& aState)
+void Router::Update(bool aLinked, const link::Link::Status& aState, const std::string& aVBlocked)
 {
 	std::lock_guard lock(mutex_);
 	situation_.linked = aLinked;
 	situation_.inGame = aState.inGame;
 	situation_.minecraft = aState.minecraft;
 	situation_.minecraftInWorld = aState.inWorld;
+	situation_.blocked = (aState.minecraftFlags & proto::kMcDead) ? "Minecraft's player is dead" : aVBlocked;
 	if (mode_.On())
 	{
-		const char* why = !aState.minecraft  ? "Minecraft has gone"
-		                  : !aState.inWorld  ? "Minecraft left its world"
-		                  : !aLinked         ? "unlinked"
-		                  : !aState.inGame   ? "V isn't found"
-		                                     : nullptr;
-		if (why)
+		std::string why = !aState.minecraft ? "Minecraft has gone"
+		                  : !aState.inWorld ? "Minecraft left its world"
+		                  : !aLinked        ? "unlinked"
+		                  : !aState.inGame  ? "V isn't found"
+		                                    : situation_.blocked;
+		if (!why.empty())
 		{
-			Off(why);
+			Off(std::move(why));
 		}
 	}
+}
+
+int64_t Router::TakeMouseX()
+{
+	return mouseX_.exchange(0);
 }
 
 std::optional<std::string> Router::TurnOn()

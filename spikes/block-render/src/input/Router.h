@@ -43,9 +43,12 @@ public:
 
 	// From the main thread. The link: once the mapping opens, and null again at unload.
 	void SetLink(link::Link* aLink);
-	// Once a frame, after the link's update: whether the user linked, and what the link says. Build mode ends if
-	// Minecraft or V is gone, or the link.
-	void Update(bool aLinked, const link::Link::Status& aState);
+	// Once a frame, after the link's update: whether the user linked, what the link says, and why V can't be placed, if
+	// it can't (spike 5). Build mode ends if Minecraft or V is gone, or the link, or V can't be placed, or Minecraft's
+	// player dies.
+	void Update(bool aLinked, const link::Link::Status& aState, const std::string& aVBlocked = {});
+	// The mouse's movement along x since the last call, in raw counts: for the turn a teleport adds back (spike 5).
+	int64_t TakeMouseX();
 	// Build mode on: nothing, or why it stays off.
 	std::optional<std::string> TurnOn();
 	// Build mode off, saying why: true if it was on.
@@ -73,5 +76,6 @@ private:
 	bool                  linkRequested_ = false;
 	std::optional<double> press_;
 	std::atomic<uint64_t> read_{ 0 };
+	std::atomic<int64_t>  mouseX_{ 0 };
 };
 }

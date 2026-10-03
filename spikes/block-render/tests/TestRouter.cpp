@@ -340,3 +340,60 @@ TEST(RouterReportsBuildMode)
 	CHECK_STR(building.router.Report().why, "Esc left it");
 	CHECK(Logged(building.log, "build mode off: Esc left it"));
 }
+
+TEST(RouterSumsTheMouseMovementAlongX)
+{
+	// For the turn a teleport may have to add back (spike 5's "The teleport"), in or out of build mode.
+	LogQueue log;
+	Router   router(log, &FakeFront);
+	auto     move = Mouse(0, 0, 7, 2);
+	auto     click = Mouse(RI_MOUSE_LEFT_BUTTON_DOWN, 0, -3, 0);
+	Inspect(router, move);
+	Inspect(router, click);
+	CHECK_EQ(router.TakeMouseX(), 4ll);
+	CHECK_EQ(router.TakeMouseX(), 0ll);  // taken
+	auto     absolute = Mouse(0, 0, 30000, 30000);  // a tablet's position, not a movement
+	RAWMOUSE mouse = MouseOf(absolute);
+	mouse.usFlags = MOUSE_MOVE_ABSOLUTE;
+	std::memcpy(absolute.data() + sizeof(RAWINPUTHEADER), &mouse, sizeof mouse);
+	Inspect(router, absolute);
+	CHECK_EQ(router.TakeMouseX(), 0ll);
+}
+
+TEST(RouterKeepsBuildModeOffWhileVCantBePlaced)
+{
+	LogQueue log;
+	Router   router(log, &FakeFront);
+	router.Update(true, Linked(), "V is in a vehicle");
+	CHECK_STR(router.TurnOn().value_or("on"), "V is in a vehicle");
+	CHECK(Logged(log, "build mode stays off: V is in a vehicle"));
+	router.Update(true, Linked(), "");
+	CHECK(!router.TurnOn());
+	CHECK(router.On());
+}
+
+TEST(RouterEndsBuildModeWhenVCantBePlaced)
+{
+	Building building;
+	building.router.Update(true, Linked(), "V is in a workspot");
+	CHECK(!building.router.On());
+	CHECK_STR(building.router.Report().why, "V is in a workspot");
+	const auto inputs = building.mapping.Inputs();
+	CHECK(inputs.size() == 1 && inputs[0].type == proto::kInReleaseAll);
+}
+
+TEST(RouterEndsBuildModeWhenMinecraftsPlayerDies)
+{
+	Building           building;
+	link::Link::Status state = Linked();
+	state.minecraftFlags = proto::kMcInWorld | proto::kMcDead;
+	building.router.Update(true, state);
+	CHECK(!building.router.On());
+	CHECK_STR(building.router.Report().why, "Minecraft's player is dead");
+	const auto inputs = building.mapping.Inputs();
+	CHECK(inputs.size() == 1 && inputs[0].type == proto::kInReleaseAll);
+	CHECK_STR(building.router.TurnOn().value_or("on"), "Minecraft's player is dead");  // until it respawns
+	state.minecraftFlags = proto::kMcInWorld;
+	building.router.Update(true, state);
+	CHECK(!building.router.TurnOn());
+}

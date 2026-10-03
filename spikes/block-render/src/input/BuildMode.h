@@ -36,11 +36,12 @@ struct RawMouse
 // Where things stand: whether the game is in front, and what the link said last frame.
 struct Situation
 {
-	bool inFront = false;    // the foreground window is the game's
-	bool linked = false;     // the user's Link
-	bool inGame = false;     // linked, with V found
-	bool minecraft = false;  // Minecraft's heartbeat is fresh
-	bool minecraftInWorld = false;
+	bool        inFront = false;    // the foreground window is the game's
+	bool        linked = false;     // the user's Link
+	bool        inGame = false;     // linked, with V found
+	bool        minecraft = false;  // Minecraft's heartbeat is fresh
+	bool        minecraftInWorld = false;
+	std::string blocked;  // why Minecraft can't drive V: V in a vehicle, a workspot or dead, or Minecraft's player dead (spike 5)
 };
 
 // What becomes of one event.
