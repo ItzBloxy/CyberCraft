@@ -1,7 +1,27 @@
 # Collision and movement: results
 
 Spike 5 makes Minecraft's player drive V in build mode, gives Minecraft Night City's shape, and stops V against
-Minecraft's blocks. Step 1 ran the drive with `mclink`, without Cyberpunk. Later steps add their sections as they run.
+Minecraft's blocks. Step 1 ran the drive with `mclink`, without Cyberpunk; step 2, further down ("Step 2: in the game,
+on the floor"), ran it in the game. Later steps add their sections as they run.
+
+## Part 1: moving as Minecraft's player
+
+Part 1 asked whether Minecraft's player can drive V in build mode: the movement keys go to Minecraft, and every frame V
+is teleported so that its camera lands on Minecraft's eye, smoothly enough to play.
+
+**Yes, with the frame's mouse turn added back (`set turn 1`).**
+- **It drives:** V walks, sprints, sprint-jumps, sneaks and flies as Minecraft's player does, at Minecraft's own speeds,
+  and lands on Minecraft's eye one frame later, within 4 to 7 mm. A steady walk's camera moves with 1.3% frame-to-frame
+  jitter. It felt smooth to the user.
+- **The look:** a teleport with V's own yaw locks left and right turning, so the plugin adds each frame's mouse turn,
+  measured outside build mode, to the teleport's yaw. With that, turning is smooth in every direction.
+- **It's safe for V:** falls from up to 47 m did no damage, a car hitting V played V's knockdown and V recovered, and
+  build mode ends cleanly every way the spec lists.
+- **It's cheap:** the teleport costs 0.002 ms a frame. Build mode costs about 0.3 ms a frame, all of it Minecraft's HUD.
+- **No refused clicks:** build mode sends Minecraft no teleports, so clicks while moving all land, which ends spike 4's
+  refusals.
+
+What Part 1 leaves for later is in step 2's "What it means for Part 2".
 
 ## Step 1: the drive with `mclink`, without Cyberpunk
 
@@ -86,3 +106,107 @@ sections and 2,231 HUD images (60 a second), with no resyncs and nothing rejecte
 - **No refused clicks while moving:** build mode ends spike 4's refusals, since Minecraft's player moves by itself.
 - **The script's keys stayed held through the jump,** so step 2's own check of jumping onto a block, where the user
   stops on it, settles what step 1 showed only by the jump's height.
+
+## Step 2: in the game, on the floor
+
+Date: 2026-10-03. BlockRender 0.11.0 at `91b3480` (the plan's Tasks 1 to 16, 289 unit tests passing), deployed to
+Cyberpunk 2077 2.31 with RED4ext 1.30.0, on an RTX 3070. Minecraft as in step 1, linked through the mapping. At spike
+3's corner (world x −116.6, y −2005.2) with the same save, on spike 4's floor. Part 1 has no `ground` setting yet.
+
+The user played: Minecraft, the game, F8 and the moving. The agent sent requests, recorded drive logs and the status,
+and read the plugin's log. Plan: Task 17.
+
+### Verdict
+
+**Step 2: pass, with `set turn 1`.** Every check passed but one, the opening check's first try: with the teleport's yaw
+V's own, the view wouldn't turn left or right. The plan's fallback, `set turn 1`, made it smooth. One message differs
+from the plan, in a car (below), and a few small things are left for Part 2.
+
+### The checks
+
+- **The script calls:** on linking, the log found all eight, with the types `Puppet` checks for:
+  - `PlayerSystem.GetLocalPlayerMainGameObject() -> handle:gameObject`;
+  - `TeleportationFacility.Teleport(handle:gameObject, Vector4, EulerAngles)`;
+  - V's `GetWorldYaw() -> Float`;
+  - `GetMountedVehicle;GameObject(handle:gameObject) -> whandle:vehicleBaseObject`;
+  - `WorkspotGameSystem.IsActorInWorkspot(handle:gameObject) -> Bool`;
+  - V's `IsDead() -> Bool` and `GetEntityID() -> entEntityID`;
+  - `StatPoolsSystem.GetStatPoolValue(gameStatsObjectID, gamedataStatPoolType, Bool) -> Float`.
+
+  V's health read 100% through the stat pools. Nothing faulted in the whole run.
+- **The turn ratio:** five or six turns of the mouse, outside build mode, measured −0.0500 degrees a count from 25
+  turns. Moving the mouse right lowers the game's yaw.
+- **The opening check:** F8, and `Minecraft let its player go after 0.09 s: V follows it`. Then:
+  - **with `set turn 0`,** the default, the user could look up and down smoothly but not left or right: the teleport
+    puts V's yaw back to where it was before the frame's mouse turn. The pitch is the camera's own, which the teleport
+    doesn't touch;
+  - **with `set turn 1`,** the frame's mouse counts times the ratio, added to the teleport's yaw, made turning "very
+    smooth", in all directions. That settles risk 1's first question: the turn has to be added back.
+- **Moving, with a 60 s drive log** (4,311 frames, at about 72 frames a second):
+  - the user found walking, strafing, backing up, sprinting, jumping, sneaking and flying all smooth;
+  - on a steady walk the target moved at 4.32 m/s with 0.3% frame-to-frame jitter, and V's camera at 4.31 m/s with
+    1.3%. Each frame V's camera was within 3.6 to 6.7 mm of where the frame before put it: the teleport lands before
+    the next frame's camera is taken, one frame of latency and no judder. That settles risk 1's second question. The
+    blocks are drawn with the frame's own camera, so they stay locked to the city;
+  - over the whole log, V's camera was a median 6.4 mm from the last frame's target, and 3.9 cm at the 90th
+    percentile, which is V's head moving through the frame;
+  - the render delay settled at 13.4 to 16.7 ms, against step 1's 4 ms: Minecraft's ticks reach the game later in its
+    frame than they reached `mclink`. Only 3 of the 4,311 frames waited for a late tick;
+  - the teleport call took a median 0.0014 ms, and at most 0.04 ms;
+  - the floor grew around Minecraft's player at its height, never with a new epoch.
+- **Hit by a car:** a car drove into V mid-test. V's camera first sat 10 cm high for half a second, then the game
+  played V's knockdown: the camera dropped 1.35 m and swung up to 0.86 m sideways over 2 s, and rose back over the next
+  2. The teleports kept V's feet under Minecraft's eye throughout, no target was skipped, build mode stayed on, and V's
+  health stayed 100%.
+- **Sprinting:** another drive log measured a straight sprint at 5.61 m/s, Minecraft's 5.612, and a sprint-jump
+  climbing over a second to 7.16 to 7.27 m/s, Minecraft's own sprint-jump speed: the jump's forward boost is applied.
+  The user still found sprinting and sprint-jumping slow compared with Minecraft itself. The speeds are Minecraft's, so
+  it's the view: Minecraft widens its field of view by about 15% while sprinting and bobs the camera with each step,
+  and V's camera does neither. Night City's scale makes the same speed read slower too.
+- **Entering with W held:** V stayed where it was until the drive drove, and walked as Minecraft's player once W was
+  pressed again: the held W stayed the game's, as spike 4's rule says.
+- **Clicks while moving:** about ten right clicks while walking all placed stone, with no red message in Minecraft's
+  chat.
+- **Falls while placed:** with a save made first, four flights peaked at 18.9, 46.7, 11.9 and 26.5 m above the street
+  before dropping back. V's health read 100% in all 90 readings, and V's camera stayed within 9 mm of where the last
+  frame put it through every fall and landing, 5 mm on average while falling. V never falls in the game's own terms
+  while placed, so risk 2 doesn't happen, and neither fallback is needed.
+- **Leaving:**
+  - F8 standing: `build mode off: F8 turned it off`, and V stayed where Minecraft's player was;
+  - F8 a few metres up: V fell as in the game, from too low for fall damage;
+  - Esc: `build mode off: Esc left it`, and the game's menu opened;
+  - F8 again: Minecraft let its player go after 0.10 s, and the drive drove.
+
+  After each, the link's teleports resumed from V's camera, up to 10 a second while V fell.
+- **A vehicle:** getting into a car with build mode on gave `build mode off: V is in a vehicle`, from
+  `GetMountedVehicle`. F8 in the car then kept build mode off, as it should, but said `build mode stays off: V isn't
+  found` rather than repeating the vehicle, as the plan expected. In the car the camera isn't V's eye (`PlayerLocator`
+  drops a camera more than 5 m from V's feet), so the link finds no V, and "V isn't found" comes before V's own reason.
+  While V sat in the car, the eye height measure also learned the seat's camera height, 1.18 m: it averages over frames
+  where V's feet stay level, and a car seat is level.
+- **The cost,** standing still for half a minute each way:
+
+  | Build mode | Frame time | Frames a second |
+  |---|---|---|
+  | On | 16.04 ms | 62.3 |
+  | Off | 15.81 ms | 63.2 |
+  | On again | 16.14 ms | 61.9 |
+
+  The difference, 0.2 to 0.3 ms, is Minecraft's HUD, which shows only in build mode: its copy took 0.17 ms and its pass
+  0.12 ms on the GPU. The teleport call took 0.002 ms a frame. Entering build mode gave one long frame each time, 53 and
+  56 ms against a usual worst of about 20.
+- **Once, right after the first F8,** V's camera stood 7.5 cm from Minecraft's eye, 7 cm of it upward. Later readings
+  standing still were within 1 cm, and it didn't come back.
+
+### What it means for Part 2
+
+- **`set turn 1` should be the default:** without it, build mode can't turn.
+- **V's reason in a car:** the plugin should ask `Puppet` why V can't be placed even when the link finds no camera, and
+  say "V is in a vehicle" rather than "V isn't found". `Puppet` finds V itself, so it doesn't need the camera.
+- **The eye height** should be measured only while V can be placed: a car seat, or any workspot, isn't V standing.
+  Getting out of a car and pressing F8 within a second would place V by the seat's height until the average caught up.
+- **The long frame on entering build mode:** the fresh floor, or the HUD's first frame. Part 2's floor and exporter
+  send much more, so its cost needs measuring there anyway.
+- **The sense of speed:** a field-of-view kick while Minecraft's player sprints would match Minecraft's own. It's a
+  choice for later, not a fault in the drive.
+- **The render delay** in the game is 13 to 17 ms, so V's view runs that far behind Minecraft's newest position.
