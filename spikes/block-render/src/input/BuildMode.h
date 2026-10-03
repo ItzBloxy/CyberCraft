@@ -8,11 +8,12 @@
 #include <optional>
 #include <string>
 
-// Build mode (the spec's "Input"): what becomes of each keyboard and mouse event the game reads. In build mode the mouse
-// buttons, side buttons included, the wheel and the keys 1 to 9 go to Minecraft and are hidden from the game; F8
-// toggles it; and the keys that open the game's menus leave it, and reach the game. A press's repeats and its release
-// go where the press went, so neither side is left holding an input that only the other saw let go. Pure, and not
-// thread-safe: the router (input/Router.h) holds its lock around every call.
+// Build mode (the minecraft-link spec's "Input"): what becomes of each keyboard and mouse event the game reads. In build
+// mode the mouse buttons, side buttons included, the wheel and the keys 1 to 9 go to Minecraft and are hidden from the
+// game; F8 toggles it; and the keys that open the game's menus leave it, and reach the game. Since spike 5 (its spec's
+// "Keys"), Minecraft's movement keys go to Minecraft too, and the game's crouch keys are hidden without going anywhere.
+// A press's repeats and its release go where the press went, so neither side is left holding an input that only the
+// other saw let go. Pure, and not thread-safe: the router (input/Router.h) holds its lock around every call.
 namespace cpmc::input
 {
 namespace proto = skycraft::proto;
@@ -87,7 +88,7 @@ private:
 		Neither,  // Minecraft's, until build mode ended and Minecraft let go of everything
 	};
 
-	static constexpr size_t kInputs = 14;  // the five mouse buttons, then the keys 1 to 9
+	static constexpr size_t kInputs = 23;  // the five mouse buttons, the keys 1 to 9, then nine other keys it takes
 
 	Holder Route(size_t aInput, bool aDown);
 	void   Forward(Decision& aDecision, const proto::InputEvent& aEvent, std::string aWhat);

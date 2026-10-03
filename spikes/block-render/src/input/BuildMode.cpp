@@ -62,6 +62,24 @@ constexpr Button kButtons[] = {
 constexpr size_t kButtonCount = std::size(kButtons);  // their holders come first, then the keys 1 to 9's
 constexpr size_t kSideButtons = 3;                    // the first side button's index
 
+// The other keys build mode takes (spike 5's "Keys"): Minecraft's movement keys, forwarded, and the game's crouch keys,
+// only hidden, so V can't crouch under the puppet. C is Minecraft's toolbar-saving key, so it isn't forwarded either.
+// The forwarded keys are physical keys: Minecraft applies its own bindings to them.
+struct TakenKey
+{
+	uint16_t    scanCode;  // set 1, without its E0 prefix
+	bool        extended;
+	bool        forward;  // to Minecraft, as well as hidden from the game
+	const char* name;
+};
+
+constexpr TakenKey kTakenKeys[] = {
+	{ 0x11, false, true, "W" },          { 0x1E, false, true, "A" },        { 0x1F, false, true, "S" },
+	{ 0x20, false, true, "D" },          { 0x39, false, true, "Space" },    { 0x2A, false, true, "Left Shift" },
+	{ 0x1D, false, true, "Left Ctrl" },  { 0x2E, false, false, "C" },       { 0x1D, true, false, "Right Ctrl" },
+};
+constexpr size_t kTakenFirst = kButtonCount + 9;  // their holders come after the buttons' and 1 to 9's
+
 int Sign(double aValue)
 {
 	return aValue > 0.0 ? 1 : aValue < 0.0 ? -1 : 0;
@@ -130,6 +148,26 @@ Decision BuildMode::Key(const RawKey& aKey, const Situation& aSituation)
 				slot_ = digit;
 			}
 		}
+	}
+	for (size_t i = 0; i < std::size(kTakenKeys); ++i)
+	{
+		const TakenKey& taken = kTakenKeys[i];
+		if (aKey.scanCode != taken.scanCode || aKey.extended != taken.extended)
+		{
+			continue;
+		}
+		const Holder to = Route(kTakenFirst + i, !aKey.up);
+		if (to == Holder::Minecraft || to == Holder::Neither)
+		{
+			decision.hideKey = true;
+			++hidden_;
+		}
+		if (to == Holder::Minecraft && taken.forward)
+		{
+			Forward(decision, { proto::kInKey, SdlScancode(aKey.scanCode, aKey.extended), aKey.up ? 0 : 1, 0, 0 },
+			        std::format("{} {}", taken.name, aKey.up ? "up" : "down"));
+		}
+		break;
 	}
 	return decision;
 }
@@ -232,7 +270,7 @@ bool BuildMode::LostFront()
 
 BuildMode::Holder BuildMode::Route(size_t aInput, bool aDown)
 {
-	static_assert(kInputs == kButtonCount + 9);
+	static_assert(kInputs == kTakenFirst + std::size(kTakenKeys));
 	Holder& holder = held_[aInput];
 	if (aDown && holder == Holder::None)
 	{

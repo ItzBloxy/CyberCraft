@@ -179,9 +179,9 @@ TEST(RouterMakesAKeyANoOp)
 	const auto inputs = building.mapping.Inputs();
 	CHECK(inputs.size() == 1 && inputs[0].type == proto::kInKey && inputs[0].code == 30 && inputs[0].a == 1);
 	CHECK(!building.router.TakePress());  // only buttons are marks
-	auto w = Key(0x11, 'W');
-	Inspect(building.router, w);
-	CHECK_EQ(KeyOf(w).VKey, USHORT('W'));  // V still walks
+	auto f = Key(0x21, 'F');
+	Inspect(building.router, f);
+	CHECK_EQ(KeyOf(f).VKey, USHORT('F'));  // V still interacts
 	CHECK(building.mapping.Inputs().empty());
 }
 

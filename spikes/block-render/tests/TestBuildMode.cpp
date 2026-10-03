@@ -181,7 +181,7 @@ TEST(BuildModeForwardsTheWheelAndFollowsTheSlot)
 	CHECK_EQ(mode.Slot().value_or(0), 9);
 }
 
-TEST(BuildModeTakesOnlyTheKeys1To9)
+TEST(BuildModeTakesTheKeys1To9)
 {
 	BuildMode mode = On();
 	CHECK(Is(mode.Key(Press(0x02), Ready()).forward[0], proto::kInKey, 30, 1));  // 1
@@ -189,7 +189,7 @@ TEST(BuildModeTakesOnlyTheKeys1To9)
 	CHECK(Is(mode.Key(Release(0x0A), Ready()).forward[0], proto::kInKey, 38, 0));  // 9's release goes too
 	CHECK(Passes(mode.Key(Release(0x05), Ready())));      // 4's release, its press never seen: the game's
 	CHECK(Passes(mode.Key(Press(0x0B), Ready())));        // 0
-	CHECK(Passes(mode.Key(Press(0x11), Ready())));        // W
+	CHECK(Passes(mode.Key(Press(0x12), Ready())));        // E: the game's iconic weapon, still the game's
 	CHECK(Passes(mode.Key(Press(0x02, true), Ready())));  // an extended 0x02 isn't 1
 	CHECK(Passes(mode.Key(Press(0x4F), Ready())));        // the keypad's 1
 	CHECK(mode.On());
@@ -290,4 +290,69 @@ TEST(BuildModeCountsWhatItForwardsAndHides)
 	CHECK(mode.TurnOff("a build off request"));
 	CHECK(!mode.TurnOff("again"));
 	CHECK_STR(mode.Why(), "a build off request");
+}
+
+TEST(BuildModeGivesMinecraftTheMovementKeys)
+{
+	// W, A, S, D, Space, Left Shift and Left Ctrl as set-1 scan codes, and the SDL scancodes Minecraft gets for them.
+	const std::pair<uint16_t, uint16_t> keys[] = { { 0x11, 26 }, { 0x1E, 4 },  { 0x1F, 22 }, { 0x20, 7 },
+		                                           { 0x39, 44 }, { 0x2A, 225 }, { 0x1D, 224 } };
+	BuildMode                           mode = On();
+	for (const auto& [scanCode, sdl] : keys)
+	{
+		const Decision down = mode.Key(Press(scanCode), Ready());
+		CHECK(down.hideKey && down.forwarded == 1 && Is(down.forward[0], proto::kInKey, sdl, 1));
+		const Decision repeat = mode.Key(Press(scanCode), Ready());  // held: Windows repeats the press
+		CHECK(repeat.hideKey && repeat.forwarded == 1 && Is(repeat.forward[0], proto::kInKey, sdl, 1));
+		const Decision up = mode.Key(Release(scanCode), Ready());
+		CHECK(up.hideKey && up.forwarded == 1 && Is(up.forward[0], proto::kInKey, sdl, 0));
+	}
+	CHECK_STR(mode.Last(), "Left Ctrl up");
+	BuildMode off;  // outside build mode they're the game's
+	for (const auto& [scanCode, sdl] : keys)
+	{
+		CHECK(Passes(off.Key(Press(scanCode), Ready())));
+		CHECK(Passes(off.Key(Release(scanCode), Ready())));
+	}
+}
+
+TEST(BuildModeHidesTheGamesCrouchKeys)
+{
+	// C toggles crouching and Right Ctrl holds it: hidden in build mode, so V can't crouch, and not forwarded.
+	BuildMode mode = On();
+	for (const RawKey& key : { Press(0x2E), Release(0x2E), Press(0x1D, true), Release(0x1D, true) })
+	{
+		const Decision decision = mode.Key(key, Ready());
+		CHECK(decision.hideKey && decision.forwarded == 0);
+	}
+	BuildMode off;
+	CHECK(Passes(off.Key(Press(0x2E), Ready())));
+	CHECK(Passes(off.Key(Press(0x1D, true), Ready())));
+}
+
+TEST(BuildModeLeavesAMovementKeyHeldBeforeItWithTheGame)
+{
+	// W held when build mode starts: its repeats and its release are the game's, so the game lets go of it. Pressed
+	// again, it's Minecraft's.
+	BuildMode mode;
+	CHECK(Passes(mode.Key(Press(0x11), Ready())));
+	mode.Key(Press(kF8), Ready());
+	CHECK(mode.On());
+	CHECK(Passes(mode.Key(Press(0x11), Ready())));  // a repeat
+	CHECK(Passes(mode.Key(Release(0x11), Ready())));
+	const Decision again = mode.Key(Press(0x11), Ready());
+	CHECK(again.hideKey && again.forwarded == 1);
+}
+
+TEST(BuildModeLeavesOnShiftF6WithLeftShiftForwarded)
+{
+	BuildMode      mode = On();
+	const Decision shift = mode.Key(Press(0x2A), Ready());
+	CHECK(shift.hideKey && shift.forwarded == 1);  // Minecraft's: in the user's instance it toggles sprint
+	const Decision f6 = mode.Key(Press(0x40), Ready());
+	CHECK(!mode.On());
+	CHECK(f6.releaseAll && !f6.hideKey);  // and CET's overlay opens
+	CHECK_STR(mode.Why(), "Shift+F6 left it");
+	const Decision release = mode.Key(Release(0x2A), Ready());  // its press went to Minecraft, which let go of everything
+	CHECK(release.hideKey && release.forwarded == 0);
 }
