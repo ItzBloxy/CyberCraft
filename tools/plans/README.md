@@ -27,6 +27,12 @@ scratchpad while in use; this is a copy, so the next spike can start from them. 
   DLL's exports.
 - **`tick.py`, `tick_steps.py`:** tick a whole task, or single steps.
 - **`b.sh`:** builds and tests the scratch copy; `b.sh "" "" clean` rebuilds from clean.
+- **`mutate.py`** (spike 4's Part 3): breaks the new code once per mutation, an exact text swap in one file, rebuilds,
+  and checks that the test named for it fails. A crash counts as not caught, since it hides every later test. The list
+  is Part 3's; under `%TEMP%` an incremental build can miss a change, so `clean` reruns chosen ones from clean.
+- **`find_calls.py`, `disasm.py`** (spike 4's Part 3): find the game executable's calls through chosen USER32 imports
+  and disassemble the functions that make them, or any address, with capstone. They showed how Cyberpunk reads Raw
+  Input (the minecraft-link spec's "Cyberpunk's input").
 
 **Before reuse:** the paths point at `spikes/block-render` (`planlib.target`, `gen_plan.repo_path`,
 `run_plan.project`) and at spike 4's scratchpad (`b.sh`). The runners know a few step kinds only their spike had:
