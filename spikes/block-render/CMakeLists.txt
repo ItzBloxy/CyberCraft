@@ -91,6 +91,7 @@ target_link_libraries(render_runtime PUBLIC render_core RED4ext::SDK d3d12)
 add_library(BlockRender SHARED
 	src/Plugin.cpp
 	src/PlayerLocator.cpp
+	src/Puppet.cpp
 )
 target_link_libraries(BlockRender PRIVATE render_runtime)
 
