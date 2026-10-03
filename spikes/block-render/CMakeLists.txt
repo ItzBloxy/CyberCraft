@@ -59,6 +59,7 @@ add_library(render_core STATIC
 	src/Measurements.cpp
 	src/ProcessUsage.cpp
 	src/input/Scancodes.cpp
+	src/input/BuildMode.cpp
 )
 target_link_libraries(render_core PUBLIC render_settings d3dcompiler dxguid advapi32)
 
@@ -148,6 +149,7 @@ add_executable(render_tests
 	tests/TestMeasurements.cpp
 	tests/TestProcessUsage.cpp
 	tests/TestScancodes.cpp
+	tests/TestBuildMode.cpp
 	tools/mclink/McLinkScript.cpp
 )
 target_include_directories(render_tests PRIVATE tools/mclink)

@@ -1,0 +1,108 @@
+#pragma once
+
+#include <skycraft_protocol.h>
+
+#include <array>
+#include <cstddef>
+#include <cstdint>
+#include <optional>
+#include <string>
+
+// Build mode (the spec's "Input"): what becomes of each keyboard and mouse event the game reads. In build mode the mouse
+// buttons, side buttons included, the wheel and the keys 1 to 9 go to Minecraft and are hidden from the game; F8
+// toggles it; and the keys that open the game's menus leave it, and reach the game. A press's repeats and its release
+// go where the press went, so neither side is left holding an input that only the other saw let go. Pure, and not
+// thread-safe: the router (input/Router.h) holds its lock around every call.
+namespace cpmc::input
+{
+namespace proto = skycraft::proto;
+
+// A keyboard event, from RAWKEYBOARD.
+struct RawKey
+{
+	uint16_t scanCode = 0;      // set 1, without its E0 prefix (MakeCode)
+	bool     extended = false;  // the E0 prefix (RI_KEY_E0)
+	bool     up = false;        // a release (RI_KEY_BREAK); a key held down repeats its press
+};
+
+// A mouse event's buttons and wheel, from RAWMOUSE. Its movement isn't build mode's business.
+struct RawMouse
+{
+	uint16_t buttons = 0;  // usButtonFlags: RI_MOUSE_LEFT_BUTTON_DOWN and the rest, and RI_MOUSE_WHEEL
+	int16_t  wheel = 0;    // usButtonData, with RI_MOUSE_WHEEL: notches x 120, positive away from the user (up)
+};
+
+// Where things stand: whether the game is in front, and what the link said last frame.
+struct Situation
+{
+	bool inFront = false;    // the foreground window is the game's
+	bool linked = false;     // the user's Link
+	bool inGame = false;     // linked, with V found
+	bool minecraft = false;  // Minecraft's heartbeat is fresh
+	bool minecraftInWorld = false;
+};
+
+// What becomes of one event.
+struct Decision
+{
+	static constexpr size_t kMost = 11;  // five buttons pressed and released, and the wheel
+
+	uint16_t                             hideButtons = 0;      // mouse: the flags to clear, so the game doesn't see them
+	bool                                 hideKey = false;      // keyboard: make the key a no-op for the game
+	bool                                 releaseAll = false;   // build mode ended: Minecraft lets go of everything, first
+	std::array<proto::InputEvent, kMost> forward{};            // then these go to Minecraft's input ring, in order
+	size_t                               forwarded = 0;
+	bool                                 press = false;        // a left, right or middle press went to Minecraft: a latency mark
+	bool                                 requestLink = false;  // F8 while unlinked: the main thread links, then turns it on
+};
+
+class BuildMode
+{
+public:
+	Decision Key(const RawKey& aKey, const Situation& aSituation);
+	Decision Mouse(const RawMouse& aMouse, const Situation& aSituation);
+
+	// On, from the main thread: a build request, or F8's link once it's done. True if it's on; if not, Why() says why.
+	bool TurnOn(const Situation& aSituation);
+	// Off, saying why: true if it was on, so Minecraft must let go of everything.
+	bool TurnOff(std::string aWhy);
+	// The game stopped being in front, so what's held is let go of in another window, where neither side sees it. True
+	// if build mode is on, so Minecraft must let go of everything. Build mode stays on for when the user comes back.
+	bool LostFront();
+
+	bool               On() const { return on_; }
+	const std::string& Why() const { return why_; }          // why it's off
+	std::optional<int> Slot() const { return slot_; }        // Minecraft's hotbar slot, 1 to 9, as far as it's known
+	uint64_t           Forwarded() const { return forwarded_; }  // events for Minecraft's input ring
+	uint64_t           Hidden() const { return hidden_; }        // inputs hidden from the game
+	const std::string& Last() const { return last_; }            // the last input forwarded
+
+private:
+	// Where a held input's press went.
+	enum class Holder : uint8_t
+	{
+		None,
+		Game,
+		Minecraft,
+		Neither,  // Minecraft's, until build mode ended and Minecraft let go of everything
+	};
+
+	static constexpr size_t kInputs = 14;  // the five mouse buttons, then the keys 1 to 9
+
+	Holder Route(size_t aInput, bool aDown);
+	void   Forward(Decision& aDecision, const proto::InputEvent& aEvent, std::string aWhat);
+	void   Scroll(int16_t aWheel);
+
+	bool                        on_ = false;
+	std::string                 why_ = "F8 turns it on";
+	std::array<Holder, kInputs> held_{};
+	bool                        f8Down_ = false;
+	bool                        leftShift_ = false;
+	bool                        rightShift_ = false;
+	std::optional<int>          slot_;
+	double                      scroll_ = 0.0;  // the wheel's notches not yet whole, as Minecraft keeps them
+	uint64_t                    forwarded_ = 0;
+	uint64_t                    hidden_ = 0;
+	std::string                 last_ = "nothing yet";
+};
+}
