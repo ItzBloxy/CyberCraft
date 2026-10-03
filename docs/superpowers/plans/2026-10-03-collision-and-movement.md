@@ -123,7 +123,7 @@ finite positions and eye heights (the spec's "Safety"). The tests feed it SkyCra
 - Create: `src/link/Ticks.h`, `src/link/Ticks.cpp`, `tests/TestTicks.cpp`
 - Modify: `CMakeLists.txt`
 
-- [ ] **Step 1: Write the failing test, `tests/TestTicks.cpp`**
+- [x] **Step 1: Write the failing test, `tests/TestTicks.cpp`**
 
 ```cpp
 #include "Harness.h"
@@ -281,7 +281,7 @@ TEST(TicksWaitLongerForLateTicksAndShrinkSlowly)
 }
 ```
 
-- [ ] **Step 2: Edit `CMakeLists.txt` to add the test**
+- [x] **Step 2: Edit `CMakeLists.txt` to add the test**
 
 ```cmake
 	tests/TestRouter.cpp
@@ -293,7 +293,7 @@ TEST(TicksWaitLongerForLateTicksAndShrinkSlowly)
 	tools/mclink/McLinkScript.cpp
 ```
 
-- [ ] **Step 3: Build; it must fail**
+- [x] **Step 3: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -302,7 +302,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `error C1083: Cannot open include file: 'link/Ticks.h'`.
 
-- [ ] **Step 4: Write `src/link/Ticks.h`**
+- [x] **Step 4: Write `src/link/Ticks.h`**
 
 ```cpp
 #pragma once
@@ -362,7 +362,7 @@ private:
 }
 ```
 
-- [ ] **Step 5: Write `src/link/Ticks.cpp`**
+- [x] **Step 5: Write `src/link/Ticks.cpp`**
 
 ```cpp
 #include "link/Ticks.h"
@@ -504,7 +504,7 @@ void TickInterpolator::Reset()
 }
 ```
 
-- [ ] **Step 6: Edit `CMakeLists.txt` to add the source**
+- [x] **Step 6: Edit `CMakeLists.txt` to add the source**
 
 ```cmake
 	src/link/Link.cpp
@@ -516,7 +516,7 @@ void TickInterpolator::Reset()
 	src/render/PendingSections.cpp
 ```
 
-- [ ] **Step 7: Build and run the tests; they must pass**
+- [x] **Step 7: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -526,7 +526,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `241 test(s), 0 failure(s)`.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -559,7 +559,7 @@ code says so where it does it, and `VoxelsFillBothLayersAtABoundary` tests it.
 - Create: `src/link/Voxels.h`, `src/link/Voxels.cpp`, `tests/TestVoxels.cpp`
 - Modify: `CMakeLists.txt`
 
-- [ ] **Step 1: Write the failing test, `tests/TestVoxels.cpp`**
+- [x] **Step 1: Write the failing test, `tests/TestVoxels.cpp`**
 
 ```cpp
 #include "Harness.h"
@@ -710,7 +710,7 @@ TEST(VoxelsRegionPayload)
 }
 ```
 
-- [ ] **Step 2: Edit `CMakeLists.txt` to add the test**
+- [x] **Step 2: Edit `CMakeLists.txt` to add the test**
 
 ```cmake
 	tests/TestTicks.cpp
@@ -722,7 +722,7 @@ TEST(VoxelsRegionPayload)
 	tools/mclink/McLinkScript.cpp
 ```
 
-- [ ] **Step 3: Build; it must fail**
+- [x] **Step 3: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -731,7 +731,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `error C1083: Cannot open include file: 'link/Voxels.h'`.
 
-- [ ] **Step 4: Write `src/link/Voxels.h`**
+- [x] **Step 4: Write `src/link/Voxels.h`**
 
 ```cpp
 #pragma once
@@ -772,7 +772,7 @@ std::vector<uint8_t> RegionPayload(int32_t aRegionX, int32_t aRegionY, int32_t a
 }
 ```
 
-- [ ] **Step 5: Write `src/link/Voxels.cpp`**
+- [x] **Step 5: Write `src/link/Voxels.cpp`**
 
 ```cpp
 #include "link/Voxels.h"
@@ -1036,7 +1036,7 @@ std::vector<uint8_t> RegionPayload(int32_t aRegionX, int32_t aRegionY, int32_t a
 }
 ```
 
-- [ ] **Step 6: Edit `CMakeLists.txt` to add the source**
+- [x] **Step 6: Edit `CMakeLists.txt` to add the source**
 
 ```cmake
 	src/link/Ticks.cpp
@@ -1048,7 +1048,7 @@ std::vector<uint8_t> RegionPayload(int32_t aRegionX, int32_t aRegionY, int32_t a
 	src/render/PendingSections.cpp
 ```
 
-- [ ] **Step 7: Build and run the tests; they must pass**
+- [x] **Step 7: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -1058,7 +1058,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `249 test(s), 0 failure(s)`.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -1079,7 +1079,7 @@ from one helper that both the triangles and the voxels use.
 **Files:**
 - Modify: `src/link/Floor.h`, `src/link/Floor.cpp`, `tests/TestFloor.cpp`
 
-- [ ] **Step 1: Edit `tests/TestFloor.cpp`: the failing test**
+- [x] **Step 1: Edit `tests/TestFloor.cpp`: the failing test**
 
 ```cpp
 	CHECK(FloorClear(0x01020304) == std::vector<uint8_t>({ 4, 3, 2, 1 }));
@@ -1115,7 +1115,7 @@ TEST(FloorVoxelsMakeItsRegionsKnown)
 }
 ```
 
-- [ ] **Step 2: Build; it must fail**
+- [x] **Step 2: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -1124,7 +1124,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `error C3861: 'FloorVoxels': identifier not found`.
 
-- [ ] **Step 3: Edit `src/link/Floor.h`**
+- [x] **Step 3: Edit `src/link/Floor.h`**
 
 ```cpp
 #pragma once
@@ -1163,7 +1163,7 @@ std::vector<std::vector<uint8_t>> FloorVoxels(int32_t aRegionX, int32_t aRegionZ
 // The regions of a floor centred on Minecraft block column aX, aZ: (region x, region z) pairs, 7 by 7.
 ```
 
-- [ ] **Step 4: Edit `src/link/Floor.cpp`**
+- [x] **Step 4: Edit `src/link/Floor.cpp`**
 
 ```cpp
 #include <cmath>
@@ -1228,7 +1228,7 @@ std::vector<std::vector<uint8_t>> FloorVoxels(int32_t aRegionX, int32_t aRegionZ
 		     RegionPayload(aRegionX, regionY + 1, aRegionZ, aEpoch, {}) };
 ```
 
-- [ ] **Step 5: Build and run the tests; they must pass**
+- [x] **Step 5: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -1238,7 +1238,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `250 test(s), 0 failure(s)`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -1267,7 +1267,7 @@ where the feet don't move up or down, from spike 4's 1.60 m until a frame counts
 - Create: `src/link/Drive.h`, `src/link/Drive.cpp`, `tests/TestDrive.cpp`
 - Modify: `CMakeLists.txt`
 
-- [ ] **Step 1: Write the failing test, `tests/TestDrive.cpp`**
+- [x] **Step 1: Write the failing test, `tests/TestDrive.cpp`**
 
 ```cpp
 #include "Harness.h"
@@ -1424,7 +1424,7 @@ TEST(EyeHeightAveragesOnlyWhileTheFeetStayLevel)
 }
 ```
 
-- [ ] **Step 2: Edit `CMakeLists.txt` to add the test**
+- [x] **Step 2: Edit `CMakeLists.txt` to add the test**
 
 ```cmake
 	tests/TestVoxels.cpp
@@ -1436,7 +1436,7 @@ TEST(EyeHeightAveragesOnlyWhileTheFeetStayLevel)
 	tools/mclink/McLinkScript.cpp
 ```
 
-- [ ] **Step 3: Build; it must fail**
+- [x] **Step 3: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -1445,7 +1445,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `error C1083: Cannot open include file: 'link/Drive.h'`.
 
-- [ ] **Step 4: Write `src/link/Drive.h`**
+- [x] **Step 4: Write `src/link/Drive.h`**
 
 ```cpp
 #pragma once
@@ -1527,7 +1527,7 @@ private:
 }
 ```
 
-- [ ] **Step 5: Write `src/link/Drive.cpp`**
+- [x] **Step 5: Write `src/link/Drive.cpp`**
 
 ```cpp
 #include "link/Drive.h"
@@ -1660,7 +1660,7 @@ Drive::Step Drive::Update(double aNow, bool aAcked, const std::optional<TickSamp
 }
 ```
 
-- [ ] **Step 6: Edit `CMakeLists.txt` to add the source**
+- [x] **Step 6: Edit `CMakeLists.txt` to add the source**
 
 ```cmake
 	src/link/Voxels.cpp
@@ -1672,7 +1672,7 @@ Drive::Step Drive::Update(double aNow, bool aAcked, const std::optional<TickSamp
 	src/render/PendingSections.cpp
 ```
 
-- [ ] **Step 7: Build and run the tests; they must pass**
+- [x] **Step 7: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -1682,7 +1682,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `260 test(s), 0 failure(s)`.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -1705,7 +1705,7 @@ Two changes to the link before the drive:
 **Files:**
 - Modify: `src/link/Link.h`, `src/link/Link.cpp`, `tests/TestLink.cpp`
 
-- [ ] **Step 1: Edit `tests/TestLink.cpp`: the failing test**
+- [x] **Step 1: Edit `tests/TestLink.cpp`: the failing test**
 
 ```cpp
 #include "link/Link.h"
@@ -1793,7 +1793,7 @@ TEST(LinkTeleportsByStepAndRate)
 	CHECK_EQ(minecraft.Collision(payloads).size(), size_t(1 + 49 * 4));
 ```
 
-- [ ] **Step 2: Build; it must fail**
+- [x] **Step 2: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -1802,7 +1802,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `error C3861: 'FirstTeleportSeq': identifier not found`.
 
-- [ ] **Step 3: Edit `src/link/Link.h`**
+- [x] **Step 3: Edit `src/link/Link.h`**
 
 ```cpp
 class Link
@@ -1822,7 +1822,7 @@ public:
 	explicit Link(uint8_t* aBase, uint32_t aFirstTeleportSeq = FirstTeleportSeq());
 ```
 
-- [ ] **Step 4: Edit `src/link/Link.cpp`**
+- [x] **Step 4: Edit `src/link/Link.cpp`**
 
 ```cpp
 Link::Link(uint8_t* aBase)
@@ -1856,7 +1856,7 @@ Link::Link(uint8_t* aBase, uint32_t aFirstTeleportSeq)
 		}
 ```
 
-- [ ] **Step 5: Build and run the tests; they must pass**
+- [x] **Step 5: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -1866,7 +1866,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `261 test(s), 0 failure(s)`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -1900,7 +1900,7 @@ The tests' fake Minecraft gains ticks. `Corner()`'s camera moves to 1.60 m above
 **Files:**
 - Modify: `src/link/Link.h`, `src/link/Link.cpp`, `tests/TestLink.cpp`
 
-- [ ] **Step 1: Edit `tests/TestLink.cpp`: the failing tests**
+- [x] **Step 1: Edit `tests/TestLink.cpp`: the failing tests**
 
 ```cpp
 		state.eyeZ = 2007.5;
@@ -2160,7 +2160,7 @@ TEST(LinkMeasuresVsEyeHeightOutsideBuildModeOnly)
 }
 ```
 
-- [ ] **Step 2: Build; it must fail**
+- [x] **Step 2: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -2169,7 +2169,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `error C2039: 'placeV': is not a member of 'cpmc::link::Link::Status'`.
 
-- [ ] **Step 3: Edit `src/link/Link.h`**
+- [x] **Step 3: Edit `src/link/Link.h`**
 
 ```cpp
 #include "link/Commands.h"
@@ -2248,7 +2248,7 @@ Expected: `error C2039: 'placeV': is not a member of 'cpmc::link::Link::Status'`
 	std::optional<Vec3d>  lastEye_;  // where the last frame put Minecraft's eye, world axes
 ```
 
-- [ ] **Step 4: Edit `src/link/Link.cpp`**
+- [x] **Step 4: Edit `src/link/Link.cpp`**
 
 ```cpp
 			overlay_.Reset();
@@ -2424,7 +2424,7 @@ void Link::SendFloor(const Vec3d& aCentre, bool aNewEpoch, LinkSink& aSink)
 		                    : std::format("floor {} grows to Minecraft {:.1f} {:.1f}, at height {:.2f}", epoch, aCentre.x, aCentre.z, aCentre.y));
 ```
 
-- [ ] **Step 5: Build and run the tests; they must pass**
+- [x] **Step 5: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -2434,7 +2434,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `268 test(s), 0 failure(s)`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -2464,7 +2464,7 @@ cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
   `tests/TestMcLinkScript.cpp`
 - Create: `tools/mclink/drive.txt`, `tools/mclink/relink.txt`
 
-- [ ] **Step 1: Edit `tests/TestMcLinkScript.cpp`: the failing tests**
+- [x] **Step 1: Edit `tests/TestMcLinkScript.cpp`: the failing tests**
 
 ```cpp
 using namespace cpmc::mclink;
@@ -2523,7 +2523,7 @@ TEST(ScriptParsesHeldKeysAndTracking)
 TEST(ScriptTypeKeepsTheWholeCommand)
 ```
 
-- [ ] **Step 2: Build; it must fail**
+- [x] **Step 2: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -2532,7 +2532,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `error C2065: 'Down': undeclared identifier`.
 
-- [ ] **Step 3: Edit `tools/mclink/McLinkScript.h`**
+- [x] **Step 3: Edit `tools/mclink/McLinkScript.h`**
 
 ```cpp
 //   build on|off                   build mode: off sets SkyState's menu flag (on by default)
@@ -2586,7 +2586,7 @@ Expected: `error C2065: 'Down': undeclared identifier`.
 		Track,
 ```
 
-- [ ] **Step 4: Edit `tools/mclink/McLinkScript.cpp`**
+- [x] **Step 4: Edit `tools/mclink/McLinkScript.cpp`**
 
 ```cpp
 		else if (verb == "key")
@@ -2621,7 +2621,7 @@ Expected: `error C2065: 'Down': undeclared identifier`.
 				return fail(std::format("{} takes a number of seconds", verb));
 ```
 
-- [ ] **Step 5: Edit `tools/mclink/Main.cpp`**
+- [x] **Step 5: Edit `tools/mclink/Main.cpp`**
 
 ```cpp
 // mclink: a console stand-in for Cyberpunk's side of SkyCraft's protocol, for spike 4's step 1. It runs BlockRender's
@@ -2771,7 +2771,7 @@ std::string Flags(uint32_t aFlags)
 		case Action::Kind::Quit: next = script->size(); break;
 ```
 
-- [ ] **Step 6: Write `tools/mclink/drive.txt`**
+- [x] **Step 6: Write `tools/mclink/drive.txt`**
 
 ```text
 # Spike 5's step 1: build mode's drive against the real Minecraft, without the game (docs/superpowers/specs/
@@ -2902,7 +2902,7 @@ status
 quit
 ```
 
-- [ ] **Step 7: Write `tools/mclink/relink.txt`**
+- [x] **Step 7: Write `tools/mclink/relink.txt`**
 
 ```text
 # Spike 5's step 1: a new game side, with Minecraft still running, starts its teleportSeq from the clock, so its first
@@ -2915,7 +2915,7 @@ status
 quit
 ```
 
-- [ ] **Step 8: Build and run the tests; they must pass**
+- [x] **Step 8: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -2925,7 +2925,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `270 test(s), 0 failure(s)`.
 
-- [ ] **Step 9: Run mclink without Minecraft**
+- [x] **Step 9: Run mclink without Minecraft**
 
 Minecraft and the game must not be running.
 ```bash
@@ -2936,7 +2936,7 @@ Expected: `the mapping: created (process …); waiting for Minecraft`, then the 
 `game side:` line whose sequence is a large odd number (it starts from the clock), and `drive: off, teleport 0 applied
 of …`. Then `exit: 0`.
 
-- [ ] **Step 10: Commit**
+- [x] **Step 10: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -2961,14 +2961,14 @@ Step 1 of the spec's "The steps", with the user: the drive run by `mclink` again
 **Files:**
 - Create: `docs/spikes/2026-10-03-collision-and-movement-results.md`
 
-- [ ] **Step 1: Check that the game isn't running**
+- [x] **Step 1: Check that the game isn't running**
 
 ```bash
 tasklist | grep -i -c "cyberpunk2077.exe"
 ```
 Expected: `0`. If it's `1`, ask the user to quit the game: it would hold the mapping.
 
-- [ ] **Step 2: Ask the user to start Minecraft**
+- [x] **Step 2: Ask the user to start Minecraft**
 
 The user starts the `CyberCraft` instance from the Modrinth App, and says when its title screen shows. Then:
 ```bash
@@ -2976,7 +2976,7 @@ grep -E "SkyCraft:" "/c/Users/BLOXY/AppData/Roaming/ModrinthApp/profiles/CyberCr
 ```
 Expected: `SkyCraft: can't open Skyrim's shared memory yet (Windows error 2: …)`: waiting for a game side.
 
-- [ ] **Step 3: Run step 1's script**
+- [x] **Step 3: Run step 1's script**
 
 ```bash
 cd /d/Cyberpunk-Minecraft/spikes/block-render && mkdir -p build/step1 && cd build/step1 \
@@ -3005,7 +3005,7 @@ It takes about a minute once Minecraft is in its world, and up to four if it ope
   last status's teleport count higher than before `build on`.
 - **No `build mode ends:` line,** and `exit: 0`.
 
-- [ ] **Step 4: Look at the HUD images**
+- [x] **Step 4: Look at the HUD images**
 
 ```bash
 cd /d/Cyberpunk-Minecraft/spikes/block-render && uv run --no-project -q --with numpy --with pillow python tools/view_dump.py build/step1
@@ -3014,7 +3014,7 @@ Expected: `clicks.dds` and `count.dds` converted. Read `build/step1/clicks.png` 
 - **`clicks.png`:** no red text in the chat, so no click was refused;
 - **`count.png`:** the chat says the `/fill` replaced 20 blocks: all twenty right clicks while strafing placed stone.
 
-- [ ] **Step 5: Run the relink script twice**
+- [x] **Step 5: Run the relink script twice**
 
 Wait 10 seconds after Step 3: Minecraft drops the link after 8 s, and keeps running. Then:
 ```bash
@@ -3029,11 +3029,11 @@ Expected:
   own sequence;
 - `teleports logged:` at least 2: each run's first link teleported Minecraft's player, though Minecraft kept running.
 
-- [ ] **Step 6: Ask the user to stop Minecraft**
+- [x] **Step 6: Ask the user to stop Minecraft**
 
 Its window is hidden, so the user stops it from the Modrinth App.
 
-- [ ] **Step 7: Write step 1's results, `docs/spikes/2026-10-03-collision-and-movement-results.md`**
+- [x] **Step 7: Write step 1's results, `docs/spikes/2026-10-03-collision-and-movement-results.md`**
 
 From `build/step1/drive.log`, the relink logs, the two PNGs and Minecraft's log, as spike 4's results doc does:
 - the versions;
@@ -3041,7 +3041,7 @@ From `build/step1/drive.log`, the relink logs, the two PNGs and Minecraft's log,
   stopped the walk, the render delay and late ticks, and the clicks;
 - anything that surprised, and what it means for step 2.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add docs/spikes/2026-10-03-collision-and-movement-results.md \
@@ -3067,7 +3067,7 @@ Two old test lines used W as a key build mode leaves alone: `BuildModeTakesOnlyT
 **Files:**
 - Modify: `src/input/BuildMode.h`, `src/input/BuildMode.cpp`, `tests/TestBuildMode.cpp`, `tests/TestRouter.cpp`
 
-- [ ] **Step 1: Edit `tests/TestBuildMode.cpp`: the failing tests**
+- [x] **Step 1: Edit `tests/TestBuildMode.cpp`: the failing tests**
 
 ```cpp
 TEST(BuildModeTakesOnlyTheKeys1To9)
@@ -3155,7 +3155,7 @@ TEST(BuildModeLeavesOnShiftF6WithLeftShiftForwarded)
 }
 ```
 
-- [ ] **Step 2: Edit `tests/TestRouter.cpp`: F instead of W**
+- [x] **Step 2: Edit `tests/TestRouter.cpp`: F instead of W**
 
 ```cpp
 	auto w = Key(0x11, 'W');
@@ -3168,7 +3168,7 @@ TEST(BuildModeLeavesOnShiftF6WithLeftShiftForwarded)
 	CHECK_EQ(KeyOf(f).VKey, USHORT('F'));  // V still interacts
 ```
 
-- [ ] **Step 3: Build and run the tests; the new ones must fail**
+- [x] **Step 3: Build and run the tests; the new ones must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -3178,7 +3178,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `FAIL BuildModeGivesMinecraftTheMovementKeys`, `FAIL BuildModeHidesTheGamesCrouchKeys` and `FAIL BuildModeLeavesOnShiftF6WithLeftShiftForwarded` among the failures: the tests compile, since the keys go through the same calls as the buttons.
 
-- [ ] **Step 4: Edit `src/input/BuildMode.h`**
+- [x] **Step 4: Edit `src/input/BuildMode.h`**
 
 ```cpp
 // Build mode (the spec's "Input"): what becomes of each keyboard and mouse event the game reads. In build mode the mouse
@@ -3202,7 +3202,7 @@ Expected: `FAIL BuildModeGivesMinecraftTheMovementKeys`, `FAIL BuildModeHidesThe
 	static constexpr size_t kInputs = 23;  // the five mouse buttons, the keys 1 to 9, then nine other keys it takes
 ```
 
-- [ ] **Step 5: Edit `src/input/BuildMode.cpp`**
+- [x] **Step 5: Edit `src/input/BuildMode.cpp`**
 
 ```cpp
 constexpr size_t kSideButtons = 3;                    // the first side button's index
@@ -3267,7 +3267,7 @@ constexpr size_t kTakenFirst = kButtonCount + 9;  // their holders come after th
 	static_assert(kInputs == kTakenFirst + std::size(kTakenKeys));
 ```
 
-- [ ] **Step 6: Build and run the tests; they must pass**
+- [x] **Step 6: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -3277,7 +3277,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `274 test(s), 0 failure(s)`.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -3301,7 +3301,7 @@ Two more jobs for the router, for the plugin:
 - Modify: `src/input/BuildMode.h`, `src/input/BuildMode.cpp`, `src/input/Router.h`, `src/input/Router.cpp`,
   `tests/TestRouter.cpp`
 
-- [ ] **Step 1: Edit `tests/TestRouter.cpp`: the failing tests**
+- [x] **Step 1: Edit `tests/TestRouter.cpp`: the failing tests**
 
 ```cpp
 	CHECK(Logged(building.log, "build mode off: Esc left it"));
@@ -3369,7 +3369,7 @@ TEST(RouterEndsBuildModeWhenMinecraftsPlayerDies)
 }
 ```
 
-- [ ] **Step 2: Build; it must fail**
+- [x] **Step 2: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -3378,7 +3378,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `error C2039: 'TakeMouseX': is not a member of 'cpmc::input::Router'`.
 
-- [ ] **Step 3: Edit `src/input/BuildMode.h`**
+- [x] **Step 3: Edit `src/input/BuildMode.h`**
 
 ```cpp
 	bool inFront = false;    // the foreground window is the game's
@@ -3396,7 +3396,7 @@ Expected: `error C2039: 'TakeMouseX': is not a member of 'cpmc::input::Router'`.
 	std::string blocked;  // why Minecraft can't drive V: V in a vehicle, a workspot or dead, or Minecraft's player dead (spike 5)
 ```
 
-- [ ] **Step 4: Edit `src/input/BuildMode.cpp`**
+- [x] **Step 4: Edit `src/input/BuildMode.cpp`**
 
 ```cpp
 		why_ = aSituation.linked ? "V isn't found" : "it isn't linked";
@@ -3413,7 +3413,7 @@ Expected: `error C2039: 'TakeMouseX': is not a member of 'cpmc::input::Router'`.
 	else
 ```
 
-- [ ] **Step 5: Edit `src/input/Router.h`**
+- [x] **Step 5: Edit `src/input/Router.h`**
 
 ```cpp
 	// Once a frame, after the link's update: whether the user linked, and what the link says. Build mode ends if
@@ -3436,7 +3436,7 @@ Expected: `error C2039: 'TakeMouseX': is not a member of 'cpmc::input::Router'`.
 	std::atomic<int64_t>  mouseX_{ 0 };
 ```
 
-- [ ] **Step 6: Edit `src/input/Router.cpp`**
+- [x] **Step 6: Edit `src/input/Router.cpp`**
 
 ```cpp
 		std::memcpy(&mouse, body, sizeof mouse);
@@ -3491,7 +3491,7 @@ int64_t Router::TakeMouseX()
 	return mouseX_.exchange(0);
 ```
 
-- [ ] **Step 7: Build and run the tests; they must pass**
+- [x] **Step 7: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -3501,7 +3501,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `278 test(s), 0 failure(s)`.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -3533,7 +3533,7 @@ Two pure pieces for the plugin:
   `tests/TestDriveLog.cpp`
 - Modify: `CMakeLists.txt`
 
-- [ ] **Step 1: Write the failing test, `tests/TestTurn.cpp`**
+- [x] **Step 1: Write the failing test, `tests/TestTurn.cpp`**
 
 ```cpp
 #include "Harness.h"
@@ -3666,7 +3666,7 @@ TEST(TurnRatioDropsATurnBrokenOff)
 }
 ```
 
-- [ ] **Step 2: Write the failing test, `tests/TestDriveLog.cpp`**
+- [x] **Step 2: Write the failing test, `tests/TestDriveLog.cpp`**
 
 ```cpp
 #include "Harness.h"
@@ -3745,7 +3745,7 @@ TEST(DriveLogStopsWhenFull)
 }
 ```
 
-- [ ] **Step 3: Edit `CMakeLists.txt` to add the tests**
+- [x] **Step 3: Edit `CMakeLists.txt` to add the tests**
 
 ```cmake
 	tests/TestDrive.cpp
@@ -3758,7 +3758,7 @@ TEST(DriveLogStopsWhenFull)
 	tools/mclink/McLinkScript.cpp
 ```
 
-- [ ] **Step 4: Build; it must fail**
+- [x] **Step 4: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -3767,7 +3767,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `error C1083: Cannot open include file: 'link/Turn.h'`, and the same for `log/DriveLog.h`.
 
-- [ ] **Step 5: Write `src/link/Turn.h`**
+- [x] **Step 5: Write `src/link/Turn.h`**
 
 ```cpp
 #pragma once
@@ -3819,7 +3819,7 @@ private:
 }
 ```
 
-- [ ] **Step 6: Write `src/link/Turn.cpp`**
+- [x] **Step 6: Write `src/link/Turn.cpp`**
 
 ```cpp
 #include "link/Turn.h"
@@ -3895,7 +3895,7 @@ double TurnRatio::Turn(int64_t aCounts) const
 }
 ```
 
-- [ ] **Step 7: Write `src/log/DriveLog.h`**
+- [x] **Step 7: Write `src/log/DriveLog.h`**
 
 ```cpp
 #pragma once
@@ -3960,7 +3960,7 @@ private:
 }
 ```
 
-- [ ] **Step 8: Write `src/log/DriveLog.cpp`**
+- [x] **Step 8: Write `src/log/DriveLog.cpp`**
 
 ```cpp
 #include "log/DriveLog.h"
@@ -4045,7 +4045,7 @@ void DriveLog::Finish()
 }
 ```
 
-- [ ] **Step 9: Edit `CMakeLists.txt` to add the sources**
+- [x] **Step 9: Edit `CMakeLists.txt` to add the sources**
 
 ```cmake
 	src/link/Drive.cpp
@@ -4058,7 +4058,7 @@ void DriveLog::Finish()
 	src/render/PendingSections.cpp
 ```
 
-- [ ] **Step 10: Build and run the tests; they must pass**
+- [x] **Step 10: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -4068,7 +4068,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `287 test(s), 0 failure(s)`.
 
-- [ ] **Step 11: Commit**
+- [x] **Step 11: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -4086,7 +4086,7 @@ here: `set` already takes a name and a number, and the plugin handles `turn` in 
 **Files:**
 - Modify: `src/Requests.h`, `src/Requests.cpp`, `tests/TestRequests.cpp`
 
-- [ ] **Step 1: Edit `tests/TestRequests.cpp`: the failing test**
+- [x] **Step 1: Edit `tests/TestRequests.cpp`: the failing test**
 
 ```cpp
 TEST(RequestsTypeIntoMinecraft)
@@ -4112,7 +4112,7 @@ TEST(RequestsForTheDriveLog)
 TEST(RequestsTypeIntoMinecraft)
 ```
 
-- [ ] **Step 2: Build; it must fail**
+- [x] **Step 2: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -4121,7 +4121,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `error C2065: 'DriveLog': undeclared identifier`.
 
-- [ ] **Step 3: Edit `src/Requests.h`**
+- [x] **Step 3: Edit `src/Requests.h`**
 
 ```cpp
 //                               '/' and runs verbatim to the end of the line)
@@ -4154,7 +4154,7 @@ Expected: `error C2065: 'DriveLog': undeclared identifier`.
 	double      number = 0.0;  // the field's block count, the setting's value, or the drive log's seconds
 ```
 
-- [ ] **Step 4: Edit `src/Requests.cpp`**
+- [x] **Step 4: Edit `src/Requests.cpp`**
 
 ```cpp
 	}
@@ -4174,7 +4174,7 @@ Expected: `error C2065: 'DriveLog': undeclared identifier`.
 	if (command == "set")
 ```
 
-- [ ] **Step 5: Build and run the tests; they must pass**
+- [x] **Step 5: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -4184,7 +4184,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `288 test(s), 0 failure(s)`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -4211,7 +4211,7 @@ Why build mode is off stays in the `build=` line just above it.
 **Files:**
 - Modify: `src/Status.h`, `src/Status.cpp`, `tests/TestStatus.cpp`
 
-- [ ] **Step 1: Edit `tests/TestStatus.cpp`: the failing test**
+- [x] **Step 1: Edit `tests/TestStatus.cpp`: the failing test**
 
 ```cpp
 #include "Status.h"
@@ -4266,7 +4266,7 @@ TEST(StatusWritesTheDrive)
 }
 ```
 
-- [ ] **Step 2: Build; it must fail**
+- [x] **Step 2: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -4275,7 +4275,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `error C2039: 'drive': is not a member of 'cpmc::LinkReport'`.
 
-- [ ] **Step 3: Edit `src/Status.h`**
+- [x] **Step 3: Edit `src/Status.h`**
 
 ```cpp
 	std::string        lastInput;            // the last forwarded
@@ -4307,7 +4307,7 @@ Expected: `error C2039: 'drive': is not a member of 'cpmc::LinkReport'`.
 // drive, positions, ring, atlas, hud, latency, burst and processes); then one structure line per structure:
 ```
 
-- [ ] **Step 4: Edit `src/Status.cpp`**
+- [x] **Step 4: Edit `src/Status.cpp`**
 
 ```cpp
 #include <format>
@@ -4375,7 +4375,7 @@ std::string FormatLink(const LinkReport& aLink)
 	out += FormatDrive(aLink);
 ```
 
-- [ ] **Step 5: Build and run the tests; they must pass**
+- [x] **Step 5: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -4385,7 +4385,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `289 test(s), 0 failure(s)`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -4432,7 +4432,7 @@ Only the game can run it: Task 17's first check is the log's `puppet: found …`
 - Create: `src/Puppet.h`, `src/Puppet.cpp`
 - Modify: `CMakeLists.txt`
 
-- [ ] **Step 1: Write `src/Puppet.h`**
+- [x] **Step 1: Write `src/Puppet.h`**
 
 ```cpp
 #pragma once
@@ -4497,7 +4497,7 @@ private:
 }
 ```
 
-- [ ] **Step 2: Write `src/Puppet.cpp`**
+- [x] **Step 2: Write `src/Puppet.cpp`**
 
 ```cpp
 #include "Puppet.h"
@@ -4854,7 +4854,7 @@ bool Puppet::Teleport(const Vec3d& aFeet, double aYaw, std::string& aError)
 }
 ```
 
-- [ ] **Step 3: Edit `CMakeLists.txt` to add the source**
+- [x] **Step 3: Edit `CMakeLists.txt` to add the source**
 
 ```cmake
 	src/PlayerLocator.cpp
@@ -4866,7 +4866,7 @@ bool Puppet::Teleport(const Vec3d& aFeet, double aYaw, std::string& aError)
 )
 ```
 
-- [ ] **Step 4: Build and run the tests; they must pass**
+- [x] **Step 4: Build and run the tests; they must pass**
 
 The plugin compiles `Puppet`; no test can run it.
 ```bash
@@ -4877,7 +4877,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `289 test(s), 0 failure(s)`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -4908,7 +4908,7 @@ The plugin's side of Part 1 (the spec's "Entering", "Each frame while Minecraft 
 **Files:**
 - Modify: `src/Plugin.cpp`, `CMakeLists.txt`
 
-- [ ] **Step 1: Edit `src/Plugin.cpp`**
+- [x] **Step 1: Edit `src/Plugin.cpp`**
 
 ```cpp
 // in build mode (F8) the mouse buttons, the wheel and the keys 1 to 9 are Minecraft's.
@@ -5217,7 +5217,7 @@ void WriteDriveLog(const cpmc::DriveLog::Finished& aLog, const std::string& aFol
 	aInfo->version = RED4EXT_V1_SEMVER(0, 11, 0);
 ```
 
-- [ ] **Step 2: Edit `CMakeLists.txt`: the version**
+- [x] **Step 2: Edit `CMakeLists.txt`: the version**
 
 ```cmake
 project(BlockRender VERSION 0.10.0 LANGUAGES C CXX)
@@ -5226,7 +5226,7 @@ project(BlockRender VERSION 0.10.0 LANGUAGES C CXX)
 project(BlockRender VERSION 0.11.0 LANGUAGES C CXX)
 ```
 
-- [ ] **Step 3: Build and run the tests; they must pass**
+- [x] **Step 3: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -5236,7 +5236,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `289 test(s), 0 failure(s)`.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -5255,7 +5255,7 @@ setting, and another records 10 s with `drivelog 10`, so step 2 needs no typed r
 **Files:**
 - Modify: `tools/blockrender_hud/init.lua`
 
-- [ ] **Step 1: Edit `tools/blockrender_hud/init.lua`**
+- [x] **Step 1: Edit `tools/blockrender_hud/init.lua`**
 
 ```lua
 -- Minecraft's hotbar slot. Delete this folder to remove it.
@@ -5317,7 +5317,7 @@ local turn = nil         -- the drive line's turn setting: "on" or "off"
         ImGui.Separator()
 ```
 
-- [ ] **Step 2: Check the overlay's syntax**
+- [x] **Step 2: Check the overlay's syntax**
 
 ```bash
 luac -p /d/Cyberpunk-Minecraft/spikes/block-render/tools/blockrender_hud/init.lua && echo "syntax ok"
@@ -5327,7 +5327,7 @@ Its patterns were also run on the two lines `StatusWritesTheDrive` expects, and 
 V's camera 0.012 m from Minecraft's eye, V's health 100%` with the turn `on`, and `Drive: off, V's health unknown` with
 the turn `off`.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -5351,7 +5351,7 @@ superpowers:systematic-debugging before going on. Fixes become new tasks.
 **Files:**
 - Modify: `docs/spikes/2026-10-03-collision-and-movement-results.md`
 
-- [ ] **Step 1: Deploy (the game must not be running)**
+- [x] **Step 1: Deploy (the game must not be running)**
 
 ```bash
 tasklist | grep -i -c "cyberpunk2077.exe"
@@ -5369,7 +5369,7 @@ Expected: the plugin's folder holds `BlockRender.dll`, `BlockRender.pdb` and `sh
 and `atlas.json`; the overlay's folder holds `init.lua`; then `installed`. The second configure clears `CP2077_DIR`
 again.
 
-- [ ] **Step 2: In the game: load, link, and find the script calls**
+- [x] **Step 2: In the game: load, link, and find the script calls**
 
 Ask the user to start the `CyberCraft` instance from the Modrinth App, then to launch the game, load the free-roam
 save, go to the corner, and stand still with open street ahead. Then ask the user to click the overlay's Link button.
@@ -5389,7 +5389,7 @@ status's `request=` line. Ask the user to turn V left and right with the mouse a
 drive line's ratio must then be measured: `turn off, -0.0… degrees a count from … turns`, or positive. Its sign says
 which way the game's yaw turns.
 
-- [ ] **Step 3: In the game: the opening check**
+- [x] **Step 3: In the game: the opening check**
 
 Ask the user to press F8 and to stand still in Minecraft. Expected: within a second, `build mode on`, `link: build
 mode: Minecraft's player goes to V's feet, …` and `link: Minecraft let its player go after … s: V follows it`; the
@@ -5399,7 +5399,7 @@ Then ask the user to turn the mouse and look up and down, still standing, and to
 outside build mode. If it lags, jumps back or won't turn, ask the user to click the overlay's `Turn: off` button, so
 it reads `Turn: on`, and to try again. Record which works: it settles risk 1's first question.
 
-- [ ] **Step 4: In the game: moving**
+- [x] **Step 4: In the game: moving**
 
 With build mode on, ask the user to walk, strafe and back up, then sprint (Left Shift toggles it), jump, sneak (Left
 Ctrl, held), and fly (Space twice) up with Space and down with Left Ctrl, and to say how smooth each is. While they
@@ -5413,7 +5413,7 @@ walk and turn, ask them to click `Drive log 10 s`. Expected:
 Read the CSV: the target column must move smoothly frame to frame. Where the camera column steps unevenly though the
 target doesn't, the teleport lands late in the frame: it settles risk 1's second question.
 
-- [ ] **Step 5: In the game: entering with W held, and clicks while moving**
+- [x] **Step 5: In the game: entering with W held, and clicks while moving**
 
 Ask the user to leave build mode (F8), hold W, press F8 while still holding it, then let go of W and press it again.
 Expected: V stays where it is until the drive says `driving`, since the held W stays the game's and the drive holds
@@ -5422,14 +5422,14 @@ V; once W is pressed again, Minecraft's player walks, and V with it.
 Then ask the user to place a row of stone on the street while walking: right clicks with W held, looking down a
 little. Expected: every click places a block, and no red message shows in Minecraft's chat in the HUD.
 
-- [ ] **Step 6: In the game: fall damage while placed**
+- [x] **Step 6: In the game: fall damage while placed**
 
 Ask the user to make a save first, in case V dies. Then, in build mode, fly up about 5 m (Space twice, then Space
 held) and stop flying (Space twice) to drop to the street; then the same from about 20 m. Expected: Minecraft's
 creative player takes no damage. Record the drive line's health after each drop: whether V's own movement fights the
 teleports (risk 2).
 
-- [ ] **Step 7: In the game: leaving**
+- [x] **Step 7: In the game: leaving**
 
 Ask the user to:
 1. press F8 standing: V stays where Minecraft's player was, and the log says `build mode off: F8 turned it off`;
@@ -5439,25 +5439,25 @@ Ask the user to:
 
 After each, the status's teleport count grows again: the link's teleports have resumed from V's camera.
 
-- [ ] **Step 8: In the game: a vehicle**
+- [x] **Step 8: In the game: a vehicle**
 
 With build mode on, ask the user to walk up to a car and get in with F, which V still interacts with. Expected:
 `build mode off: V is in a vehicle`, or `V is in a workspot`, since a car's seat is one. Then, in the car, F8 must say
 `build mode stays off: …` with the same reason.
 
-- [ ] **Step 9: In the game: the cost**
+- [x] **Step 9: In the game: the cost**
 
 Ask the user to stand still for 10 s with build mode on, then 10 s with it off. Read the status's `frame=` line and
 CET's frame time each time, and the drive line's teleport time (average and worst).
 
-- [ ] **Step 10: Ask the user to quit the game and stop Minecraft**
+- [x] **Step 10: Ask the user to quit the game and stop Minecraft**
 
-- [ ] **Step 11: Record step 2's results in `docs/spikes/2026-10-03-collision-and-movement-results.md`**
+- [x] **Step 11: Record step 2's results in `docs/spikes/2026-10-03-collision-and-movement-results.md`**
 
 A "Step 2" section: each check above with its outcome and numbers; which turn setting worked; what the drive log
 showed; V's health after the drops; the cost; and anything that surprised, and what it means for Part 2.
 
-- [ ] **Step 12: Commit**
+- [x] **Step 12: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add docs/spikes/2026-10-03-collision-and-movement-results.md \
@@ -5469,7 +5469,7 @@ cd /d/Cyberpunk-Minecraft && git add docs/spikes/2026-10-03-collision-and-moveme
 
 ### Task 18: Close Part 1, and plan Part 2
 
-- [ ] **Step 1: Add "How Part 1 went" to this plan**
+- [x] **Step 1: Add "How Part 1 went" to this plan**
 
 At the end, after "Found while planning": what ran as written, what changed, and what steps 1 and 2 found.
 
@@ -5510,3 +5510,32 @@ The spec's "Changes while planning" records these too.
   move it.
 - **The overlay** gains a short drive line, and buttons for `set turn` and `drivelog 10`.
 - **The drive line** leaves why build mode is off to the `build=` line above it.
+
+## How Part 1 went
+
+Part 1 ran on 2026-10-03, and its answer is yes, with `set turn 1`. The results are in
+[docs/spikes/2026-10-03-collision-and-movement-results.md](../../spikes/2026-10-03-collision-and-movement-results.md).
+- **As written:** Tasks 1 to 7 and 9 to 16 ran through the plan runner in the real repo exactly as written. Every
+  build, test, `mclink` and overlay expectation was met, and each task's files matched the verified scratch clone's.
+  289 tests, no warnings. No code changed after running it.
+- **Step 1 (Task 8):** passed against SkyCraft's real mod. Two of its expectations were worded too tightly:
+  - the gold block: the script's held keys jumped onto it and straight off, shown by a jump peak only its top reaches;
+  - V's feet trail Minecraft's newest position while moving, by the render delay: 4.7 cm walking, by design.
+- **Step 2 (Task 17):** passed, with `set turn 1`.
+  - **The look:** with V's own yaw, the teleport locked turning left and right. Adding the frame's mouse turn, at the
+    measured −0.05 degrees a count, made it smooth, which settles risk 1's first question.
+  - **The drive:** V's camera lands on where the last frame put it within 4 to 7 mm, one frame of latency and no
+    judder, which settles risk 1's second question.
+  - **Safe for V:** falls from up to 47 m did no damage, so risk 2 doesn't happen. A car's knockdown recovered in 4 s
+    with build mode on.
+  - **The script calls:** all eight were found with the types `Puppet` expects, and nothing faulted.
+  - **The cost:** build mode costs about 0.3 ms a frame, all of it Minecraft's HUD.
+- **One message differed:** F8 in a car says "V isn't found" rather than "V is in a vehicle", since the car's camera
+  isn't V's eye. Build mode still stays off, as it should.
+- **Left for Part 2:**
+  - `set turn 1` by default;
+  - V's reason even when the link finds no camera;
+  - the eye height measured only while V can be placed, not in a car seat;
+  - the long frame, 53 to 56 ms, on entering build mode;
+  - and, as a choice, a field-of-view kick while sprinting. The speeds match Minecraft's, but the user found
+    sprinting slow without it.
