@@ -57,6 +57,8 @@ add_library(render_core STATIC
 	src/link/Ticks.cpp
 	src/link/Voxels.cpp
 	src/link/Drive.cpp
+	src/link/Turn.cpp
+	src/log/DriveLog.cpp
 	src/render/PendingSections.cpp
 	src/render/Hud.cpp
 	src/Measurements.cpp
@@ -161,6 +163,8 @@ add_executable(render_tests
 	tests/TestTicks.cpp
 	tests/TestVoxels.cpp
 	tests/TestDrive.cpp
+	tests/TestTurn.cpp
+	tests/TestDriveLog.cpp
 	tools/mclink/McLinkScript.cpp
 )
 target_include_directories(render_tests PRIVATE tools/mclink)
