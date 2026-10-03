@@ -1,7 +1,7 @@
-# Minecraft link: results, steps 1 and 2
+# Minecraft link: results, steps 1 to 3
 
 Step 1 ran BlockRender's link code against Minecraft without Cyberpunk; step 2, further down ("Step 2: in the game"),
-ran it in the game.
+ran it in the game; step 3, at the end ("Step 3: building from inside the game"), added keys and clicks.
 
 Date: 2026-10-02. No Cyberpunk: `mclink`, BlockRender's link code in a console program, ran against the user's
 Minecraft with SkyCraft's unchanged mod. The versions:
@@ -401,3 +401,184 @@ clicks land where V aims. Clicks go wrong only where V is inside or under Minecr
 walking through blocks, and for as long as a block overhangs 1 to 2 m above the feet. Cyberpunk doesn't collide with
 Minecraft's blocks, and that's the project's PhysX work, not this spike's. So Part 3 builds on the open street, and
 its results say where clicks stray.
+
+## Step 3: building from inside the game
+
+Date: 2026-10-03, 16:33 to 16:59. The versions:
+- **BlockRender 0.10.0:** the plan's Tasks 30 to 38 (`129087d`), with 232 C++ and 25 Python tests passing;
+- **Cyberpunk 2077 2.31:** spike 3's settings, unchanged;
+- **Minecraft and SkyCraft:** as in steps 1 and 2, in the same instance and world.
+
+The run was at spike 3's corner, in free roam, by day. The user played, pressed each key and button asked for, built,
+took screenshots, and started and stopped Minecraft. The agent sent requests, recorded the status twice a second, and
+read BlockRender's log and Minecraft's. With the game closed, `mclink` then settled what the user reported along the
+way (see "Clicks refused after a teleport"). Plan: Task 39.
+
+### Verdict
+
+**Step 3: pass.** In build mode the mouse buttons, the wheel and 1 to 9 went to Minecraft, and none of them reached
+the game: V never reacted. Every check passed. The user reported one problem, and it isn't BlockRender's: now and then
+Minecraft refused a block with "The height limit for building is 1023". Its server refuses clicks while it waits for a
+teleport to be confirmed, and SkyCraft teleports Minecraft's player up to 10 times a second while V moves.
+- **Loading:** the patch on the game's `GetRawInputData` went in first, and 4,870 keyboard and mouse events had passed
+  through it by the first status. With build mode off, the game took input as always.
+- **F8:** without Minecraft, it linked and left build mode off, saying why. With Minecraft in its world, it turned
+  build mode on and off, and the HUD with it.
+- **Each input:** Minecraft took every key, button and wheel notch, and V did nothing at any of them.
+- **Building:** blocks landed where the crosshair pointed, at the corner and 26 m west.
+- **Menus:** Esc, I, M, J, P, K, H, T and Shift+F6 each left build mode and opened as usual.
+- **Click latency:** placing a block, Minecraft's half averaged 41 ms, from the click to the section's arrival, and
+  ours 17 ms, within a frame. The latency check's breaks weren't timed: see "Surprises".
+- **Alt-Tab:** Minecraft let go of a held button the moment the game lost the front, and build mode stayed on.
+- **Unlinking, and Minecraft going:** each ended build mode, and the HUD went.
+- **The counts:** 754 inputs went to Minecraft, and 802 were hidden from the game: those 754, and F8's own 24 presses
+  and their releases. None were dropped.
+
+### Loading, and F8 without Minecraft
+
+- **BlockRender:** `GetRawInputData hooked; the focus watch runs`, then `BlockRender 0.10.0 loaded (game 2.3.1),
+  hooked` at 16:33:16.4, and `the mapping: created` at 16:33:31.8, at the game's first update.
+- **The status:** `build=off: F8 turns it on; slot unknown until a number key; 0 inputs forwarded to Minecraft and 0
+  hidden from the game, the last: nothing yet; 0 dropped with the input ring full; GetRawInputData hooked, 4870
+  keyboard and mouse events read`. The patch was on the game's input path from the start.
+- **Build mode off:** the user drew a weapon, aimed with the right button and put it away, as always.
+- **F8, with Minecraft not running,** at 16:35:38: `F8: linking first, then build mode`, `request: F8: link on:
+  Minecraft's player follows V; drawing is gbuffer`, `request: build on: it stays off: Minecraft isn't there`, and
+  `build mode stays off: Minecraft isn't there`.
+
+### Minecraft, and build mode on and off
+
+- **Minecraft,** started from the Modrinth App: `linked to Skyrim (pid 31924)`, `Skyrim link up`, `game window
+  hidden` and `opening mirror world`, from 16:36:38 to 16:36:42. The link was on, so its player went straight to V.
+  BlockRender logged `link: Minecraft is there (process 25044)` and a floor at V's feet, then Minecraft's atlas, built
+  in 14.0 ms. Minecraft's eye was at V's camera to the hundredth.
+- **The status** still said `build=off: Minecraft isn't there`, the reason F8 last gave, with 2 inputs hidden: F8's
+  press and release.
+- **The hotbar:** `mc creative` and three `/item replace` commands put stone, gold and diamond in its first three
+  slots, and Minecraft's chat confirmed each.
+- **F8, three times:** `build mode on` at 16:38:29.7, `build mode off: F8 turned it off` at 16:38:35.8, and `build mode
+  on` at 16:38:37.6. Minecraft's HUD showed with the first and the third, and went with the second.
+
+### Each input, Minecraft's and not the game's
+
+With a weapon drawn and build mode on, the user went through every input, and more besides, with the status recorded
+twice a second:
+
+| Input | Minecraft | The `build=` line |
+|---|---|---|
+| 1 to 7 | selected each slot | the slot followed; the last `the key 5 up` and so on |
+| 8 and 9 | nothing: this instance binds slots 8 and 9 to the side buttons | `slot 8`, `slot 9` |
+| the side buttons | selected slots 8 and 9 | `slot unknown until a number key`; the last `mouse button 5 up` or `mouse button 4 up` |
+| the wheel, a notch down and a notch up, from slot 2 | slot 3, then 2 | `slot 3`, then `slot 2`; the last `the wheel, -120`, then `the wheel, 120` |
+| a right click on the street | stone, gold or diamond where the crosshair pointed | the last `the right button up` |
+| a left click on a block | broke it | the last `the left button up` |
+| a middle click on the diamond, from slot 1 | picked it: the selection jumped to the diamond's slot | still `slot 1`, as the spec says: a pick is Minecraft's own |
+
+- **V did nothing** at any of them: no weapon switched, no aim, no swing, nothing thrown.
+- **The counts:** 376 inputs forwarded and 392 hidden when the list was done. All through the 10-minute recording,
+  hidden minus forwarded went up only with F8, by 2 a press, from 8 to 42 over 17 presses: every forwarded input was
+  hidden too. None were dropped.
+
+### Building at two spots
+
+- **The corner, then 26 m west** (x −141.9): the user placed and broke blocks at both, and they landed where the
+  crosshair pointed, on the street. Screenshots at each spot show them.
+- **The positions,** recorded twice a second for 8 minutes (959 readings): Minecraft's eye was 0.06 m from V's camera
+  on average, within the link's 0.1 m teleport step, and 0.39 m at most. The 17 readings over 0.25 m all came while V
+  moved. The floor moved twice on the walk west, at 16 m (epochs 48 and 49).
+- **The log:** no `render ring:` lines, and no errors.
+
+### Leaving through each menu key
+
+From 16:45:21 to 16:46:02, Esc, I, M, J, P, K, H and T, then Shift+F6, each logged `build mode off: <key> left it`.
+The HUD went, the menu, the phone or CET's overlay opened and took clicks as usual, and F8 turned build mode on again
+after each. T and H, pressed again, did the same.
+
+### Click latency
+
+Five right clicks placing stone and five left clicks breaking it, alternately, a second or two apart, with V standing
+still:
+
+| | Samples | Average |
+|---|---|---|
+| Minecraft's half: the click to the section's arrival | 30, 43, 74, 29, 31 ms | 41 ms |
+| Ours: arrival to the first list that draws it | 9.6, 22.0, 22.5, 9.4, 23.0 ms; 0 or 1 frames | 17 ms |
+
+- **Minecraft's half is shorter than for step 2's commands,** 41 ms against 68: a click needs no chat, and Minecraft
+  acts on it at its next tick, at most 50 ms away. Ours is close to step 2's 20 ms: within a frame.
+- **The breaks gave no samples:** see "Surprises".
+- **Over the session,** the status's average of 192 samples was 49 ms and 21.7 ms (0.8 frames). It mixes in clicks in
+  quick succession, where each click replaces the last one's mark, as step 2's sets of commands did.
+
+### Alt-Tab with a button held
+
+- **The first try** found no shield: step 1's starter kit gave one, but this player had none by now. `mc /item replace
+  entity @s weapon.offhand with shield` gave it one.
+- **Holding the right button,** looking at the sky, raised the shield in the HUD. The user Alt-Tabbed to Claude Code
+  with the button still held, and the shield came down at once, before the button was let go in the other window. The
+  log has `the game lost the front in build mode: Minecraft lets go of everything` for each Alt-Tab, four from
+  16:50:18.9.
+- **Back in the game:** still `build=on`, and a right click placed a block at about 16:50:55.
+- **The focus watch** let go 14 times in the session, each time the game lost the front in build mode, and build mode
+  stayed on each time.
+
+### Unlinking, and Minecraft going
+
+- **Clearing first:** instead of `mc wipe`, which clears one layer at V's feet, one `mc /fill -160 5 1985 -95 12 2025
+  air` cleared the built area: 41 blocks.
+- **`link off`** with build mode on: `build mode off: unlinked` at 16:58:10.9, `link=not linked`, and the HUD gone.
+- **F8:** `F8: linking first, then build mode`, `request: F8: link on: …`, `request: build on: the mouse buttons, the
+  wheel and 1 to 9 are Minecraft's` and `build mode on`, all at 16:58:28.0.
+- **Minecraft stopped** from the Modrinth App: `link: Minecraft has gone` and `build mode off: Minecraft has gone` at
+  16:58:41.4, and the HUD went.
+- **F8 again:** `build mode stays off: Minecraft isn't there`.
+
+### Clean up
+
+`link off` and `mode off`: drawing off, unlinked, and no error lines in BlockRender's log for the session. By then 754
+inputs had gone to Minecraft and 802 had been hidden from the game, none dropped, of 88,800 keyboard and mouse events
+through the patch. BlockRender 0.10.0 stays installed: nothing changes until the user links, picks a drawing mode or
+presses F8.
+
+### Clicks refused after a teleport
+
+The user reported that now and then a block wouldn't place, with Minecraft's red message "The height limit for
+building is 1023", all through the testing. Nothing was near that height: fills from y 1,000 to 1,023 over the area
+found no blocks, and Minecraft's player went above y 15 only while V flew up to about 1,000 m, late in the session.
+- **The cause, in Minecraft 26.3's server:** `ServerGamePacketListenerImpl.handleUseItemOn` refuses a click on a block
+  while `awaitingPositionFromClient` is set, which is while the server waits for the client to confirm a teleport. It
+  then calls `sendBuildLimitMessage`, the height message with the world's top (1,023 in SkyCraft's world), and sends
+  the block back as it was. A vanilla player is rarely teleported, so the misleading message rarely shows.
+- **Why it happens here:** the link asks for a teleport each time V's camera moves 0.1 m, up to 10 times a second
+  (`teleportstep` and `teleportrate`), and SkyCraft moves Minecraft's player on its client and on its server
+  (`ServerPlayer.teleportTo`). Each teleport leaves the server waiting until Minecraft's client confirms it, a frame
+  or so later. A click that reaches the server in that window is refused.
+- **Settled with `mclink`,** without Cyberpunk: 24 right clicks along a row 2 m apart, with nothing in the way, each
+  after a teleport to its spot. Of the 18 clicks sent in the same frame as their teleport, 3 were refused, each with
+  the message in the HUD image 0.3 s later. Of the 6 sent a second after their teleport, none were. The row then held
+  21 blocks, missing exactly the 3 refused ones. The row was removed afterwards.
+- **For what comes next:** standing still, every click places; while V moves, some fail, at random. The project's own
+  Minecraft side should hold a click until Minecraft's client has confirmed the last teleport, or not teleport
+  Minecraft's player at all: with spike 2's puppeting, Minecraft's player moves and V follows it.
+
+### Surprises, and what they mean for what comes next
+
+- **Clicks refused after a teleport** (above): Minecraft's and SkyCraft's doing, not BlockRender's.
+- **A break that empties a section isn't timed.** A section is timed from its arrival to the first list that draws it,
+  and a section a break empties is never drawn again, so it gives no sample. In the latency check each block was alone
+  in its section, so the five breaks gave none. The renderer drops such a section at its next update, on the same path as an
+  upload, so the break should show as quickly as a placement. Timing it means timing a removal to the first list
+  without it: a small follow-up.
+- **The floor follows V up and down.** The link sends a fresh floor whenever V's feet are more than 1 m above or below
+  the last one's centre. V's jumps, about 3 m high, sent it four to six times each, and V's flight to about 1,000 m
+  sent it 1,668 times in a minute, epoch 1,743 by the end. A click in mid-jump lands on the raised floor: diamond
+  blocks were left floating at y 9, beside where a jump had lifted the floor to 9.41 at 16:57:59, just before the
+  last input, a right click with the diamond slot. Night City's own collision, the project's PhysX work, replaces the
+  floor.
+- **Two sections stayed unexplained.** At 16:43:55, as V walked west, two sections with 276 vertices arrived, and they
+  stayed drawn to the end. None of the clearing fills touched them, Minecraft's world has nothing there now (a new
+  `mclink` side at that spot got only the 4 known sections), and SkyCraft has no dig records saved. BlockRender's log
+  doesn't list sections, so which they were is lost. A request that lists the renderer's sections, as `mclink` lists
+  Minecraft's, would name them.
+- **Blocks left in Minecraft's world:** the floating diamond blocks, stone from the `mclink` runs at x −120, and the
+  eye experiment's blocks 150 to 190 m west. The first two will show at the corner in the next run unless cleared.
