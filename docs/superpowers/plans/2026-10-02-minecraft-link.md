@@ -9875,7 +9875,7 @@ at `bfcaf17`, MIT, as `extern/skycraft/LICENSE`): the spec's "`input/`". Build m
 - Create: `src/input/Scancodes.h`, `src/input/Scancodes.cpp`, `tests/TestScancodes.cpp`
 - Modify: `CMakeLists.txt`
 
-- [ ] **Step 1: Write the failing test, `tests/TestScancodes.cpp`**
+- [x] **Step 1: Write the failing test, `tests/TestScancodes.cpp`**
 
 ```cpp
 #include "Harness.h"
@@ -9913,7 +9913,7 @@ TEST(ScancodesTellExtendedKeysApart)
 }
 ```
 
-- [ ] **Step 2: Edit `CMakeLists.txt` to add the test**
+- [x] **Step 2: Edit `CMakeLists.txt` to add the test**
 
 ```cmake
 	tests/TestProcessUsage.cpp
@@ -9923,7 +9923,7 @@ TEST(ScancodesTellExtendedKeysApart)
 	tests/TestScancodes.cpp
 ```
 
-- [ ] **Step 3: Build; it must fail**
+- [x] **Step 3: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -9932,7 +9932,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `error C1083: Cannot open include file: 'input/Scancodes.h'`.
 
-- [ ] **Step 4: Write `src/input/Scancodes.h`**
+- [x] **Step 4: Write `src/input/Scancodes.h`**
 
 ```cpp
 #pragma once
@@ -9950,7 +9950,7 @@ uint16_t SdlScancode(uint16_t aScanCode, bool aExtended);
 }
 ```
 
-- [ ] **Step 5: Write `src/input/Scancodes.cpp`**
+- [x] **Step 5: Write `src/input/Scancodes.cpp`**
 
 ```cpp
 #include "input/Scancodes.h"
@@ -10004,7 +10004,7 @@ uint16_t SdlScancode(uint16_t aScanCode, bool aExtended)
 }
 ```
 
-- [ ] **Step 6: Edit `CMakeLists.txt` to add the source**
+- [x] **Step 6: Edit `CMakeLists.txt` to add the source**
 
 ```cmake
 	src/ProcessUsage.cpp
@@ -10016,7 +10016,7 @@ uint16_t SdlScancode(uint16_t aScanCode, bool aExtended)
 )
 ```
 
-- [ ] **Step 7: Build and run the tests; they must pass**
+- [x] **Step 7: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -10026,7 +10026,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `206 test(s), 0 failure(s)`.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -10069,7 +10069,7 @@ and whether Minecraft must first let go of everything.
 - Create: `src/input/BuildMode.h`, `src/input/BuildMode.cpp`, `tests/TestBuildMode.cpp`
 - Modify: `CMakeLists.txt`
 
-- [ ] **Step 1: Write the failing test, `tests/TestBuildMode.cpp`**
+- [x] **Step 1: Write the failing test, `tests/TestBuildMode.cpp`**
 
 ```cpp
 #include "Harness.h"
@@ -10367,7 +10367,7 @@ TEST(BuildModeCountsWhatItForwardsAndHides)
 }
 ```
 
-- [ ] **Step 2: Edit `CMakeLists.txt` to add the test**
+- [x] **Step 2: Edit `CMakeLists.txt` to add the test**
 
 ```cmake
 	tests/TestScancodes.cpp
@@ -10377,7 +10377,7 @@ TEST(BuildModeCountsWhatItForwardsAndHides)
 	tests/TestBuildMode.cpp
 ```
 
-- [ ] **Step 3: Build; it must fail**
+- [x] **Step 3: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -10386,7 +10386,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `error C1083: Cannot open include file: 'input/BuildMode.h'`.
 
-- [ ] **Step 4: Write `src/input/BuildMode.h`**
+- [x] **Step 4: Write `src/input/BuildMode.h`**
 
 ```cpp
 #pragma once
@@ -10499,7 +10499,7 @@ private:
 }
 ```
 
-- [ ] **Step 5: Write `src/input/BuildMode.cpp`**
+- [x] **Step 5: Write `src/input/BuildMode.cpp`**
 
 ```cpp
 #include "input/BuildMode.h"
@@ -10780,7 +10780,7 @@ void BuildMode::Scroll(int16_t aWheel)
 }
 ```
 
-- [ ] **Step 6: Edit `CMakeLists.txt` to add the source**
+- [x] **Step 6: Edit `CMakeLists.txt` to add the source**
 
 ```cmake
 	src/input/Scancodes.cpp
@@ -10790,7 +10790,7 @@ void BuildMode::Scroll(int16_t aWheel)
 	src/input/BuildMode.cpp
 ```
 
-- [ ] **Step 7: Build and run the tests; they must pass**
+- [x] **Step 7: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -10800,7 +10800,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `219 test(s), 0 failure(s)`.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -10821,7 +10821,7 @@ once, which costs nothing with build mode off.
 - Create: `src/input/FocusWatch.h`, `src/input/FocusWatch.cpp`, `tests/TestFocusWatch.cpp`
 - Modify: `CMakeLists.txt`
 
-- [ ] **Step 1: Write the failing test, `tests/TestFocusWatch.cpp`**
+- [x] **Step 1: Write the failing test, `tests/TestFocusWatch.cpp`**
 
 ```cpp
 #include "Harness.h"
@@ -10849,7 +10849,7 @@ TEST(FocusWatchLetsGoIfTheGameStartsBehind)
 }
 ```
 
-- [ ] **Step 2: Edit `CMakeLists.txt` to add the test**
+- [x] **Step 2: Edit `CMakeLists.txt` to add the test**
 
 ```cmake
 	tests/TestBuildMode.cpp
@@ -10859,7 +10859,7 @@ TEST(FocusWatchLetsGoIfTheGameStartsBehind)
 	tests/TestFocusWatch.cpp
 ```
 
-- [ ] **Step 3: Build; it must fail**
+- [x] **Step 3: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -10868,7 +10868,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `error C1083: Cannot open include file: 'input/FocusWatch.h'`.
 
-- [ ] **Step 4: Write `src/input/FocusWatch.h`**
+- [x] **Step 4: Write `src/input/FocusWatch.h`**
 
 ```cpp
 #pragma once
@@ -10890,7 +10890,7 @@ private:
 }
 ```
 
-- [ ] **Step 5: Write `src/input/FocusWatch.cpp`**
+- [x] **Step 5: Write `src/input/FocusWatch.cpp`**
 
 ```cpp
 #include "input/FocusWatch.h"
@@ -10906,7 +10906,7 @@ bool FocusWatch::LostFront(bool aInFront)
 }
 ```
 
-- [ ] **Step 6: Edit `CMakeLists.txt` to add the source**
+- [x] **Step 6: Edit `CMakeLists.txt` to add the source**
 
 ```cmake
 	src/input/BuildMode.cpp
@@ -10916,7 +10916,7 @@ bool FocusWatch::LostFront(bool aInFront)
 	src/input/FocusWatch.cpp
 ```
 
-- [ ] **Step 7: Build and run the tests; they must pass**
+- [x] **Step 7: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -10926,7 +10926,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `221 test(s), 0 failure(s)`.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -10964,7 +10964,7 @@ and read what lands in its input ring.
 - Create: `src/input/Router.h`, `src/input/Router.cpp`, `tests/TestRouter.cpp`
 - Modify: `CMakeLists.txt`
 
-- [ ] **Step 1: Write the failing test, `tests/TestRouter.cpp`**
+- [x] **Step 1: Write the failing test, `tests/TestRouter.cpp`**
 
 ```cpp
 #include "Harness.h"
@@ -11311,7 +11311,7 @@ TEST(RouterReportsBuildMode)
 }
 ```
 
-- [ ] **Step 2: Edit `CMakeLists.txt` to add the test**
+- [x] **Step 2: Edit `CMakeLists.txt` to add the test**
 
 ```cmake
 	tests/TestFocusWatch.cpp
@@ -11321,7 +11321,7 @@ TEST(RouterReportsBuildMode)
 	tests/TestRouter.cpp
 ```
 
-- [ ] **Step 3: Build; it must fail**
+- [x] **Step 3: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -11330,7 +11330,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `error C1083: Cannot open include file: 'input/Router.h'`.
 
-- [ ] **Step 4: Write `src/input/Router.h`**
+- [x] **Step 4: Write `src/input/Router.h`**
 
 ```cpp
 #pragma once
@@ -11412,7 +11412,7 @@ private:
 }
 ```
 
-- [ ] **Step 5: Write `src/input/Router.cpp`**
+- [x] **Step 5: Write `src/input/Router.cpp`**
 
 ```cpp
 #include "input/Router.h"
@@ -11635,7 +11635,7 @@ void Router::Push(const proto::InputEvent& aEvent)
 }
 ```
 
-- [ ] **Step 6: Edit `CMakeLists.txt` to add the source**
+- [x] **Step 6: Edit `CMakeLists.txt` to add the source**
 
 ```cmake
 	src/input/FocusWatch.cpp
@@ -11645,7 +11645,7 @@ void Router::Push(const proto::InputEvent& aEvent)
 	src/input/Router.cpp
 ```
 
-- [ ] **Step 7: Build and run the tests; they must pass**
+- [x] **Step 7: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -11655,7 +11655,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `230 test(s), 0 failure(s)`.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -11673,7 +11673,7 @@ goes on after the link's next update; off ends build mode, and Minecraft lets go
 **Files:**
 - Modify: `tests/TestRequests.cpp`, `src/Requests.h`, `src/Requests.cpp`
 
-- [ ] **Step 1: Edit `tests/TestRequests.cpp` to test the build requests**
+- [x] **Step 1: Edit `tests/TestRequests.cpp` to test the build requests**
 
 ```cpp
 TEST(RequestsTypeIntoMinecraft)
@@ -11695,7 +11695,7 @@ TEST(RequestsForBuildMode)
 TEST(RequestsTypeIntoMinecraft)
 ```
 
-- [ ] **Step 2: Build; it must fail**
+- [x] **Step 2: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -11704,7 +11704,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `error C2065: 'Build': undeclared identifier`.
 
-- [ ] **Step 3: Edit `src/Requests.h` to add the request**
+- [x] **Step 3: Edit `src/Requests.h` to add the request**
 
 ```cpp
 //   link on|off                (spike 4: the in-game flag)
@@ -11731,7 +11731,7 @@ Expected: `error C2065: 'Build': undeclared identifier`.
 	Kind        kind = Kind::Log;
 ```
 
-- [ ] **Step 4: Edit `src/Requests.cpp` to parse it as `link` is parsed**
+- [x] **Step 4: Edit `src/Requests.cpp` to parse it as `link` is parsed**
 
 ```cpp
 	if (command == "link")
@@ -11752,7 +11752,7 @@ Expected: `error C2065: 'Build': undeclared identifier`.
 		return Request{ command == "link" ? Request::Kind::Link : Request::Kind::Build, std::string(words[1]) };
 ```
 
-- [ ] **Step 5: Build and run the tests; they must pass**
+- [x] **Step 5: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -11762,7 +11762,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `231 test(s), 0 failure(s)`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -11783,7 +11783,7 @@ line's hint now says a click in build mode is a mark too.
 **Files:**
 - Modify: `tests/TestStatus.cpp`, `src/Status.h`, `src/Status.cpp`
 
-- [ ] **Step 1: Edit `tests/TestStatus.cpp` to test the build line**
+- [x] **Step 1: Edit `tests/TestStatus.cpp` to test the build line**
 
 ```cpp
 	CHECK(Has(status, "latency=no samples yet: type a command while V stands still"));
@@ -11826,7 +11826,7 @@ TEST(StatusWritesBuildMode)
 }
 ```
 
-- [ ] **Step 2: Build; it must fail**
+- [x] **Step 2: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -11835,7 +11835,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `error C2039: 'inputHooked': is not a member of 'cpmc::LinkReport'`.
 
-- [ ] **Step 3: Edit `src/Status.h` to add build mode's fields**
+- [x] **Step 3: Edit `src/Status.h` to add build mode's fields**
 
 ```cpp
 // Spike 4's lines (the spec's "Measurements"): the link, the render ring, Minecraft's atlas, the HUD, latency, the last
@@ -11868,7 +11868,7 @@ Expected: `error C2039: 'inputHooked': is not a member of 'cpmc::LinkReport'`.
 // Lines of "key=value": mode, frames, blocks, gpu, frame, streamline, hooks, request; with a link, its lines (link, build,
 ```
 
-- [ ] **Step 4: Edit `src/Status.cpp` to write the line**
+- [x] **Step 4: Edit `src/Status.cpp` to write the line**
 
 ```cpp
 	                   aLink.inGame ? "in game" : "not in game");
@@ -11890,7 +11890,7 @@ Expected: `error C2039: 'inputHooked': is not a member of 'cpmc::LinkReport'`.
 	           : std::string("latency=no samples yet: type a command, or click in build mode, while V stands still\n");
 ```
 
-- [ ] **Step 5: Build and run the tests; they must pass**
+- [x] **Step 5: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -11900,7 +11900,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `232 test(s), 0 failure(s)`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -11928,7 +11928,7 @@ The spec's `RawInputHook`, in `render_runtime`, since only the game can test it:
 - Create: `src/input/RawInputHook.h`, `src/input/RawInputHook.cpp`
 - Modify: `CMakeLists.txt`
 
-- [ ] **Step 1: Write `src/input/RawInputHook.h`**
+- [x] **Step 1: Write `src/input/RawInputHook.h`**
 
 ```cpp
 #pragma once
@@ -11951,7 +11951,7 @@ void RemoveRawInputHook();
 }
 ```
 
-- [ ] **Step 2: Write `src/input/RawInputHook.cpp`**
+- [x] **Step 2: Write `src/input/RawInputHook.cpp`**
 
 ```cpp
 #include "input/RawInputHook.h"
@@ -12042,7 +12042,7 @@ void RemoveRawInputHook()
 }
 ```
 
-- [ ] **Step 3: Edit `CMakeLists.txt` to add it to the runtime**
+- [x] **Step 3: Edit `CMakeLists.txt` to add it to the runtime**
 
 ```cmake
 	src/render/Renderer.cpp
@@ -12054,7 +12054,7 @@ void RemoveRawInputHook()
 )
 ```
 
-- [ ] **Step 4: Build and run the tests; they must pass**
+- [x] **Step 4: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -12064,7 +12064,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `232 test(s), 0 failure(s)`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -12097,7 +12097,7 @@ cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
 **Files:**
 - Modify: `src/Plugin.cpp`, `CMakeLists.txt`
 
-- [ ] **Step 1: Edit `src/Plugin.cpp` to route input**
+- [x] **Step 1: Edit `src/Plugin.cpp` to route input**
 
 ```cpp
 // through SkyCraft's shared memory: Minecraft's player follows V, and Minecraft's blocks and HUD are drawn in the game.
@@ -12305,7 +12305,7 @@ void BuildRequest(bool aOn)
 	aInfo->version = RED4EXT_V1_SEMVER(0, 10, 0);
 ```
 
-- [ ] **Step 2: Edit `CMakeLists.txt` for version 0.10.0**
+- [x] **Step 2: Edit `CMakeLists.txt` for version 0.10.0**
 
 ```cmake
 project(BlockRender VERSION 0.9.1 LANGUAGES C CXX)
@@ -12314,7 +12314,7 @@ project(BlockRender VERSION 0.9.1 LANGUAGES C CXX)
 project(BlockRender VERSION 0.10.0 LANGUAGES C CXX)
 ```
 
-- [ ] **Step 3: Build and run the tests; they must pass**
+- [x] **Step 3: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -12324,7 +12324,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `232 test(s), 0 failure(s)`.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -12344,7 +12344,7 @@ build mode anyway.
 **Files:**
 - Modify: `tools/blockrender_hud/init.lua`
 
-- [ ] **Step 1: Edit `tools/blockrender_hud/init.lua` to show build mode**
+- [x] **Step 1: Edit `tools/blockrender_hud/init.lua` to show build mode**
 
 ```lua
 -- HUD shows, through blockrender.request in this folder. Delete this folder to remove it.
@@ -12389,14 +12389,14 @@ local build = nil        -- the build line's first two parts: on, or off and why
         ImGui.Separator()
 ```
 
-- [ ] **Step 2: Check the overlay's syntax**
+- [x] **Step 2: Check the overlay's syntax**
 
 ```bash
 luac -p /d/Cyberpunk-Minecraft/spikes/block-render/tools/blockrender_hud/init.lua && echo "syntax ok"
 ```
 Expected: `syntax ok`.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -12424,7 +12424,7 @@ the game gets risk 1's fallback as a new task, its events' type changed to HID i
 **Files:**
 - Modify: `docs/spikes/2026-10-02-minecraft-link-results.md`
 
-- [ ] **Step 1: Deploy (the game must not be running)**
+- [x] **Step 1: Deploy (the game must not be running)**
 
 ```bash
 tasklist | grep -i -c "cyberpunk2077.exe"
@@ -12446,7 +12446,7 @@ Expected:
 
 The second configure clears `CP2077_DIR` again.
 
-- [ ] **Step 2: In the game: load, without Minecraft**
+- [x] **Step 2: In the game: load, without Minecraft**
 
 Ask the user to check that Minecraft isn't running, then to launch the game, load the free-roam save, go to the
 corner, and stand still with open street ahead. Then read the log's first lines and the status. Expected:
@@ -12466,7 +12466,7 @@ Then ask the user to press F8 once. Minecraft isn't running, so F8 links, and bu
   gbuffer`, `build mode stays off: Minecraft isn't there`, and `request: build on: it stays off: Minecraft isn't there`;
 - in the status, `mode=gbuffer`, `link=linked; …; Minecraft absent; in game`, and `build=off: Minecraft isn't there`.
 
-- [ ] **Step 3: In the game: start Minecraft, and fill the hotbar**
+- [x] **Step 3: In the game: start Minecraft, and fill the hotbar**
 
 Ask the user to start the `CyberCraft` instance from the Modrinth App, and to say when its window has gone. The link is
 on, so Minecraft's player goes straight to V. Expected:
@@ -12487,7 +12487,7 @@ mc /item replace entity @s hotbar.2 with diamond_block 64
 In creative mode a click breaks a block at once, and the first three slots hold blocks that look different on the
 street.
 
-- [ ] **Step 4: In the game: build mode on and off**
+- [x] **Step 4: In the game: build mode on and off**
 
 Ask the user to press F8, look, press F8 again, look, and press it once more, and to say what they saw each time.
 Expected:
@@ -12499,7 +12499,7 @@ Expected:
 
 F8 itself goes to neither game: the counts' hidden inputs include F8's presses and releases.
 
-- [ ] **Step 5: In the game: each input, Minecraft's and not the game's**
+- [x] **Step 5: In the game: each input, Minecraft's and not the game's**
 
 With build mode off (F8), ask the user to draw a weapon that shows a stray input without alarming the street: a melee
 weapon if V has one, which a left click that reached the game would swing, and a right click raise to block. If V's
@@ -12524,7 +12524,7 @@ Expected after all of them: every forwarded input hidden too, so the hidden coun
 presses and releases, and `0 dropped`. Ask for a screenshot with the HUD and the blocks. If V acted on an input, stop:
 see the top of this task.
 
-- [ ] **Step 6: In the game: building on the street, walking, and building elsewhere**
+- [x] **Step 6: In the game: building on the street, walking, and building elsewhere**
 
 Ask the user to build freely for a minute on the open street ahead, placing and breaking blocks, but not to stand in
 or under what they build: there Minecraft crawls, and its clicks land short (the results' "Minecraft's eye among
@@ -12535,7 +12535,7 @@ blocks"). Then to walk about 20 m along the street with build mode on, and build
 
 Ask for a screenshot at each spot.
 
-- [ ] **Step 7: In the game: leaving through each menu key**
+- [x] **Step 7: In the game: leaving through each menu key**
 
 For each of Esc, I, M, J, P, K, H and T, then Shift+F6: with build mode on, ask the user to press the key, click
 something in what opens (a tab, say), close it, and press F8 again. Read the status after each key. Expected for each:
@@ -12545,7 +12545,7 @@ something in what opens (a tab, say), close it, and press F8 again. Read the sta
 
 Shift+F6 opens CET's overlay, whose buttons take clicks as usual too.
 
-- [ ] **Step 8: In the game: click latency**
+- [x] **Step 8: In the game: click latency**
 
 With build mode on, slot 1 (stone), and V standing still with the street ahead: ask the user to right-click once on the
 street, then left-click the block it placed, and so on, alternately, five times each, a second or two apart. Read the
@@ -12555,7 +12555,7 @@ log's `latency:` lines as they come. Expected: a line for each click, with both 
 
 Single clicks only: each click replaces a mark still waiting for its section, as each Enter does.
 
-- [ ] **Step 9: In the game: Alt-Tab with a button held**
+- [x] **Step 9: In the game: Alt-Tab with a button held**
 
 With build mode on, ask the user to look up at the sky, where nothing in Minecraft's world is in reach, and hold the
 right button: Minecraft then raises the shield in its off hand, in the HUD, for as long as the button is held. Still
@@ -12567,7 +12567,7 @@ to the game. Expected:
 
 If the shield is still up, Minecraft still holds the button: stop, and see the top of this task.
 
-- [ ] **Step 10: In the game: Unlink, and Minecraft going**
+- [x] **Step 10: In the game: Unlink, and Minecraft going**
 
 Send `mc wipe`, which clears the layer at V's feet, so the blocks of both spots go if the street kept the same block
 height. Then, with build mode on, send `link off`. Expected: `build mode off: unlinked`, the HUD gone, and
@@ -12576,14 +12576,14 @@ height. Then, with build mode on, send `link off`. Expected: `build mode off: un
 the Modrinth App. Expected within 3 seconds: `link: Minecraft has gone` and `build mode off: Minecraft has gone`, and
 the HUD gone. Ask the user to press F8 once more: `build=off: Minecraft isn't there`.
 
-- [ ] **Step 11: In the game: clean up**
+- [x] **Step 11: In the game: clean up**
 
 Send `link off` and `mode off`, each once the last shows in the status. Expected: `mode=off`, `link=not linked`, and no
 error lines in BlockRender's log for the session. Then ask the user to quit the game. BlockRender 0.10.0 stays
 installed: as before, nothing shows until the user links or picks a drawing mode, and the patch passes every input
 until F8.
 
-- [ ] **Step 12: Record the results, and commit**
+- [x] **Step 12: Record the results, and commit**
 
 Add step 3 to `docs/spikes/2026-10-02-minecraft-link-results.md`, as steps 1 and 2 are there:
 - the build, and any change to the game's settings;
@@ -12604,18 +12604,18 @@ cd /d/Cyberpunk-Minecraft && git add docs/spikes \
 
 ### Task 40: Close Part 3, and the spike
 
-- [ ] **Step 1: Add "How Part 3 went" to this plan**
+- [x] **Step 1: Add "How Part 3 went" to this plan**
 
 At the end: what ran as written, what changed, and what step 3 found.
 
-- [ ] **Step 2: Record the spike's verdict**
+- [x] **Step 2: Record the spike's verdict**
 
 The spec's step 4. At the top of `docs/spikes/2026-10-02-minecraft-link-results.md`, the answer to the spike's
 question (the spec's "Purpose"), from steps 1 to 3: whether Night City shows Minecraft's live world a frame or two
 after Minecraft changes it, with the building done from inside Cyberpunk, and both games at acceptable frame rates.
 Then what the spike leaves for the project: puppeting, Night City's collision, and what step 3 found.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add docs \
@@ -12627,3 +12627,30 @@ cd /d/Cyberpunk-Minecraft && git add docs \
 
 Use superpowers:finishing-a-development-branch. The user has chosen a local fast-forward merge of the spike branch
 into `main` each time so far; ask again.
+
+## How Part 3 went
+
+On 2026-10-03, inline, as the user asked.
+- **Tasks 30 to 38 ran as written,** in the repo, by the runner that replayed them (`tools/plans/run_plan.py`,
+  execute mode). Every build that had to fail failed with its expected message, and every count matched: 204 to 232
+  C++ tests, with no warnings, and `luac` took the overlay. The 9 commits run from `46d8cab` to `129087d`, and their 23
+  files are identical to the verified scratch copy's and to the fresh replay's, line endings aside.
+- **Task 39 ran as written,** with the user: [step 3's results](../../spikes/2026-10-02-minecraft-link-results.md).
+  Every check passed. It departed from the plan in three places:
+  - **Step 9's shield:** the player had none by now, so a typed `/item replace` put one in its off hand first;
+  - **Step 10's clearing:** one `/fill` over the built area instead of `mc wipe`, which clears only the layer at V's
+    feet;
+  - **after Step 11,** with the game closed, `mclink` settled what the user had reported along the way: clicks that
+    Minecraft refused with "The height limit for building is 1023".
+- **What step 3 found** (the results have the numbers):
+  - **build mode works as designed:** every input reached Minecraft and none reached the game, and F8, the menu keys,
+    Alt-Tab, unlinking and Minecraft going all did what the spec says. Placing a block takes Minecraft 41 ms and us 17
+    ms, within a frame;
+  - **Minecraft's server refuses a click while a teleport is unconfirmed,** with a height message that misleads.
+    SkyCraft teleports its player after V up to 10 times a second, so some clicks fail while V moves. The project's
+    own Minecraft side should hold a click until the teleport is confirmed, or not teleport at all (puppeting);
+  - **a break that empties a section isn't timed,** since such a section is never drawn again;
+  - **the floor follows V up and down,** sent again for each metre of height, so a click in mid-jump places a block in
+    the air;
+  - **two sections stayed unexplained:** BlockRender can't list the sections it draws, and a request that does would
+    have named them.

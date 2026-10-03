@@ -3,6 +3,41 @@
 Step 1 ran BlockRender's link code against Minecraft without Cyberpunk; step 2, further down ("Step 2: in the game"),
 ran it in the game; step 3, at the end ("Step 3: building from inside the game"), added keys and clicks.
 
+## The spike's verdict
+
+The spike asked whether Night City can show Minecraft's live world, streamed by SkyCraft's unchanged mod, so that
+blocks placed, broken or blown up appear a frame or two after Minecraft changes them, with the building done from
+inside Cyberpunk, and both games at acceptable frame rates.
+
+**Yes.**
+- **Live, from the unchanged mod:** BlockRender's link code worked against SkyCraft 0.1.2 as written (step 1). In the
+  game it drew Minecraft's blocks into Night City's G-buffer, lit as the street is, with Minecraft's HUD over the view
+  (step 2).
+- **A frame after Minecraft changes them:** our half, from a section's arrival to the first frame that draws it,
+  averaged 20 ms for typed commands (step 2) and 17 ms for clicks (step 3), 0 or 1 frames. Minecraft's own half is
+  41 ms for a click, its next tick, and 68 ms for a typed command. A 128-block field and 125 TNT didn't hitch a frame.
+  Breaks and explosions come the same way, but one that empties a section isn't timed yet.
+- **Building from inside Cyberpunk:** F8's build mode hands the mouse buttons, the wheel and 1 to 9 to Minecraft, and
+  the game sees none of them. Blocks land where V looks, on the open street. While V moves, Minecraft now and then
+  refuses a click (below).
+- **Frame rates:** with Minecraft linked and its HUD showing, Cyberpunk kept 68 to 69 frames a second, against 76 to
+  79 without Minecraft, and Minecraft ran at the same rate, paced to it. Minecraft running costs Cyberpunk about 2 ms
+  a frame, and the link, the drawing and the HUD about 0.25 ms more.
+
+**What it leaves for the project:**
+- **Puppeting** (spike 2, waiting for a Minecraft side): Minecraft's player moves by itself, and V follows it. That
+  also ends the refused clicks. Today SkyCraft teleports Minecraft's player after V up to 10 times a second, and
+  Minecraft's server refuses a click while a teleport is unconfirmed, with a misleading "The height limit for building
+  is 1023" (step 3's "Clicks refused after a teleport"). Until then, the project's Minecraft side should hold a click
+  until the teleport is confirmed.
+- **Night City's collision** (the PhysX work, from spike 1): the floor at V's feet is a stand-in. It follows V's jumps,
+  so a click in mid-jump places a block in the air. And V walks through Minecraft's blocks, where Minecraft's player
+  crawls and its clicks land short ("Minecraft's eye among blocks").
+- **Two small additions to the plugin,** from step 3: timing a removal to the first frame without it, and a request
+  that lists the sections the renderer draws, which would have named the two that step 3 left unexplained.
+
+## Step 1: `mclink`, without Cyberpunk
+
 Date: 2026-10-02. No Cyberpunk: `mclink`, BlockRender's link code in a console program, ran against the user's
 Minecraft with SkyCraft's unchanged mod. The versions:
 - **Minecraft 26.3**, Fabric Loader 0.19.5, Fabric API 0.161.0+26.3 and Java 25, in the Modrinth App's `CyberCraft`
@@ -15,7 +50,7 @@ The user set up the instance, and started and stopped Minecraft. The agent ran `
 its output, Minecraft's log and the saved images. Plan: [2026-10-02-minecraft-link.md](../superpowers/plans/2026-10-02-minecraft-link.md),
 Task 11.
 
-## Verdict
+### Verdict
 
 **Step 1: pass.** BlockRender's link code works against SkyCraft's real mod as written: nothing in it changed after
 running it. Every check passed. Two of the plan's expectations were wrong, and both are explained below: the atlas is
@@ -41,7 +76,7 @@ shield.
 - **Traffic:** Minecraft paced to `mclink` at 60 frames a second. The render ring carried about 8 MB a second, nearly
   all of it animated textures. Nothing was refused, rejected or dropped.
 
-## Runs
+### Runs
 
 | Run | When | Script | What happened |
 |---|---|---|---|
@@ -51,9 +86,9 @@ shield.
 
 Minecraft started at 14:16:52 and ran throughout. Its log has no errors, and two warnings (see "Surprises").
 
-## The checks
+### The checks
 
-### The link and the pinned player
+#### The link and the pinned player
 
 - `mclink` created the mapping. Minecraft, polling once a second, opened it 0.5 s later. Its log:
   `linked to Skyrim (pid 8984)`, `Skyrim link up`, `game window hidden`, `sizing overlay to Skyrim viewport
@@ -64,7 +99,7 @@ Minecraft started at 14:16:52 and ran throughout. Its log has no errors, and two
 - Over the next 10 s, `McState`'s feet stayed exactly at the target: SkyCraft held the player, since no voxel regions
   ever arrive.
 
-### Typed commands, and a click
+#### Typed commands, and a click
 
 | Time (s) | `mclink` |
 |---|---|
@@ -77,7 +112,7 @@ Minecraft started at 14:16:52 and ran throughout. Its log has no errors, and two
 Typing one command takes about 0.1 s: T, a client tick for chat to open, the text and Enter, and a tick to close.
 Latency from Enter to the frame that draws a block is step 2's measurement, in the game.
 
-### The HUD image
+#### The HUD image
 
 `hud.dds`, saved at 17.69 s, 1280 × 720:
 - the right way up once flipped (its rows come bottom-up, as SkyCraft's flag says);
@@ -89,7 +124,7 @@ Latency from Enter to the frame that draws a block is step 2's measurement, in t
 - a "New Recipe(s) Unlocked!" toast, from the kits;
 - 262,656 pixels not transparent, and 1 with a colour above its alpha, where the spec expected none.
 
-### TNT, and a block that stays
+#### TNT, and a block that stays
 
 | Time (s) | `mclink` |
 |---|---|
@@ -99,7 +134,7 @@ Latency from Enter to the frame that draws a block is step 2's measurement, in t
 | 23.90 | `typed: /setblock ~-6 ~ ~ minecraft:gold_block` |
 | 23.93 | `section -8 0 125`: 36 vertices, blocks x −126 to −125; its texel is rgba(255, 236, 79, 255), gold |
 
-### Coming and going
+#### Coming and going
 
 - **Unlinking and linking again:** the second `link on` teleported the player back (a second
   `teleported to -119.5 6.14 2007.5` in Minecraft's log), and sent the floor again with epoch 2.
@@ -110,7 +145,7 @@ Latency from Enter to the frame that draws a block is step 2's measurement, in t
   the gold block's section 0.01 s after. HUD images resumed at once: 166 in the 3 s run. SkyCraft resends only
   sections with blocks in them, so the gold block was what made this checkable.
 
-### Traffic
+#### Traffic
 
 Minecraft's frames, the render ring and HUD images, in `mclink`'s lines every 5 s:
 
@@ -133,7 +168,7 @@ Run 1's render ring, by message type, over its 29 s:
 No resyncs, rejected messages, sections before the atlas, dropped translucent triangles, dropped inputs or refused HUD
 images.
 
-## Surprises, and what they mean for Part 2
+### Surprises, and what they mean for Part 2
 
 - **The atlas is 20.1 MB, not 6 to 13.** SkyCraft's `SkyAtlas` stacks Minecraft's block atlas over its item atlas,
   plus a 16-row strip of crack and arrow textures: 2048 × (2048 + 512 + 16). Minecraft 26.3's block atlas is a full
