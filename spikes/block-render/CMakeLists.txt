@@ -61,6 +61,7 @@ add_library(render_core STATIC
 	src/input/Scancodes.cpp
 	src/input/BuildMode.cpp
 	src/input/FocusWatch.cpp
+	src/input/Router.cpp
 )
 target_link_libraries(render_core PUBLIC render_settings d3dcompiler dxguid advapi32)
 
@@ -152,6 +153,7 @@ add_executable(render_tests
 	tests/TestScancodes.cpp
 	tests/TestBuildMode.cpp
 	tests/TestFocusWatch.cpp
+	tests/TestRouter.cpp
 	tools/mclink/McLinkScript.cpp
 )
 target_include_directories(render_tests PRIVATE tools/mclink)
