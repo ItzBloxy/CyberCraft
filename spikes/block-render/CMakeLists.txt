@@ -55,6 +55,7 @@ add_library(render_core STATIC
 	src/link/Mapping.cpp
 	src/link/Link.cpp
 	src/link/Ticks.cpp
+	src/link/Voxels.cpp
 	src/render/PendingSections.cpp
 	src/render/Hud.cpp
 	src/Measurements.cpp
@@ -157,6 +158,7 @@ add_executable(render_tests
 	tests/TestFocusWatch.cpp
 	tests/TestRouter.cpp
 	tests/TestTicks.cpp
+	tests/TestVoxels.cpp
 	tools/mclink/McLinkScript.cpp
 )
 target_include_directories(render_tests PRIVATE tools/mclink)
