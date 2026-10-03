@@ -1,7 +1,8 @@
 // BlockRender: spike 3's RED4ext plugin, linked to Minecraft by spike 4. It hooks the game's Streamline calls and D3D12
 // to map Cyberpunk's frame (spike 3's step 1: the frame log and the dumps), and draws Minecraft blocks into it (step 2:
 // on the finished frame; step 3: before DLSS; step 4: into the G-buffer). Spike 4 links it to SkyCraft's Minecraft
-// through SkyCraft's shared memory: Minecraft's player follows V, and Minecraft's blocks and HUD are drawn in the game.
+// through SkyCraft's shared memory: Minecraft's player follows V, Minecraft's blocks and HUD are drawn in the game, and
+// in build mode (F8) the mouse buttons, the wheel and the keys 1 to 9 are Minecraft's.
 // Commands come through blockrender.request, in its folder or the overlay's, and status.txt in the overlay's folder says
 // what it's doing. See docs/superpowers/specs/2026-10-01-block-render-design.md and 2026-10-02-minecraft-link-design.md.
 #include <RED4ext/RED4ext.hpp>
@@ -15,6 +16,8 @@
 #include "hooks/D3D12Hooks.h"
 #include "hooks/HookGroups.h"
 #include "hooks/StreamlineHooks.h"
+#include "input/RawInputHook.h"
+#include "input/Router.h"
 #include "link/Link.h"
 #include "link/Mapping.h"
 #include "log/Dumps.h"
@@ -38,6 +41,7 @@
 #include <initializer_list>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -46,19 +50,21 @@ namespace
 using Clock = std::chrono::steady_clock;
 using namespace std::chrono_literals;
 
-constexpr const char* kVersion = "0.9.1";
+constexpr const char* kVersion = "0.10.0";
 
 RED4ext::v1::PluginHandle g_handle = nullptr;
 const RED4ext::v1::Sdk*   g_sdk = nullptr;
 std::filesystem::path     g_pluginDir;
 std::filesystem::path     g_hudDir;  // the CET overlay's folder, where status.txt goes
 cpmc::LogQueue            g_log;
-bool                      g_hooked = false;  // Streamline's imports are patched
+bool                      g_hooked = false;       // Streamline's imports are patched
+bool                      g_inputHooked = false;  // GetRawInputData's import is patched
 
 // Made at load and never destroyed: the hooks may call them until the process ends.
-cpmc::FrameLog* g_frameLog = nullptr;
-cpmc::Dumps*    g_dumps = nullptr;
-cpmc::Renderer* g_renderer = nullptr;
+cpmc::FrameLog*      g_frameLog = nullptr;
+cpmc::Dumps*         g_dumps = nullptr;
+cpmc::Renderer*      g_renderer = nullptr;
+cpmc::input::Router* g_router = nullptr;  // where keys and clicks go (the spec's "Input")
 
 cpmc::BlockWorld                           g_world;
 cpmc::MeshOptions                          g_meshOptions;
@@ -83,6 +89,7 @@ bool                             g_minecraftAtlas = false;  // Minecraft's atlas
 std::optional<cpmc::Vec3d>       g_camera;                  // V's camera, Minecraft axes, as the link last had it
 std::string                      g_lastTyped;               // the last mc request, which names its burst
 std::optional<double>            g_lastEnter;               // the link's last Enter, once marked
+bool                             g_buildWanted = false;     // F8's link, or build on: build mode, after the link's next update
 cpmc::LatencyTracker             g_latency;
 cpmc::BurstWindow                g_burst;
 std::optional<cpmc::BurstReport> g_lastBurst;
@@ -256,6 +263,7 @@ void OpenMapping()
 	if (open)
 	{
 		g_link = new cpmc::link::Link(g_mapping.Base());
+		g_router->SetLink(g_link);
 		g_second = {};
 		g_second.start = cpmc::SteadySeconds();
 	}
@@ -277,7 +285,8 @@ void UpdateLink(double aNow)
 		pose = cpmc::link::GamePose{ player->feet, player->camera->position, player->camera->forward };
 	}
 	g_camera = pose ? std::optional<cpmc::Vec3d>(cpmc::McFromWorld(pose->camera)) : std::nullopt;
-	g_hudWanted = cpmc::HudWanted(g_hudSetting, false, state.inWorld);  // build mode comes with input, in Part 3
+	const bool buildMode = g_router->On();
+	g_hudWanted = cpmc::HudWanted(g_hudSetting, buildMode, state.inWorld);
 	g_renderer->SetHud(g_hudWanted);
 	const cpmc::HudSize back = g_renderer->BackBufferSize();
 	const cpmc::HudSize viewport = cpmc::HudViewport(back.width, back.height, g_hudScale);
@@ -289,10 +298,16 @@ void UpdateLink(double aNow)
 	frame.tickMs = GetTickCount64();
 	frame.pose = pose;
 	frame.linked = g_linked;
-	frame.buildMode = false;
+	frame.buildMode = buildMode;
 	frame.takeHud = g_hudWanted;
 	const uint64_t drainedBefore = state.drainedBytes;
 	g_link->Update(frame, g_linkSettings, g_sink);
+	g_router->Update(g_linked, state);  // build mode ends if Minecraft or V has gone, or the link
+	if (std::exchange(g_buildWanted, false))
+	{
+		const std::optional<std::string> why = g_router->TurnOn();
+		Report(why ? "build on: it stays off: " + *why : "build on: the mouse buttons, the wheel and 1 to 9 are Minecraft's");
+	}
 	g_frame.bytes = state.drainedBytes - drainedBefore;
 	g_frame.drainMs = state.drainMs;
 	++g_second.frames;
@@ -306,6 +321,10 @@ void UpdateLink(double aNow)
 		g_lastEnter = state.lastEnter;
 		g_latency.Mark(*state.lastEnter);
 		g_burst.Start(*state.lastEnter, "mc " + g_lastTyped);
+	}
+	if (const std::optional<double> press = g_router->TakePress())
+	{
+		g_latency.Mark(*press);  // a click that went to Minecraft
 	}
 	if (const std::optional<cpmc::Renderer::TimedUpload> timed = g_renderer->TakeTimedUpload())
 	{
@@ -443,8 +462,9 @@ void Set(const cpmc::Request& aRequest)
 	                                                              : "set: " + error);
 }
 
-// link on|off (the spec's "Linking"): linking also switches drawing to gbuffer if it's off.
-void LinkRequest(bool aOn)
+// link on|off (the spec's "Linking"): linking also switches drawing to gbuffer if it's off. aBy says what asked, when it
+// wasn't a link request.
+void LinkRequest(bool aOn, std::string_view aBy = {})
 {
 	g_linked = aOn;
 	if (!aOn)
@@ -454,10 +474,30 @@ void LinkRequest(bool aOn)
 	std::string why;
 	if (g_renderer->ModeName() == "off" && !g_renderer->SetMode("gbuffer", why))
 	{
-		return Report("link on, but drawing stays off: " + why);
+		return Report(std::format("{}link on, but drawing stays off: {}", aBy, why));
 	}
 	const std::string link = g_link ? "Minecraft's player follows V" : "it starts once the mapping opens, which is " + g_mappingState;
-	Report(std::format("link on: {}; drawing is {}", link, g_renderer->ModeName()));
+	Report(std::format("{}link on: {}; drawing is {}", aBy, link, g_renderer->ModeName()));
+}
+
+// build on|off (the spec's "Requests"): as F8. On links first, if it isn't linked, and goes on after the link's next
+// update, once it knows whether V and Minecraft are there.
+void BuildRequest(bool aOn)
+{
+	if (!aOn)
+	{
+		return Report(g_router->TurnOff("a build off request") ? "build off: Minecraft lets go of everything"
+		                                                         : "build off: it's off already");
+	}
+	if (g_router->On())
+	{
+		return Report("build on: it's on already");
+	}
+	if (!g_linked)
+	{
+		LinkRequest(true, "build on: ");
+	}
+	g_buildWanted = true;
 }
 
 void TypeRequest(const std::string& aWhat)
@@ -527,6 +567,7 @@ void RunRequest(const std::filesystem::path& aFolder, bool aWholeLine)
 		Report("floor: a fresh one at the next update, once Minecraft is there");
 		break;
 	case cpmc::Request::Kind::Mc: TypeRequest(request->what); break;
+	case cpmc::Request::Kind::Build: BuildRequest(request->what == "on"); break;
 	}
 }
 
@@ -600,6 +641,15 @@ cpmc::LinkReport LinkLines(const cpmc::Renderer::Stats& aStats, double aNow)
 	report.mapping = g_mappingState;
 	report.linked = g_linked;
 	report.camera = g_camera;
+	const cpmc::input::InputReport input = g_router->Report();
+	report.inputHooked = g_inputHooked;
+	report.buildMode = input.on;
+	report.buildWhy = input.why;
+	report.slot = input.slot;
+	report.inputsRead = input.read;
+	report.inputsForwarded = input.forwarded;
+	report.inputsHidden = input.hidden;
+	report.lastInput = input.last;
 	if (g_link)
 	{
 		const cpmc::link::Link::Status& state = g_link->State();
@@ -620,6 +670,7 @@ cpmc::LinkReport LinkLines(const cpmc::Renderer::Stats& aStats, double aNow)
 		report.floorEpoch = state.floorEpoch;
 		report.floorSent = state.floorSent;
 		report.floorCentre = state.floorCentre;
+		report.inputsDropped = state.inputsDropped;
 		report.ringMb = double(g_second.bytes) / 1048576.0;
 		report.ringMbWorstFrame = double(g_second.bytesWorstFrame) / 1048576.0;
 		report.drainMsAverage = g_second.frames ? g_second.drainMsSum / double(g_second.frames) : 0.0;
@@ -769,6 +820,11 @@ bool OnUpdate(RED4ext::CGameApplication*)
 		RunRequest(g_pluginDir, false);
 		RunRequest(g_hudDir, true);
 	}
+	if (g_link && g_router->TakeLinkRequest())
+	{
+		LinkRequest(true, "F8: ");  // F8 while unlinked: the link, then build mode once the link has seen V
+		g_buildWanted = true;
+	}
 	UpdateLink(seconds);
 	const auto [time, folderName] = Timestamps();
 	if (g_frameLog->Capturing())
@@ -838,6 +894,9 @@ RED4EXT_C_EXPORT bool RED4EXT_CALL Main(RED4ext::v1::PluginHandle aHandle, RED4e
 		g_frameLog = new cpmc::FrameLog(g_log);
 		g_dumps = new cpmc::Dumps(g_log, g_pluginDir);
 		g_renderer = new cpmc::Renderer(g_log, g_pluginDir);
+		// Input first: it passes everything until the user links or presses F8.
+		g_router = new cpmc::input::Router(g_log);
+		g_inputHooked = cpmc::input::InstallRawInputHook(*g_router, g_log);
 		for (cpmc::HookEvents* listener : std::initializer_list<cpmc::HookEvents*>{ g_frameLog, g_dumps, g_renderer })
 		{
 			cpmc::d3d::AddListener(listener);
@@ -857,6 +916,12 @@ RED4EXT_C_EXPORT bool RED4EXT_CALL Main(RED4ext::v1::PluginHandle aHandle, RED4e
 		break;
 	}
 	case RED4ext::v1::EMainReason::Unload:
+		if (g_router)
+		{
+			g_router->TurnOff("the plugin unloads");  // Minecraft lets go of everything
+			cpmc::input::RemoveRawInputHook();
+			g_router->SetLink(nullptr);  // from here on, nothing pushes into the mapping
+		}
 		if (g_renderer)
 		{
 			g_renderer->Shutdown();
@@ -876,7 +941,7 @@ RED4EXT_C_EXPORT void RED4EXT_CALL Query(RED4ext::v1::PluginInfo* aInfo)
 {
 	aInfo->name = L"BlockRender";
 	aInfo->author = L"Cyberpunk-Minecraft";
-	aInfo->version = RED4EXT_V1_SEMVER(0, 9, 1);
+	aInfo->version = RED4EXT_V1_SEMVER(0, 10, 0);
 	aInfo->runtime = RED4EXT_V1_RUNTIME_VERSION_LATEST;
 	aInfo->sdk = RED4EXT_V1_SDK_VERSION_CURRENT;
 }
