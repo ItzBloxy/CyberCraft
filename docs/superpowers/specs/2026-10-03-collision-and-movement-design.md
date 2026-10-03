@@ -1,7 +1,9 @@
 # Collision and movement: design (spike 5)
 
-Date: 2026-10-03. Status: agreed with the user section by section in the brainstorm. "Found while writing", at the
-end, lists what writing it out added to what was agreed.
+Date: 2026-10-03. Status: agreed with the user section by section in the brainstorm. "Found while writing", near the
+end, lists what writing it out added to what was agreed. Then revised after a deep self-review, which checked each
+claim against its source and walked through each step: "Changes from the deep review", at the end, lists what changed
+and what was checked. The sections above it already include those changes.
 
 ## Purpose
 
@@ -139,7 +141,9 @@ Ctrl sneaks (and flies down).
     the block below, and the block 8 below;
   - it also needs voxel ground in the 3 × 3 column within 12 blocks below. Once the regions are known, 6 s since the
     hold began does instead;
-  - then `liftOutOfGeometry` lifts the player onto triangle ground up to 2.5 blocks above, and lets go.
+  - then `liftOutOfGeometry` lifts the player onto the highest triangle surface up to 2.5 blocks above its feet, and
+    lets go. Any surface counts (`TriCollider.groundAt` with walkable surfaces not required), so the underside of an
+    overhang lower than that counts too.
 - **`teleportAck`** (`afterRender`): `McState` reports the last `teleportSeq` applied, less 1 while the player is
   held. So `teleportAck == teleportSeq` means Minecraft has its player there, and lets it move.
 - **The look** is set from `SkyState` every frame while no screen is open.
@@ -166,6 +170,20 @@ Ctrl sneaks (and flies down).
   time, corrected for the partial tick already gone.
 - **Solids** (`WorldExporter`): after each section, `kRenSolids` lists its blocks that have any collision shape, as a
   4,096-bit set (bit x + 16z + 256y). Its count is 0 when the section has none left.
+
+### Minecraft 26.3, for eye heights and clicks
+
+From the user's 26.3 jar, with `javap`:
+- **Eye heights** (`Avatar`'s pose table): 1.62 standing, 1.27 crouching, and 0.4 swimming, crawling and gliding.
+- **The server corrects a move by teleporting the player back** (`ServerGamePacketListenerImpl.handleMovePlayer`), and
+  so refuses clicks until the client confirms, in two cases:
+  - the move ends colliding with something the old position didn't;
+  - outside creative and spectator, the server's replay of the move lands more than a quarter block from the client's
+    ("moved wrongly").
+
+  The game rule SkyCraft turns off, `PLAYER_MOVEMENT_CHECK`, only removes "moved too quickly"
+  (`shouldCheckPlayerMovement`). Players skip the game's voxels on the server too, so walking on the triangles
+  shouldn't trigger either case. Step 1's clicks check it.
 
 ### SkyCraft's game side, as a reference
 
@@ -204,8 +222,13 @@ Ctrl sneaks (and flies down).
 
 - `RED4ext::ExecuteFunction` on a class (`CClass*`) takes the instance from `GameInstance::GetSystem`. That's how
   `PlayerLocator` calls `PlayerSystem` and `CameraSystem` every frame.
-- `TeleportationFacility` is a game system (`ITeleportationFacility : IGameSystem`).
+- The game instance's system map is keyed by implementation types (`GameEngine.hpp`). `TeleportationFacility`'s script
+  name names its implementation class, `gameTeleportationFacility`, a game system (`ITeleportationFacility :
+  IGameSystem`), as `CameraSystem` names `gameCameraSystem`.
+- `CClass::GetFunction` searches parent classes too, so a function declared on a base class is found.
 - `EulerAngles` is `{Roll, Pitch, Yaw}`.
+- FreeFly passes a pitch of 0 to `Teleport`, and still flies where the camera looks, up and down, so a teleport
+  doesn't seem to reset the camera's pitch.
 
 ### PhysX (spike 1 and its audit)
 
@@ -213,6 +236,13 @@ Ctrl sneaks (and flies down).
   (4,000 to 6,000 actors), with `eREQUIRE_RW_LOCK` off. Z is up.
 - **The origin:** PhysX = world − origin, where the origin is the 1,024 m grid point nearest V, one frame behind V. It's
   read from V's controller: a kinematic capsule (radius 0.32, half-height 0.4) whose centre is 1 m above V's feet.
+  Spike 1's `ReadController` finds that actor once, then each frame checks the cached actor is still among scene 0's
+  dynamic actors; its origin watch did that for 48,000 frames.
+- **V's controller, if it's PhysX's.** It very likely is: the game imports `PxCreateControllerManager`, and V's
+  collider is the kinematic capsule a controller makes. Then, from `PxController.h` and `PxControllerManager.h`:
+  - it moves by sweeping against scene-query shapes, so a shape that's only a simulation shape doesn't stop it;
+  - its geometry cache is flushed by itself whenever a static shape is added, changed or removed;
+  - its overlap recovery, on unless the game turned it off, pushes it out of static objects it starts inside.
 - **The ABI:** `PxPhysics`, `PxScene` and the actors match NVIDIA's 3.4.2 headers. `PxShape` has one more virtual, at
   slot 6, so every later slot is one higher; the repo's copy of the headers (`extern/physx-3.4.2`) declares it. The
   audit covered only the calls the probe makes.
@@ -243,7 +273,9 @@ SkyCraft's header, `extern/skycraft/skycraft_protocol.h` (version 11), stays unc
 - **`SkyState`:**
   - `teleportSeq` starts each run at a value from the clock, as SkyCraft's does. It goes up on linking, when Minecraft
     comes back, for each teleport outside build mode, and once on entering build mode;
-  - the position is V's camera less 1.62 outside build mode, as now, and V's feet on entering build mode;
+  - the position is V's camera less 1.62 outside build mode, as now. In build mode it's V's feet, every frame, so that
+    whenever Minecraft teleports its player by itself (a new player object, or the in-game flag coming back), it puts
+    it where V is;
   - the menu flag stays clear in build mode, as now.
 - **`McState`, newly read:**
   - `teleportAck`;
@@ -277,7 +309,7 @@ spikes/block-render/
   src/physx/Export.*      the city's batches, read on the main thread within the budget
   src/physx/BoxMerge.*    a section's solid blocks as few boxes (pure)
   src/physx/Bodies.*      the blocks' static actors: made, posed, rebuilt and removed
-  src/physx/SceneWatch.*  step 4's log of who writes to scene 0 (hooks, on request)
+  src/physx/SceneWatch.*  step 3's log of who writes to scene 0, and when (hooks, on request)
   src/Puppet.*            the game's script calls: Teleport, V's yaw, in a vehicle, dead, health
   src/Plugin.cpp, Requests.*, Status.*   + the new requests, the status lines and the update order
   tools/mclink/           + held keys, build mode's drive, and the dump loader
@@ -305,34 +337,44 @@ The names are proposals; the plan settles them.
 
 ### Entering
 
-Build mode turns on (F8 or `build on`) only when Minecraft is in its world, and V is found, alive and on foot.
-Otherwise it says why, as spike 4's does. Then:
+Build mode turns on (F8 or `build on`) only when Minecraft is in its world, and V is found, alive and on foot: not in
+a vehicle, and not in a workspot (sitting, or held by a scene), through the game's script calls, chosen while
+planning. Otherwise it says why, as spike 4's does. Then:
 1. **The ground:**
    - in `floor` mode, a fresh floor at V's feet, with its voxels (see "Part 2");
    - in `city` mode, the exporter's regions, which it keeps around V anyway.
 2. **One teleport:** `teleportSeq` goes up once, with `SkyState`'s position at V's feet. Minecraft puts its player
    there and holds it.
 3. **The keys:**
-   - from this moment the movement keys are Minecraft's, so V stands still;
+   - from this moment the movement keys are Minecraft's;
    - a key already held when build mode starts stays the game's until it's released, as spike 4's buttons do.
-4. **Waiting:** until Minecraft's `teleportAck` equals our `teleportSeq`, Minecraft is still holding its player, and V
-   isn't placed. The status shows how long it has waited. There's no time limit: F8 leaves.
+4. **Waiting:** until Minecraft's `teleportAck` equals our `teleportSeq`, Minecraft is still holding its player. V is
+   held where it is, placed there every frame, so a movement key that was already down when build mode started can't
+   walk V away. The status shows how long it has waited. There's no time limit: F8 leaves.
 5. **Driving:** from then on, Minecraft drives. The link sends no more teleports while build mode is on, so no click
-   is refused.
+   is refused. If `teleportAck` falls behind again, because Minecraft teleported its player by itself (see "The
+   protocol"), the drive goes back to waiting, and V is held where it is.
 
 ### Each frame while Minecraft drives
 
 In `OnUpdate`, after `Link::Update` has read `McState`:
 1. **The ticks** go into the interpolator (`Ticks`). It's ported from SkyCraft's `Game.cpp` with SkyCraft's constants
-   (see "SkyCraft's game side"), and runs on `QueryPerformanceCounter`, the clock Minecraft stamps them with. It gives
-   Minecraft's feet and eye height at the render time.
+   (see "SkyCraft's game side"), and runs on `QueryPerformanceCounter`, the clock Minecraft stamps them with. It's fed
+   every frame while linked, so it has settled by the time Minecraft drives. It gives Minecraft's feet and eye height
+   at the render time.
 2. **V's target** is Minecraft's eye (the interpolated feet plus the interpolated eye height), in world axes, less V's
-   camera offset from V's feet, as `LocatePlayer` read it this frame (1.60 m up when standing). So V's camera lands on
-   Minecraft's eye:
-   - standing, V's feet are 2 cm from Minecraft's;
-   - sneaking, Minecraft's eye is 1.27 above its feet and V can't crouch, so V sinks about 0.33 m. V's legs go into the
-     floor, and the crosshair stays exactly on Minecraft's pick ray;
-   - a target that isn't finite, or is more than 20 m from V, isn't used: the frame is skipped and counted.
+   own eye height.
+   - **V's eye height** is the camera's height above V's feet, averaged over the frames before build mode starts
+     while V's feet aren't moving up or down (1.60 m standing in spike 4). It isn't read during build mode: a camera
+     and feet read in the same frame may straddle a teleport, and V can't crouch in build mode, so the height doesn't
+     change. If V was crouched when build mode started, it stays crouched, and its eye height is measured as it is.
+   - **Horizontally,** V's feet go straight under Minecraft's eye. If V's camera sits off V's feet horizontally, the
+     status's camera-to-eye distance shows by how much.
+   - **So V's camera lands on Minecraft's eye.** Standing, V's feet are 2 cm from Minecraft's. Sneaking, Minecraft's
+     eye is 1.27 above its feet and V can't crouch, so V sinks about 0.33 m: V's legs go into the floor, and the
+     crosshair stays on Minecraft's pick ray.
+   - **A target that isn't finite, or is more than 20 m from V,** isn't used: the frame is skipped and counted. If the
+     targets stay bad for a second, build mode ends and says why.
 3. **The teleport:** `TeleportationFacility.Teleport(V, target, EulerAngles(0, 0, yaw))`, found by its script name and
    called the way `PlayerLocator` calls the camera system.
    - The yaw is V's current one, from `GetWorldYaw` as FreeFly reads it.
@@ -340,9 +382,13 @@ In `OnUpdate`, after `Link::Update` has read `McState`:
      sees. Counts become degrees by a ratio measured while V turns outside build mode.
    - Which of the two works is step 2's opening check.
 4. **The rest of the link,** as now:
-   - the look from V's camera into `SkyState`;
+   - the look from V's camera into `SkyState`, and V's feet as its position;
    - the ground around Minecraft's player. In `floor` mode the floor stays at the height it had when build mode
      started, and grows as the player moves, never with a new epoch, so nothing is cleared from under it.
+
+**BlockRender's drawing** takes its camera from the frame the game renders (from Streamline), so the blocks stay locked
+to the city wherever in the frame the teleport lands. The teleport's place in the frame only adds latency, which the
+status's camera-to-eye distance shows.
 
 There are no status effects at first: hiding the keys already stops V walking. If V's own movement fights the
 teleports (falling between them, landing, fall damage), FreeFly's `GameplayRestriction.NoMovement` is the fallback,
@@ -352,7 +398,8 @@ and health set every frame is the last resort.
 
 Build mode ends on F8, a menu key or Shift+F6, as now. It also ends when:
 - the link goes off, or Minecraft goes or leaves its world (as now), or Minecraft's player dies;
-- V is lost (loading), dies, or gets into a vehicle. Cyberpunk's F (interact) still works in build mode.
+- V is lost (loading), dies, or gets into a vehicle or a workspot. Cyberpunk's F (interact) still works in build mode;
+- the targets stay bad for a second.
 
 Then:
 - V isn't placed any more, so it stays where Minecraft's player was. In mid-air it falls, as in the game;
@@ -371,7 +418,8 @@ Then:
 - **Where a press goes:** each key follows spike 4's rule, that a press's repeats and its release go where the press
   went.
 - **Shift+F6** still leaves build mode with Left Shift forwarded, since `BuildMode` notes both Shift keys before it
-  decides anything else.
+  decides anything else. Left Shift reaches Minecraft first, though, so in the user's instance it also toggles
+  Minecraft's sprint on the way out.
 
 ### Status
 
@@ -418,7 +466,9 @@ The floor's epochs:
   - an overlap query;
   - each shape's triangles (`ShapeTriangles`);
   - V's controller, for the origin.
-- **What it keeps:** shapes of static actors that are scene-query or simulation shapes.
+- **What it keeps:** the scene-query shapes of static actors. That's what V's controller sweeps against, if it's a
+  PhysX controller (see "PhysX"); a shape that's only a simulation shape doesn't stop V. From spike 1's census, about
+  7,078 of 7,596 shapes are both, about 319 query-only and about 192 simulation-only.
 - **What it leaves out:**
   - dynamic and kinematic actors: cars, litter and bodies, V's and NPCs' controllers, and perhaps doors and lifts;
   - triggers;
@@ -426,7 +476,8 @@ The floor's epochs:
   - our own bodies from part 3.
 - **The area** is SkyCraft's: regions of 8 blocks, 5 out horizontally, 3 below and 2 above (88 m square, 48 m tall).
   - It's centred on Minecraft's player while Minecraft drives, and on V otherwise.
-  - It runs whenever the link is on and the ground is `city`, so the regions are ready when build mode starts.
+  - It runs whenever the link is on, Minecraft is there and the ground is `city`, so the regions are ready when build
+    mode starts. Without Minecraft its messages would only queue in a ring nobody reads, as spike 4's floor avoids.
 - **Batches:** the main thread reads 2 × 2 × 2 regions at a time:
   - one overlap query for the batch's box, with a quarter-block margin as SkyCraft's has;
   - each shape's triangles culled to that box;
@@ -434,7 +485,8 @@ The floor's epochs:
 
   Batches go nearest first, in SkyCraft's order (height weighted double).
 - **The budget:** batches are read in `OnUpdate`, under scene 0's read lock as spike 1 read it, until 1.5 ms have
-  gone (`set exportbudget`). A batch is always read whole.
+  gone (`set exportbudget`). A batch is always read whole. Whether `OnUpdate` is a safe time to read every frame is
+  what the scene watch (below) settles first.
 - **The worker:** one thread takes each batch's triangles and, for each region:
   - voxelizes it at 1/8 block with SkyCraft's triangle-box test;
   - builds its messages: the triangles (`kColTris`), then the voxels (`kColRegion`).
@@ -445,8 +497,8 @@ The floor's epochs:
   - the city streams its collision in as V moves, so the batches next to the centre are read again every second;
   - a region is sent again only if its triangles' hash has changed;
   - regions more than one beyond the area are forgotten, so they're read again on return.
-- **Settling:** the exporter waits 1.5 s (SkyCraft's settle time) before reading, after the link starts and after V is
-  found again following a load.
+- **Settling:** the exporter waits 1.5 s (SkyCraft's settle time) before reading, after the link starts, after
+  Minecraft comes back, and after V is found again following a load.
 - **Epochs:** a clear only when the link starts, when Minecraft comes back, or when the ground setting changes. Never
   while walking.
 - **Coordinates:**
@@ -454,10 +506,34 @@ The floor's epochs:
     to Minecraft's axes (`McFromWorld`);
   - each batch's box goes the other way, for its query.
 
+### The scene watch
+
+Spike 1 read scene 0's regions on the main thread about twenty times (its dumps), and V's controller every frame for
+48,000 frames (its origin watch). The exporter reads far more, every frame, and part 3 writes to the scene, so both
+need to know which threads the game writes to scene 0 from, and when. PhysX's read-write lock works whether or not the
+scene requires it (`eREQUIRE_RW_LOCK` only makes its use compulsory), so our read lock keeps out the game's writes
+only if the game takes the write lock. So step 3 opens with a watch:
+- **Hooks** on scene 0's vtable (`NpScene`'s, audited first) record each call's thread and time, without doing
+  anything else. The small five-plane scenes share that vtable, so only calls on scene 0 are kept. The calls:
+  - adding and removing actors and aggregates, one or several at a time;
+  - stepping the simulation (`simulate`, or `collide` and `advance`) and fetching its results (`fetchResults`, or
+    `fetchResultsStart` and `fetchResultsFinish`);
+  - the write lock (`lockWrite`, `unlockWrite`);
+  - `shiftOrigin`, with its shift, which settles whether the game moves the whole scene when PhysX's origin moves.
+- **The status** sums them by thread, and says which came while `OnUpdate` was running.
+- **What it decides:**
+  - if the game never writes to scene 0 during `OnUpdate`, or always takes the write lock to do it (which our read
+    lock then excludes), the reads and part 3's writes stay in `OnUpdate`;
+  - otherwise they move to where the watch shows the scene is quiet, such as just after the game fetches the
+    simulation's results.
+- **When:** on request (`scenewatch on`), and the hooks come out on `scenewatch off` and at unload.
+
 ### `mclink`'s dump loader
 
 `mclink` loads a dump's `collision.obj`:
-- it keeps the `s0_static_*` objects;
+- it keeps the `s0_static_*` objects. These are the static actors' simulation shapes, with or without the scene-query
+  flag, since the dumps put every query-only shape, of any actor, under `s0_queryonly_*` (the probe's `Category`).
+  Nearly all of them are scene-query shapes too, so this stands in for the exporter's choice;
 - it moves them to Minecraft's player's feet (the dump's origin is V's feet);
 - it hands them to the same filing, voxelizing and message code.
 
@@ -489,6 +565,8 @@ The link keeps `kRenSolids` by section instead of stepping over it.
 - **In build mode too:** bodies stay while V is placed by teleports, so leaving build mode on top of a build leaves V
   standing on them. Leaving while sneaking starts V's controller about a third of a metre inside the top block, and
   step 4 checks what the controller does then.
+- **When:** while `blocks` is on and drawing is on, so blocks nobody can see never leave invisible walls. They stay
+  while unlinked, or with Minecraft gone, as the drawn blocks do.
 - **Off by default:** `set blocks 1` turns them on. It stays off by default until step 4 passes.
 
 ### What they're made of
@@ -515,24 +593,30 @@ The exporter skips our actors by their pointers, so Minecraft never gets its own
 
 ### The audit
 
-Before step 4, offline, as spike 1's audit was done: each new call's slot is checked against the game's DLLs,
-disassembled. The new calls:
-- `PxPhysics::createRigidStatic` and `createShape`;
-- `PxRigidActor::attachShape` and `setGlobalPose`;
-- `PxShape::setQueryFilterData`, `setSimulationFilterData` and `getMaterials`, each one slot later than in NVIDIA's
-  headers;
-- `PxScene::addActor`, `removeActor`, `simulate` and `fetchResults`;
-- `PxActor::getScene`, and `PxBase::release` for actors and shapes.
-
-The probe's own calls are already audited, and listed as such: `PxScene::overlap` and `raycast`, the actors'
-`getGlobalPose`, `getNbShapes` and `getShapes`, and the shapes' getters (their filter data and flags among them). The
-results go into `docs/spikes/2026-10-01-physx-abi-audit.md` as an addendum.
+Offline, as spike 1's audit was done: each new slot is checked against the game's DLLs, disassembled. The results go
+into `docs/spikes/2026-10-01-physx-abi-audit.md` as an addendum.
+- **Before step 3,** the slots the scene watch hooks, on `PxScene`: `addActor`, both `addActors`, `removeActor`,
+  `removeActors`, `addAggregate`, `removeAggregate`, `simulate`, `collide`, `advance`, `fetchResults`,
+  `fetchResultsStart`, `fetchResultsFinish`, `lockWrite`, `unlockWrite` and `shiftOrigin`. NVIDIA's header puts them at
+  slots 10 to 16, 56 to 58, 61, 62, 64, 107, 108 and 116 of 118. MSVC may order overloads differently, so each is
+  confirmed in the disassembly.
+- **Before step 4,** the calls that make and manage bodies:
+  - `PxPhysics::createRigidStatic` and `createShape`;
+  - `PxRigidActor::attachShape` and `setGlobalPose`;
+  - `PxShape::setQueryFilterData`, `setSimulationFilterData` and `getMaterials`, each one slot later than in NVIDIA's
+    headers;
+  - `PxActor::getScene`, and `PxBase::release` for actors and shapes. `addActor` and `removeActor` are already done
+    for the watch.
+- **Already audited:** the probe's own calls, listed as such: `PxScene::overlap`, `raycast`, `lockRead` and
+  `unlockRead`, the actors' `getGlobalPose`, `getNbShapes` and `getShapes`, and the shapes' getters (their filter data
+  and flags among them).
 
 ### Threads
 
-Step 4's first check decides where the adds, removes and poses run:
-- the starting point is `OnUpdate` on the main thread, where spike 1 read the scene without trouble;
-- they move if the check finds the game writing to scene 0 from another thread at that time.
+Step 3's scene watch decides where the adds, removes and poses run, as it does for the exporter's reads:
+- the starting point is `OnUpdate` on the main thread;
+- they move if the watch finds the game writing to scene 0 without its write lock while `OnUpdate` runs. If the game
+  does take the write lock, our writes take it too.
 
 ### Loads
 
@@ -562,24 +646,30 @@ The user starts Minecraft, and the agent runs `mclink` scripts. Checks:
 - **Clicks while walking:** 20 right clicks with W held, along a row. None are refused: 20 blocks, and no red message
   in the HUD image.
 - **Entering and leaving:** `mclink`'s script plays the game side's drive: build mode on (one teleport, waiting,
-  driving), then off (teleports resume).
+  driving), then off (teleports resume). The moving and clicking checks above run with build mode on, so `SkyState`'s
+  menu flag is clear and held keys stay held.
 - **The interpolator** runs on `mclink`'s own 60 Hz frames, as the game will run it: the render delay it settles on,
   and the frames that waited for a late tick.
+- **The clock-started `teleportSeq`:** a second `mclink` run, with Minecraft still running, teleports Minecraft's
+  player on its first link.
 
 ### Step 2: in the game, on the floor
 
 Part 1 in BlockRender 0.11.0, deployed. At spike 3's corner, with `ground floor`:
 - **The opening check:**
   - F8, then the drive line says driving within a second;
-  - standing still in Minecraft, the user turns the mouse. Does the view turn as it does outside build mode? If not,
-    `set turn 1`, and again.
+  - standing still in Minecraft, the user turns the mouse and looks up and down. Does the view move as it does outside
+    build mode? If not, `set turn 1`, and again.
 - **Moving:** walking, strafing, backing up, sprinting, jumping, sneaking (the view drops to Minecraft's eye), and
   flying up and down. The user judges how smooth it is. The status and a frame log record V's camera against
   Minecraft's eye, the render delay and late ticks.
+- **Entering with W held:** V stays where it is until Minecraft drives, then walks as Minecraft's player once W is
+  pressed again.
 - **Clicks while moving:** a row of blocks placed while walking. None are refused.
-- **Fall damage while placed:** fly up 20 m and drop. Minecraft's creative player takes none; the status shows V's
-  health.
-- **Leaving:** F8 standing (V stays), F8 while flying (V falls), Esc, and entering again.
+- **Fall damage while placed:** fly up 5 m and drop, then 20 m. Minecraft's creative player takes none; the status
+  shows V's health. A save first, in case V dies.
+- **Leaving:** F8 standing (V stays), F8 while flying a few metres up (V falls, with the game's fall damage), Esc, and
+  entering again.
 - **A vehicle:** with build mode on, the user gets into a car with F, and build mode ends.
 - **Cost:** frame times while driving and not, and the teleport call's time.
 
@@ -587,19 +677,24 @@ Part 1 in BlockRender 0.11.0, deployed. At spike 3's corner, with `ground floor`
 
 - **Offline first:** `mclink` with the dumps from spot B and the ramp. Minecraft's player walks the sidewalk, the
   kerbs, the walkway and the ramp, and stops at walls. TNT lands on the street, on its voxels.
+- **In the game, the opening check:** with `ground floor`, so the exporter isn't running yet, `scenewatch on` for a
+  minute of walking and driving, across an origin line. It shows which threads write to scene 0, and when, whether the
+  game takes the write lock, and whether it calls `shiftOrigin` at the line. That decides where the exporter reads
+  (see "The scene watch").
 - **In the game,** with `ground city`, at the corner, then at spot B and the ramp:
   - the release when build mode starts;
   - walking streets, kerbs, stairs and ramps, and into walls. Where Minecraft's player and V disagree, `shapes` logs
     the shapes there with their filters;
-  - flying fast across the city: the regions keep ahead, and the player never falls through;
+  - entering build mode under something less than 2.5 m above V's feet, an awning or a stair, say. Minecraft's
+    `liftOutOfGeometry` may put its player, and so V, on top of it;
+  - a block placed against the street or a wall lands on it, since clicks now hit the city's triangles;
+  - sprint-flying across the city, then dropping: the regions keep ahead, and the player lands on the street;
   - TNT on the street, with no stone under it;
   - the cost: reading time a frame (average and worst), the worker's time, and ring bytes.
 
 ### Step 4: V against blocks
 
-- **The opening check, first part:** `scenewatch on` for a minute of walking and driving. It logs which threads call
-  scene 0's add, remove, simulate and fetch, and compares them with `OnUpdate`'s.
-- **The opening check, second part:** `box on`, with a save made just before, one interaction at a time:
+- **The opening check:** `box on`, with a save made just before, one interaction at a time:
   - walk into the box, stand on it, jump onto it, shoot it, and drive into it;
   - with the box placed just short of an origin line (the probe's overlay shows the distance), cross the line and
     come back. The box still stops V;
@@ -628,7 +723,7 @@ plugin's folder or the overlay's. The new commands:
 | `set blocks 0\|1` | Bodies for Minecraft's blocks around V (0) |
 | `shapes` | Logs the static shapes within 2 m of Minecraft's player (or V, outside build mode): geometry, actor, filters |
 | `box on\|off` | Step 4's test box, 3 m ahead of V, made as the bodies are |
-| `scenewatch on\|off` | Step 4's log of which threads call scene 0's add, remove, simulate and fetch |
+| `scenewatch on\|off` | Step 3's watch of scene 0: which threads add, remove, step, fetch, lock and shift it, and when |
 
 The overlay gains buttons for the ground, blocks, the box and `shapes`, and the drive, ground and bodies lines.
 
@@ -648,8 +743,8 @@ The overlay gains buttons for the ground, blocks, the box and `shapes`, and the 
   - adds, removes and rebuilds a second, and the worst rebuild's time;
   - the copied filters and material;
   - origin changes, and whether the game moved our bodies or we posed them again.
-- **Scene watch,** while on: each thread's calls to add, remove, simulate and fetch, and whether any came during
-  `OnUpdate`.
+- **Scene watch,** while on: each thread's calls to add, remove, step, fetch, lock and shift scene 0, which of them
+  came while `OnUpdate` was running, and each `shiftOrigin`'s shift.
 - **Frame rates:** with the drive, the exporter and the bodies each on and off.
 
 ## Safety
@@ -667,15 +762,18 @@ The overlay gains buttons for the ground, blocks, the box and `shapes`, and the 
   finite, with a `tickMs` from 1 to 1,000, before the interpolator takes them.
 - **The rings:** the collision ring is never written past its tail. A message that doesn't fit waits for the next
   frame, and the render ring is still drained every frame.
-- **Off by default:** nothing changes until the user links or presses F8. The exporter runs only while linked with
-  `ground city`. Bodies stay off until `set blocks 1`, and the scene hooks until `scenewatch on`.
+- **Off by default:** nothing changes until the user links or presses F8. The exporter runs only while linked, with
+  Minecraft there and `ground city`. Bodies stay off until `set blocks 1`, and the scene hooks until `scenewatch on`.
+- **The hooks** only record and call on: they run on the game's own threads, so they take no lock and allocate
+  nothing, and write into a fixed buffer.
+- **At unload:** the hooks are put back, and the bodies are left alone, since the scene may already be going.
 - **Builds:** a build that deploys runs only when `tasklist` shows no `Cyberpunk2077.exe`.
 
 ## Error handling
 
 - **`Teleport` isn't found, or the call fails:** build mode turns off and says why, so Minecraft never walks away from
   a V that can't follow.
-- **A bad target:** the frame is skipped and counted.
+- **A bad target:** the frame is skipped and counted. A second of them ends build mode, and says why.
 - **Minecraft never lets go:** the status shows the wait, and F8 leaves.
 - **PhysX checks fail:** the ground falls back to `floor`, bodies stay off, and the status says why.
 - **A shape or mesh fails its checks while being read:** it's skipped and counted, as in spike 1.
@@ -692,9 +790,13 @@ The overlay gains buttons for the ground, blocks, the box and `shapes`, and the 
 - **Part 1:**
   - the interpolator, with SkyCraft's cases: the rhythm, late ticks, two ticks in a frame, a missed tick, a restarted
     Minecraft, and the delay growing and shrinking;
-  - V's target, from Minecraft's eye and V's camera offset, and the 20 m check;
-  - the drive: entering, waiting, driving, and each way of leaving;
-  - `teleportSeq` starting from the clock, and no teleports or new floor epochs while driving;
+  - V's eye height: averaged only over frames where V's feet don't move up or down, and the fallback;
+  - V's target, from Minecraft's eye and V's eye height, the 20 m check, and a second of bad targets ending build
+    mode;
+  - the drive: entering, waiting with V held where it is, driving, waiting again when `teleportAck` falls behind, and
+    each way of leaving;
+  - `teleportSeq` starting from the clock; no teleports or new floor epochs while driving; and `SkyState`'s position
+    at V's feet every frame in build mode;
   - the new keys, the crouch keys hidden, and Shift+F6 with Left Shift forwarded;
   - the floor's voxel messages, byte for byte.
 - **Part 2:**
@@ -703,12 +805,15 @@ The overlay gains buttons for the ground, blocks, the box and `shapes`, and the 
   - nearest-first order, the budget, and sending again only on a changed hash;
   - the messages' layout, `ColBlock`'s bit order included;
   - PhysX to world to Minecraft coordinates, with an origin;
-  - our own bodies left out;
+  - which shapes are kept: static scene-query shapes, not simulation-only ones, triggers, or our own bodies;
+  - the exporter idle without Minecraft;
+  - the scene watch's summary of recorded calls: by thread, and inside `OnUpdate` or not;
   - the dump loader, on a small OBJ.
 - **Part 3:**
   - solids from `kRenSolids`, and their checks;
   - the box merge: the boxes cover exactly the solid blocks, with no overlaps;
   - which sections get bodies around V, and the two-section hysteresis;
+  - bodies only while `blocks` and drawing are both on;
   - a box from Minecraft's axes to a world box shape;
   - posing again after an origin change.
 
@@ -739,14 +844,22 @@ Steps 2 to 4.
    - leave out the filter bits behind the fault (bullets', say);
    - if statics don't stop V at all, SkyCraft's push-out, which nudges V out of blocks sideways. It can't hold V up
      on top, so that would be a partial answer.
-7. **Our writes race the game's threads.** Step 4's first check picks where they run.
+7. **The exporter's reads, or the bodies' writes, race the game's threads.** Step 3's scene watch picks where they
+   run, before the exporter reads every frame.
 8. **A load with bodies in the scene.** Step 4 loads one, and "Loads" says what the plugin does.
-9. **V's controller starts inside a block** after leaving build mode while sneaking. Step 4 checks it; leaving
-   standing avoids it.
+9. **V's controller starts inside a block:** after leaving build mode while sneaking, or when a block appears where V
+   stands. A PhysX controller's overlap recovery, if the game left it on, pushes it out of static objects; step 4 shows
+   what happens. Leaving build mode standing avoids the first.
 10. **Minecraft's player now moves between teleports outside build mode.** Once regions are known, Minecraft lets its
     player go after each teleport, so its eye can leave V's camera, for example falling to the street while V stands
     on a car. That's harmless: outside build mode nothing is forwarded.
-11. **Accepted limits:**
+11. **Entering build mode under a low overhang lifts V onto it.** Minecraft's `liftOutOfGeometry` takes any surface up
+    to 2.5 blocks above where its player is held, so under an awning, a stair or a low ceiling it puts its player, and
+    then V, on top. With SkyCraft's mod unchanged there's no way round it but entering build mode somewhere else. Step 3
+    tries it, to see how often it matters.
+12. **Scenes and workspots.** Build mode refuses a V in a workspot or a vehicle, but other scripted moments (a
+    dialogue standing up, say) aren't detected, and teleporting V there could upset them. Build mode is for free roam.
+13. **Accepted limits:**
     - NPCs don't route around blocks;
     - slabs, stairs and fences are whole cubes for V;
     - sneaking doesn't stop at edges;
@@ -773,3 +886,108 @@ Writing the spec out against the sources added these to what the brainstorm agre
 - **Bodies copy their filters and material** from the static shape under V, and wait until there is one.
 - **Loads:** bodies are removed if scene 0 is still listed, otherwise forgotten, and step 4 tries a load with bodies
   present.
+
+## Changes from the deep review
+
+The user asked for a deep self-review of the spec. Each claim was traced to its source: SkyCraft's code at `bfcaf17`,
+the user's Minecraft 26.3 jar (with `javap`), the protocol header, NVIDIA's PhysX 3.4.2 headers in `extern/`, the
+RED4ext SDK, the game's files and FreeFly's Lua, BlockRender's code, and spike 1's probe, audit and dumps. Each step was
+then walked through as it would run. The sections above already include these changes.
+
+**Corrected:**
+- **V's eye height is measured before build mode, not read each frame.** The draft placed V by "V's camera offset from
+  its feet, as `LocatePlayer` read it this frame". A camera and feet read in one frame can straddle a teleport, and
+  then the offset is wrong by however far V moved that frame, up to about 0.17 m a frame when flying up. V can't crouch
+  in build mode, so the eye height measured while V stands beforehand stays right. Horizontally, V's feet now go
+  straight under Minecraft's eye, and the status shows any offset of the camera.
+- **V is held where it is while waiting,** instead of not being placed. A movement key already down when build mode
+  starts stays the game's, so V would have walked away from Minecraft's held player, then jumped back when driving
+  began.
+- **`SkyState`'s position is V's feet every frame in build mode.** Minecraft also teleports its player by itself (a new
+  player object, or the in-game flag coming back), to wherever the position says. The draft left it at V's feet when
+  build mode started, which would have pulled Minecraft's player, and V with it, back there.
+- **The drive waits again when `teleportAck` falls behind** while driving (one of Minecraft's own teleports, as
+  above), instead of placing V at a player Minecraft is holding.
+- **The exporter keeps only scene-query shapes.** A PhysX character controller moves by sweeping against scene-query
+  shapes, so a simulation-only shape (about 192 of spike 1's 7,596) doesn't stop V, and the draft's "scene-query or
+  simulation" would have given Minecraft walls V walks through.
+- **The exporter runs only while Minecraft is there,** as spike 4's floor does. Otherwise its messages would queue in
+  a ring nobody reads.
+- **The scene watch opens step 3, not step 4.** The exporter reads scene 0 every frame, so which threads write to it,
+  and when, matters for part 2's reads as much as for part 3's writes. Its slots are audited before step 3, and the
+  calls that make bodies before step 4.
+- **The scene watch covers every way the game might write:** batch adds and removes, aggregates, the split simulation
+  and fetch, the write lock, and `shiftOrigin`. The draft hooked only single adds and removes, `simulate` and
+  `fetchResults`. The write lock says whether our read lock already keeps the game's writes out, and `shiftOrigin`
+  settles directly whether the game moves the whole scene when the origin moves.
+- **Step 2's falls start low:** 5 m before 20 m, and leaving build mode in flight a few metres up, with a save first.
+  The draft's 20 m drops could kill V if the game applies fall damage while V is placed, and leaving at 20 m certainly
+  would.
+- **A second of bad targets ends build mode,** rather than leaving V frozen while Minecraft walks on.
+- **The overhang risk's fix was wrong,** in the first draft of this review: teleporting Minecraft's player higher only
+  moves `liftOutOfGeometry`'s 2.5-block window up. With the mod unchanged, the only way round it is entering build
+  mode elsewhere.
+
+**Added:**
+- **Minecraft 26.3's server corrections,** from the jar: a move into something new, or outside creative a replay more
+  than a quarter block off, teleports the player back and refuses clicks until confirmed. SkyCraft's
+  `PLAYER_MOVEMENT_CHECK` only removes "moved too quickly". Players skip the game's voxels on the server too, so
+  walking on the triangles shouldn't trigger either case, and step 1's clicks check it.
+- **`liftOutOfGeometry` lifts onto any surface up to 2.5 blocks above,** an overhang's underside included. Entering
+  build mode under an awning, a stair or a low ceiling puts Minecraft's player, and then V, on top. A risk, and a check
+  in step 3.
+- **Workspots:** build mode needs V outside workspots (sitting, scenes) as well as vehicles. Other scripted moments
+  aren't detected, so build mode is for free roam (a risk).
+- **The PhysX controller's behaviour,** from NVIDIA's headers: its cache flushes itself when a static shape is added,
+  changed or removed, so a new body stops V with nothing else needed; and its overlap recovery pushes it out of static
+  objects it starts inside, unless the game turned it off. That's part of risk 9's check.
+- **BlockRender's drawing and the teleport:** blocks are drawn with the camera of the frame the game renders, so they
+  stay locked to the city whatever the order. Only latency depends on where the teleport lands.
+- **The interpolator is fed every frame while linked,** so it has settled when Minecraft starts driving.
+- **Step 1 checks the clock-started `teleportSeq`:** a second `mclink` run, with Minecraft still running, teleports its
+  player on its first link. Spike 4 never hit the bug, since a new run only collides when the last one ended on the
+  same value as the new one's first. And step 1's moving checks run with build mode on, so the menu flag doesn't
+  release the held keys.
+- **Step 2 enters with W held, and looks up and down** as well as turning.
+- **Step 3 places blocks against the street and walls,** which land on them now that clicks hit the city's triangles,
+  and **enters build mode under an overhang.**
+- **Shift+F6 toggles Minecraft's sprint** on its way out, since Left Shift reaches Minecraft first.
+- **Bodies exist only while drawing is on,** so blocks nobody can see never leave invisible walls.
+- **The hooks** only record and call on, on the game's threads, and come out at unload. Bodies are left alone at
+  unload.
+- **The dump loader's categories:** `s0_static_*` holds static actors' simulation shapes, with or without the
+  scene-query flag, since the probe files every query-only shape under `s0_queryonly_*`. Nearly all are scene-query
+  shapes too.
+
+**Checked, and found as written:**
+- **SkyCraft's Minecraft side:**
+  - teleports on a new `teleportSeq` or player object, and the parking while not in game (`SkyClient.beginFrame`,
+    `holdUntilReady`);
+  - the hold's three known regions, its 3 × 3 column 12 blocks deep, and the 6 s fallback;
+  - `teleportAck` less 1 while held (`afterRender`);
+  - the last `teleportSeq` never reset for a new game side (`SkyLink.poll`);
+  - the look while no screen is open;
+  - `InputBridge`'s virtual keyboard and repeats, and the menu flag's release every frame;
+  - the smooth collider for players on client and server (`SkyCraftClient`, `BlockCollisionsMixin`,
+    `EntityCollideMixin`), and `TriCollider`'s walkable limit (`SkyTri.WALKABLE_NY`, 0.7);
+  - `PlayerEdgeMixin` and `MinecraftServerFlightMixin`;
+  - the collision reader: its 2 ms poll, epochs, regions replacing their box and marking regions known, and
+    triangles stored under their box's minimum corner (`SkyCollision`);
+  - the ticks (`publishTick`), and the solids (`WorldExporter`).
+- **SkyCraft's game side:** the puppet's conditions, the clock-started `teleportSeq` (`Game.cpp`, lines 23 to 29), the
+  interpolation's constants (lines 662 to 786, and `tickDue`'s 40 entries), and the exporter's area, refresh, budget
+  and settle time (`Collision.cpp`, `Game.cpp`).
+- **Minecraft 26.3:** the eye heights (`Avatar`'s pose table), and the user's bindings (`options.txt`).
+- **Cyberpunk:** the movement bindings (`inputUserMappings.xml`), and FreeFly's teleport, status effects and health.
+- **RED4ext:** `ExecuteFunction` on a class goes through `GetSystem`, whose map is keyed by implementation types;
+  `TeleportationFacility`'s script name names its implementation; `CClass::GetFunction` searches parent classes;
+  `EulerAngles` is roll, pitch, yaw.
+- **PhysX:** the census and region costs; the origin rule, and how spike 1 reads V's controller each frame; the ABI
+  shift; the `addActors` note; the read-write lock's semantics; `PxScene`'s 118 slots, of which the probe's audited
+  ones include `lockRead` and `unlockRead` (105 and 106).
+- **The protocol and BlockRender:** `ColRegion`, `ColBlock` and `RenSolids`; the scan codes and their SDL codes
+  (`Scancodes.cpp`); the floor's 7 × 7 regions and its 16 m and 1 m triggers (`Floor.h`, `Link.cpp`); the menu flag
+  outside build mode; `teleportSeq` starting at 0; `kRenSolids` stepped over; `BuildMode` noting the Shift keys
+  first.
+- **Spike 1's dumps:** objects by category, Minecraft's axes relative to V's feet, and spot B's 64,192 static
+  triangles.
