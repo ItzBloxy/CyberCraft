@@ -3,11 +3,14 @@
 -- frame time as CET sees it, which works without BlockRender too and goes into frames.txt here as well. Its buttons
 -- switch BlockRender's drawing mode, link it to Minecraft, type commands into Minecraft, and cycle when Minecraft's
 -- HUD shows, through blockrender.request in this folder. A line under them shows build mode, which F8 toggles, and
--- Minecraft's hotbar slot. Delete this folder to remove it.
+-- Minecraft's hotbar slot; and since spike 5, one shows build mode's drive, with buttons for its turn and its drive log.
+-- Delete this folder to remove it.
 local status = nil       -- status.txt's lines, except the structures
 local structures = {}    -- { name, min = { x, y, z }, max = { x, y, z } }, in world coordinates
 local hudSetting = nil   -- the hud line's setting: "never", "in build mode" or "always"
 local build = nil        -- the build line's first two parts: on, or off and why; and the slot
+local drive = nil        -- the drive line's state, V's camera from Minecraft's eye, and V's health
+local turn = nil         -- the drive line's turn setting: "on" or "off"
 local player = nil       -- the lines about V
 local sinceRead = 1.0
 local frames = { sum = 0.0, count = 0, worst = 0.0 }  -- this second's frame times, from onUpdate
@@ -58,12 +61,22 @@ local function readStatus()
     structures = {}
     hudSetting = nil
     build = nil
+    drive = nil
+    turn = nil
     for line in file:lines() do
         local name, a, b, c, d, e, f = line:match("^structure=(%S+) (%S+) (%S+) (%S+) (%S+) (%S+) (%S+)$")
         hudSetting = line:match("^hud=([^,]+),") or hudSetting
         local mode, slot = line:match("^build=([^;]*); ([^;]*);")
         if mode ~= nil then
             build = mode .. ", " .. slot
+        end
+        local state = line:match("^drive=([^;]*)")
+        if state ~= nil then
+            local eye = line:match("V's camera from Minecraft's eye ([%d.]+ m)")
+            local health = line:match("V's health ([^;]*)")
+            drive = state .. (eye and (", V's camera " .. eye .. " from Minecraft's eye") or "")
+                .. (health and (", V's health " .. health) or "")
+            turn = line:match("; turn (%a+),")
         end
         if name ~= nil then
             table.insert(structures, {
@@ -173,6 +186,20 @@ registerForEvent("onDraw", function()
         end
         if build ~= nil then
             ImGui.Text("Build mode (F8): " .. build)
+        end
+        if drive ~= nil then
+            ImGui.Text("Drive: " .. drive)
+            if turn ~= nil then
+                -- "###turn" keeps the button's ID the same while its label changes.
+                ImGui.SameLine()
+                if ImGui.Button("Turn: " .. turn .. "###turn") then
+                    request("set turn " .. (turn == "on" and 0 or 1))
+                end
+            end
+            ImGui.SameLine()
+            if ImGui.Button("Drive log 10 s") then
+                request("drivelog 10")
+            end
         end
         ImGui.Separator()
         if status == nil then
