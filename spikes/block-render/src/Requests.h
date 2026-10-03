@@ -20,6 +20,7 @@ namespace cpmc
 //   floor                      (a fresh floor around V)
 //   mc <set>|<command>         (a set: creative, tnt-kit, tnt-ahead, wall, tnt-cube, field or wipe; a command starts with
 //                               '/' and runs verbatim to the end of the line)
+//   drivelog <seconds>         (spike 5: build mode's drive, a row a frame, for 1 to 60 seconds)
 struct Request
 {
 	enum class Kind
@@ -35,11 +36,12 @@ struct Request
 		Floor,
 		Mc,
 		Build,
+		DriveLog,
 	};
 
 	Kind        kind = Kind::Log;
 	std::string what;          // the dump target, mode, structure, setting name, on or off, or what to type
-	double      number = 0.0;  // the field's block count, or the setting's value
+	double      number = 0.0;  // the field's block count, the setting's value, or the drive log's seconds
 };
 
 // The command in aText (one line; surrounding whitespace is ignored). Nothing, with aError saying why, if the text

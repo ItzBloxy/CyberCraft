@@ -162,6 +162,15 @@ std::optional<Request> ParseRequest(std::string_view aText, std::string& aError)
 		}
 		return Fail(aError, "place takes cube, sampler, house, or field <blocks>");
 	}
+	if (command == "drivelog")
+	{
+		const std::optional<double> seconds = arguments == 1 ? Number(words[1]) : std::nullopt;
+		if (!seconds || *seconds < 1.0 || *seconds > 60.0)
+		{
+			return Fail(aError, "drivelog takes a number of seconds from 1 to 60");
+		}
+		return Request{ Request::Kind::DriveLog, {}, *seconds };
+	}
 	if (command == "set")
 	{
 		if (arguments != 2 || !IsSettingName(words[1]))

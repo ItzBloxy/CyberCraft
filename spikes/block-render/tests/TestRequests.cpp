@@ -123,6 +123,23 @@ TEST(RequestsForBuildMode)
 	CHECK(!cpmc::ParseRequest("build on now", error));
 }
 
+TEST(RequestsForTheDriveLog)
+{
+	std::string error;
+	const auto  ten = cpmc::ParseRequest("drivelog 10\n", error);
+	CHECK(ten.has_value());
+	CHECK(ten.value_or(cpmc::Request{}).kind == cpmc::Request::Kind::DriveLog);
+	CHECK_EQ(ten.value_or(cpmc::Request{}).number, 10.0);
+	CHECK_EQ(cpmc::ParseRequest("drivelog 2.5", error).value_or(cpmc::Request{}).number, 2.5);
+	CHECK(cpmc::ParseRequest("drivelog 1", error).has_value());
+	CHECK(cpmc::ParseRequest("drivelog 60", error).has_value());
+	CHECK(!cpmc::ParseRequest("drivelog 0.5", error));
+	CHECK(!cpmc::ParseRequest("drivelog 61", error));
+	CHECK(!cpmc::ParseRequest("drivelog 10 now", error));
+	CHECK(!cpmc::ParseRequest("drivelog", error));
+	CHECK_STR(error, "drivelog takes a number of seconds from 1 to 60");
+}
+
 TEST(RequestsTypeIntoMinecraft)
 {
 	std::string error;
