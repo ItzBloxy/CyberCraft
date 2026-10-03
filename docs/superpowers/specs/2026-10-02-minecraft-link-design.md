@@ -153,6 +153,15 @@ and the user's 26.3 jar. SkyCraft's Skyrim side is 11,850 lines of C++.
 
   It imports no DirectInput, no `GetRawInputBuffer`, and no key-state function (`GetAsyncKeyState`, `GetKeyState`,
   `GetKeyboardState`).
+- **How it reads them** (its code, read while planning Part 3; see "Changes while planning"):
+  - it registers the keyboard and the mouse with no flags, so Raw Input reaches it only while its window has the
+    focus (no `RIDEV_INPUTSINK`), and Windows still sends the legacy key and mouse messages (no `RIDEV_NOLEGACY`);
+  - one window-message handler reads every `WM_INPUT`, into a 48-byte buffer, and ignores what `GetRawInputData`
+    returns. It acts on the buffer's type: mouse, keyboard, or anything else skipped;
+  - **the mouse:** the movement from `lLastX` and `lLastY`, the wheel from `RI_MOUSE_WHEEL` in whole notches, and
+    the buttons from `usButtonFlags`' presses and releases;
+  - **the keyboard:** by virtual key. One of 0xFF or 0 is skipped, and so is a press of a key already down;
+  - no legacy key or mouse message (`WM_KEYDOWN`, `WM_LBUTTONDOWN`) reaches its input system.
 - **The bindings that clash with Minecraft's building keys** (`inputUserMappings.xml`):
   - **mouse:** left is attack, right is aim, middle is the combat gadget or tag;
   - **the wheel** is next and previous weapon;
@@ -291,7 +300,7 @@ Minecraft's (blocks, y up, z south). The mapping is `Local\SkyCraft_v1`, 200,327
     `kMcTimeoutMs`).
 - **Input events:** `{u16 type, u16 code, i32 a, b, c}`:
   - key: code is the SDL scancode, a is 1 for down and 0 for up;
-  - mouse button: code is 1 left, 2 middle, 3 right;
+  - mouse button: code is 1 left, 2 middle, 3 right, and 4 and 5 the side buttons;
   - scroll: a is notches × 120, positive up;
   - text: a is the code point, taken only while a screen is open;
   - release all.
@@ -339,8 +348,9 @@ spikes/block-render/
   src/link/Link.*                 the link each frame: in game, teleports, the floor, events, Minecraft coming and going
   src/input/Scancodes.*           set-1 scan codes to SDL scancodes (SkyCraft's table, credited)
   src/input/BuildMode.*           what each raw event does, in and out of build mode
-  src/input/RawInputHook.*        the GetRawInputData import patch
-  src/input/FocusWatch.*          the thread that releases held inputs when the game loses the front
+  src/input/FocusWatch.*          whether the game has just lost the front
+  src/input/Router.*              each RAWINPUT event read, hidden and forwarded, for the hook's and two other threads
+  src/input/RawInputHook.*        the GetRawInputData import patch, and the focus watch's thread
   src/render/Atlas.*              + an atlas from Minecraft's RGBA, with mip levels
   src/render/PendingSections.*    the renderer's waiting uploads, the latest mesh per section
   src/render/Hud.*                the HUD pass's rules: when it shows, and where each pixel samples the image
@@ -355,9 +365,9 @@ spikes/block-render/
 ## Build
 
 - **As in spike 3,** with three changes:
-  - `render_core` gains `link/`, `input/Scancodes`, `input/BuildMode`, `render/PendingSections` and `render/Hud`, so
-    the unit tests reach them. `FocusWatch`'s decision is a pure function there too;
-  - `render_runtime` gains `input/RawInputHook` and `FocusWatch`'s thread;
+  - `render_core` gains `link/`, `input/Scancodes`, `input/BuildMode`, `input/FocusWatch`, `input/Router`,
+    `render/PendingSections` and `render/Hud`, so the unit tests reach them;
+  - `render_runtime` gains `input/RawInputHook`: the patch, and the focus watch's thread;
   - a new console target, `mclink`, links `render_core`.
 - **The protocol header** comes from `extern/skycraft/`.
 - **Versions:** BlockRender's version becomes 0.9.0, in the log line and in `Query`.
@@ -426,13 +436,17 @@ spikes/block-render/
 ### `input/`
 
 - **`Scancodes`:** SkyCraft's set-1 to SDL table. An extended key (E0) is code + 0x80, as in DirectInput.
-- **`BuildMode`:** a pure function from a raw event, and whether build mode is on, to a decision: pass, forward and
-  hide, toggle, or leave and pass.
-- **`RawInputHook`:** the import patch. It calls the original, and applies the decision to the event it returns (see
+- **`BuildMode`:** what each raw event does: pass, forward and hide, toggle, or leave and pass. It goes by whether
+  build mode is on, where the event's press went, whether the game is in front, and what the link last said. It also
+  keeps the hotbar slot. Pure.
+- **`Router`:** reads each event `GetRawInputData` copied out, after checking its size, asks `BuildMode`, hides in
+  place what Minecraft takes, and forwards it through the link. The hook's thread, the focus watch's and the main
+  thread share it, behind one lock. It's tested on synthetic `RAWINPUT` events, with a link in memory.
+- **`RawInputHook`:** the import patch. It calls the original, then hands the event it copied to the router (see
   "Input").
-- **`FocusWatch`:** a small thread that checks, 10 times a second, whether the foreground window belongs to the game.
-  It runs on its own thread because nobody has checked whether Cyberpunk keeps calling `OnUpdate` while another
-  window is in front.
+- **`FocusWatch`:** whether the game has just stopped being in front. A small thread checks it 10 times a second, and
+  tells the router. It's a thread so that held inputs are released even if the game stops updating in the
+  background, which step 2 found it doesn't.
 
 ### The renderer and the atlas
 
@@ -592,37 +606,49 @@ A console program around the same `link/` code, standing in for Cyberpunk:
   | Event | Outside build mode | In build mode |
   |---|---|---|
   | F8 (scan code 0x42) | Toggles build mode on, hidden from the game | Toggles it off, hidden |
-  | Left, right, middle button | Passes | Forwarded as SDL button 1, 3 or 2, and cleared from the event |
+  | Left, right, middle and side buttons | Passes | Forwarded as SDL button 1, 3, 2, 4 or 5, and cleared from the event |
   | Wheel | Passes | Forwarded as a scroll, and cleared from the event |
   | 1 to 9 (0x02 to 0x0A) | Passes | Forwarded as SDL 30 to 38, and the event made a no-op |
   | Esc, I, M, J, P, K, H, T, or F6 with Shift held | Passes | Leaves build mode, and passes |
   | Anything else, mouse movement included | Passes | Passes |
 
   - A cleared mouse event keeps its movement, so the look keeps working. A no-op key has scan code 0 and virtual key
-    0xFF.
+    0xFF. The game reads the buttons and the wheel only from the cleared flags, and skips a key whose virtual key is
+    0xFF (see "Cyberpunk's input").
   - Key repeats are forwarded as repeats, and F8's own repeats are ignored.
-- **Build mode turns on only while Minecraft is in its world.** Otherwise F8 says why on the overlay, and nothing goes
-  into the ring, so no stale clicks wait for Minecraft. Minecraft disappearing, or Unlink, ends build mode.
+- **A press's repeats and release go where the press went** (see "Changes while planning"). A button, or a key 1 to 9,
+  pressed outside build mode is the game's until it's released, even if build mode goes on meanwhile: V doesn't go on
+  aiming. One pressed in build mode is Minecraft's. When build mode ends, Minecraft lets go of everything at once, so
+  its presses' repeats and releases then go nowhere. When the game loses the front, every press is forgotten, since
+  it's released in another window.
+- **Build mode turns on only while Minecraft is in its world, and V is found.** F8 while unlinked links first, as
+  `link on` does, and turns build mode on after the link's next update. Otherwise F8 says why on the overlay, and
+  nothing goes into the ring, so no stale clicks wait for Minecraft. Minecraft going or leaving its world, V not found
+  (loading), or Unlink ends build mode.
 - **Leaving build mode** sends a release-all, and `SkyState`'s menu flag repeats it every frame while build mode is
   off. Nothing stays held down in Minecraft.
 - **Focus:**
   - **The hook forwards nothing unless the foreground window belongs to the game's process.** It checks before
-    forwarding each event. Cyberpunk may have registered Raw Input to get it in the background too
-    (`RIDEV_INPUTSINK`, not checked). Without this rule, a click in Minecraft's own window would then also arrive
-    through the ring.
+    forwarding each event. Cyberpunk doesn't ask for Raw Input in the background (no `RIDEV_INPUTSINK`; see
+    "Cyberpunk's input"), so this only guards against an event that arrives anyway: a click meant for another
+    window would otherwise reach Minecraft through the ring.
   - **`FocusWatch` releases held inputs once** when the game stops being in front. It doesn't rely on `OnUpdate`, so
     a button held while Alt-Tabbing is let go even if Cyberpunk stops updating in the background.
   - **Build mode stays on,** so it's still on when the user comes back from another window.
 - **The hotbar slot:** tracked from the forwarded keys and the wheel (up is the slot to the left, down the slot to the
-  right, wrapping at 1 and 9), and shown on the overlay. It's approximate: Minecraft can change the slot by itself,
-  for example when the middle button picks a block that's in another slot.
+  right, wrapping at 1 and 9), and shown on the overlay. It's unknown until a number key sets it. The wheel moves it as
+  Minecraft 26.3's `ScrollWheelHandler` does: by whole notches, keeping the fraction, one slot an event at most, and
+  starting over when it turns the other way. A side button makes it unknown again, since which slot it picks, if any,
+  is Minecraft's own binding. It's approximate: Minecraft can change the slot by itself, for example when the middle
+  button picks a block that's in another slot.
 - **What build mode takes from Cyberpunk:** every use of the mouse buttons and the wheel, not only combat. That
   includes scrolling through dialogue choices, scanning and quickhacking, and the radial menu. F8 out of build mode
   first. Interact (F) still works.
 - **Threads:** the hook runs on whichever thread Cyberpunk reads input on, and `FocusWatch` on its own.
-  - Build mode's state, whether Minecraft is in its world, and a link request from F8 are atomics. The main thread
-    keeps Minecraft's state current for the hook.
-  - A mutex guards writing into the input ring, which `Commands` and `FocusWatch` share.
+  - Build mode's state, what the link last said about Minecraft and V, F8's link request, the last click's time and
+    the link itself are behind the router's one lock. The main thread keeps the link's view current, once a frame.
+  - The link's own mutex guards writing into the input ring, which `Commands` and the router share.
+  - At unload, the main thread takes the link from the router before unmapping, so no thread pushes into it after.
 
 ### Typed commands
 
@@ -691,8 +717,9 @@ A console program around the same `link/` code, standing in for Cyberpunk:
     - linked;
     - teleports this second and the last target;
     - the floor's epoch, centre and height;
-  - **build mode:** on or off with the reason, the slot, events forwarded and hidden, and input events dropped
-    because the ring was full;
+  - **build mode:** on or off with the reason, the slot, and since the start: inputs forwarded and hidden, the last
+    one forwarded, input events dropped because the ring was full, and the keyboard and mouse events the hook has
+    read, which shows it's on the game's path before build mode is on;
   - **the ring:** messages and MB this second by type, the most in one frame, drain time (average and worst), and
     rejected messages;
   - **blocks:**
@@ -783,10 +810,10 @@ BlockRender 0.9.0, deployed. At spike 3's corner, with the same save:
 ### Step 3: in the game, input
 
 - **Build mode:** F8 turns it on, the overlay shows it, and Minecraft's HUD appears (`hud 1`, the default).
-- **Blocking, input by input:** the left, right and middle buttons, the wheel, and each of 1 to 9. Does Minecraft act
-  (a block broken or placed, the HUD's slot changed), and does V stay still (no attack, aim, gadget, or weapon
-  switch)? An input Cyberpunk still reacts to gets the fallback (see "Risks"), and is checked again. The overlay's
-  slot line should match the HUD's.
+- **Blocking, input by input:** the left, right, middle and side buttons, the wheel, and each of 1 to 9. Does
+  Minecraft act (a block broken or placed, the HUD's slot changed), and does V stay still (no attack, aim, gadget, or
+  weapon switch)? An input Cyberpunk still reacts to gets the fallback (see "Risks"), and is checked again. The
+  overlay's slot line should match the HUD's.
 - **Building:** placing and breaking blocks on the street by clicking. Walking (Minecraft's player follows), and
   building elsewhere. The floor moves to follow V.
 - **Leaving:** each menu key leaves build mode, the HUD goes, and the menu takes clicks normally. F8 turns it back on.
@@ -805,7 +832,7 @@ plugin's folder or the overlay's. New and changed commands:
 | Command | Does |
 |---|---|
 | `link on\|off` | Sets or clears the in-game flag, as the Link and Unlink buttons |
-| `build on\|off` | Build mode, as F8 |
+| `build on\|off` | Build mode, as F8: on links first, if it isn't linked |
 | `floor` | Sends a fresh floor around V |
 | `mc <name>` | Types a named set: `creative`, `tnt-kit`, `tnt-ahead`, `wall`, `tnt-cube`, `field` or `wipe` |
 | `mc /<command>` | Types that command, taken verbatim to the end of the line |
@@ -901,9 +928,14 @@ plugin's folder or the overlay's. New and changed commands:
 - **`BuildMode`:**
   - every row of the table above;
   - Shift with F6;
-  - F8's repeats;
-  - no forwarding without Minecraft in its world, or while the game isn't in front.
-- **`RawInputHook`'s rewrites,** on synthetic `RAWINPUT` events: a cleared button keeps its movement, and a no-op key.
+  - F8's repeats, and F8 linking first;
+  - no forwarding without Minecraft in its world, or while the game isn't in front;
+  - a press's repeats and release going where the press went, and what's forgotten when the game loses the front;
+  - the side buttons;
+  - the hotbar slot, from the keys and the wheel.
+- **The router's rewrites,** on synthetic `RAWINPUT` events, with a link in memory: a cleared button keeps its
+  movement, a no-op key, and events too short or of another type left alone. Also build mode ending when Minecraft or
+  V goes, the focus watch's release, and nothing pushed once the link is taken away.
 - **`FocusWatch`'s decision:** a release once on losing the front, and none while it stays lost.
 - **`Mapping`:**
   - created under a test name, and its header;
@@ -925,15 +957,15 @@ Steps 2 and 3. Every step also checks that CET's overlay and spike 3's mode butt
 
 ## Risks
 
-1. **Rewriting the event doesn't stop Cyberpunk acting on it.**
+1. **Rewriting the event doesn't stop Cyberpunk acting on it.** Its code says it does (see "Cyberpunk's input"), but
+   only the game can show it.
    **Fallbacks, in order:**
-   - return the event as no data;
-   - change its type to HID (`RIM_TYPEHID`), which Cyberpunk's keyboard and mouse handling shouldn't take as a key or
-     click;
+   - change its type to HID (`RIM_TYPEHID`), which Cyberpunk's handler skips, the event's movement with it;
    - for the combat buttons, the gameplay restrictions FreeFly applies as status effects (`GameplayRestriction.NoCombat`
      among them).
 
-   Step 3 checks each input, so the fallback is chosen per input.
+   Returning the event as no data, once the first fallback, can't work: the game reads the buffer whatever the call
+   returns. Step 3 checks each input, so the fallback is chosen per input.
 2. **Cyberpunk stops running while another window is in front,** such as Claude Code on the second monitor, which the
    user answers in between tests. The heartbeat stops, Minecraft drops the link after 8 s, and links again on return.
    Teleports and typed commands pause too. Held inputs are still released, because `FocusWatch` runs on its own
@@ -1128,6 +1160,51 @@ Planning Part 2, after step 1, corrected these:
   sections are kept as they come, so they're there as soon as the user links. Drawing stays as spike 3 left it, so
   nothing shows until then, and the renderer uploads nothing until drawing is first switched on. "Safety" said the
   plugin only kept the heartbeat.
+
+Planning Part 3, after step 2, found or changed these:
+- **How the game reads input, from its code.** Before writing the hook, the executable's callers of the Raw Input
+  imports were disassembled (`Cyberpunk2077.exe` 2.31, with capstone; the addresses are the image's, based at
+  0x140000000):
+  - **the registration** (at 0x14016c7f2): the keyboard (usage page 1, usage 6) and the mouse (1, 2), each with flags 0
+    and no target window. So there's no `RIDEV_INPUTSINK`, and no Raw Input in the background, which "Focus" had left
+    unchecked; and no `RIDEV_NOLEGACY`;
+  - **the one reader** (at 0x1407cb893, in the input system's window-message handler): for each `WM_INPUT`,
+    `GetRawInputData` with `RID_INPUT` into a 48-byte buffer on the stack, without asking the size first. It ignores
+    the call's result, and goes by the buffer's type: mouse, keyboard, or anything else skipped;
+  - **the mouse** (0x1407cbd90): the movement from `lLastX` and `lLastY`; the wheel from `RI_MOUSE_WHEEL`, with
+    `usButtonData` / 120 in whole notches; and the five buttons from `usButtonFlags`, each press or release acted on
+    only if it changes that button's state;
+  - **the keyboard** (0x1407cc508): by virtual key. A virtual key of 0xFF or 0 is skipped at once, and so is a press
+    of a key already down. The scan code only tells the left and right Shift apart;
+  - **other messages:** the same handler takes `WM_ACTIVATE`, `WM_SETFOCUS`, `WM_KILLFOCUS`, `WM_SETCURSOR`,
+    `WM_MOUSELEAVE`, `WM_WTSSESSION_CHANGE` and Alt's `WM_SYSCOMMAND`, but no legacy key or mouse message.
+
+  So the spec's rewrites hide each input as intended: the cleared button or wheel flag with the movement kept, and the
+  key with virtual key 0xFF. Risk 1's first fallback, returning no data, couldn't work, since the result is ignored.
+  Changing the type to HID would, as any other type is skipped. Step 3 still checks each input in the game.
+- **A press's repeats and release go where the press went.** "Input"'s table decided each event by build mode alone. A
+  button held when build mode went on (V aiming, say) would then have had its release hidden, and the game would
+  have kept it held until build mode ended. Build mode now remembers where each press of its inputs went.
+- **The side buttons go to Minecraft too.** The user's Minecraft picks hotbar slots 8 and 9 with them (`key.mouse.5`
+  and `key.mouse.4` in the `CyberCraft` instance's options, as in nearly all their instances), and Cyberpunk binds
+  neither: its mappings use only the left, right and middle buttons and the wheel, and the user rebound nothing. So
+  in build mode they're forwarded as SDL's buttons 4 and 5, as Minecraft 26.3 numbers them (`InputConstants`), and
+  hidden from the game. The user chose this while Part 3 was planned. The keys 8 and 9 are still forwarded, though
+  this instance binds no slot to them. A side button isn't a latency mark, and makes the overlay's slot unknown.
+- **F8 while unlinked links, then turns build mode on:** the hook only asks; the main thread links, and turns build
+  mode on after the link's next update, once it knows whether Minecraft and V are there. `build on` does the same.
+  Build mode also needs V found, and ends when Minecraft leaves its world.
+- **The router.** `BuildMode` stays a pure class. What the three threads share is a second, tested class,
+  `input/Router`: the `RAWINPUT` reads and rewrites, forwarding through the link, and one lock. Only the patch and the
+  focus watch's thread are in `render_runtime` (`input/RawInputHook`). "Threads" said atomics; one lock is simpler,
+  and the hook takes it only for buttons, the wheel and keys, never for mouse movement.
+- **The hotbar slot** is unknown until a number key sets it, and the wheel moves it as Minecraft 26.3's
+  `ScrollWheelHandler` does (its bytecode, in the user's jar).
+- **The status's build line** counts since the start, and adds the last input forwarded and the events the hook has
+  read.
+- **At unload,** build mode goes off, the patch is put back, and the focus watch is told to stop. Then the router
+  loses the link, so no thread can push into the mapping once it's unmapped. Nothing waits for the focus watch's
+  thread.
 
 ## Changes from step 2
 

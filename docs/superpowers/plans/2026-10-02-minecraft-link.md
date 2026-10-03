@@ -1,4 +1,4 @@
-# Minecraft Link Implementation Plan, Parts 1 and 2 (steps 1 and 2)
+# Minecraft Link Implementation Plan, Parts 1 to 3 (steps 1 to 3)
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 >
@@ -33,7 +33,9 @@ The unit tests play Minecraft's side in plain memory. Step 1 then checks the lin
 - **Part 2** is step 2 in the game: Tasks 13 to 29, which Task 12 planned from step 1's findings, all but Task 28,
   which step 2's run added. The plugin's link, the renderer's changes, the HUD pass, the status and the overlay, then
   the game run and what it found.
-- **Part 3** is step 3: input, which Task 29 plans once step 2 has run.
+- **Part 3** is step 3 in the game: input. Tasks 30 to 40, which Task 29 planned from step 2's findings: build mode,
+  the patch on the game's `GetRawInputData`, the router between the threads, the plugin and the overlay, then the game
+  run and the spike's close.
 
 Task 12 closes Part 1 and plans Part 2.
 
@@ -9722,16 +9724,17 @@ cd /d/Cyberpunk-Minecraft && git add docs/spikes \
 
 At the end: what ran as written, what changed, and what step 2 found.
 
-- [ ] **Step 2: Plan Part 3**
+- [x] **Step 2: Plan Part 3**
 
 Use superpowers:writing-plans to add Part 3's tasks, from Task 30 on, to this plan: step 3 in the game, input. Verify
 them as Part 2's were. Changes to the spec found while planning go in its "Changes while planning".
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
+Step 1 was committed on its own (`796ec82`), so this commit's message names only Part 3.
 ```bash
 cd /d/Cyberpunk-Minecraft && git add docs/superpowers \
-  && git commit -q -m "minecraft-link plan: Part 2 closed, Part 3 planned" \
+  && git commit -q -m "minecraft-link plan: Part 3 planned" \
        -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
 ```
 
@@ -9768,3 +9771,2859 @@ On 2026-10-02 and 03, inline, as the user asked.
     Part 3 builds on the open street. `mclink`'s status line gained the eye for that run (`tools/mclink/eye.txt`);
   - **latency samples from sets of several commands are wrong,** since each Enter replaces the mark. A click is one
     input, but the same rule applies to clicks in quick succession.
+
+---
+
+## Part 3: step 3, input
+
+Tasks 30 to 40, planned after Part 2 closed (see "How Part 2 went"), from step 2's findings and the eye experiment.
+
+**Goal:** BlockRender 0.10.0, with F8's build mode: the mouse buttons, the wheel and the keys 1 to 9 go to Minecraft
+through SkyCraft's input ring, and are hidden from Cyberpunk, so V doesn't shoot, aim or switch weapons while the user
+builds. Then run the spec's step 3 with the user: build mode on and off, each input blocked from the game and acted on
+by Minecraft, building on the street and elsewhere, leaving through each menu key, click latency, and Alt-Tab with a
+button held.
+
+**How the game reads input,** from its code, read before writing any of this (the spec's "Cyberpunk's input", and its
+"Changes while planning"): `Cyberpunk2077.exe` calls `GetRawInputData` in one place, its input system's handler for
+`WM_INPUT`, into a 48-byte buffer, and ignores what the call returns. It takes the mouse's buttons, and whether the
+wheel turned, only from `usButtonFlags`, and keys by virtual key, skipping 0xFF. So clearing a button's or the wheel's
+flag hides it and keeps the movement, and a virtual key of 0xFF hides a key, as the spec planned.
+
+**How it works:**
+- **The patch** (Task 36) replaces the exe's import of `GetRawInputData`. It calls the original, then hands the event
+  it copied to the router. The focus watch's thread starts with it.
+- **Build mode** (Task 31) decides what each event does, from whether it's on, where the event's press went, whether
+  the game is in front, and what the link said last frame:
+  - F8 toggles it, and links first if the user hasn't;
+  - in it, the mouse buttons, the wheel and the keys 1 to 9 are forwarded as SkyCraft's input events (with
+    `Scancodes`, Task 30) and hidden from the game. The mouse buttons include the side buttons, which the user's
+    Minecraft picks hotbar slots 8 and 9 with;
+  - the keys that open the game's menus, and Shift+F6 for CET's overlay, leave it, and reach the game;
+  - a press's repeats and release go where the press went;
+  - it follows Minecraft's hotbar slot from the keys and the wheel.
+- **The router** (Task 33) is what three threads share, behind one lock: whichever thread the game reads input on,
+  through the patch; the focus watch's; and the main thread. It reads each `RAWINPUT` after checking its size, asks
+  build mode, hides in place what Minecraft takes, and forwards it through the link. The main thread keeps it current
+  once a frame, and build mode ends when Minecraft or V goes, or the link.
+- **The focus watch** (Tasks 32 and 36): 10 times a second, whether the game has just lost the front. If it has, in
+  build mode, Minecraft lets go of everything.
+- **Requests and the status** (Tasks 34 and 35): `build on|off`, and a `build=` line.
+- **The plugin** (Task 37) installs the patch at load, keeps the router current, shows the HUD in build mode
+  (`hud 1`, the default), sets `SkyState`'s menu flag from it, and marks each click that goes to Minecraft for
+  latency, as a typed command's Enter is. It's 0.10.0.
+- **The overlay** (Task 38) shows build mode and the slot under its buttons.
+- **The game run** (Task 39) follows the spec's "Step 3", on the open street, where Minecraft's eye is at V's camera.
+  Task 40 closes Part 3 and the spike.
+
+**Already verified:** as in Parts 1 and 2, all the code was compiled and tested in a scratch clone first. Then each of
+the new units' tests was made to fail: 49 deliberate breaks of the new code, from F8's repeats to the wheel's
+fractions and the router's size checks, each caught by the test meant for it. Tasks 30 to 38 were then replayed in a
+fresh clone from `77dc397`, where Part 3's planning began, applying every step as written and checking every expected
+result:
+- zero compiler warnings at `/W4`;
+- 232 C++ tests and 25 Python tests passing;
+- `luac` accepting the overlay;
+- the replayed files identical to the scratch clone's.
+
+Tasks 36 and 37, the patch and the plugin, have no unit tests: only the game can test them, in Task 39. The overlay was
+run once with CET stubbed out, showing the build line.
+
+**The spec:** planning Part 3 changed it in eight places, which its "Changes while planning" lists after Part 2's.
+Among them: how the game reads input, from its code; a press's repeats and release going where the press went; and
+the side buttons, which the user chose to forward too.
+
+**Test counts:** 204 at the start. Then 206, 219, 221, 230, 231 and 232 after Tasks 30 to 35, and 232 until Task 39.
+The Python count stays at 25.
+
+**The commands and rules** in "Before you start", and in Part 2's introduction for the game, apply here too. Part 3
+adds:
+- **The user's keys:** the game's bindings are its defaults, and the keyboard layout is Danish, whose letters and
+  digits sit where a US keyboard's do, so the scan codes build mode watches are the keys the game binds. CET's overlay
+  is Shift+F6 and FreeFly is F7 (`bindings.json`); F8 is free. The `CyberCraft` instance binds hotbar slots 8 and 9
+  to the mouse's side buttons, not to the keys 8 and 9.
+- **No faults:** the patch runs on whichever thread the game reads input on. The router checks every size before it
+  reads or writes, and leaves alone anything it doesn't know.
+
+## File map (Part 3)
+
+| File | Responsibility |
+|---|---|
+| `src/input/Scancodes.*` | Keys to SDL's scancodes: SkyCraft's table |
+| `src/input/BuildMode.*` | What each key and click does, in and out of build mode, and the hotbar slot |
+| `src/input/FocusWatch.*` | Whether the game has just lost the front |
+| `src/input/Router.*` | Each `RAWINPUT` event read, hidden and forwarded, between three threads |
+| `src/input/RawInputHook.*` | The patch on the game's `GetRawInputData`, and the focus watch's thread |
+| `src/Requests.*` | `build on\|off` |
+| `src/Status.*` | The `build=` line |
+| `src/Plugin.cpp` | The patch at load, the router once a frame, build mode's HUD and menu flag, click latency, and the unload |
+| `tools/blockrender_hud/init.lua` | The overlay's line for build mode |
+| `CMakeLists.txt` | The new sources and tests, and version 0.10.0 |
+| `tests/TestScancodes.cpp`, `tests/TestBuildMode.cpp`, `tests/TestFocusWatch.cpp`, `tests/TestRouter.cpp` | One test file per new unit; the requests' and the status's tests grow in their own files |
+
+---
+
+### Task 30: Keys to SDL's scancodes, from SkyCraft's table
+
+SkyCraft's input ring takes keys as SDL scancodes, which are USB HID usages. Raw Input reports a key's set-1 scan code
+without its E0 prefix (`MakeCode`), and the prefix as a flag (`RI_KEY_E0`). SkyCraft's Skyrim side already has the
+table, indexed by DirectInput's key codes, where an extended key's code is its scan code + 0x80 (`skse/src/Input.cpp`
+at `bfcaf17`, MIT, as `extern/skycraft/LICENSE`): the spec's "`input/`". Build mode forwards only the keys 1 to 9 (SDL
+30 to 38), but the table is SkyCraft's whole, every pair unchanged, for whatever is forwarded later.
+
+**Files:**
+- Create: `src/input/Scancodes.h`, `src/input/Scancodes.cpp`, `tests/TestScancodes.cpp`
+- Modify: `CMakeLists.txt`
+
+- [ ] **Step 1: Write the failing test, `tests/TestScancodes.cpp`**
+
+```cpp
+#include "Harness.h"
+
+#include "input/Scancodes.h"
+
+using cpmc::input::SdlScancode;
+
+TEST(ScancodesMapTheKeysBuildModeForwards)
+{
+	for (uint16_t key = 1; key <= 9; ++key)
+	{
+		CHECK_EQ(SdlScancode(uint16_t(0x01 + key), false), uint16_t(29 + key));  // 1 to 9: SDL 30 to 38
+	}
+	CHECK_EQ(SdlScancode(0x0B, false), uint16_t(39));  // 0
+	CHECK_EQ(SdlScancode(0x14, false), uint16_t(23));  // T, as Commands types it
+	CHECK_EQ(SdlScancode(0x1C, false), uint16_t(40));  // Enter
+	CHECK_EQ(SdlScancode(0x1E, false), uint16_t(4));   // A
+	CHECK_EQ(SdlScancode(0x01, false), uint16_t(41));  // Esc
+	CHECK_EQ(SdlScancode(0x42, false), uint16_t(65));  // F8
+	CHECK_EQ(SdlScancode(0x57, false), uint16_t(68));  // F11
+}
+
+TEST(ScancodesTellExtendedKeysApart)
+{
+	CHECK_EQ(SdlScancode(0x1D, false), uint16_t(224));  // left Ctrl
+	CHECK_EQ(SdlScancode(0x1D, true), uint16_t(228));   // right Ctrl
+	CHECK_EQ(SdlScancode(0x1C, true), uint16_t(88));    // the keypad's Enter
+	CHECK_EQ(SdlScancode(0x48, false), uint16_t(96));   // the keypad's 8
+	CHECK_EQ(SdlScancode(0x48, true), uint16_t(82));    // Up
+	CHECK_EQ(SdlScancode(0x2A, true), uint16_t(0));     // the fake Shift Windows sends around some extended keys
+	CHECK_EQ(SdlScancode(0x59, false), uint16_t(0));    // not in the table
+	CHECK_EQ(SdlScancode(0x9D, false), uint16_t(0));    // past set 1's keys: not the right Ctrl
+	CHECK_EQ(SdlScancode(0xFF, true), uint16_t(0));     // a keyboard overrun
+}
+```
+
+- [ ] **Step 2: Edit `CMakeLists.txt` to add the test**
+
+```cmake
+	tests/TestProcessUsage.cpp
+```
+```cmake
+	tests/TestProcessUsage.cpp
+	tests/TestScancodes.cpp
+```
+
+- [ ] **Step 3: Build; it must fail**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C" | sort -u | head -3
+```
+Expected: `error C1083: Cannot open include file: 'input/Scancodes.h'`.
+
+- [ ] **Step 4: Write `src/input/Scancodes.h`**
+
+```cpp
+#pragma once
+
+#include <cstdint>
+
+// Keys as Raw Input reports them, to the SDL scancodes (USB HID usages) SkyCraft's input ring takes (the spec's
+// "input/"). Raw Input gives a key's set-1 scan code without its E0 prefix (RAWKEYBOARD's MakeCode), and the prefix as
+// a flag (RI_KEY_E0). The table is SkyCraft's (skse/src/Input.cpp at bfcaf17, MIT, as extern/skycraft/LICENSE), which
+// is indexed by DirectInput's key codes: an extended key's code is its scan code + 0x80.
+namespace cpmc::input
+{
+// The key's SDL scancode, or 0 for a key SkyCraft's table doesn't have.
+uint16_t SdlScancode(uint16_t aScanCode, bool aExtended);
+}
+```
+
+- [ ] **Step 5: Write `src/input/Scancodes.cpp`**
+
+```cpp
+#include "input/Scancodes.h"
+
+#include <array>
+
+namespace cpmc::input
+{
+namespace
+{
+// SkyCraft's kDikToSdl (skse/src/Input.cpp, MIT): DirectInput key code to SDL scancode.
+constexpr auto kDikToSdl = [] {
+	std::array<uint16_t, 256> t{};
+	t[0x01] = 41;  // Esc
+	for (int i = 0; i < 9; ++i)
+	{
+		t[0x02 + i] = uint16_t(30 + i);  // 1-9
+	}
+	t[0x0B] = 39;                                                          // 0
+	t[0x0C] = 45, t[0x0D] = 46, t[0x0E] = 42, t[0x0F] = 43;                // - = Backspace Tab
+	t[0x10] = 20, t[0x11] = 26, t[0x12] = 8, t[0x13] = 21, t[0x14] = 23;   // Q W E R T
+	t[0x15] = 28, t[0x16] = 24, t[0x17] = 12, t[0x18] = 18, t[0x19] = 19;  // Y U I O P
+	t[0x1A] = 47, t[0x1B] = 48, t[0x1C] = 40, t[0x1D] = 224;               // [ ] Enter LCtrl
+	t[0x1E] = 4, t[0x1F] = 22, t[0x20] = 7, t[0x21] = 9, t[0x22] = 10;     // A S D F G
+	t[0x23] = 11, t[0x24] = 13, t[0x25] = 14, t[0x26] = 15;                // H J K L
+	t[0x27] = 51, t[0x28] = 52, t[0x29] = 53, t[0x2A] = 225, t[0x2B] = 49;   // ; ' ` LShift backslash
+	t[0x2C] = 29, t[0x2D] = 27, t[0x2E] = 6, t[0x2F] = 25, t[0x30] = 5;      // Z X C V B
+	t[0x31] = 17, t[0x32] = 16, t[0x33] = 54, t[0x34] = 55, t[0x35] = 56;    // N M , . /
+	t[0x36] = 229, t[0x37] = 85, t[0x38] = 226, t[0x39] = 44, t[0x3A] = 57;  // RShift KP* LAlt Space Caps
+	for (int i = 0; i < 10; ++i)
+	{
+		t[0x3B + i] = uint16_t(58 + i);  // F1-F10
+	}
+	t[0x45] = 83, t[0x46] = 71;                                               // NumLock ScrollLock
+	t[0x47] = 95, t[0x48] = 96, t[0x49] = 97, t[0x4A] = 86;                   // KP7 KP8 KP9 KP-
+	t[0x4B] = 92, t[0x4C] = 93, t[0x4D] = 94, t[0x4E] = 87;                   // KP4 KP5 KP6 KP+
+	t[0x4F] = 89, t[0x50] = 90, t[0x51] = 91, t[0x52] = 98, t[0x53] = 99;     // KP1 KP2 KP3 KP0 KP.
+	t[0x56] = 100, t[0x57] = 68, t[0x58] = 69;                                // OEM102 F11 F12
+	t[0x9C] = 88, t[0x9D] = 228, t[0xB5] = 84, t[0xB7] = 70, t[0xB8] = 230;  // KPEnter RCtrl KP/ PrtSc RAlt
+	t[0xC5] = 72, t[0xC7] = 74, t[0xC8] = 82, t[0xC9] = 75, t[0xCB] = 80;    // Pause Home Up PgUp Left
+	t[0xCD] = 79, t[0xCF] = 77, t[0xD0] = 81, t[0xD1] = 78, t[0xD2] = 73;    // Right End Down PgDn Insert
+	t[0xD3] = 76, t[0xDB] = 227, t[0xDC] = 231, t[0xDD] = 101;               // Delete LWin RWin Menu
+	return t;
+}();
+}
+
+uint16_t SdlScancode(uint16_t aScanCode, bool aExtended)
+{
+	return aScanCode < 0x80 ? kDikToSdl[aScanCode | (aExtended ? 0x80u : 0u)] : uint16_t(0);
+}
+}
+```
+
+- [ ] **Step 6: Edit `CMakeLists.txt` to add the source**
+
+```cmake
+	src/ProcessUsage.cpp
+)
+```
+```cmake
+	src/ProcessUsage.cpp
+	src/input/Scancodes.cpp
+)
+```
+
+- [ ] **Step 7: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `206 test(s), 0 failure(s)`.
+
+- [ ] **Step 8: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "minecraft-link: keys to SDL's scancodes, from SkyCraft's table" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 31: Build mode decides where each key and click goes
+
+The spec's "Input", as a pure class that the router (Task 33) calls under its lock. Each keyboard or mouse event, with
+where things stand (whether the game is in front, linked, V found, Minecraft there and in its world), becomes a
+`Decision`: which mouse flags to clear, whether to make the key a no-op, what to forward to Minecraft's input ring,
+and whether Minecraft must first let go of everything.
+- **F8** toggles build mode, never reaches the game, and does nothing when it repeats. Unlinked, it asks the main
+  thread to link first (`requestLink`), and the main thread then turns build mode on with `TurnOn`. Build mode goes on
+  only with Minecraft in its world and V found; otherwise `Why()` says why it stayed off.
+- **In build mode,** the left, right and middle buttons are forwarded as SDL's buttons 1, 3 and 2, the wheel as a
+  scroll in units of 120 (positive up), and the keys 1 to 9 as SDL's 30 to 38. Each is hidden from the game.
+- **The side buttons** go to Minecraft too, as SDL's buttons 4 and 5, which is how Minecraft 26.3 numbers
+  `key.mouse.4` and `key.mouse.5` (`InputConstants`). The user's Minecraft picks hotbar slots 8 and 9 with them, and
+  Cyberpunk binds neither (the spec's "Changes while planning"; the user chose this while Part 3 was planned). They
+  change no block, so they aren't latency marks.
+- **The menu keys** (Esc, I, M, J, P, K, H, T) and Shift+F6 leave build mode and reach the game. Shift is followed from
+  every key event; the E0 "fake Shift" Windows sends around some extended keys isn't Shift.
+- **A press's repeats and release go where the press went** (the spec's "Changes while planning"). Each button and
+  number key remembers whether its press went to the game or to Minecraft. A button held as build mode goes on, V
+  aiming say, stays the game's until released, so V stops aiming. When build mode ends, Minecraft lets go of
+  everything at once, so its presses' repeats and releases then go nowhere: forwarding a repeat would press the key in
+  Minecraft again. When the game loses the front, every press is forgotten, since it's let go of in another window.
+- **The hotbar slot** is set by a forwarded number key's press, and moved by the wheel as Minecraft 26.3's
+  `ScrollWheelHandler` moves it (its bytecode in the user's jar): notches accumulate, a turn the other way starts over,
+  and an event moves the slot one step at most, by its whole notches' sign, up being to the left. Until a number key
+  sets it, it's unknown, and a side button makes it unknown again: what it picks is Minecraft's own binding.
+- **Nothing goes to Minecraft while the game isn't in front.** The game doesn't take Raw Input in the background, so
+  this only guards against an event that arrives anyway.
+
+**Files:**
+- Create: `src/input/BuildMode.h`, `src/input/BuildMode.cpp`, `tests/TestBuildMode.cpp`
+- Modify: `CMakeLists.txt`
+
+- [ ] **Step 1: Write the failing test, `tests/TestBuildMode.cpp`**
+
+```cpp
+#include "Harness.h"
+
+#include "input/BuildMode.h"
+
+#include <Windows.h>
+
+using namespace cpmc::input;
+
+namespace
+{
+// Linked, V found, Minecraft in its world, and the game in front: build mode can go on.
+Situation Ready()
+{
+	return { true, true, true, true, true };
+}
+
+RawKey Press(uint16_t aScanCode, bool aExtended = false)
+{
+	return { aScanCode, aExtended, false };
+}
+
+RawKey Release(uint16_t aScanCode, bool aExtended = false)
+{
+	return { aScanCode, aExtended, true };
+}
+
+constexpr uint16_t kF8 = 0x42;
+
+// Build mode, turned on with F8.
+BuildMode On()
+{
+	BuildMode mode;
+	mode.Key(Press(kF8), Ready());
+	mode.Key(Release(kF8), Ready());
+	return mode;
+}
+
+bool Passes(const Decision& aDecision)
+{
+	return aDecision.hideButtons == 0 && !aDecision.hideKey && aDecision.forwarded == 0 && !aDecision.releaseAll;
+}
+
+bool Is(const proto::InputEvent& aEvent, uint16_t aType, uint16_t aCode, int32_t aA)
+{
+	return aEvent.type == aType && aEvent.code == aCode && aEvent.a == aA;
+}
+}
+
+TEST(BuildModeStartsOffAndPassesEverything)
+{
+	BuildMode mode;
+	CHECK(!mode.On());
+	CHECK_STR(mode.Why(), "F8 turns it on");
+	CHECK(!mode.Slot());
+	CHECK(Passes(mode.Mouse({ RI_MOUSE_LEFT_BUTTON_DOWN, 0 }, Ready())));
+	CHECK(Passes(mode.Mouse({ RI_MOUSE_LEFT_BUTTON_UP, 0 }, Ready())));
+	CHECK(Passes(mode.Mouse({ RI_MOUSE_WHEEL, 120 }, Ready())));
+	CHECK(Passes(mode.Mouse({ RI_MOUSE_BUTTON_4_DOWN, 0 }, Ready())));
+	CHECK(Passes(mode.Key(Press(0x04), Ready())));  // 3
+	CHECK(Passes(mode.Key(Press(0x01), Ready())));  // Esc
+	CHECK_EQ(mode.Forwarded(), 0ull);
+	CHECK_EQ(mode.Hidden(), 0ull);
+}
+
+TEST(BuildModeTogglesOnF8)
+{
+	BuildMode      mode;
+	const Decision on = mode.Key(Press(kF8), Ready());
+	CHECK(mode.On());
+	CHECK(on.hideKey);  // F8 is build mode's alone
+	CHECK(!on.releaseAll && on.forwarded == 0 && !on.requestLink);
+	CHECK(mode.Key(Press(kF8), Ready()).hideKey);  // a repeat: hidden, and nothing else
+	CHECK(mode.On());
+	CHECK(mode.Key(Release(kF8), Ready()).hideKey);
+	const Decision off = mode.Key(Press(kF8), Ready());
+	CHECK(!mode.On());
+	CHECK(off.hideKey && off.releaseAll);  // Minecraft lets go of everything
+	CHECK_STR(mode.Why(), "F8 turned it off");
+	CHECK(!mode.Key(Press(kF8, true), Ready()).hideKey);  // an extended 0x42 isn't F8
+}
+
+TEST(BuildModeF8LinksFirst)
+{
+	BuildMode mode;
+	Situation unlinked = Ready();
+	unlinked.linked = false;
+	unlinked.inGame = false;
+	const Decision first = mode.Key(Press(kF8), unlinked);
+	CHECK(first.requestLink && first.hideKey);
+	CHECK(!mode.On());
+	CHECK(mode.TurnOn(Ready()));  // the main thread has linked
+	CHECK(mode.On());
+	CHECK(mode.Why().empty());
+}
+
+TEST(BuildModeGoesOnOnlyWithMinecraftInItsWorld)
+{
+	BuildMode mode;
+	Situation situation = Ready();
+	situation.minecraftInWorld = false;
+	mode.Key(Press(kF8), situation);
+	CHECK(!mode.On());
+	CHECK_STR(mode.Why(), "Minecraft isn't in its world");
+	situation.minecraft = false;
+	CHECK(!mode.TurnOn(situation));
+	CHECK_STR(mode.Why(), "Minecraft isn't there");
+	situation = Ready();
+	situation.inGame = false;
+	CHECK(!mode.TurnOn(situation));
+	CHECK_STR(mode.Why(), "V isn't found");
+	CHECK(mode.TurnOn(Ready()));
+}
+
+TEST(BuildModeForwardsAndHidesTheButtons)
+{
+	BuildMode      mode = On();
+	const Decision left = mode.Mouse({ RI_MOUSE_LEFT_BUTTON_DOWN, 0 }, Ready());
+	CHECK_EQ(left.hideButtons, uint16_t(RI_MOUSE_LEFT_BUTTON_DOWN));
+	CHECK_EQ(left.forwarded, size_t(1));
+	CHECK(Is(left.forward[0], proto::kInMouseButton, 1, 1));
+	CHECK(left.press);
+	const Decision up = mode.Mouse({ RI_MOUSE_LEFT_BUTTON_UP, 0 }, Ready());
+	CHECK(Is(up.forward[0], proto::kInMouseButton, 1, 0));
+	CHECK(!up.press);
+	// The right and middle buttons in one event: SDL numbers them 3 and 2.
+	const Decision both = mode.Mouse({ RI_MOUSE_RIGHT_BUTTON_DOWN | RI_MOUSE_MIDDLE_BUTTON_DOWN, 0 }, Ready());
+	CHECK_EQ(both.hideButtons, uint16_t(RI_MOUSE_RIGHT_BUTTON_DOWN | RI_MOUSE_MIDDLE_BUTTON_DOWN));
+	CHECK_EQ(both.forwarded, size_t(2));
+	CHECK(Is(both.forward[0], proto::kInMouseButton, 3, 1));
+	CHECK(Is(both.forward[1], proto::kInMouseButton, 2, 1));
+	CHECK(Passes(mode.Mouse({ RI_MOUSE_HWHEEL, 120 }, Ready())));  // the horizontal wheel stays the game's
+	CHECK_STR(mode.Last(), "the middle button down");
+}
+
+TEST(BuildModeForwardsTheSideButtons)
+{
+	// Cyberpunk binds neither, and the user's Minecraft picks hotbar slots with them.
+	BuildMode mode = On();
+	mode.Key(Press(0x04), Ready());  // 3
+	CHECK_EQ(mode.Slot().value_or(0), 3);
+	const Decision back = mode.Mouse({ RI_MOUSE_BUTTON_4_DOWN, 0 }, Ready());
+	CHECK_EQ(back.hideButtons, uint16_t(RI_MOUSE_BUTTON_4_DOWN));
+	CHECK(Is(back.forward[0], proto::kInMouseButton, 4, 1));
+	CHECK(!back.press);   // it changes no block: no latency to time
+	CHECK(!mode.Slot());  // which slot it picks, if any, is Minecraft's binding
+	const Decision both = mode.Mouse({ RI_MOUSE_BUTTON_4_UP | RI_MOUSE_BUTTON_5_DOWN, 0 }, Ready());
+	CHECK_EQ(both.forwarded, size_t(2));
+	CHECK(Is(both.forward[0], proto::kInMouseButton, 4, 0));
+	CHECK(Is(both.forward[1], proto::kInMouseButton, 5, 1));
+	CHECK_STR(mode.Last(), "mouse button 5 down");
+	mode.Key(Press(0x0A), Ready());  // 9
+	CHECK_EQ(mode.Slot().value_or(0), 9);
+}
+
+TEST(BuildModeForwardsTheWheelAndFollowsTheSlot)
+{
+	BuildMode      mode = On();
+	const Decision three = mode.Key(Press(0x04), Ready());
+	CHECK(three.hideKey);
+	CHECK(Is(three.forward[0], proto::kInKey, 32, 1));  // SDL's 3
+	CHECK(mode.Key(Release(0x04), Ready()).hideKey);
+	CHECK_EQ(mode.Slot().value_or(0), 3);
+	const Decision up = mode.Mouse({ RI_MOUSE_WHEEL, 120 }, Ready());
+	CHECK_EQ(up.hideButtons, uint16_t(RI_MOUSE_WHEEL));
+	CHECK(Is(up.forward[0], proto::kInScroll, 0, 120));
+	CHECK_EQ(mode.Slot().value_or(0), 2);  // up is the slot to the left
+	mode.Mouse({ RI_MOUSE_WHEEL, -120 }, Ready());
+	CHECK_EQ(mode.Slot().value_or(0), 3);
+	mode.Mouse({ RI_MOUSE_WHEEL, 360 }, Ready());  // three notches in one event move it one slot, as in Minecraft
+	CHECK_EQ(mode.Slot().value_or(0), 2);
+	mode.Mouse({ RI_MOUSE_WHEEL, 60 }, Ready());  // half a notch waits for the other half
+	CHECK_EQ(mode.Slot().value_or(0), 2);
+	mode.Mouse({ RI_MOUSE_WHEEL, 60 }, Ready());
+	CHECK_EQ(mode.Slot().value_or(0), 1);
+	mode.Mouse({ RI_MOUSE_WHEEL, 120 }, Ready());  // from 1 round to 9
+	CHECK_EQ(mode.Slot().value_or(0), 9);
+	mode.Mouse({ RI_MOUSE_WHEEL, 60 }, Ready());    // half a notch up waits,
+	mode.Mouse({ RI_MOUSE_WHEEL, -120 }, Ready());  // but turning the other way starts over: a whole notch down
+	CHECK_EQ(mode.Slot().value_or(0), 1);
+	mode.Key(Press(0x0A), Ready());  // 9
+	CHECK_EQ(mode.Slot().value_or(0), 9);
+}
+
+TEST(BuildModeTakesOnlyTheKeys1To9)
+{
+	BuildMode mode = On();
+	CHECK(Is(mode.Key(Press(0x02), Ready()).forward[0], proto::kInKey, 30, 1));  // 1
+	mode.Key(Press(0x0A), Ready());
+	CHECK(Is(mode.Key(Release(0x0A), Ready()).forward[0], proto::kInKey, 38, 0));  // 9's release goes too
+	CHECK(Passes(mode.Key(Release(0x05), Ready())));      // 4's release, its press never seen: the game's
+	CHECK(Passes(mode.Key(Press(0x0B), Ready())));        // 0
+	CHECK(Passes(mode.Key(Press(0x11), Ready())));        // W
+	CHECK(Passes(mode.Key(Press(0x02, true), Ready())));  // an extended 0x02 isn't 1
+	CHECK(Passes(mode.Key(Press(0x4F), Ready())));        // the keypad's 1
+	CHECK(mode.On());
+}
+
+TEST(BuildModeLeavesOnTheMenuKeys)
+{
+	for (const int key : { 0x01, 0x17, 0x32, 0x24, 0x19, 0x25, 0x23, 0x14 })  // Esc I M J P K H T
+	{
+		BuildMode      mode = On();
+		const Decision decision = mode.Key(Press(uint16_t(key)), Ready());
+		CHECK(!mode.On());
+		CHECK(decision.releaseAll);
+		CHECK(!decision.hideKey && decision.forwarded == 0);  // the game opens its menu
+	}
+	BuildMode mode = On();
+	mode.Key(Press(0x17), Ready());
+	CHECK_STR(mode.Why(), "I left it");
+	CHECK(Passes(mode.Key(Release(0x17), Ready())));
+	mode = On();
+	CHECK(Passes(mode.Key(Press(0x40), Ready())));  // F6 alone
+	CHECK(mode.On());
+	mode.Key(Press(0x36), Ready());                    // the right Shift
+	CHECK(mode.Key(Press(0x40), Ready()).releaseAll);  // Shift+F6: CET's overlay
+	CHECK_STR(mode.Why(), "Shift+F6 left it");
+	mode = On();
+	mode.Key(Press(0x2A, true), Ready());  // the fake Shift Windows sends around some extended keys isn't Shift
+	CHECK(Passes(mode.Key(Press(0x40), Ready())));
+	CHECK(mode.On());
+	mode.Key(Press(0x01, true), Ready());  // an extended 0x01 isn't Esc
+	CHECK(mode.On());
+}
+
+TEST(BuildModeSendsAReleaseWhereItsPressWent)
+{
+	BuildMode mode;
+	CHECK(Passes(mode.Mouse({ RI_MOUSE_RIGHT_BUTTON_DOWN, 0 }, Ready())));  // V aiming before build mode
+	CHECK(Passes(mode.Key(Press(0x03), Ready())));                          // and 2 held
+	mode.Key(Press(kF8), Ready());
+	mode.Key(Release(kF8), Ready());
+	CHECK(mode.On());
+	CHECK(Passes(mode.Key(Press(0x03), Ready())));                        // 2's repeat: still the game's
+	CHECK(Passes(mode.Mouse({ RI_MOUSE_RIGHT_BUTTON_UP, 0 }, Ready())));  // so V stops aiming
+	CHECK(mode.Key(Press(0x02), Ready()).hideKey);                        // 1, pressed now: Minecraft's
+	// Minecraft's press, then build mode ends: Minecraft lets go of everything, so its repeats and release go nowhere.
+	mode.Mouse({ RI_MOUSE_LEFT_BUTTON_DOWN, 0 }, Ready());
+	CHECK(mode.Key(Press(kF8), Ready()).releaseAll);
+	const Decision release = mode.Mouse({ RI_MOUSE_LEFT_BUTTON_UP, 0 }, Ready());
+	CHECK_EQ(release.hideButtons, uint16_t(RI_MOUSE_LEFT_BUTTON_UP));
+	CHECK_EQ(release.forwarded, size_t(0));
+	const Decision repeat = mode.Key(Press(0x02), Ready());
+	CHECK(repeat.hideKey && repeat.forwarded == 0);
+	CHECK(mode.Key(Release(0x02), Ready()).hideKey);
+	CHECK(Passes(mode.Key(Press(0x02), Ready())));  // a new press, with build mode off: the game's
+}
+
+TEST(BuildModeForwardsNothingWhileTheGameIsntInFront)
+{
+	BuildMode mode = On();
+	Situation away = Ready();
+	away.inFront = false;
+	CHECK(Passes(mode.Mouse({ RI_MOUSE_LEFT_BUTTON_DOWN, 0 }, away)));
+	CHECK(Passes(mode.Mouse({ RI_MOUSE_WHEEL, 120 }, away)));
+	CHECK(Passes(mode.Key(Press(0x02), away)));
+	CHECK(Passes(mode.Key(Press(kF8), away)));
+	CHECK(mode.On());  // an F8 meant for another window doesn't toggle it
+}
+
+TEST(BuildModeLetsGoWhenTheGameLosesTheFront)
+{
+	BuildMode mode;
+	mode.Mouse({ RI_MOUSE_RIGHT_BUTTON_DOWN, 0 }, Ready());  // the game's
+	mode.Key(Press(kF8), Ready());
+	mode.Key(Release(kF8), Ready());
+	mode.Mouse({ RI_MOUSE_LEFT_BUTTON_DOWN, 0 }, Ready());  // Minecraft's
+	CHECK(mode.LostFront());  // on: Minecraft lets go of everything
+	CHECK(mode.On());         // and build mode stays on for when the user comes back
+	// Both were let go of in another window. Back in the game, the next presses are Minecraft's.
+	const Decision again = mode.Mouse({ RI_MOUSE_RIGHT_BUTTON_DOWN | RI_MOUSE_LEFT_BUTTON_DOWN, 0 }, Ready());
+	CHECK_EQ(again.forwarded, size_t(2));
+	CHECK(Is(again.forward[1], proto::kInMouseButton, 3, 1));
+	mode.Key(Press(kF8), Ready());  // off, with F8 held as the front goes
+	CHECK(!mode.On());
+	CHECK(!mode.LostFront());       // off: nothing to let go of
+	mode.Key(Press(kF8), Ready());  // F8 was let go of elsewhere: this is a press, not a repeat
+	CHECK(mode.On());
+}
+
+TEST(BuildModeCountsWhatItForwardsAndHides)
+{
+	BuildMode mode = On();  // F8's press and release: 2 hidden
+	mode.Mouse({ RI_MOUSE_RIGHT_BUTTON_DOWN, 0 }, Ready());
+	mode.Mouse({ RI_MOUSE_RIGHT_BUTTON_UP, 0 }, Ready());
+	mode.Mouse({ RI_MOUSE_WHEEL, -120 }, Ready());
+	CHECK_EQ(mode.Forwarded(), 3ull);
+	CHECK_EQ(mode.Hidden(), 5ull);
+	CHECK_STR(mode.Last(), "the wheel, -120");
+	CHECK(mode.TurnOff("a build off request"));
+	CHECK(!mode.TurnOff("again"));
+	CHECK_STR(mode.Why(), "a build off request");
+}
+```
+
+- [ ] **Step 2: Edit `CMakeLists.txt` to add the test**
+
+```cmake
+	tests/TestScancodes.cpp
+```
+```cmake
+	tests/TestScancodes.cpp
+	tests/TestBuildMode.cpp
+```
+
+- [ ] **Step 3: Build; it must fail**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C" | sort -u | head -3
+```
+Expected: `error C1083: Cannot open include file: 'input/BuildMode.h'`.
+
+- [ ] **Step 4: Write `src/input/BuildMode.h`**
+
+```cpp
+#pragma once
+
+#include <skycraft_protocol.h>
+
+#include <array>
+#include <cstddef>
+#include <cstdint>
+#include <optional>
+#include <string>
+
+// Build mode (the spec's "Input"): what becomes of each keyboard and mouse event the game reads. In build mode the mouse
+// buttons, side buttons included, the wheel and the keys 1 to 9 go to Minecraft and are hidden from the game; F8
+// toggles it; and the keys that open the game's menus leave it, and reach the game. A press's repeats and its release
+// go where the press went, so neither side is left holding an input that only the other saw let go. Pure, and not
+// thread-safe: the router (input/Router.h) holds its lock around every call.
+namespace cpmc::input
+{
+namespace proto = skycraft::proto;
+
+// A keyboard event, from RAWKEYBOARD.
+struct RawKey
+{
+	uint16_t scanCode = 0;      // set 1, without its E0 prefix (MakeCode)
+	bool     extended = false;  // the E0 prefix (RI_KEY_E0)
+	bool     up = false;        // a release (RI_KEY_BREAK); a key held down repeats its press
+};
+
+// A mouse event's buttons and wheel, from RAWMOUSE. Its movement isn't build mode's business.
+struct RawMouse
+{
+	uint16_t buttons = 0;  // usButtonFlags: RI_MOUSE_LEFT_BUTTON_DOWN and the rest, and RI_MOUSE_WHEEL
+	int16_t  wheel = 0;    // usButtonData, with RI_MOUSE_WHEEL: notches x 120, positive away from the user (up)
+};
+
+// Where things stand: whether the game is in front, and what the link said last frame.
+struct Situation
+{
+	bool inFront = false;    // the foreground window is the game's
+	bool linked = false;     // the user's Link
+	bool inGame = false;     // linked, with V found
+	bool minecraft = false;  // Minecraft's heartbeat is fresh
+	bool minecraftInWorld = false;
+};
+
+// What becomes of one event.
+struct Decision
+{
+	static constexpr size_t kMost = 11;  // five buttons pressed and released, and the wheel
+
+	uint16_t                             hideButtons = 0;      // mouse: the flags to clear, so the game doesn't see them
+	bool                                 hideKey = false;      // keyboard: make the key a no-op for the game
+	bool                                 releaseAll = false;   // build mode ended: Minecraft lets go of everything, first
+	std::array<proto::InputEvent, kMost> forward{};            // then these go to Minecraft's input ring, in order
+	size_t                               forwarded = 0;
+	bool                                 press = false;        // a left, right or middle press went to Minecraft: a latency mark
+	bool                                 requestLink = false;  // F8 while unlinked: the main thread links, then turns it on
+};
+
+class BuildMode
+{
+public:
+	Decision Key(const RawKey& aKey, const Situation& aSituation);
+	Decision Mouse(const RawMouse& aMouse, const Situation& aSituation);
+
+	// On, from the main thread: a build request, or F8's link once it's done. True if it's on; if not, Why() says why.
+	bool TurnOn(const Situation& aSituation);
+	// Off, saying why: true if it was on, so Minecraft must let go of everything.
+	bool TurnOff(std::string aWhy);
+	// The game stopped being in front, so what's held is let go of in another window, where neither side sees it. True
+	// if build mode is on, so Minecraft must let go of everything. Build mode stays on for when the user comes back.
+	bool LostFront();
+
+	bool               On() const { return on_; }
+	const std::string& Why() const { return why_; }          // why it's off
+	std::optional<int> Slot() const { return slot_; }        // Minecraft's hotbar slot, 1 to 9, as far as it's known
+	uint64_t           Forwarded() const { return forwarded_; }  // events for Minecraft's input ring
+	uint64_t           Hidden() const { return hidden_; }        // inputs hidden from the game
+	const std::string& Last() const { return last_; }            // the last input forwarded
+
+private:
+	// Where a held input's press went.
+	enum class Holder : uint8_t
+	{
+		None,
+		Game,
+		Minecraft,
+		Neither,  // Minecraft's, until build mode ended and Minecraft let go of everything
+	};
+
+	static constexpr size_t kInputs = 14;  // the five mouse buttons, then the keys 1 to 9
+
+	Holder Route(size_t aInput, bool aDown);
+	void   Forward(Decision& aDecision, const proto::InputEvent& aEvent, std::string aWhat);
+	void   Scroll(int16_t aWheel);
+
+	bool                        on_ = false;
+	std::string                 why_ = "F8 turns it on";
+	std::array<Holder, kInputs> held_{};
+	bool                        f8Down_ = false;
+	bool                        leftShift_ = false;
+	bool                        rightShift_ = false;
+	std::optional<int>          slot_;
+	double                      scroll_ = 0.0;  // the wheel's notches not yet whole, as Minecraft keeps them
+	uint64_t                    forwarded_ = 0;
+	uint64_t                    hidden_ = 0;
+	std::string                 last_ = "nothing yet";
+};
+}
+```
+
+- [ ] **Step 5: Write `src/input/BuildMode.cpp`**
+
+```cpp
+#include "input/BuildMode.h"
+
+#include "input/Scancodes.h"
+
+#include <Windows.h>
+
+#include <cmath>
+#include <format>
+#include <initializer_list>
+#include <iterator>
+#include <utility>
+
+namespace cpmc::input
+{
+namespace
+{
+constexpr uint16_t kF6 = 0x40;
+constexpr uint16_t kF8 = 0x42;
+constexpr uint16_t kLeftShift = 0x2A;
+constexpr uint16_t kRightShift = 0x36;
+
+// The keys that open the game's menus (Esc, I, M, J, P, K, H and T), and Shift with F6, which opens CET's overlay: its
+// name, or null.
+const char* MenuKey(const RawKey& aKey, bool aShift)
+{
+	if (aKey.extended)
+	{
+		return nullptr;
+	}
+	switch (aKey.scanCode)
+	{
+	case 0x01: return "Esc";
+	case 0x17: return "I";
+	case 0x32: return "M";
+	case 0x24: return "J";
+	case 0x19: return "P";
+	case 0x25: return "K";
+	case 0x23: return "H";
+	case 0x14: return "T";
+	case kF6: return aShift ? "Shift+F6" : nullptr;
+	default: return nullptr;
+	}
+}
+
+// The mouse buttons build mode takes, as Raw Input flags them and SDL numbers them. The side buttons are Minecraft's
+// too: Cyberpunk binds neither, and the user's Minecraft picks hotbar slots with them.
+struct Button
+{
+	uint16_t    down;
+	uint16_t    up;
+	uint16_t    sdl;
+	const char* name;
+};
+
+constexpr Button kButtons[] = {
+	{ RI_MOUSE_LEFT_BUTTON_DOWN, RI_MOUSE_LEFT_BUTTON_UP, 1, "the left button" },
+	{ RI_MOUSE_RIGHT_BUTTON_DOWN, RI_MOUSE_RIGHT_BUTTON_UP, 3, "the right button" },
+	{ RI_MOUSE_MIDDLE_BUTTON_DOWN, RI_MOUSE_MIDDLE_BUTTON_UP, 2, "the middle button" },
+	{ RI_MOUSE_BUTTON_4_DOWN, RI_MOUSE_BUTTON_4_UP, 4, "mouse button 4" },
+	{ RI_MOUSE_BUTTON_5_DOWN, RI_MOUSE_BUTTON_5_UP, 5, "mouse button 5" },
+};
+constexpr size_t kButtonCount = std::size(kButtons);  // their holders come first, then the keys 1 to 9's
+constexpr size_t kSideButtons = 3;                    // the first side button's index
+
+int Sign(double aValue)
+{
+	return aValue > 0.0 ? 1 : aValue < 0.0 ? -1 : 0;
+}
+}
+
+Decision BuildMode::Key(const RawKey& aKey, const Situation& aSituation)
+{
+	Decision decision;
+	if (!aKey.extended && (aKey.scanCode == kLeftShift || aKey.scanCode == kRightShift))
+	{
+		(aKey.scanCode == kLeftShift ? leftShift_ : rightShift_) = !aKey.up;
+	}
+	if (!aSituation.inFront)
+	{
+		return decision;  // not the user at the game: nothing goes to Minecraft
+	}
+	if (!aKey.extended && aKey.scanCode == kF8)
+	{
+		// F8 is build mode's alone, and its repeats do nothing.
+		decision.hideKey = true;
+		++hidden_;
+		const bool press = !aKey.up && !f8Down_;
+		f8Down_ = !aKey.up;
+		if (!press)
+		{
+			return decision;
+		}
+		if (on_)
+		{
+			decision.releaseAll = TurnOff("F8 turned it off");
+		}
+		else if (!aSituation.linked)
+		{
+			decision.requestLink = true;
+		}
+		else
+		{
+			TurnOn(aSituation);
+		}
+		return decision;
+	}
+	if (on_ && !aKey.up)
+	{
+		if (const char* menu = MenuKey(aKey, leftShift_ || rightShift_))
+		{
+			decision.releaseAll = TurnOff(std::format("{} left it", menu));
+			return decision;  // and the game opens its menu
+		}
+	}
+	if (!aKey.extended && aKey.scanCode >= 0x02 && aKey.scanCode <= 0x0A)
+	{
+		const int    digit = aKey.scanCode - 0x01;  // the keys 1 to 9
+		const Holder to = Route(kButtonCount - 1 + size_t(digit), !aKey.up);
+		if (to == Holder::Minecraft || to == Holder::Neither)
+		{
+			decision.hideKey = true;
+			++hidden_;
+		}
+		if (to == Holder::Minecraft)
+		{
+			Forward(decision, { proto::kInKey, SdlScancode(aKey.scanCode, false), aKey.up ? 0 : 1, 0, 0 },
+			        std::format("the key {} {}", digit, aKey.up ? "up" : "down"));
+			if (!aKey.up)
+			{
+				slot_ = digit;
+			}
+		}
+	}
+	return decision;
+}
+
+Decision BuildMode::Mouse(const RawMouse& aMouse, const Situation& aSituation)
+{
+	Decision decision;
+	if (!aSituation.inFront)
+	{
+		return decision;
+	}
+	for (size_t i = 0; i < kButtonCount; ++i)
+	{
+		for (const bool down : { true, false })
+		{
+			const uint16_t flag = down ? kButtons[i].down : kButtons[i].up;
+			if (!(aMouse.buttons & flag))
+			{
+				continue;
+			}
+			const Holder to = Route(i, down);
+			if (to == Holder::Minecraft || to == Holder::Neither)
+			{
+				decision.hideButtons |= flag;
+				++hidden_;
+			}
+			if (to == Holder::Minecraft)
+			{
+				Forward(decision, { proto::kInMouseButton, kButtons[i].sdl, down ? 1 : 0, 0, 0 },
+				        std::format("{} {}", kButtons[i].name, down ? "down" : "up"));
+				if (i < kSideButtons)
+				{
+					decision.press = decision.press || down;  // a side button changes no block: no latency to time
+				}
+				else if (down)
+				{
+					slot_.reset();  // which slot it picks, if any, is Minecraft's own binding
+				}
+			}
+		}
+	}
+	if ((aMouse.buttons & RI_MOUSE_WHEEL) && on_)
+	{
+		decision.hideButtons |= RI_MOUSE_WHEEL;
+		++hidden_;
+		Forward(decision, { proto::kInScroll, 0, aMouse.wheel, 0, 0 }, std::format("the wheel, {}", aMouse.wheel));
+		Scroll(aMouse.wheel);
+	}
+	return decision;
+}
+
+bool BuildMode::TurnOn(const Situation& aSituation)
+{
+	if (on_)
+	{
+		return true;
+	}
+	if (!aSituation.minecraftInWorld)
+	{
+		why_ = aSituation.minecraft ? "Minecraft isn't in its world" : "Minecraft isn't there";
+	}
+	else if (!aSituation.inGame)
+	{
+		why_ = aSituation.linked ? "V isn't found" : "it isn't linked";
+	}
+	else
+	{
+		on_ = true;
+		why_.clear();
+	}
+	return on_;
+}
+
+bool BuildMode::TurnOff(std::string aWhy)
+{
+	if (!on_)
+	{
+		return false;
+	}
+	on_ = false;
+	why_ = std::move(aWhy);
+	for (Holder& holder : held_)
+	{
+		if (holder == Holder::Minecraft)
+		{
+			holder = Holder::Neither;  // Minecraft lets go of it now: its repeats and release go nowhere
+		}
+	}
+	return true;
+}
+
+bool BuildMode::LostFront()
+{
+	held_.fill(Holder::None);
+	f8Down_ = false;
+	leftShift_ = false;
+	rightShift_ = false;
+	return on_;
+}
+
+BuildMode::Holder BuildMode::Route(size_t aInput, bool aDown)
+{
+	static_assert(kInputs == kButtonCount + 9);
+	Holder& holder = held_[aInput];
+	if (aDown && holder == Holder::None)
+	{
+		holder = on_ ? Holder::Minecraft : Holder::Game;  // a press goes where build mode says
+	}
+	const Holder to = holder;  // a repeat or a release goes where its press went
+	if (!aDown)
+	{
+		holder = Holder::None;
+	}
+	return to;  // None: a release whose press was never seen, which the game ignores unless it holds the input
+}
+
+void BuildMode::Forward(Decision& aDecision, const proto::InputEvent& aEvent, std::string aWhat)
+{
+	if (aDecision.forwarded < aDecision.forward.size())
+	{
+		aDecision.forward[aDecision.forwarded++] = aEvent;
+		++forwarded_;
+		last_ = std::move(aWhat);
+	}
+}
+
+void BuildMode::Scroll(int16_t aWheel)
+{
+	// As Minecraft's ScrollWheelHandler counts it: turning the other way starts over, and each event moves the slot one
+	// step at most, by its whole notches, keeping the fraction for the next. Up is the slot to the left.
+	const double notches = aWheel / 120.0;
+	if (scroll_ != 0.0 && Sign(notches) != Sign(scroll_))
+	{
+		scroll_ = 0.0;
+	}
+	scroll_ += notches;
+	const double whole = std::trunc(scroll_);
+	scroll_ -= whole;
+	if (whole != 0.0 && slot_)
+	{
+		slot_ = (*slot_ - 1 - Sign(whole) + 9) % 9 + 1;
+	}
+}
+}
+```
+
+- [ ] **Step 6: Edit `CMakeLists.txt` to add the source**
+
+```cmake
+	src/input/Scancodes.cpp
+```
+```cmake
+	src/input/Scancodes.cpp
+	src/input/BuildMode.cpp
+```
+
+- [ ] **Step 7: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `219 test(s), 0 failure(s)`.
+
+- [ ] **Step 8: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "minecraft-link: build mode decides where each key and click goes" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 32: The focus watch's decision
+
+The spec's `FocusWatch`: whether the game has just stopped being in front, true once, and not again until the game
+has been back. Its thread, which checks ten times a second and tells the router, comes with the patch in Task 36. The
+watch starts out as if the game were in front, so a plugin that loads while the user is in another window lets go
+once, which costs nothing with build mode off.
+
+**Files:**
+- Create: `src/input/FocusWatch.h`, `src/input/FocusWatch.cpp`, `tests/TestFocusWatch.cpp`
+- Modify: `CMakeLists.txt`
+
+- [ ] **Step 1: Write the failing test, `tests/TestFocusWatch.cpp`**
+
+```cpp
+#include "Harness.h"
+
+#include "input/FocusWatch.h"
+
+using cpmc::input::FocusWatch;
+
+TEST(FocusWatchLetsGoOnceOnLosingTheFront)
+{
+	FocusWatch watch;
+	CHECK(!watch.LostFront(true));
+	CHECK(watch.LostFront(false));
+	CHECK(!watch.LostFront(false));  // still away: once is enough
+	CHECK(!watch.LostFront(true));   // back
+	CHECK(!watch.LostFront(true));
+	CHECK(watch.LostFront(false));  // away again
+}
+
+TEST(FocusWatchLetsGoIfTheGameStartsBehind)
+{
+	FocusWatch watch;  // the plugin loaded while the user was in another window
+	CHECK(watch.LostFront(false));
+	CHECK(!watch.LostFront(false));
+}
+```
+
+- [ ] **Step 2: Edit `CMakeLists.txt` to add the test**
+
+```cmake
+	tests/TestBuildMode.cpp
+```
+```cmake
+	tests/TestBuildMode.cpp
+	tests/TestFocusWatch.cpp
+```
+
+- [ ] **Step 3: Build; it must fail**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C" | sort -u | head -3
+```
+Expected: `error C1083: Cannot open include file: 'input/FocusWatch.h'`.
+
+- [ ] **Step 4: Write `src/input/FocusWatch.h`**
+
+```cpp
+#pragma once
+
+// The focus watch's decision (the spec's "input/"): whether the game has just stopped being in front. Its thread
+// (input/RawInputHook.h) checks ten times a second, so that a button held while the user switches windows is let go of
+// in Minecraft even if the game stopped updating.
+namespace cpmc::input
+{
+class FocusWatch
+{
+public:
+	// True once when the game stops being in front, and not again until it has been back.
+	bool LostFront(bool aInFront);
+
+private:
+	bool inFront_ = true;
+};
+}
+```
+
+- [ ] **Step 5: Write `src/input/FocusWatch.cpp`**
+
+```cpp
+#include "input/FocusWatch.h"
+
+namespace cpmc::input
+{
+bool FocusWatch::LostFront(bool aInFront)
+{
+	const bool lost = inFront_ && !aInFront;
+	inFront_ = aInFront;
+	return lost;
+}
+}
+```
+
+- [ ] **Step 6: Edit `CMakeLists.txt` to add the source**
+
+```cmake
+	src/input/BuildMode.cpp
+```
+```cmake
+	src/input/BuildMode.cpp
+	src/input/FocusWatch.cpp
+```
+
+- [ ] **Step 7: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `221 test(s), 0 failure(s)`.
+
+- [ ] **Step 8: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "minecraft-link: the focus watch's decision" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 33: The router, between the hook, the focus watch and the main thread
+
+Build mode's decisions, applied to the bytes `GetRawInputData` copied out, and shared by three threads (the spec's
+"Input" and "Threads"):
+- **`Inspect`,** from the patch on the game's input thread. A mouse event needs the header and a whole `RAWMOUSE`, a
+  keyboard event the header and a whole `RAWKEYBOARD`; anything shorter, or of another type, is left alone. The
+  struct is copied out and back with `memcpy`, since the game's buffer is just bytes. A mouse event with no button or
+  wheel flag (movement, or the horizontal wheel) returns before taking the lock, so turning costs next to nothing.
+- **Hiding,** in place: the hidden flags cleared from `usButtonFlags`, which keeps `lLastX` and `lLastY`, and a hidden
+  key's virtual key set to 0xFF and its scan code to 0. The game skips both (the spec's "Cyberpunk's input").
+- **Forwarding** goes through `Link::Push`, which may be called from any thread, under the router's lock. The link is
+  `SetLink`'s, from the main thread: null until the mapping opens, and again at unload, so nothing pushes into the
+  mapping after it's unmapped. A release-all goes first whenever build mode ends.
+- **The main thread,** once a frame after the link's update, gives `Update` whether the user linked and what the link
+  says. Build mode ends there, with a release-all, if Minecraft has gone or left its world, or the user unlinked, or V
+  isn't found. It also turns build mode on and off (`TurnOn`, `TurnOff`), takes F8's link request, and takes the time
+  of the last click that went to Minecraft, for latency.
+- **The focus watch** calls `FrontLost`: in build mode, a release-all.
+- **The log** gets a line when build mode goes on or off, or stays off for a new reason, when F8 asks for the link,
+  and when the focus watch lets go. `LogQueue` takes lines from any thread.
+
+The tests drive it with synthetic `RAWINPUT` events, through a real `Link` on the mapping's layout in plain memory,
+and read what lands in its input ring.
+
+**Files:**
+- Create: `src/input/Router.h`, `src/input/Router.cpp`, `tests/TestRouter.cpp`
+- Modify: `CMakeLists.txt`
+
+- [ ] **Step 1: Write the failing test, `tests/TestRouter.cpp`**
+
+```cpp
+#include "Harness.h"
+
+#include "input/Router.h"
+
+#include <Windows.h>
+
+#include <cstring>
+#include <vector>
+
+using namespace cpmc;
+using namespace cpmc::input;
+
+namespace
+{
+bool g_inFront = true;
+
+bool FakeFront()
+{
+	return g_inFront;
+}
+
+// The mapping's layout in plain memory, with a link on it: what the router forwards lands in its input ring.
+struct Mapping
+{
+	Mapping()
+	{
+		base = static_cast<uint8_t*>(VirtualAlloc(nullptr, proto::kMappingBytes, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE));
+		link = new link::Link(base);
+	}
+	~Mapping()
+	{
+		delete link;
+		VirtualFree(base, 0, MEM_RELEASE);
+	}
+
+	std::vector<proto::InputEvent> Inputs()  // everything forwarded since the last call
+	{
+		uint8_t* const                 ring = base + proto::kOffInputRing;
+		const uint64_t                 head = *reinterpret_cast<uint64_t*>(ring);
+		uint64_t&                      tail = *reinterpret_cast<uint64_t*>(ring + 0x40);
+		std::vector<proto::InputEvent> events;
+		for (; tail < head; ++tail)
+		{
+			proto::InputEvent event;
+			std::memcpy(&event, ring + 0x80 + (tail % proto::kInputRingEntries) * sizeof event, sizeof event);
+			events.push_back(event);
+		}
+		return events;
+	}
+
+	uint8_t*    base = nullptr;
+	link::Link* link = nullptr;
+};
+
+// What the link says once a frame: Minecraft there and in its world, and V found while linked.
+link::Link::Status Linked()
+{
+	link::Link::Status state;
+	state.minecraft = true;
+	state.inWorld = true;
+	state.inGame = true;
+	return state;
+}
+
+// A router on a link, in build mode.
+struct Building
+{
+	Building() : router(log, &FakeFront)
+	{
+		g_inFront = true;
+		router.SetLink(mapping.link);
+		router.Update(true, Linked());
+		CHECK(!router.TurnOn());
+	}
+
+	LogQueue log;
+	Mapping  mapping;
+	Router   router;
+};
+
+// A mouse event as GetRawInputData copies it: the header, then RAWMOUSE.
+std::vector<uint8_t> Mouse(USHORT aButtons, SHORT aWheel = 0, LONG aX = 0, LONG aY = 0)
+{
+	RAWINPUT input{};
+	input.header.dwType = RIM_TYPEMOUSE;
+	input.header.dwSize = sizeof(RAWINPUTHEADER) + sizeof(RAWMOUSE);
+	input.data.mouse.usButtonFlags = aButtons;
+	input.data.mouse.usButtonData = USHORT(aWheel);
+	input.data.mouse.lLastX = aX;
+	input.data.mouse.lLastY = aY;
+	std::vector<uint8_t> bytes(input.header.dwSize);
+	std::memcpy(bytes.data(), &input, bytes.size());
+	return bytes;
+}
+
+// A key event: the header, then RAWKEYBOARD, with the virtual key the game reads.
+std::vector<uint8_t> Key(USHORT aScanCode, USHORT aVirtualKey, bool aUp = false)
+{
+	RAWINPUT input{};
+	input.header.dwType = RIM_TYPEKEYBOARD;
+	input.header.dwSize = sizeof(RAWINPUTHEADER) + sizeof(RAWKEYBOARD);
+	input.data.keyboard.MakeCode = aScanCode;
+	input.data.keyboard.Flags = aUp ? RI_KEY_BREAK : RI_KEY_MAKE;
+	input.data.keyboard.VKey = aVirtualKey;
+	input.data.keyboard.Message = aUp ? WM_KEYUP : WM_KEYDOWN;
+	std::vector<uint8_t> bytes(input.header.dwSize);
+	std::memcpy(bytes.data(), &input, bytes.size());
+	return bytes;
+}
+
+RAWMOUSE MouseOf(const std::vector<uint8_t>& aBytes)
+{
+	RAWMOUSE mouse;
+	std::memcpy(&mouse, aBytes.data() + sizeof(RAWINPUTHEADER), sizeof mouse);
+	return mouse;
+}
+
+RAWKEYBOARD KeyOf(const std::vector<uint8_t>& aBytes)
+{
+	RAWKEYBOARD key;
+	std::memcpy(&key, aBytes.data() + sizeof(RAWINPUTHEADER), sizeof key);
+	return key;
+}
+
+void Inspect(Router& aRouter, std::vector<uint8_t>& aEvent)
+{
+	aRouter.Inspect(aEvent.data(), uint32_t(aEvent.size()));
+}
+
+bool Logged(LogQueue& aLog, const std::string& aLine)
+{
+	for (const std::string& line : aLog.Drain())
+	{
+		if (line == aLine)
+		{
+			return true;
+		}
+	}
+	return false;
+}
+}
+
+TEST(RouterHidesAButtonAndKeepsItsMovement)
+{
+	Building building;
+	auto     click = Mouse(RI_MOUSE_LEFT_BUTTON_DOWN, 0, 5, -3);
+	Inspect(building.router, click);
+	const RAWMOUSE mouse = MouseOf(click);
+	CHECK_EQ(mouse.usButtonFlags, USHORT(0));  // the game sees no press
+	CHECK_EQ(mouse.lLastX, LONG(5));           // but the look keeps working
+	CHECK_EQ(mouse.lLastY, LONG(-3));
+	const auto inputs = building.mapping.Inputs();
+	CHECK(inputs.size() == 1 && inputs[0].type == proto::kInMouseButton && inputs[0].code == 1 && inputs[0].a == 1);
+	CHECK(building.router.TakePress().has_value());  // a latency mark
+	CHECK(!building.router.TakePress());
+	// The release, with the horizontal wheel in the same event: that stays the game's.
+	auto release = Mouse(RI_MOUSE_LEFT_BUTTON_UP | RI_MOUSE_HWHEEL, 120);
+	Inspect(building.router, release);
+	CHECK_EQ(MouseOf(release).usButtonFlags, USHORT(RI_MOUSE_HWHEEL));
+	auto wheel = Mouse(RI_MOUSE_WHEEL, -120);
+	Inspect(building.router, wheel);
+	CHECK_EQ(MouseOf(wheel).usButtonFlags, USHORT(0));
+	auto side = Mouse(RI_MOUSE_BUTTON_5_DOWN);  // the user's Minecraft picks hotbar slots with the side buttons
+	Inspect(building.router, side);
+	CHECK_EQ(MouseOf(side).usButtonFlags, USHORT(0));
+	const auto rest = building.mapping.Inputs();
+	CHECK(rest.size() == 3 && rest[0].a == 0 && rest[1].type == proto::kInScroll && rest[1].a == -120 && rest[2].code == 5);
+}
+
+TEST(RouterMakesAKeyANoOp)
+{
+	Building building;
+	auto     one = Key(0x02, '1');
+	Inspect(building.router, one);
+	const RAWKEYBOARD key = KeyOf(one);
+	CHECK_EQ(key.VKey, USHORT(0xFF));  // the game skips it
+	CHECK_EQ(key.MakeCode, USHORT(0));
+	CHECK_EQ(key.Message, UINT(WM_KEYDOWN));
+	const auto inputs = building.mapping.Inputs();
+	CHECK(inputs.size() == 1 && inputs[0].type == proto::kInKey && inputs[0].code == 30 && inputs[0].a == 1);
+	CHECK(!building.router.TakePress());  // only buttons are marks
+	auto w = Key(0x11, 'W');
+	Inspect(building.router, w);
+	CHECK_EQ(KeyOf(w).VKey, USHORT('W'));  // V still walks
+	CHECK(building.mapping.Inputs().empty());
+}
+
+TEST(RouterLeavesEverythingElseAlone)
+{
+	Building building;
+	auto     move = Mouse(0, 0, 7, 7);
+	Inspect(building.router, move);
+	CHECK_EQ(building.router.Report().read, 1ull);
+	// Too short for its type: left as it is, and not read.
+	auto short1 = Mouse(RI_MOUSE_LEFT_BUTTON_DOWN);
+	building.router.Inspect(short1.data(), uint32_t(sizeof(RAWINPUTHEADER) + sizeof(RAWMOUSE) - 1));
+	CHECK_EQ(MouseOf(short1).usButtonFlags, USHORT(RI_MOUSE_LEFT_BUTTON_DOWN));
+	auto short2 = Key(0x02, '1');
+	building.router.Inspect(short2.data(), uint32_t(sizeof(RAWINPUTHEADER) + sizeof(RAWKEYBOARD) - 1));
+	CHECK_EQ(KeyOf(short2).VKey, USHORT('1'));
+	building.router.Inspect(short2.data(), 0);
+	building.router.Inspect(nullptr, 64);
+	// Another device's type, with a press's bytes in it.
+	auto hid = Mouse(RI_MOUSE_LEFT_BUTTON_DOWN);
+	hid[0] = RIM_TYPEHID;
+	Inspect(building.router, hid);
+	CHECK_EQ(MouseOf(hid).usButtonFlags, USHORT(RI_MOUSE_LEFT_BUTTON_DOWN));
+	CHECK(building.mapping.Inputs().empty());
+	CHECK_EQ(building.router.Report().read, 1ull);
+}
+
+TEST(RouterPassesEverythingOutsideBuildMode)
+{
+	LogQueue log;
+	Mapping  mapping;
+	Router   router(log, &FakeFront);
+	g_inFront = true;
+	router.SetLink(mapping.link);
+	router.Update(true, Linked());
+	auto click = Mouse(RI_MOUSE_RIGHT_BUTTON_DOWN);
+	Inspect(router, click);
+	CHECK_EQ(MouseOf(click).usButtonFlags, USHORT(RI_MOUSE_RIGHT_BUTTON_DOWN));
+	auto three = Key(0x04, '3');
+	Inspect(router, three);
+	CHECK_EQ(KeyOf(three).VKey, USHORT('3'));
+	CHECK(mapping.Inputs().empty());
+	CHECK(!router.On());
+	auto f8 = Key(0x42, VK_F8);
+	Inspect(router, f8);  // F8 turns it on, and is hidden
+	CHECK(router.On());
+	CHECK_EQ(KeyOf(f8).VKey, USHORT(0xFF));
+	CHECK(Logged(log, "build mode on"));
+}
+
+TEST(RouterTakesF8sLinkRequest)
+{
+	LogQueue log;
+	Mapping  mapping;
+	Router   router(log, &FakeFront);
+	g_inFront = true;
+	router.SetLink(mapping.link);
+	link::Link::Status state = Linked();
+	state.inGame = false;
+	router.Update(false, state);
+	auto f8 = Key(0x42, VK_F8);
+	Inspect(router, f8);
+	CHECK(!router.On());
+	CHECK(router.TakeLinkRequest());
+	CHECK(!router.TakeLinkRequest());
+	router.Update(true, Linked());  // the main thread linked
+	CHECK(!router.TurnOn());
+	CHECK(router.On());
+	router.TurnOff("a build off request");
+	state.inWorld = false;
+	router.Update(true, state);
+	CHECK_STR(router.TurnOn().value_or("on"), "Minecraft isn't in its world");
+	CHECK(Logged(log, "build mode stays off: Minecraft isn't in its world"));
+}
+
+TEST(RouterEndsBuildModeWhenMinecraftOrVGoes)
+{
+	struct Case
+	{
+		bool        linked, minecraft, inWorld, inGame;
+		const char* why;
+	};
+	for (const Case& c : { Case{ true, false, false, false, "Minecraft has gone" },
+	                       Case{ true, true, false, true, "Minecraft left its world" }, Case{ false, true, true, false, "unlinked" },
+	                       Case{ true, true, true, false, "V isn't found" } })
+	{
+		Building           building;
+		link::Link::Status state;
+		state.minecraft = c.minecraft;
+		state.inWorld = c.inWorld;
+		state.inGame = c.inGame;
+		building.router.Update(c.linked, state);
+		CHECK(!building.router.On());
+		CHECK_STR(building.router.Report().why, c.why);
+		const auto inputs = building.mapping.Inputs();
+		CHECK(inputs.size() == 1 && inputs[0].type == proto::kInReleaseAll);  // Minecraft lets go of everything
+	}
+}
+
+TEST(RouterLetsGoWhenTheGameLosesTheFront)
+{
+	Building building;
+	auto     use = Mouse(RI_MOUSE_RIGHT_BUTTON_DOWN);
+	Inspect(building.router, use);
+	building.mapping.Inputs();
+	building.router.FrontLost();
+	const auto inputs = building.mapping.Inputs();
+	CHECK(inputs.size() == 1 && inputs[0].type == proto::kInReleaseAll);
+	CHECK(building.router.On());
+	CHECK(Logged(building.log, "the game lost the front in build mode: Minecraft lets go of everything"));
+	building.router.TurnOff("a build off request");
+	building.mapping.Inputs();
+	building.router.FrontLost();
+	CHECK(building.mapping.Inputs().empty());  // off: nothing to let go of
+	// A click in another window that reached the game anyway isn't Minecraft's.
+	CHECK(!building.router.TurnOn());
+	g_inFront = false;
+	auto away = Mouse(RI_MOUSE_LEFT_BUTTON_DOWN);
+	Inspect(building.router, away);
+	CHECK_EQ(MouseOf(away).usButtonFlags, USHORT(RI_MOUSE_LEFT_BUTTON_DOWN));
+	CHECK(building.mapping.Inputs().empty());
+	g_inFront = true;
+}
+
+TEST(RouterPushesNothingOnceTheLinkIsGone)
+{
+	Building building;
+	building.router.SetLink(nullptr);  // the plugin unloading
+	auto click = Mouse(RI_MOUSE_LEFT_BUTTON_DOWN);
+	Inspect(building.router, click);
+	building.router.TurnOff("the plugin unloads");
+	CHECK(building.mapping.Inputs().empty());
+}
+
+TEST(RouterReportsBuildMode)
+{
+	Building building;
+	auto     three = Key(0x04, '3');
+	Inspect(building.router, three);
+	auto up = Mouse(RI_MOUSE_WHEEL, 120, 1, 1);
+	Inspect(building.router, up);
+	const InputReport on = building.router.Report();
+	CHECK(on.on);
+	CHECK_EQ(on.slot.value_or(0), 2);
+	CHECK_EQ(on.read, 2ull);
+	CHECK_EQ(on.forwarded, 2ull);
+	CHECK_EQ(on.hidden, 2ull);
+	CHECK_STR(on.last, "the wheel, 120");
+	building.mapping.Inputs();
+	auto esc = Key(0x01, VK_ESCAPE);
+	Inspect(building.router, esc);
+	CHECK_EQ(KeyOf(esc).VKey, USHORT(VK_ESCAPE));  // the game opens its menu
+	const auto inputs = building.mapping.Inputs();
+	CHECK(inputs.size() == 1 && inputs[0].type == proto::kInReleaseAll);  // and Minecraft lets go of everything
+	CHECK(!building.router.On());
+	CHECK_STR(building.router.Report().why, "Esc left it");
+	CHECK(Logged(building.log, "build mode off: Esc left it"));
+}
+```
+
+- [ ] **Step 2: Edit `CMakeLists.txt` to add the test**
+
+```cmake
+	tests/TestFocusWatch.cpp
+```
+```cmake
+	tests/TestFocusWatch.cpp
+	tests/TestRouter.cpp
+```
+
+- [ ] **Step 3: Build; it must fail**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C" | sort -u | head -3
+```
+Expected: `error C1083: Cannot open include file: 'input/Router.h'`.
+
+- [ ] **Step 4: Write `src/input/Router.h`**
+
+```cpp
+#pragma once
+
+#include "LogQueue.h"
+#include "input/BuildMode.h"
+#include "link/Link.h"
+
+#include <atomic>
+#include <cstdint>
+#include <mutex>
+#include <optional>
+#include <string>
+
+// Where the game's keyboard and mouse events go (the spec's "Input"), between three threads: the game's input thread,
+// through the GetRawInputData patch (input/RawInputHook.h); the focus watch's; and the main thread, which keeps the link
+// and what it says about Minecraft and V current, and turns build mode on and off. One lock guards build mode and the
+// link, so once the main thread takes the link away, nothing pushes into the mapping.
+namespace cpmc::input
+{
+// Whether the foreground window belongs to this process.
+bool GameInFront();
+
+// Build mode and the hook, for the status.
+struct InputReport
+{
+	bool               on = false;
+	std::string        why;            // why it's off
+	std::optional<int> slot;           // Minecraft's hotbar slot, 1 to 9, once a number key has set it
+	uint64_t           read = 0;       // keyboard and mouse events read
+	uint64_t           forwarded = 0;  // events for Minecraft's input ring
+	uint64_t           hidden = 0;     // inputs hidden from the game
+	std::string        last;           // the last input forwarded
+};
+
+class Router
+{
+public:
+	using FrontCheck = bool (*)();
+	explicit Router(LogQueue& aLog, FrontCheck aInFront = &GameInFront);
+
+	// From the patch, once GetRawInputData has copied an event into aData, aBytes of it. A keyboard or mouse event that
+	// build mode takes is hidden from the game in place, and forwarded. Anything else, or too short, is left alone.
+	void Inspect(void* aData, uint32_t aBytes);
+
+	// From the main thread. The link: once the mapping opens, and null again at unload.
+	void SetLink(link::Link* aLink);
+	// Once a frame, after the link's update: whether the user linked, and what the link says. Build mode ends if
+	// Minecraft or V is gone, or the link.
+	void Update(bool aLinked, const link::Link::Status& aState);
+	// Build mode on: nothing, or why it stays off.
+	std::optional<std::string> TurnOn();
+	// Build mode off, saying why: true if it was on.
+	bool                  TurnOff(std::string aWhy);
+	bool                  On() const;
+	bool                  TakeLinkRequest();  // F8 asked for the link, since the last call
+	std::optional<double> TakePress();        // when a mouse button's press last went to Minecraft (SteadySeconds), once
+	InputReport           Report() const;
+
+	// From the focus watch: the game has just stopped being in front.
+	void FrontLost();
+
+private:
+	// With the lock held.
+	void Apply(const Decision& aDecision, bool aWasOn, const std::string& aWhyBefore);
+	bool Off(std::string aWhy);
+	void Push(const proto::InputEvent& aEvent);
+
+	LogQueue&             log_;
+	FrontCheck            inFront_;
+	mutable std::mutex    mutex_;
+	BuildMode             mode_;
+	link::Link*           link_ = nullptr;
+	Situation             situation_;  // the main thread's part: the link, Minecraft and V
+	bool                  linkRequested_ = false;
+	std::optional<double> press_;
+	std::atomic<uint64_t> read_{ 0 };
+};
+}
+```
+
+- [ ] **Step 5: Write `src/input/Router.cpp`**
+
+```cpp
+#include "input/Router.h"
+
+#include "Measurements.h"
+
+#include <Windows.h>
+
+#include <cstring>
+#include <utility>
+
+namespace cpmc::input
+{
+namespace
+{
+// The mouse flags build mode may take: the five buttons' presses and releases, and the wheel. An event without them is
+// movement, or the horizontal wheel, and stays the game's without taking the lock.
+constexpr USHORT kTaken = RI_MOUSE_LEFT_BUTTON_DOWN | RI_MOUSE_LEFT_BUTTON_UP | RI_MOUSE_RIGHT_BUTTON_DOWN | RI_MOUSE_RIGHT_BUTTON_UP |
+                          RI_MOUSE_MIDDLE_BUTTON_DOWN | RI_MOUSE_MIDDLE_BUTTON_UP | RI_MOUSE_BUTTON_4_DOWN | RI_MOUSE_BUTTON_4_UP |
+                          RI_MOUSE_BUTTON_5_DOWN | RI_MOUSE_BUTTON_5_UP | RI_MOUSE_WHEEL;
+}
+
+bool GameInFront()
+{
+	DWORD process = 0;
+	GetWindowThreadProcessId(GetForegroundWindow(), &process);
+	return process == GetCurrentProcessId();
+}
+
+Router::Router(LogQueue& aLog, FrontCheck aInFront) : log_(aLog), inFront_(aInFront)
+{
+}
+
+void Router::Inspect(void* aData, uint32_t aBytes)
+{
+	if (!aData || aBytes < sizeof(RAWINPUTHEADER))
+	{
+		return;
+	}
+	RAWINPUTHEADER header;
+	std::memcpy(&header, aData, sizeof header);
+	uint8_t* const body = static_cast<uint8_t*>(aData) + sizeof header;
+	if (header.dwType == RIM_TYPEMOUSE && aBytes >= sizeof header + sizeof(RAWMOUSE))
+	{
+		++read_;
+		RAWMOUSE mouse;
+		std::memcpy(&mouse, body, sizeof mouse);
+		if ((mouse.usButtonFlags & kTaken) == 0)
+		{
+			return;
+		}
+		const bool      inFront = inFront_();
+		std::lock_guard lock(mutex_);
+		Situation       situation = situation_;
+		situation.inFront = inFront;
+		const bool        wasOn = mode_.On();
+		const std::string whyBefore = mode_.Why();
+		const Decision    decision = mode_.Mouse({ mouse.usButtonFlags, int16_t(mouse.usButtonData) }, situation);
+		if (decision.hideButtons != 0)
+		{
+			// The game reads buttons and the wheel only from these flags, and the movement from its own fields, which stay.
+			mouse.usButtonFlags = USHORT(mouse.usButtonFlags & ~decision.hideButtons);
+			std::memcpy(body, &mouse, sizeof mouse);
+		}
+		Apply(decision, wasOn, whyBefore);
+	}
+	else if (header.dwType == RIM_TYPEKEYBOARD && aBytes >= sizeof header + sizeof(RAWKEYBOARD))
+	{
+		++read_;
+		RAWKEYBOARD key;
+		std::memcpy(&key, body, sizeof key);
+		const bool      inFront = inFront_();
+		std::lock_guard lock(mutex_);
+		Situation       situation = situation_;
+		situation.inFront = inFront;
+		const bool        wasOn = mode_.On();
+		const std::string whyBefore = mode_.Why();
+		const Decision    decision = mode_.Key({ key.MakeCode, (key.Flags & RI_KEY_E0) != 0, (key.Flags & RI_KEY_BREAK) != 0 }, situation);
+		if (decision.hideKey)
+		{
+			// A no-op: the game skips a key whose virtual key is 0xFF.
+			key.MakeCode = 0;
+			key.VKey = 0xFF;
+			std::memcpy(body, &key, sizeof key);
+		}
+		Apply(decision, wasOn, whyBefore);
+	}
+}
+
+void Router::SetLink(link::Link* aLink)
+{
+	std::lock_guard lock(mutex_);
+	link_ = aLink;
+}
+
+void Router::Update(bool aLinked, const link::Link::Status& aState)
+{
+	std::lock_guard lock(mutex_);
+	situation_.linked = aLinked;
+	situation_.inGame = aState.inGame;
+	situation_.minecraft = aState.minecraft;
+	situation_.minecraftInWorld = aState.inWorld;
+	if (mode_.On())
+	{
+		const char* why = !aState.minecraft  ? "Minecraft has gone"
+		                  : !aState.inWorld  ? "Minecraft left its world"
+		                  : !aLinked         ? "unlinked"
+		                  : !aState.inGame   ? "V isn't found"
+		                                     : nullptr;
+		if (why)
+		{
+			Off(why);
+		}
+	}
+}
+
+std::optional<std::string> Router::TurnOn()
+{
+	std::lock_guard lock(mutex_);
+	if (mode_.On())
+	{
+		return std::nullopt;
+	}
+	if (!mode_.TurnOn(situation_))
+	{
+		log_.Push("build mode stays off: " + mode_.Why());
+		return mode_.Why();
+	}
+	log_.Push("build mode on");
+	return std::nullopt;
+}
+
+bool Router::TurnOff(std::string aWhy)
+{
+	std::lock_guard lock(mutex_);
+	return Off(std::move(aWhy));
+}
+
+bool Router::On() const
+{
+	std::lock_guard lock(mutex_);
+	return mode_.On();
+}
+
+bool Router::TakeLinkRequest()
+{
+	std::lock_guard lock(mutex_);
+	return std::exchange(linkRequested_, false);
+}
+
+std::optional<double> Router::TakePress()
+{
+	std::lock_guard lock(mutex_);
+	return std::exchange(press_, std::nullopt);
+}
+
+InputReport Router::Report() const
+{
+	std::lock_guard lock(mutex_);
+	return { mode_.On(), mode_.Why(), mode_.Slot(), read_.load(), mode_.Forwarded(), mode_.Hidden(), mode_.Last() };
+}
+
+void Router::FrontLost()
+{
+	std::lock_guard lock(mutex_);
+	if (mode_.LostFront())
+	{
+		Push({ proto::kInReleaseAll, 0, 0, 0, 0 });
+		log_.Push("the game lost the front in build mode: Minecraft lets go of everything");
+	}
+}
+
+void Router::Apply(const Decision& aDecision, bool aWasOn, const std::string& aWhyBefore)
+{
+	if (aDecision.releaseAll)
+	{
+		Push({ proto::kInReleaseAll, 0, 0, 0, 0 });
+	}
+	for (size_t i = 0; i < aDecision.forwarded; ++i)
+	{
+		Push(aDecision.forward[i]);
+	}
+	if (aDecision.press)
+	{
+		press_ = SteadySeconds();
+	}
+	if (aDecision.requestLink)
+	{
+		linkRequested_ = true;
+		log_.Push("F8: linking first, then build mode");
+	}
+	if (mode_.On() != aWasOn)
+	{
+		log_.Push(mode_.On() ? "build mode on" : "build mode off: " + mode_.Why());
+	}
+	else if (!mode_.On() && mode_.Why() != aWhyBefore)
+	{
+		log_.Push("build mode stays off: " + mode_.Why());
+	}
+}
+
+bool Router::Off(std::string aWhy)
+{
+	if (!mode_.TurnOff(std::move(aWhy)))
+	{
+		return false;
+	}
+	Push({ proto::kInReleaseAll, 0, 0, 0, 0 });
+	log_.Push("build mode off: " + mode_.Why());
+	return true;
+}
+
+void Router::Push(const proto::InputEvent& aEvent)
+{
+	if (link_)
+	{
+		link_->Push(aEvent);  // a full ring drops it, and the link counts it
+	}
+}
+}
+```
+
+- [ ] **Step 6: Edit `CMakeLists.txt` to add the source**
+
+```cmake
+	src/input/FocusWatch.cpp
+```
+```cmake
+	src/input/FocusWatch.cpp
+	src/input/Router.cpp
+```
+
+- [ ] **Step 7: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `230 test(s), 0 failure(s)`.
+
+- [ ] **Step 8: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "minecraft-link: the router, between the hook, the focus watch and the main thread" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 34: Requests for build mode
+
+The spec's "Requests": `build on|off`, as F8. The plugin applies it in Task 37: on links first, if the user hasn't, and
+goes on after the link's next update; off ends build mode, and Minecraft lets go of everything.
+
+**Files:**
+- Modify: `tests/TestRequests.cpp`, `src/Requests.h`, `src/Requests.cpp`
+
+- [ ] **Step 1: Edit `tests/TestRequests.cpp` to test the build requests**
+
+```cpp
+TEST(RequestsTypeIntoMinecraft)
+```
+```cpp
+TEST(RequestsForBuildMode)
+{
+	std::string error;
+	const auto  on = cpmc::ParseRequest("build on\n", error);
+	CHECK(on.has_value());
+	CHECK(on->kind == cpmc::Request::Kind::Build);
+	CHECK_STR(on->what, "on");
+	CHECK_STR(cpmc::ParseRequest("build off", error).value_or(cpmc::Request{}).what, "off");
+	CHECK(!cpmc::ParseRequest("build", error));
+	CHECK_STR(error, "build takes on or off");
+	CHECK(!cpmc::ParseRequest("build on now", error));
+}
+
+TEST(RequestsTypeIntoMinecraft)
+```
+
+- [ ] **Step 2: Build; it must fail**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C" | sort -u | head -3
+```
+Expected: `error C2065: 'Build': undeclared identifier`.
+
+- [ ] **Step 3: Edit `src/Requests.h` to add the request**
+
+```cpp
+//   link on|off                (spike 4: the in-game flag)
+```
+```cpp
+//   link on|off                (spike 4: the in-game flag)
+//   build on|off               (build mode, as F8: on links first, if it isn't linked)
+```
+```cpp
+		Link,
+		Floor,
+		Mc,
+	};
+
+	Kind        kind = Kind::Log;
+```
+```cpp
+		Link,
+		Floor,
+		Mc,
+		Build,
+	};
+
+	Kind        kind = Kind::Log;
+```
+
+- [ ] **Step 4: Edit `src/Requests.cpp` to parse it as `link` is parsed**
+
+```cpp
+	if (command == "link")
+	{
+		if (arguments != 1 || !OneOf(words[1], { "on", "off" }))
+		{
+			return Fail(aError, "link takes on or off");
+		}
+		return Request{ Request::Kind::Link, std::string(words[1]) };
+```
+```cpp
+	if (command == "link" || command == "build")
+	{
+		if (arguments != 1 || !OneOf(words[1], { "on", "off" }))
+		{
+			return Fail(aError, std::string(command) + " takes on or off");
+		}
+		return Request{ command == "link" ? Request::Kind::Link : Request::Kind::Build, std::string(words[1]) };
+```
+
+- [ ] **Step 5: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `231 test(s), 0 failure(s)`.
+
+- [ ] **Step 6: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "minecraft-link: requests for build mode" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 35: Build mode's line in the status
+
+The spec's "Measurements": a `build=` line after `link=`. On or off with why; the slot, or that a number key sets it;
+then, since the start, the inputs forwarded to Minecraft and hidden from the game, the last one forwarded, those
+dropped with the input ring full, and the keyboard and mouse events the patch has read. That last count climbs as soon
+as the user moves the mouse, so it shows the patch is on the game's path before build mode is ever on. The latency
+line's hint now says a click in build mode is a mark too.
+
+**Files:**
+- Modify: `tests/TestStatus.cpp`, `src/Status.h`, `src/Status.cpp`
+
+- [ ] **Step 1: Edit `tests/TestStatus.cpp` to test the build line**
+
+```cpp
+	CHECK(Has(status, "latency=no samples yet: type a command while V stands still"));
+	CHECK(Has(status, "burst=none yet"));
+	CHECK(Has(status, "processes=Cyberpunk 50% of a core, 100 MB; Minecraft not running"));
+}
+```
+```cpp
+	CHECK(Has(status, "latency=no samples yet: type a command, or click in build mode, while V stands still"));
+	CHECK(Has(status, "burst=none yet"));
+	CHECK(Has(status, "processes=Cyberpunk 50% of a core, 100 MB; Minecraft not running"));
+}
+
+TEST(StatusWritesBuildMode)
+{
+	cpmc::StatusReport report;
+	cpmc::LinkReport   link;
+	link.inputHooked = true;
+	link.buildMode = true;
+	link.slot = 3;
+	link.inputsRead = 5120;
+	link.inputsForwarded = 14;
+	link.inputsHidden = 15;
+	link.lastInput = "the right button up";
+	report.link = link;
+	CHECK(Has(cpmc::FormatStatus(report), "build=on; slot 3; 14 inputs forwarded to Minecraft and 15 hidden from the game, the last: "
+	                                      "the right button up; 0 dropped with the input ring full; GetRawInputData hooked, 5120 "
+	                                      "keyboard and mouse events read"));
+	link.inputHooked = false;
+	link.buildMode = false;
+	link.buildWhy = "Esc left it";
+	link.slot.reset();
+	link.inputsDropped = 2;
+	report.link = link;
+	const std::string status = cpmc::FormatStatus(report);
+	CHECK(Has(status, "build=off: Esc left it; slot unknown until a number key; 14 inputs forwarded to Minecraft and 15 hidden from "
+	                  "the game, the last: the right button up; 2 dropped with the input ring full; GetRawInputData not hooked (see "
+	                  "the log)"));
+	CHECK(status.find("link=") < status.find("build=") && status.find("build=") < status.find("positions="));
+}
+```
+
+- [ ] **Step 2: Build; it must fail**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C" | sort -u | head -3
+```
+Expected: `error C2039: 'inputHooked': is not a member of 'cpmc::LinkReport'`.
+
+- [ ] **Step 3: Edit `src/Status.h` to add build mode's fields**
+
+```cpp
+// Spike 4's lines (the spec's "Measurements"): the link, the render ring, Minecraft's atlas, the HUD, latency, the last
+// burst, and both games' processes. "In the last second" is from one status to the next.
+```
+```cpp
+// Spike 4's lines (the spec's "Measurements"): the link, build mode, the render ring, Minecraft's atlas, the HUD, latency,
+// the last burst, and both games' processes. "In the last second" is from one status to the next.
+```
+```cpp
+	Vec3d                floorCentre;  // Minecraft axes; y is the floor's height
+```
+```cpp
+	Vec3d                floorCentre;  // Minecraft axes; y is the floor's height
+	// Build mode, and the GetRawInputData patch; counts since the start
+	bool               inputHooked = false;
+	bool               buildMode = false;
+	std::string        buildWhy;             // why it's off
+	std::optional<int> slot;                 // Minecraft's hotbar slot, once a number key has set it
+	uint64_t           inputsRead = 0;       // keyboard and mouse events
+	uint64_t           inputsForwarded = 0;  // to Minecraft
+	uint64_t           inputsHidden = 0;     // from the game
+	uint64_t           inputsDropped = 0;    // with the input ring full
+	std::string        lastInput;            // the last forwarded
+```
+```cpp
+// Lines of "key=value": mode, frames, blocks, gpu, frame, streamline, hooks, request; with a link, its lines (link,
+```
+```cpp
+// Lines of "key=value": mode, frames, blocks, gpu, frame, streamline, hooks, request; with a link, its lines (link, build,
+```
+
+- [ ] **Step 4: Edit `src/Status.cpp` to write the line**
+
+```cpp
+	                   aLink.inGame ? "in game" : "not in game");
+```
+```cpp
+	                   aLink.inGame ? "in game" : "not in game");
+	out += std::format("build={}; {}; {} inputs forwarded to Minecraft and {} hidden from the game, the last: {}; {} dropped with the "
+	                   "input ring full; {}\n",
+	                   aLink.buildMode ? std::string("on") : "off: " + OneLine(aLink.buildWhy),
+	                   aLink.slot ? std::format("slot {}", *aLink.slot) : std::string("slot unknown until a number key"),
+	                   aLink.inputsForwarded, aLink.inputsHidden, OneLine(aLink.lastInput), aLink.inputsDropped,
+	                   aLink.inputHooked ? std::format("GetRawInputData hooked, {} keyboard and mouse events read", aLink.inputsRead)
+	                                     : std::string("GetRawInputData not hooked (see the log)"));
+```
+```cpp
+	           : std::string("latency=no samples yet: type a command while V stands still\n");
+```
+```cpp
+	           : std::string("latency=no samples yet: type a command, or click in build mode, while V stands still\n");
+```
+
+- [ ] **Step 5: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `232 test(s), 0 failure(s)`.
+
+- [ ] **Step 6: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "minecraft-link: build mode's line in the status" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 36: The patch on the game's GetRawInputData, and the focus watch's thread
+
+The spec's `RawInputHook`, in `render_runtime`, since only the game can test it:
+- **The patch:** `FindImport` finds `Cyberpunk2077.exe`'s import of `GetRawInputData` from `user32.dll`, as spike 3
+  found Streamline's, and `ApplyImport` points it at the replacement. The original, and the router, are stored before
+  the patch, so no call reaches the replacement without them. If something else patched the import first, the
+  original is whatever was there.
+- **The replacement** calls the original, and hands the router only an event copied out: `RID_INPUT`, a buffer, the
+  header size this build knows, and a result neither 0 nor -1. A size query, a header-only call, or a failure passes
+  untouched.
+- **The focus watch's thread** (`CreateThread`, which reports a failure rather than throwing) checks ten times a second
+  until `RemoveRawInputHook`. Nothing waits for it to end: the router it calls is never destroyed, and by then has no
+  link.
+
+**Files:**
+- Create: `src/input/RawInputHook.h`, `src/input/RawInputHook.cpp`
+- Modify: `CMakeLists.txt`
+
+- [ ] **Step 1: Write `src/input/RawInputHook.h`**
+
+```cpp
+#pragma once
+
+#include "LogQueue.h"
+#include "input/Router.h"
+
+// The patch on Cyberpunk2077.exe's import of GetRawInputData (the spec's "Input"). The game reads every key and click
+// through it, in one place: its input system's window-message handler, for each WM_INPUT. The replacement calls the
+// original, then hands the event it copied to the router, which hides from the game what Minecraft takes. The focus
+// watch's thread starts and stops with it. Only the game can test this file.
+namespace cpmc::input
+{
+// Patches the import, and starts the focus watch. False, with nothing patched, if the exe doesn't import it by name.
+bool InstallRawInputHook(Router& aRouter, LogQueue& aLog);
+
+// Puts the import back, and stops the focus watch. A call already in the replacement finishes through the router,
+// which outlives it, as the focus watch does.
+void RemoveRawInputHook();
+}
+```
+
+- [ ] **Step 2: Write `src/input/RawInputHook.cpp`**
+
+```cpp
+#include "input/RawInputHook.h"
+
+#include "hooks/ImportPatch.h"
+#include "input/FocusWatch.h"
+
+#include <Windows.h>
+
+#include <atomic>
+#include <optional>
+
+namespace cpmc::input
+{
+namespace
+{
+using GetRawInputDataFn = UINT(WINAPI*)(HRAWINPUT, UINT, LPVOID, PUINT, UINT);
+
+GetRawInputDataFn          g_original = nullptr;
+Router*                    g_router = nullptr;
+std::optional<ImportPatch> g_patch;
+std::atomic<bool>          g_watching{ false };
+
+UINT WINAPI GetRawInputDataHook(HRAWINPUT aInput, UINT aCommand, LPVOID aData, PUINT aSize, UINT aHeaderSize)
+{
+	const UINT copied = g_original(aInput, aCommand, aData, aSize, aHeaderSize);
+	// Only an event copied out, with the header this build knows. A size query (no buffer), or a failure, passes.
+	if (aCommand == RID_INPUT && aData && aHeaderSize == sizeof(RAWINPUTHEADER) && copied != UINT(-1) && copied != 0)
+	{
+		g_router->Inspect(aData, copied);
+	}
+	return copied;
+}
+
+// The focus watch: ten times a second, whether the game has just stopped being in front. Nothing waits for it to end.
+DWORD WINAPI WatchFocus(LPVOID)
+{
+	FocusWatch watch;
+	while (g_watching.load())
+	{
+		Sleep(100);
+		if (watch.LostFront(GameInFront()) && g_watching.load())
+		{
+			g_router->FrontLost();
+		}
+	}
+	return 0;
+}
+}
+
+bool InstallRawInputHook(Router& aRouter, LogQueue& aLog)
+{
+	std::optional<ImportPatch> patch = FindImport(GetModuleHandleW(nullptr), "user32.dll", "GetRawInputData");
+	if (!patch)
+	{
+		aLog.Push("the game doesn't import GetRawInputData by name: input isn't hooked, so build mode can't work");
+		return false;
+	}
+	// Both before the patch, so no call reaches the replacement without them.
+	g_router = &aRouter;
+	g_original = reinterpret_cast<GetRawInputDataFn>(patch->original);
+	if (!ApplyImport(*patch, reinterpret_cast<void*>(&GetRawInputDataHook)))
+	{
+		aLog.Push("GetRawInputData's import couldn't be patched: input isn't hooked, so build mode can't work");
+		return false;
+	}
+	g_patch = *patch;
+	g_watching = true;
+	const HANDLE thread = CreateThread(nullptr, 0, &WatchFocus, nullptr, 0, nullptr);
+	if (thread)
+	{
+		CloseHandle(thread);
+	}
+	aLog.Push(thread ? "GetRawInputData hooked; the focus watch runs"
+	                 : "GetRawInputData hooked, but the focus watch didn't start: switching windows won't let go of held inputs");
+	return true;
+}
+
+void RemoveRawInputHook()
+{
+	g_watching = false;
+	if (g_patch)
+	{
+		RestoreImport(*g_patch);
+		g_patch.reset();
+	}
+}
+}
+```
+
+- [ ] **Step 3: Edit `CMakeLists.txt` to add it to the runtime**
+
+```cmake
+	src/render/Renderer.cpp
+)
+```
+```cmake
+	src/render/Renderer.cpp
+	src/input/RawInputHook.cpp
+)
+```
+
+- [ ] **Step 4: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `232 test(s), 0 failure(s)`.
+
+- [ ] **Step 5: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "minecraft-link: the patch on the game's GetRawInputData, and the focus watch's thread" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 37: The plugin hands keys and clicks to Minecraft in build mode (0.10.0)
+
+`Plugin.cpp` gains input (the spec's "`Plugin.cpp`" and "Input"):
+- **At load,** before the Streamline and D3D12 hooks: the router, then the patch and the focus watch. Until the user
+  links or presses F8, the router passes everything.
+- **Once the mapping opens,** the router gets the link.
+- **Each frame:**
+  - F8's link request, if there is one, links (`F8: link on: …` in the request line) and asks for build mode;
+  - `HudWanted` and `SkyState`'s menu flag take build mode from the router: the HUD shows in build mode (`hud 1`), and
+    Minecraft stops releasing held keys every frame;
+  - after the link's update, the router's: build mode ends if Minecraft or V has gone, or the link. Then build mode
+    goes on, if F8 or `build on` asked for it, with the outcome in the request line;
+  - a click that went to Minecraft marks latency, as a typed command's Enter does.
+- **Requests:** `build on|off`, which `BuildRequest` applies as F8. `LinkRequest` takes what asked for the link, for
+  the request line.
+- **The status's build line,** from the router's report, whether the patch is in, and the link's dropped inputs.
+- **At unload,** first: build mode off, so Minecraft lets go of everything; the patch put back and the focus watch
+  stopped; then the router loses the link, before the link and the mapping go.
+- **The version** is 0.10.0.
+
+**Files:**
+- Modify: `src/Plugin.cpp`, `CMakeLists.txt`
+
+- [ ] **Step 1: Edit `src/Plugin.cpp` to route input**
+
+```cpp
+// through SkyCraft's shared memory: Minecraft's player follows V, and Minecraft's blocks and HUD are drawn in the game.
+```
+```cpp
+// through SkyCraft's shared memory: Minecraft's player follows V, Minecraft's blocks and HUD are drawn in the game, and
+// in build mode (F8) the mouse buttons, the wheel and the keys 1 to 9 are Minecraft's.
+```
+```cpp
+#include "hooks/StreamlineHooks.h"
+```
+```cpp
+#include "hooks/StreamlineHooks.h"
+#include "input/RawInputHook.h"
+#include "input/Router.h"
+```
+```cpp
+#include <string>
+```
+```cpp
+#include <string>
+#include <string_view>
+```
+```cpp
+constexpr const char* kVersion = "0.9.1";
+```
+```cpp
+constexpr const char* kVersion = "0.10.0";
+```
+```cpp
+bool                      g_hooked = false;  // Streamline's imports are patched
+
+// Made at load and never destroyed: the hooks may call them until the process ends.
+cpmc::FrameLog* g_frameLog = nullptr;
+cpmc::Dumps*    g_dumps = nullptr;
+cpmc::Renderer* g_renderer = nullptr;
+```
+```cpp
+bool                      g_hooked = false;       // Streamline's imports are patched
+bool                      g_inputHooked = false;  // GetRawInputData's import is patched
+
+// Made at load and never destroyed: the hooks may call them until the process ends.
+cpmc::FrameLog*      g_frameLog = nullptr;
+cpmc::Dumps*         g_dumps = nullptr;
+cpmc::Renderer*      g_renderer = nullptr;
+cpmc::input::Router* g_router = nullptr;  // where keys and clicks go (the spec's "Input")
+```
+```cpp
+std::optional<double>            g_lastEnter;               // the link's last Enter, once marked
+```
+```cpp
+std::optional<double>            g_lastEnter;               // the link's last Enter, once marked
+bool                             g_buildWanted = false;     // F8's link, or build on: build mode, after the link's next update
+```
+```cpp
+		g_link = new cpmc::link::Link(g_mapping.Base());
+```
+```cpp
+		g_link = new cpmc::link::Link(g_mapping.Base());
+		g_router->SetLink(g_link);
+```
+```cpp
+	g_hudWanted = cpmc::HudWanted(g_hudSetting, false, state.inWorld);  // build mode comes with input, in Part 3
+```
+```cpp
+	const bool buildMode = g_router->On();
+	g_hudWanted = cpmc::HudWanted(g_hudSetting, buildMode, state.inWorld);
+```
+```cpp
+	frame.buildMode = false;
+	frame.takeHud = g_hudWanted;
+	const uint64_t drainedBefore = state.drainedBytes;
+	g_link->Update(frame, g_linkSettings, g_sink);
+```
+```cpp
+	frame.buildMode = buildMode;
+	frame.takeHud = g_hudWanted;
+	const uint64_t drainedBefore = state.drainedBytes;
+	g_link->Update(frame, g_linkSettings, g_sink);
+	g_router->Update(g_linked, state);  // build mode ends if Minecraft or V has gone, or the link
+	if (std::exchange(g_buildWanted, false))
+	{
+		const std::optional<std::string> why = g_router->TurnOn();
+		Report(why ? "build on: it stays off: " + *why : "build on: the mouse buttons, the wheel and 1 to 9 are Minecraft's");
+	}
+```
+```cpp
+		g_burst.Start(*state.lastEnter, "mc " + g_lastTyped);
+```
+```cpp
+		g_burst.Start(*state.lastEnter, "mc " + g_lastTyped);
+	}
+	if (const std::optional<double> press = g_router->TakePress())
+	{
+		g_latency.Mark(*press);  // a click that went to Minecraft
+```
+```cpp
+// link on|off (the spec's "Linking"): linking also switches drawing to gbuffer if it's off.
+void LinkRequest(bool aOn)
+```
+```cpp
+// link on|off (the spec's "Linking"): linking also switches drawing to gbuffer if it's off. aBy says what asked, when it
+// wasn't a link request.
+void LinkRequest(bool aOn, std::string_view aBy = {})
+```
+```cpp
+		return Report("link on, but drawing stays off: " + why);
+	}
+	const std::string link = g_link ? "Minecraft's player follows V" : "it starts once the mapping opens, which is " + g_mappingState;
+	Report(std::format("link on: {}; drawing is {}", link, g_renderer->ModeName()));
+```
+```cpp
+		return Report(std::format("{}link on, but drawing stays off: {}", aBy, why));
+	}
+	const std::string link = g_link ? "Minecraft's player follows V" : "it starts once the mapping opens, which is " + g_mappingState;
+	Report(std::format("{}link on: {}; drawing is {}", aBy, link, g_renderer->ModeName()));
+}
+
+// build on|off (the spec's "Requests"): as F8. On links first, if it isn't linked, and goes on after the link's next
+// update, once it knows whether V and Minecraft are there.
+void BuildRequest(bool aOn)
+{
+	if (!aOn)
+	{
+		return Report(g_router->TurnOff("a build off request") ? "build off: Minecraft lets go of everything"
+		                                                         : "build off: it's off already");
+	}
+	if (g_router->On())
+	{
+		return Report("build on: it's on already");
+	}
+	if (!g_linked)
+	{
+		LinkRequest(true, "build on: ");
+	}
+	g_buildWanted = true;
+```
+```cpp
+	case cpmc::Request::Kind::Mc: TypeRequest(request->what); break;
+```
+```cpp
+	case cpmc::Request::Kind::Mc: TypeRequest(request->what); break;
+	case cpmc::Request::Kind::Build: BuildRequest(request->what == "on"); break;
+```
+```cpp
+	report.camera = g_camera;
+```
+```cpp
+	report.camera = g_camera;
+	const cpmc::input::InputReport input = g_router->Report();
+	report.inputHooked = g_inputHooked;
+	report.buildMode = input.on;
+	report.buildWhy = input.why;
+	report.slot = input.slot;
+	report.inputsRead = input.read;
+	report.inputsForwarded = input.forwarded;
+	report.inputsHidden = input.hidden;
+	report.lastInput = input.last;
+```
+```cpp
+		report.floorCentre = state.floorCentre;
+```
+```cpp
+		report.floorCentre = state.floorCentre;
+		report.inputsDropped = state.inputsDropped;
+```
+```cpp
+	}
+	UpdateLink(seconds);
+```
+```cpp
+	}
+	if (g_link && g_router->TakeLinkRequest())
+	{
+		LinkRequest(true, "F8: ");  // F8 while unlinked: the link, then build mode once the link has seen V
+		g_buildWanted = true;
+	}
+	UpdateLink(seconds);
+```
+```cpp
+		g_renderer = new cpmc::Renderer(g_log, g_pluginDir);
+```
+```cpp
+		g_renderer = new cpmc::Renderer(g_log, g_pluginDir);
+		// Input first: it passes everything until the user links or presses F8.
+		g_router = new cpmc::input::Router(g_log);
+		g_inputHooked = cpmc::input::InstallRawInputHook(*g_router, g_log);
+```
+```cpp
+	case RED4ext::v1::EMainReason::Unload:
+```
+```cpp
+	case RED4ext::v1::EMainReason::Unload:
+		if (g_router)
+		{
+			g_router->TurnOff("the plugin unloads");  // Minecraft lets go of everything
+			cpmc::input::RemoveRawInputHook();
+			g_router->SetLink(nullptr);  // from here on, nothing pushes into the mapping
+		}
+```
+```cpp
+	aInfo->version = RED4EXT_V1_SEMVER(0, 9, 1);
+```
+```cpp
+	aInfo->version = RED4EXT_V1_SEMVER(0, 10, 0);
+```
+
+- [ ] **Step 2: Edit `CMakeLists.txt` for version 0.10.0**
+
+```cmake
+project(BlockRender VERSION 0.9.1 LANGUAGES C CXX)
+```
+```cmake
+project(BlockRender VERSION 0.10.0 LANGUAGES C CXX)
+```
+
+- [ ] **Step 3: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `232 test(s), 0 failure(s)`.
+
+- [ ] **Step 4: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "minecraft-link: the plugin hands keys and clicks to Minecraft in build mode (0.10.0)" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 38: The overlay's line for build mode
+
+The spec's "Status and the overlay": a line under the buttons with build mode and the hotbar slot, the first two parts
+of the status's `build=` line: `Build mode (F8): on, slot 3`, or `Build mode (F8): off: Esc left it, slot unknown until
+a number key`. There's no button for it: with CET's overlay open, its clicks would go to Minecraft, and Shift+F6 leaves
+build mode anyway.
+
+**Files:**
+- Modify: `tools/blockrender_hud/init.lua`
+
+- [ ] **Step 1: Edit `tools/blockrender_hud/init.lua` to show build mode**
+
+```lua
+-- HUD shows, through blockrender.request in this folder. Delete this folder to remove it.
+local status = nil       -- status.txt's lines, except the structures
+local structures = {}    -- { name, min = { x, y, z }, max = { x, y, z } }, in world coordinates
+local hudSetting = nil   -- the hud line's setting: "never", "in build mode" or "always"
+```
+```lua
+-- HUD shows, through blockrender.request in this folder. A line under them shows build mode, which F8 toggles, and
+-- Minecraft's hotbar slot. Delete this folder to remove it.
+local status = nil       -- status.txt's lines, except the structures
+local structures = {}    -- { name, min = { x, y, z }, max = { x, y, z } }, in world coordinates
+local hudSetting = nil   -- the hud line's setting: "never", "in build mode" or "always"
+local build = nil        -- the build line's first two parts: on, or off and why; and the slot
+```
+```lua
+    hudSetting = nil
+    for line in file:lines() do
+        local name, a, b, c, d, e, f = line:match("^structure=(%S+) (%S+) (%S+) (%S+) (%S+) (%S+) (%S+)$")
+        hudSetting = line:match("^hud=([^,]+),") or hudSetting
+```
+```lua
+    hudSetting = nil
+    build = nil
+    for line in file:lines() do
+        local name, a, b, c, d, e, f = line:match("^structure=(%S+) (%S+) (%S+) (%S+) (%S+) (%S+) (%S+)$")
+        hudSetting = line:match("^hud=([^,]+),") or hudSetting
+        local mode, slot = line:match("^build=([^;]*); ([^;]*);")
+        if mode ~= nil then
+            build = mode .. ", " .. slot
+        end
+```
+```lua
+        end
+        ImGui.Separator()
+```
+```lua
+        end
+        if build ~= nil then
+            ImGui.Text("Build mode (F8): " .. build)
+        end
+        ImGui.Separator()
+```
+
+- [ ] **Step 2: Check the overlay's syntax**
+
+```bash
+luac -p /d/Cyberpunk-Minecraft/spikes/block-render/tools/blockrender_hud/init.lua && echo "syntax ok"
+```
+Expected: `syntax ok`.
+
+- [ ] **Step 3: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "minecraft-link: the overlay's line for build mode" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 39: In the game: step 3
+
+Step 3 of the spec's "The steps", with the user: BlockRender 0.10.0 in the game, linked to SkyCraft's Minecraft in the
+`CyberCraft` instance, at spike 3's corner (world x −116.6, y −2005.2) with the same save. The building stays on the
+open street, where Minecraft's eye is at V's camera (the results' "Minecraft's eye among blocks").
+
+Task 27's commands come back again and again: sending a request, the log's newest lines, the status, five readings a
+second apart, and Minecraft's side. The overlay shows build mode under its buttons, and the status's `build=` line its
+counts. The log's lines come in two streams, the request lines at once and the rest at the frame's end, so lines
+listed together below may come in another order.
+
+Note what you see as you go: Step 12 records it. If a check fails, stop and find the cause with
+superpowers:systematic-debugging before going on. Fixes become new tasks, as in Part 2. An input that still reaches
+the game gets risk 1's fallback as a new task, its events' type changed to HID instead, and is checked again.
+
+**Files:**
+- Modify: `docs/spikes/2026-10-02-minecraft-link-results.md`
+
+- [ ] **Step 1: Deploy (the game must not be running)**
+
+```bash
+tasklist | grep -i -c "cyberpunk2077.exe"
+```
+Expected: `0`. If it's `1`, ask the user to quit the game first, because a running game locks the DLL.
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default -DCP2077_DIR=E:/Cyberpunk2077 > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C|error MSB"; \
+  "$CMAKE" --preset default -DCP2077_DIR= > /dev/null; \
+  ls /e/Cyberpunk2077/red4ext/plugins/BlockRender /e/Cyberpunk2077/bin/x64/plugins/cyber_engine_tweaks/mods/blockrender_hud \
+  && cmp build/RelWithDebInfo/BlockRender.dll /e/Cyberpunk2077/red4ext/plugins/BlockRender/BlockRender.dll && echo installed
+```
+Expected:
+- the plugin's folder holds `BlockRender.dll`, `BlockRender.pdb` and `shaders`, with spike 3's `atlas.bin` and
+  `atlas.json`, and the logs and dumps;
+- the overlay's folder holds `init.lua`;
+- then `installed`.
+
+The second configure clears `CP2077_DIR` again.
+
+- [ ] **Step 2: In the game: load, without Minecraft**
+
+Ask the user to check that Minecraft isn't running, then to launch the game, load the free-roam save, go to the
+corner, and stand still with open street ahead. Then read the log's first lines and the status. Expected:
+- `GetRawInputData hooked; the focus watch runs`, `BlockRender 0.10.0 loaded` and `hooked`, then
+  `the mapping: created`;
+- in the status, `build=off: F8 turns it on; slot unknown until a number key; 0 inputs forwarded to Minecraft and 0
+  hidden from the game, the last: nothing yet; 0 dropped with the input ring full; GetRawInputData hooked, … keyboard
+  and mouse events read`;
+- under the overlay's buttons, `Build mode (F8): off: F8 turns it on, slot unknown until a number key`.
+
+Ask the user to move the mouse for a few seconds, and read the status again: the events read must have grown, which
+shows the patch is on the game's path. Then ask the user to check that, with build mode off, the game takes input as
+always: draw a weapon with 1 or the wheel, aim with the right button, and put the weapon away.
+
+Then ask the user to press F8 once. Minecraft isn't running, so F8 links, and build mode stays off. Expected:
+- in the log, `F8: linking first, then build mode`, `request: F8: link on: Minecraft's player follows V; drawing is
+  gbuffer`, `build mode stays off: Minecraft isn't there`, and `request: build on: it stays off: Minecraft isn't there`;
+- in the status, `mode=gbuffer`, `link=linked; …; Minecraft absent; in game`, and `build=off: Minecraft isn't there`.
+
+- [ ] **Step 3: In the game: start Minecraft, and fill the hotbar**
+
+Ask the user to start the `CyberCraft` instance from the Modrinth App, and to say when its window has gone. The link is
+on, so Minecraft's player goes straight to V. Expected:
+- Minecraft's side: `linked to Skyrim (pid …)` with Cyberpunk's process ID, `Skyrim link up`, and
+  `opening mirror world`;
+- the log: `link: Minecraft is there (process …)`, a floor at V's feet, and `Minecraft's atlas: 2048 x 2576, 5 levels,
+  built in … ms`;
+- the status: `link=linked; …; in its world, … frames/s; in game`, Minecraft's eye at V's camera in `positions=`, and
+  still `build=off: Minecraft isn't there`, the reason F8 last gave.
+
+Then send these, each once the last shows in the status's `request=` line, and read the log's `typed:` lines:
+```text
+mc creative
+mc /item replace entity @s hotbar.0 with stone 64
+mc /item replace entity @s hotbar.1 with gold_block 64
+mc /item replace entity @s hotbar.2 with diamond_block 64
+```
+In creative mode a click breaks a block at once, and the first three slots hold blocks that look different on the
+street.
+
+- [ ] **Step 4: In the game: build mode on and off**
+
+Ask the user to press F8, look, press F8 again, look, and press it once more, and to say what they saw each time.
+Expected:
+- the first: the log's `build mode on`; the status's `build=on; slot unknown until a number key; …`; the overlay's
+  `Build mode (F8): on, …`; and Minecraft's HUD over the game, with stone, gold and diamond in its first three slots,
+  and `hud=in build mode, scale 2, showing`;
+- the second: `build mode off: F8 turned it off`, and the HUD gone;
+- the third: on again, and the HUD back.
+
+F8 itself goes to neither game: the counts' hidden inputs include F8's presses and releases.
+
+- [ ] **Step 5: In the game: each input, Minecraft's and not the game's**
+
+With build mode off (F8), ask the user to draw a weapon that shows a stray input without alarming the street: a melee
+weapon if V has one, which a left click that reached the game would swing, and a right click raise to block. If V's
+combat gadget is a grenade, a middle click that reached the game would throw it, so nobody should be near. Then F8
+again, with the street a few metres ahead. One input at a time, ask the user what Minecraft did, in its HUD or on the
+street, and whether V did anything, and read the status's `build=` line after each:
+
+| Input | Minecraft | V | The `build=` line |
+|---|---|---|---|
+| 1 | selects slot 1: stone | doesn't switch weapons | `slot 1`; the last `the key 1 up` |
+| a right click on the street | places stone where the crosshair is | doesn't block or aim | the last `the right button up` |
+| 2, then a right click | gold, where the crosshair is | | `slot 2` |
+| 3, then a right click | diamond | | `slot 3` |
+| a left click on the gold | breaks it | doesn't swing | the last `the left button up` |
+| 2, then the wheel a notch down and a notch up | the selection to slot 3 and back to 2 | doesn't switch weapons | the slot follows: 3, then 2 |
+| 1, then a middle click on the diamond | picks it: the selection jumps to slot 3 | throws nothing, tags nothing | still `slot 1`: a pick is Minecraft's own, as the spec says |
+| 4 to 7 | each selects its slot | doesn't switch weapons | the slot follows |
+| 8 and 9 | nothing: this instance binds slots 8 and 9 to the side buttons | doesn't switch weapons | `slot 8`, `slot 9`, though Minecraft's stays at 7 |
+| the side button for slot 8, then the one for 9 | selects slot 8, then 9 | nothing | `slot unknown until a number key`; the last `mouse button 5 up` or `mouse button 4 up` |
+
+Expected after all of them: every forwarded input hidden too, so the hidden count is the forwarded one plus F8's own
+presses and releases, and `0 dropped`. Ask for a screenshot with the HUD and the blocks. If V acted on an input, stop:
+see the top of this task.
+
+- [ ] **Step 6: In the game: building on the street, walking, and building elsewhere**
+
+Ask the user to build freely for a minute on the open street ahead, placing and breaking blocks, but not to stand in
+or under what they build: there Minecraft crawls, and its clicks land short (the results' "Minecraft's eye among
+blocks"). Then to walk about 20 m along the street with build mode on, and build there too. Expected:
+- blocks land where the crosshair points, on the street at V's feet height;
+- in `positions=`, Minecraft's eye follows V's camera, and the floor's epoch goes up once V is 16 m from its centre;
+- no `render ring:` lines and no new errors in the log.
+
+Ask for a screenshot at each spot.
+
+- [ ] **Step 7: In the game: leaving through each menu key**
+
+For each of Esc, I, M, J, P, K, H and T, then Shift+F6: with build mode on, ask the user to press the key, click
+something in what opens (a tab, say), close it, and press F8 again. Read the status after each key. Expected for each:
+- the log's `build mode off: <key> left it`, and the status's `build=off: <key> left it`;
+- the HUD gone, and the menu open and taking clicks as usual;
+- after F8, `build mode on` again.
+
+Shift+F6 opens CET's overlay, whose buttons take clicks as usual too.
+
+- [ ] **Step 8: In the game: click latency**
+
+With build mode on, slot 1 (stone), and V standing still with the street ahead: ask the user to right-click once on the
+street, then left-click the block it placed, and so on, alternately, five times each, a second or two apart. Read the
+log's `latency:` lines as they come. Expected: a line for each click, with both halves:
+- **Minecraft's,** from the click to its section's arrival: up to a 20 Hz tick, 50 ms, and a frame or two more;
+- **ours,** from the arrival to the first list that draws it: under a frame, as step 2 found for commands.
+
+Single clicks only: each click replaces a mark still waiting for its section, as each Enter does.
+
+- [ ] **Step 9: In the game: Alt-Tab with a button held**
+
+With build mode on, ask the user to look up at the sky, where nothing in Minecraft's world is in reach, and hold the
+right button: Minecraft then raises the shield in its off hand, in the HUD, for as long as the button is held. Still
+holding it, Alt-Tab to Claude Code on the second monitor, let go of the button there, wait five seconds, and come back
+to the game. Expected:
+- the log's `the game lost the front in build mode: Minecraft lets go of everything`;
+- back in the game, the HUD's shield lowered, and still `build=on`;
+- a right click on the street places a block, as before.
+
+If the shield is still up, Minecraft still holds the button: stop, and see the top of this task.
+
+- [ ] **Step 10: In the game: Unlink, and Minecraft going**
+
+Send `mc wipe`, which clears the layer at V's feet, so the blocks of both spots go if the street kept the same block
+height. Then, with build mode on, send `link off`. Expected: `build mode off: unlinked`, the HUD gone, and
+`link=not linked`. Ask the user to press F8: it links again, and build mode goes on, with
+`request=build on: the mouse buttons, the wheel and 1 to 9 are Minecraft's`. Then ask the user to stop Minecraft from
+the Modrinth App. Expected within 3 seconds: `link: Minecraft has gone` and `build mode off: Minecraft has gone`, and
+the HUD gone. Ask the user to press F8 once more: `build=off: Minecraft isn't there`.
+
+- [ ] **Step 11: In the game: clean up**
+
+Send `link off` and `mode off`, each once the last shows in the status. Expected: `mode=off`, `link=not linked`, and no
+error lines in BlockRender's log for the session. Then ask the user to quit the game. BlockRender 0.10.0 stays
+installed: as before, nothing shows until the user links or picks a drawing mode, and the patch passes every input
+until F8.
+
+- [ ] **Step 12: Record the results, and commit**
+
+Add step 3 to `docs/spikes/2026-10-02-minecraft-link-results.md`, as steps 1 and 2 are there:
+- the build, and any change to the game's settings;
+- each check above, with what the user saw and the status's counts: each input, Minecraft's and not the game's;
+  building at both spots; each menu key; Alt-Tab with the button held; Unlink and Minecraft going;
+- click latency, both halves, beside step 2's for commands;
+- anything that surprised, and what it means for what comes next;
+- the verdict for step 3.
+
+Then commit:
+```bash
+cd /d/Cyberpunk-Minecraft && git add docs/spikes \
+  && git commit -q -m "minecraft-link: step 3's results" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 40: Close Part 3, and the spike
+
+- [ ] **Step 1: Add "How Part 3 went" to this plan**
+
+At the end: what ran as written, what changed, and what step 3 found.
+
+- [ ] **Step 2: Record the spike's verdict**
+
+The spec's step 4. At the top of `docs/spikes/2026-10-02-minecraft-link-results.md`, the answer to the spike's
+question (the spec's "Purpose"), from steps 1 to 3: whether Night City shows Minecraft's live world a frame or two
+after Minecraft changes it, with the building done from inside Cyberpunk, and both games at acceptable frame rates.
+Then what the spike leaves for the project: puppeting, Night City's collision, and what step 3 found.
+
+- [ ] **Step 3: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add docs \
+  && git commit -q -m "minecraft-link: Part 3 closed, and the spike's verdict" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+- [ ] **Step 4: Finish the branch**
+
+Use superpowers:finishing-a-development-branch. The user has chosen a local fast-forward merge of the spike branch
+into `main` each time so far; ask again.
