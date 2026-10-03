@@ -16,6 +16,7 @@ namespace cpmc
 //   reload
 //   set <name> <value>         (name: lower-case letters, digits, '.' and '_'; value: a finite number)
 //   link on|off                (spike 4: the in-game flag)
+//   build on|off               (build mode, as F8: on links first, if it isn't linked)
 //   floor                      (a fresh floor around V)
 //   mc <set>|<command>         (a set: creative, tnt-kit, tnt-ahead, wall, tnt-cube, field or wipe; a command starts with
 //                               '/' and runs verbatim to the end of the line)
@@ -33,6 +34,7 @@ struct Request
 		Link,
 		Floor,
 		Mc,
+		Build,
 	};
 
 	Kind        kind = Kind::Log;

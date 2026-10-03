@@ -110,6 +110,19 @@ TEST(RequestsForTheLink)
 	CHECK(!cpmc::ParseRequest("floor now", error));
 }
 
+TEST(RequestsForBuildMode)
+{
+	std::string error;
+	const auto  on = cpmc::ParseRequest("build on\n", error);
+	CHECK(on.has_value());
+	CHECK(on->kind == cpmc::Request::Kind::Build);
+	CHECK_STR(on->what, "on");
+	CHECK_STR(cpmc::ParseRequest("build off", error).value_or(cpmc::Request{}).what, "off");
+	CHECK(!cpmc::ParseRequest("build", error));
+	CHECK_STR(error, "build takes on or off");
+	CHECK(!cpmc::ParseRequest("build on now", error));
+}
+
 TEST(RequestsTypeIntoMinecraft)
 {
 	std::string error;
