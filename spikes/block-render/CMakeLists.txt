@@ -78,6 +78,7 @@ add_library(render_runtime STATIC
 	src/log/FrameLog.cpp
 	src/log/Dumps.cpp
 	src/render/Renderer.cpp
+	src/input/RawInputHook.cpp
 )
 target_link_libraries(render_runtime PUBLIC render_core RED4ext::SDK d3d12)
 
