@@ -337,9 +337,10 @@ The names are proposals; the plan settles them.
 
 ### Entering
 
-Build mode turns on (F8 or `build on`) only when Minecraft is in its world, and V is found, alive and on foot: not in
-a vehicle, and not in a workspot (sitting, or held by a scene), through the game's script calls, chosen while
-planning. Otherwise it says why, as spike 4's does. Then:
+Build mode turns on (F8 or `build on`) only when Minecraft is in its world with its player alive, and V is found,
+alive and on foot: not in a vehicle, and not in a workspot (sitting, or held by a scene), through the game's script
+calls: the global `GetMountedVehicle;GameObject`, `WorkspotGameSystem.IsActorInWorkspot` and V's `IsDead` (see
+"Changes while planning"). Otherwise it says why, as spike 4's does. Then:
 1. **The ground:**
    - in `floor` mode, a fresh floor at V's feet, with its voxels (see "Part 2");
    - in `city` mode, the exporter's regions, which it keeps around V anyway.
@@ -376,10 +377,11 @@ In `OnUpdate`, after `Link::Update` has read `McState`:
    - **A target that isn't finite, or is more than 20 m from V,** isn't used: the frame is skipped and counted. If the
      targets stay bad for a second, build mode ends and says why.
 3. **The teleport:** `TeleportationFacility.Teleport(V, target, EulerAngles(0, 0, yaw))`, found by its script name and
-   called the way `PlayerLocator` calls the camera system.
+   called the way `PlayerLocator` calls the camera system, once its parameters' types are checked.
    - The yaw is V's current one, from `GetWorldYaw` as FreeFly reads it.
    - If that fights Cyberpunk's turning, `set turn 1` adds the frame's turn from the raw mouse movement the input patch
-     sees. Counts become degrees by a ratio measured while V turns outside build mode.
+     sees. Counts become degrees by a ratio measured while V turns outside build mode: the median of the last turns'
+     ratios, so a menu's cursor, or a turn the game makes by itself, doesn't move it.
    - Which of the two works is step 2's opening check.
 4. **The rest of the link,** as now:
    - the look from V's camera into `SkyState`, and V's feet as its position;
@@ -424,15 +426,17 @@ Then:
 ### Status
 
 A drive line:
-- off, waiting (and for how long), or driving, with the reason when it's off;
-- V's camera's distance from Minecraft's eye: the last, and this second's average and worst;
+- off, or waiting or driving and for how long; why build mode is off stays in the `build=` line above it;
+- V's eye height, and V's camera's distance from Minecraft's eye: the last, and this second's average and worst;
 - the render delay, and the frames that waited for a late tick;
 - frames skipped for a bad target;
 - the teleport call's time;
-- V's health, read through the game's stat pools, so fall damage shows.
+- V's health, read through the game's stat pools, so fall damage shows;
+- the turn setting and its ratio, and how Minecraft's player moves (on the ground, sneaking, flying and so on).
 
-The frame log (`log`) gains each frame's camera, target, render delay, and whether the frame waited for a tick, so
-judder can be measured.
+`drivelog <seconds>` records a CSV row a frame for 1 to 60 s: V's camera, where the frame put it, the render delay,
+whether the frame waited for a tick, the teleport's time, the mouse's counts, the yaw and the turn, so judder can be
+measured.
 
 ## Part 2: Night City's shape in Minecraft
 
@@ -661,7 +665,7 @@ Part 1 in BlockRender 0.11.0, deployed. At spike 3's corner, with `ground floor`
   - standing still in Minecraft, the user turns the mouse and looks up and down. Does the view move as it does outside
     build mode? If not, `set turn 1`, and again.
 - **Moving:** walking, strafing, backing up, sprinting, jumping, sneaking (the view drops to Minecraft's eye), and
-  flying up and down. The user judges how smooth it is. The status and a frame log record V's camera against
+  flying up and down. The user judges how smooth it is. The status and a drive log record V's camera against
   Minecraft's eye, the render delay and late ticks.
 - **Entering with W held:** V stays where it is until Minecraft drives, then walks as Minecraft's player once W is
   pressed again.
@@ -720,12 +724,14 @@ plugin's folder or the overlay's. The new commands:
 | `set ground floor\|city` | What Minecraft gets as the game's shape: the flat floor, or Night City's collision |
 | `set exportbudget <ms>` | The exporter's main-thread budget a frame (1.5) |
 | `set turn 0\|1` | Adds the frame's mouse turn to the teleport's yaw (0) |
+| `drivelog <seconds>` | Records the drive, a CSV row a frame, for 1 to 60 s, into `logs\<time>\drive.csv` |
 | `set blocks 0\|1` | Bodies for Minecraft's blocks around V (0) |
 | `shapes` | Logs the static shapes within 2 m of Minecraft's player (or V, outside build mode): geometry, actor, filters |
 | `box on\|off` | Step 4's test box, 3 m ahead of V, made as the bodies are |
 | `scenewatch on\|off` | Step 3's watch of scene 0: which threads add, remove, step, fetch, lock and shift it, and when |
 
-The overlay gains buttons for the ground, blocks, the box and `shapes`, and the drive, ground and bodies lines.
+The overlay gains buttons for the turn and the drive log, the ground, blocks, the box and `shapes`, and the drive,
+ground and bodies lines. Part 1 adds the first two buttons and the drive line.
 
 ## Measurements and the status
 
@@ -827,7 +833,7 @@ Steps 2 to 4.
 
 ## Risks
 
-1. **The per-frame teleport fights the look.** `set turn 1` adds the turn back. If it judders, the frame log shows
+1. **The per-frame teleport fights the look.** `set turn 1` adds the turn back. If it judders, the drive log shows
    where in the frame the camera is taken. If teleporting can't be made smooth at all, the spike reports it, with what
    it found.
 2. **V's own movement states while placed:** falling between teleports, landing, fall damage. `NoMovement` is the
@@ -991,3 +997,32 @@ then walked through as it would run. The sections above already include these ch
   first.
 - **Spike 1's dumps:** objects by category, Minecraft's axes relative to V's feet, and spot B's 64,192 static
   triangles.
+
+## Changes while planning
+
+Part 1's plan (`docs/superpowers/plans/2026-10-03-collision-and-movement.md`) changed or settled these. The sections
+above already include them.
+- **The voxelizer's boundary:** SkyCraft's candidate range is empty for a triangle lying exactly on a sub-voxel
+  boundary, so a floor at a whole height would get no voxels. The port fills the layers on both sides of the boundary,
+  and says so in its code.
+- **The drive log replaces the frame log's additions.** The frame log (`log`) records two frames of the renderer's
+  D3D12 work, and judder needs seconds of frames, so `drivelog <seconds>` records the drive as CSV instead.
+- **`mclink`'s `build`** turns the drive on and off, and starts off.
+- **The order of the work:** the tasks follow the testable steps. `mclink` and step 1 come before the plugin's
+  changes, so the link's side is checked against the real Minecraft before anything goes into the game.
+- **Minecraft's player dead** keeps build mode off, and ends it, from McState's `kMcDead`, through the input router.
+- **The script calls:**
+  - in a vehicle is the global `GetMountedVehicle;GameObject`, as ImmersiveFirstPerson calls it. Not
+    `VehicleComponent.IsMountedToVehicle(GameInstance, GameObject)`: the SDK's `ScriptGameInstance` constructor aborts
+    the game if the type's size ever differs from the game's. A vehicle's seat is also a workspot, so
+    `IsActorInWorkspot` catches it too;
+  - V's health is `StatPoolsSystem.GetStatPoolValue` on V's `GetEntityID`, Health (17) in percent;
+  - each function is picked by its parameters' and return types, a system's instance is checked before a call, and a
+    static or global call gets a `void*` instance, so `ExecuteFunction` never calls on a null system;
+  - every address the SDK resolves on their path is in the game's `cyberpunk2077_addresses.json` (2.31), including
+    `rtti::Function::InternalCall`, which scripted functions such as `IsDead` need.
+- **The turn ratio** is the median of the last turns' ratios, each turn ending after 5 still frames, so counts the
+  game takes a frame late still count, and a menu's cursor doesn't.
+- **The status's drive line** leaves why build mode is off to the `build=` line, and adds V's eye height, the turn,
+  and Minecraft's player's movement flags.
+- **The overlay** shows a short drive line, with buttons for `set turn` and `drivelog 10`.
