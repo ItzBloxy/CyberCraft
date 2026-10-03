@@ -2,15 +2,18 @@
 // to map Cyberpunk's frame (spike 3's step 1: the frame log and the dumps), and draws Minecraft blocks into it (step 2:
 // on the finished frame; step 3: before DLSS; step 4: into the G-buffer). Spike 4 links it to SkyCraft's Minecraft
 // through SkyCraft's shared memory: Minecraft's player follows V, Minecraft's blocks and HUD are drawn in the game, and
-// in build mode (F8) the mouse buttons, the wheel and the keys 1 to 9 are Minecraft's.
+// in build mode (F8) the mouse buttons, the wheel and the keys 1 to 9 are Minecraft's. Spike 5 has Minecraft drive in
+// build mode: the movement keys are Minecraft's too, and V is teleported to its player's eye every frame.
 // Commands come through blockrender.request, in its folder or the overlay's, and status.txt in the overlay's folder says
-// what it's doing. See docs/superpowers/specs/2026-10-01-block-render-design.md and 2026-10-02-minecraft-link-design.md.
+// what it's doing. See docs/superpowers/specs/2026-10-01-block-render-design.md, 2026-10-02-minecraft-link-design.md and
+// 2026-10-03-collision-and-movement-design.md.
 #include <RED4ext/RED4ext.hpp>
 
 #include "LogQueue.h"
 #include "Measurements.h"
 #include "PlayerLocator.h"
 #include "ProcessUsage.h"
+#include "Puppet.h"
 #include "Requests.h"
 #include "Status.h"
 #include "hooks/D3D12Hooks.h"
@@ -20,6 +23,8 @@
 #include "input/Router.h"
 #include "link/Link.h"
 #include "link/Mapping.h"
+#include "link/Turn.h"
+#include "log/DriveLog.h"
 #include "log/Dumps.h"
 #include "log/FrameLog.h"
 #include "log/FrameLogData.h"
@@ -50,7 +55,7 @@ namespace
 using Clock = std::chrono::steady_clock;
 using namespace std::chrono_literals;
 
-constexpr const char* kVersion = "0.10.0";
+constexpr const char* kVersion = "0.11.0";
 
 RED4ext::v1::PluginHandle g_handle = nullptr;
 const RED4ext::v1::Sdk*   g_sdk = nullptr;
@@ -97,6 +102,12 @@ cpmc::ProcessWatch               g_cyberpunkProcess;
 cpmc::ProcessWatch               g_minecraftProcess;
 double                           g_lastFrameAt = 0.0;  // SteadySeconds() at the last OnUpdate
 
+// Spike 5: build mode's drive (its spec's "Part 1"). Main thread only.
+cpmc::Puppet          g_puppet{ g_log };  // the game's script calls that place V
+cpmc::link::TurnRatio g_turnRatio;        // the mouse's counts to V's degrees, measured outside build mode
+bool                  g_turn = false;     // set turn 1: each teleport's yaw gains the frame's turn from the mouse
+cpmc::DriveLog        g_driveLog;
+
 // This frame's figures, for bursts.
 struct FrameFigures
 {
@@ -119,6 +130,14 @@ struct SecondFigures
 	uint64_t                                       minecraftFramesAtStart = 0;
 	std::array<uint64_t, cpmc::link::Link::kTypes> messagesAtStart{};
 	std::array<uint64_t, cpmc::link::Link::kTypes> bytesAtStart{};
+	// The drive's
+	uint64_t waitedAtStart = 0;
+	double   eyeDistanceSum = 0.0;
+	double   eyeDistanceWorst = 0.0;
+	uint64_t eyeDistanceFrames = 0;
+	double   teleportMsSum = 0.0;
+	double   teleportMsWorst = 0.0;
+	uint64_t teleportCalls = 0;
 };
 SecondFigures g_second;
 
@@ -269,11 +288,75 @@ void OpenMapping()
 	}
 }
 
+// QueryPerformanceCounter: the clock Minecraft stamps its ticks with.
+int64_t QpcNow()
+{
+	LARGE_INTEGER now{};
+	QueryPerformanceCounter(&now);
+	return now.QuadPart;
+}
+
+int64_t QpcPerSecond()
+{
+	static const int64_t perSecond = [] {
+		LARGE_INTEGER frequency{};
+		QueryPerformanceFrequency(&frequency);
+		return frequency.QuadPart;
+	}();
+	return perSecond;
+}
+
+// What placing V did this frame, for the status and the drive log.
+struct Placed
+{
+	double                teleportMs = 0.0;
+	double                turn = 0.0;  // degrees set turn 1 added
+	std::optional<double> yaw;         // the teleport's, if V was teleported
+};
+
+// Spike 5's drive, after the link's update: build mode ends if the link says so; otherwise, while it's on, V goes where
+// the link puts it, facing its own yaw, and the frame's turn from the mouse with set turn 1. A teleport that fails ends
+// build mode, so Minecraft never walks away from a V that can't follow.
+Placed PlaceV(const cpmc::link::Link::Status& aState, const std::optional<double>& aYaw, int64_t aMouseX)
+{
+	Placed placed;
+	if (!aState.endBuild.empty())
+	{
+		g_router->TurnOff(aState.endBuild);
+		return placed;
+	}
+	if (!aState.placeV || !g_router->On())
+	{
+		return placed;
+	}
+	if (!aYaw)
+	{
+		g_router->TurnOff("V's yaw can't be read");
+		return placed;
+	}
+	placed.turn = g_turn ? g_turnRatio.Turn(aMouseX) : 0.0;
+	std::string  error;
+	const double start = cpmc::SteadySeconds();
+	const bool   moved = g_puppet.Teleport(*aState.placeV, *aYaw + placed.turn, error);
+	placed.teleportMs = (cpmc::SteadySeconds() - start) * 1000.0;
+	if (!moved)
+	{
+		g_router->TurnOff("V couldn't be placed: " + error);
+		return placed;
+	}
+	placed.yaw = *aYaw + placed.turn;
+	++g_second.teleportCalls;
+	g_second.teleportMsSum += placed.teleportMs;
+	g_second.teleportMsWorst = std::max(g_second.teleportMsWorst, placed.teleportMs);
+	return placed;
+}
+
 // The link, once a frame (the spec's "The link"): V's pose and the HUD's size, then Link::Update, which hands what
-// Minecraft sends to the sink.
-void UpdateLink(double aNow)
+// Minecraft sends to the sink. In build mode, V then goes where the link puts it (spike 5).
+void UpdateLink(double aNow, double aFrameMs)
 {
 	g_frame = {};
+	const int64_t mouseX = g_router->TakeMouseX();  // every frame, so a frame's turn is only its own
 	if (!g_link)
 	{
 		return;
@@ -286,6 +369,18 @@ void UpdateLink(double aNow)
 	}
 	g_camera = pose ? std::optional<cpmc::Vec3d>(cpmc::McFromWorld(pose->camera)) : std::nullopt;
 	const bool buildMode = g_router->On();
+	// While linked: V's yaw, and what keeps V from being placed. The turn ratio is measured outside build mode, while V
+	// can be placed, so its yaw is V's own doing.
+	const std::optional<double> yaw = g_linked && pose ? g_puppet.Yaw() : std::nullopt;
+	const std::string           blocked = g_linked && pose ? g_puppet.Blocked() : std::string();
+	if (!buildMode && yaw && blocked.empty())
+	{
+		g_turnRatio.Note(mouseX, *yaw);
+	}
+	else
+	{
+		g_turnRatio.Break();
+	}
 	g_hudWanted = cpmc::HudWanted(g_hudSetting, buildMode, state.inWorld);
 	g_renderer->SetHud(g_hudWanted);
 	const cpmc::HudSize back = g_renderer->BackBufferSize();
@@ -296,17 +391,46 @@ void UpdateLink(double aNow)
 	cpmc::link::Link::Frame frame;
 	frame.now = aNow;
 	frame.tickMs = GetTickCount64();
+	frame.qpc = QpcNow();
+	frame.qpcPerSecond = QpcPerSecond();
 	frame.pose = pose;
 	frame.linked = g_linked;
 	frame.buildMode = buildMode;
 	frame.takeHud = g_hudWanted;
 	const uint64_t drainedBefore = state.drainedBytes;
+	const uint64_t waitedBefore = state.waitedFrames;
 	g_link->Update(frame, g_linkSettings, g_sink);
-	g_router->Update(g_linked, state);  // build mode ends if Minecraft or V has gone, or the link
+	g_router->Update(g_linked, state, blocked);  // build mode ends if Minecraft or V has gone, or the link, or V can't be placed
+	const Placed placed = PlaceV(state, yaw, mouseX);
+	if (state.eyeDistance)
+	{
+		g_second.eyeDistanceSum += *state.eyeDistance;
+		g_second.eyeDistanceWorst = std::max(g_second.eyeDistanceWorst, *state.eyeDistance);
+		++g_second.eyeDistanceFrames;
+	}
+	if (g_driveLog.Recording())
+	{
+		cpmc::DriveRow row;
+		row.time = aNow;
+		row.frameMs = aFrameMs;
+		row.state = cpmc::link::DriveStateName(state.drive);
+		row.camera = pose ? std::optional<cpmc::Vec3d>(pose->camera) : std::nullopt;
+		row.target = state.placeV ? std::optional<cpmc::Vec3d>(cpmc::Vec3d{ state.placeV->x, state.placeV->y, state.placeV->z + state.eyeHeight })
+		                          : std::nullopt;
+		row.lastDistance = state.eyeDistance;
+		row.delayMs = state.renderDelayMs;
+		row.waited = state.waitedFrames != waitedBefore;
+		row.teleportMs = placed.teleportMs;
+		row.mouseX = mouseX;
+		row.yaw = placed.yaw;
+		row.turn = placed.turn;
+		g_driveLog.Add(row);
+	}
 	if (std::exchange(g_buildWanted, false))
 	{
 		const std::optional<std::string> why = g_router->TurnOn();
-		Report(why ? "build on: it stays off: " + *why : "build on: the mouse buttons, the wheel and 1 to 9 are Minecraft's");
+		Report(why ? "build on: it stays off: " + *why
+		           : "build on: Minecraft's player drives V; the movement keys, the mouse buttons, the wheel and 1 to 9 are Minecraft's");
 	}
 	g_frame.bytes = state.drainedBytes - drainedBefore;
 	g_frame.drainMs = state.drainMs;
@@ -415,6 +539,15 @@ bool SetLinkSetting(const cpmc::Request& aRequest)
 			return true;
 		}
 		g_hudScale = uint32_t(value);
+	}
+	else if (name == "turn")
+	{
+		if (value != 0.0 && value != 1.0)
+		{
+			Report("set turn: 0 teleports V with its own yaw, and 1 adds the frame's turn from the mouse");
+			return true;
+		}
+		g_turn = value == 1.0;
 	}
 	else
 	{
@@ -568,6 +701,10 @@ void RunRequest(const std::filesystem::path& aFolder, bool aWholeLine)
 		break;
 	case cpmc::Request::Kind::Mc: TypeRequest(request->what); break;
 	case cpmc::Request::Kind::Build: BuildRequest(request->what == "on"); break;
+	case cpmc::Request::Kind::DriveLog:
+		Report(g_driveLog.Start(request->number) ? std::format("drivelog: recording the drive for {:g} s", request->number)
+		                                         : "drivelog: one is already recording");
+		break;
 	}
 }
 
@@ -634,6 +771,20 @@ void WriteFrameLog(const cpmc::FrameLogData& aLog, const std::string& aFolderNam
 	                   aFolderName, aLog.evaluates.size(), aLog.submissions.size(), aLog.lists.size(), aLog.gbufferCandidates.size()));
 }
 
+void WriteDriveLog(const cpmc::DriveLog::Finished& aLog, const std::string& aFolderName)
+{
+	const std::filesystem::path folder = g_pluginDir / "logs" / aFolderName;
+	std::error_code             error;
+	std::filesystem::create_directories(folder, error);
+	std::ofstream out(folder / "drive.csv", std::ios::binary);
+	out << aLog.csv;
+	if (!out)
+	{
+		return Report("drivelog: couldn't write " + (folder / "drive.csv").string());
+	}
+	Report(std::format("drivelog: written to logs\\{}\\drive.csv ({} frames)", aFolderName, aLog.rows));
+}
+
 // The link's lines of the status (the spec's "Measurements"), from the second since the last status.
 cpmc::LinkReport LinkLines(const cpmc::Renderer::Stats& aStats, double aNow)
 {
@@ -689,7 +840,23 @@ cpmc::LinkReport LinkLines(const cpmc::Renderer::Stats& aStats, double aNow)
 		report.resyncs = state.resyncs;
 		report.translucentDropped = state.translucentDropped;
 		report.hudRefused = state.hudRefused;
+		report.drive = cpmc::link::DriveStateName(state.drive);
+		report.driveFor = state.drive == cpmc::link::DriveState::Off ? 0.0 : aNow - state.driveSince;
+		report.eyeHeight = state.eyeHeight;
+		report.eyeDistanceLast = state.eyeDistance;
+		report.eyeDistanceAverage = g_second.eyeDistanceFrames ? g_second.eyeDistanceSum / double(g_second.eyeDistanceFrames) : 0.0;
+		report.eyeDistanceWorst = g_second.eyeDistanceWorst;
+		report.renderDelayMs = state.renderDelayMs;
+		report.waitedFrames = state.waitedFrames - g_second.waitedAtStart;
+		report.skippedFrames = state.driveSkipped;
+		report.teleportMsAverage = g_second.teleportCalls ? g_second.teleportMsSum / double(g_second.teleportCalls) : -1.0;
+		report.teleportMsWorst = g_second.teleportCalls ? g_second.teleportMsWorst : -1.0;
+		report.minecraftFlags = state.minecraftFlags;
 	}
+	report.health = g_linked ? g_puppet.Health() : std::nullopt;  // once a second, so fall damage shows
+	report.turn = g_turn;
+	report.turnRatio = g_turnRatio.Ratio();
+	report.turnTurns = g_turnRatio.Turns();
 	report.atlas = aStats.atlasWidth == 0 ? "none yet"
 	                                      : std::format("{} x {}, {} levels, {}", aStats.atlasWidth, aStats.atlasHeight, aStats.atlasLevels,
 	                                                    g_minecraftAtlas ? "Minecraft's" : "atlas.bin's");
@@ -733,6 +900,7 @@ void StartSecond(double aNow)
 		g_second.minecraftFramesAtStart = state.minecraftFrames;
 		g_second.messagesAtStart = state.messages;
 		g_second.bytesAtStart = state.bytes;
+		g_second.waitedAtStart = state.waitedFrames;
 	}
 }
 
@@ -825,7 +993,7 @@ bool OnUpdate(RED4ext::CGameApplication*)
 		LinkRequest(true, "F8: ");  // F8 while unlinked: the link, then build mode once the link has seen V
 		g_buildWanted = true;
 	}
-	UpdateLink(seconds);
+	UpdateLink(seconds, frameMs);
 	const auto [time, folderName] = Timestamps();
 	if (g_frameLog->Capturing())
 	{
@@ -837,6 +1005,10 @@ bool OnUpdate(RED4ext::CGameApplication*)
 	if (const std::optional<cpmc::FrameLogData> finished = g_frameLog->TakeFinished(kVersion, time))
 	{
 		WriteFrameLog(*finished, folderName);
+	}
+	if (const std::optional<cpmc::DriveLog::Finished> finished = g_driveLog.TakeFinished())
+	{
+		WriteDriveLog(*finished, folderName);
 	}
 	g_dumps->Update(folderName);
 	if (g_minecraftAtlas)
@@ -941,7 +1113,7 @@ RED4EXT_C_EXPORT void RED4EXT_CALL Query(RED4ext::v1::PluginInfo* aInfo)
 {
 	aInfo->name = L"BlockRender";
 	aInfo->author = L"Cyberpunk-Minecraft";
-	aInfo->version = RED4EXT_V1_SEMVER(0, 10, 0);
+	aInfo->version = RED4EXT_V1_SEMVER(0, 11, 0);
 	aInfo->runtime = RED4EXT_V1_RUNTIME_VERSION_LATEST;
 	aInfo->sdk = RED4EXT_V1_SDK_VERSION_CURRENT;
 }
