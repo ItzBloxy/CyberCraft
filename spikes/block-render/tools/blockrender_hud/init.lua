@@ -2,10 +2,12 @@
 -- into this folder once a second, plus V's position, heading and Minecraft block, and the nearest structure, and the
 -- frame time as CET sees it, which works without BlockRender too and goes into frames.txt here as well. Its buttons
 -- switch BlockRender's drawing mode, link it to Minecraft, type commands into Minecraft, and cycle when Minecraft's
--- HUD shows, through blockrender.request in this folder. Delete this folder to remove it.
+-- HUD shows, through blockrender.request in this folder. A line under them shows build mode, which F8 toggles, and
+-- Minecraft's hotbar slot. Delete this folder to remove it.
 local status = nil       -- status.txt's lines, except the structures
 local structures = {}    -- { name, min = { x, y, z }, max = { x, y, z } }, in world coordinates
 local hudSetting = nil   -- the hud line's setting: "never", "in build mode" or "always"
+local build = nil        -- the build line's first two parts: on, or off and why; and the slot
 local player = nil       -- the lines about V
 local sinceRead = 1.0
 local frames = { sum = 0.0, count = 0, worst = 0.0 }  -- this second's frame times, from onUpdate
@@ -55,9 +57,14 @@ local function readStatus()
     status = {}
     structures = {}
     hudSetting = nil
+    build = nil
     for line in file:lines() do
         local name, a, b, c, d, e, f = line:match("^structure=(%S+) (%S+) (%S+) (%S+) (%S+) (%S+) (%S+)$")
         hudSetting = line:match("^hud=([^,]+),") or hudSetting
+        local mode, slot = line:match("^build=([^;]*); ([^;]*);")
+        if mode ~= nil then
+            build = mode .. ", " .. slot
+        end
         if name ~= nil then
             table.insert(structures, {
                 name = name,
@@ -163,6 +170,9 @@ registerForEvent("onDraw", function()
             if ImGui.Button(set) then
                 request("mc " .. set)
             end
+        end
+        if build ~= nil then
+            ImGui.Text("Build mode (F8): " .. build)
         end
         ImGui.Separator()
         if status == nil then
