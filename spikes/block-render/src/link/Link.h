@@ -54,10 +54,15 @@ public:
 // A render message type's name, for reports: "section", "atlas patch" and so on, and "other" from Link::kTypes - 1 on.
 const char* RenderTypeName(size_t aType);
 
+// Where a run's teleportSeq starts: from the clock, and odd, as SkyCraft's Skyrim side starts its own. A Minecraft that
+// kept running keeps the last value it applied and teleports only on a change, so a run must not repeat it.
+uint32_t FirstTeleportSeq();
+
 class Link
 {
 public:
-	explicit Link(uint8_t* aBase);  // the mapping's memory, laid out as skycraft_protocol.h has it
+	// aBase: the mapping's memory, laid out as skycraft_protocol.h has it. aFirstTeleportSeq: tests give their own.
+	explicit Link(uint8_t* aBase, uint32_t aFirstTeleportSeq = FirstTeleportSeq());
 
 	struct Frame
 	{

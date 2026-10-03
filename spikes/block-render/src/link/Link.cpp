@@ -30,10 +30,16 @@ const char* RenderTypeName(size_t aType)
 	return names[aType < Link::kTypes ? aType : Link::kTypes - 1];
 }
 
-Link::Link(uint8_t* aBase)
+uint32_t FirstTeleportSeq()
+{
+	return uint32_t(std::chrono::steady_clock::now().time_since_epoch().count()) | 1u;
+}
+
+Link::Link(uint8_t* aBase, uint32_t aFirstTeleportSeq)
     : base_(aBase), overlay_(aBase + proto::kOffOverlayCtl, aBase + proto::kOffOverlaySlotHdr, aBase + proto::kOffOverlayPixels,
                              proto::kOverlaySlotBytes)
 {
+	status_.teleportSeq = aFirstTeleportSeq;
 }
 
 void Link::Update(const Frame& aFrame, const LinkSettings& aSettings, LinkSink& aSink)
@@ -255,7 +261,12 @@ void Link::SendFloor(const Vec3d& aFeet, LinkSink& aSink)
 	bool           sent = WriteByteRing(ring, proto::kColRingDataBytes, proto::kColClear, FloorClear(epoch));
 	for (const auto& [x, z] : FloorRegions(aFeet.x, aFeet.z))
 	{
+		// Each region's triangles first, then its voxels, as SkyCraft sends them.
 		sent = sent && WriteByteRing(ring, proto::kColRingDataBytes, proto::kColTris, FloorRegion(x, z, aFeet.y, epoch));
+		for (const std::vector<uint8_t>& voxels : FloorVoxels(x, z, aFeet.y, epoch))
+		{
+			sent = sent && WriteByteRing(ring, proto::kColRingDataBytes, proto::kColRegion, voxels);
+		}
 	}
 	status_.floorEpoch = epoch;
 	status_.floorSent = sent;

@@ -1,5 +1,6 @@
 #include "Harness.h"
 
+#include "link/Floor.h"
 #include "link/Link.h"
 
 #include <Windows.h>
@@ -205,7 +206,7 @@ const LinkSettings kSettings;
 TEST(LinkWritesTheHeartbeatAndSkyState)
 {
 	FakeMinecraft minecraft;
-	Link          link(minecraft.base);
+	Link          link(minecraft.base, 0);
 	Sink          sink;
 	LinkSettings  settings;
 	settings.viewportWidth = 1280;
@@ -269,7 +270,7 @@ TEST(LinkNamesTheRenderTypes)
 TEST(LinkTeleportsMinecraftsEyeToTheCamera)
 {
 	FakeMinecraft minecraft;
-	Link          link(minecraft.base);
+	Link          link(minecraft.base, 0);
 	Sink          sink;
 	link.Update(At(1.0), kSettings, sink);
 	const auto sky = minecraft.Sky();
@@ -284,10 +285,25 @@ TEST(LinkTeleportsMinecraftsEyeToTheCamera)
 	CHECK_EQ(minecraft.Sky().flags, 0u);  // unlinked
 }
 
+TEST(LinkStartsItsTeleportSequenceFromTheClock)
+{
+	// A Minecraft that kept running keeps the last teleportSeq it applied, and teleports only when it changes. A new
+	// game side starting from 0 again could repeat it: no teleport, and an acknowledgement that looks like an arrival.
+	// So the sequence starts from the clock, as SkyCraft's does, and odd, so never 0.
+	CHECK(FirstTeleportSeq() % 2 == 1);
+	FakeMinecraft  minecraft;
+	Link           link(minecraft.base);
+	const uint32_t first = link.State().teleportSeq;
+	CHECK(first % 2 == 1);
+	Sink sink;
+	link.Update(At(1.0), kSettings, sink);  // linked, with V: the first teleport
+	CHECK_EQ(minecraft.Sky().teleportSeq, first + 1);
+}
+
 TEST(LinkTeleportsByStepAndRate)
 {
 	FakeMinecraft minecraft;
-	Link          link(minecraft.base);
+	Link          link(minecraft.base, 0);
 	Sink          sink;
 	link.Update(At(1.00), kSettings, sink);
 	link.Update(At(1.50, Corner(0.05)), kSettings, sink);
@@ -312,17 +328,22 @@ TEST(LinkSendsTheFloorOnceMinecraftIsThere)
 	minecraft.Beat(77, 2000);
 	link.Update(At(2.0), kSettings, sink);
 	auto messages = minecraft.Collision(payloads);
-	CHECK_EQ(messages.size(), size_t(50));
+	CHECK_EQ(messages.size(), size_t(1 + 49 * 4));  // the clear, then each region's triangles and three voxel regions
 	CHECK_EQ(messages[0].type, uint32_t(proto::kColClear));
 	CHECK(payloads[0] == std::vector<uint8_t>({ 1, 0, 0, 0 }));
 	CHECK_EQ(messages[1].type, uint32_t(proto::kColTris));
+	CHECK_EQ(messages[2].type, uint32_t(proto::kColRegion));
+	CHECK_EQ(messages[3].type, uint32_t(proto::kColRegion));
+	CHECK_EQ(messages[4].type, uint32_t(proto::kColRegion));
+	CHECK_EQ(messages[5].type, uint32_t(proto::kColTris));
+	CHECK(payloads[2] == FloorVoxels(-18, 247, 6.14, 1)[0]);  // the first region's, the floor's own
 	CHECK_EQ(minecraft.Sky().collisionEpoch, 1u);
 	minecraft.Beat(77, 2100);
 	link.Update(At(2.1), kSettings, sink);
 	CHECK(minecraft.Collision(payloads).empty());
 	minecraft.Beat(77, 2200);
 	link.Update(At(2.2, Corner(20.0)), kSettings, sink);  // 20 m along: a new floor
-	CHECK_EQ(minecraft.Collision(payloads).size(), size_t(50));
+	CHECK_EQ(minecraft.Collision(payloads).size(), size_t(1 + 49 * 4));
 	CHECK_EQ(link.State().floorEpoch, 2u);
 	minecraft.Beat(77, 2300);
 	link.Update(At(2.3, Corner(20.0, 1.5)), kSettings, sink);  // 1.5 m up
