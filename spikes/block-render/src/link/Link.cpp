@@ -66,6 +66,7 @@ void Link::Update(const Frame& aFrame, const LinkSettings& aSettings, LinkSink& 
 			// slots. A reset then could undo an image Minecraft has just published (it ships one left from before as
 			// soon as it relinks), leaving its writer and our reader on one slot.
 			overlay_.Reset();
+			ticks_.Reset();
 		}
 		status_.floorSent = false;
 		teleportDue_ = true;
@@ -84,12 +85,17 @@ void Link::Update(const Frame& aFrame, const LinkSettings& aSettings, LinkSink& 
 	const auto mc = there ? ReadMcState(base_) : std::nullopt;
 	status_.inWorld = mc && (mc->flags & proto::kMcInWorld);
 	status_.screenOpen = mc && (mc->flags & proto::kMcScreenOpen);
+	std::optional<TickSample> sample;
 	if (mc)
 	{
 		status_.minecraftFeet = { mc->x, mc->y, mc->z };
 		status_.minecraftEye = { mc->eyeX, mc->eyeY, mc->eyeZ };
 		status_.minecraftFrames = mc->frameCounter;
+		status_.minecraftFlags = mc->flags;
+		status_.teleportAck = mc->teleportAck;
+		sample = ticks_.Frame(*mc, aFrame.qpc, aFrame.qpcPerSecond);  // every frame, so it has settled when it drives
 	}
+	status_.renderDelayMs = ticks_.DelayMs();
 
 	// In game while linked with V there. Linking teleports Minecraft's player and sends a fresh floor.
 	const bool inGame = aFrame.linked && aFrame.pose.has_value();
@@ -107,7 +113,81 @@ void Link::Update(const Frame& aFrame, const LinkSettings& aSettings, LinkSink& 
 			status_.look = *look;
 		}
 	}
-	if (inGame)
+
+	// Build mode (spike 5): one teleport, of Minecraft's player to V's feet, and then Minecraft drives and V follows.
+	const bool build = inGame && aFrame.buildMode;
+	status_.placeV.reset();
+	status_.endBuild.clear();
+	status_.eyeDistance.reset();
+	if (aFrame.pose && !build)
+	{
+		eyeHeight_.Note(aFrame.pose->feet, aFrame.pose->camera);
+	}
+	if (build && !wasBuild_)
+	{
+		++status_.teleportSeq;
+		++status_.teleports;
+		status_.target = McFromWorld(aFrame.pose->feet);
+		lastTeleportAt_ = aFrame.now;
+		teleportDue_ = false;
+		drive_.Enter(aFrame.pose->feet, aFrame.now);
+		lastEye_.reset();
+		if (there)
+		{
+			SendFloor(status_.target, true, aSink);
+		}
+		aSink.Log("build mode: Minecraft's player goes to V's feet, and V waits there until Minecraft lets it go");
+	}
+	else if (!build && wasBuild_)
+	{
+		drive_.Leave();
+		teleportDue_ = true;  // Minecraft's player follows V again, from where it is
+		aSink.Log("build mode ended: Minecraft's player follows V again");
+	}
+	wasBuild_ = build;
+	if (build)
+	{
+		const DriveState  before = drive_.State();
+		const double      since = drive_.Since();
+		const bool        acked = mc && mc->teleportAck == status_.teleportSeq;
+		const Drive::Step driveStep = drive_.Update(aFrame.now, acked, sample, aFrame.pose->feet, eyeHeight_.Value());
+		status_.placeV = driveStep.place;
+		status_.endBuild = driveStep.end;
+		if (drive_.State() == DriveState::Driving && before == DriveState::Waiting)
+		{
+			aSink.Log(std::format("Minecraft let its player go after {:.2f} s: V follows it", aFrame.now - since));
+		}
+		else if (drive_.State() == DriveState::Waiting && before == DriveState::Driving)
+		{
+			aSink.Log("Minecraft holds its player again: V waits where it is");
+		}
+		if (drive_.State() == DriveState::Driving)
+		{
+			if (sample && sample->waited)
+			{
+				++status_.waitedFrames;
+			}
+			if (lastEye_)
+			{
+				status_.eyeDistance = Distance(aFrame.pose->camera, *lastEye_);
+			}
+		}
+		lastEye_ = drive_.State() == DriveState::Driving && driveStep.place ? drive_.Eye() : std::nullopt;
+		// The floor stays at its height while Minecraft drives, and grows around its player, never with a new epoch,
+		// whose clear would take the ground from under it. Until Minecraft has its player at V, it's around V.
+		const bool  driving = drive_.State() == DriveState::Driving && mc;
+		const Vec3d centre = driving ? Vec3d{ mc->x, mc->y, mc->z } : McFromWorld(aFrame.pose->feet);
+		if (there && (!status_.floorSent || floorRequested_))
+		{
+			SendFloor(McFromWorld(aFrame.pose->feet), true, aSink);
+			floorRequested_ = false;
+		}
+		else if (there && std::hypot(centre.x - status_.floorCentre.x, centre.z - status_.floorCentre.z) > 16.0)
+		{
+			SendFloor({ centre.x, status_.floorCentre.y, centre.z }, false, aSink);
+		}
+	}
+	else if (inGame)
 	{
 		const Vec3d target = TeleportTarget(aFrame.pose->camera);
 		const bool  due = teleportDue_ || Distance(target, status_.target) >= aSettings.teleportStep;
@@ -123,18 +203,25 @@ void Link::Update(const Frame& aFrame, const LinkSettings& aSettings, LinkSink& 
 		if (there && (!status_.floorSent || floorRequested_ || std::hypot(feet.x - status_.floorCentre.x, feet.z - status_.floorCentre.z) > 16.0 ||
 		              std::abs(feet.y - status_.floorCentre.y) > 1.0))
 		{
-			SendFloor(feet, aSink);
+			SendFloor(feet, true, aSink);
 			floorRequested_ = false;
 		}
 	}
+	status_.drive = drive_.State();
+	status_.driveSince = drive_.Since();
+	status_.driveSkipped = drive_.Skipped();
+	status_.eyeHeight = eyeHeight_.Value();
 
+	// The position: the last teleport's target, or in build mode V's feet, every frame, so that a teleport Minecraft
+	// makes by itself (a new player object, or the in-game flag coming back) puts its player where V is.
+	const Vec3d     position = build ? McFromWorld(aFrame.pose->feet) : status_.target;
 	proto::SkyState state{};
 	state.flags = (inGame ? uint32_t(proto::kSkyInGame) : 0u) | (aFrame.buildMode ? 0u : uint32_t(proto::kSkyMenuOpen));
 	state.worldId = 1;
 	state.collisionEpoch = status_.floorEpoch;
-	state.posX = status_.target.x;
-	state.posY = status_.target.y;
-	state.posZ = status_.target.z;
+	state.posX = position.x;
+	state.posY = position.y;
+	state.posZ = position.z;
 	state.yaw = status_.look.yaw;
 	state.pitch = status_.look.pitch;
 	state.teleportSeq = status_.teleportSeq;
@@ -253,17 +340,18 @@ bool Link::Take(const RingMessage& aMessage, const LinkSettings& aSettings, Link
 	}
 }
 
-void Link::SendFloor(const Vec3d& aFeet, LinkSink& aSink)
+void Link::SendFloor(const Vec3d& aCentre, bool aNewEpoch, LinkSink& aSink)
 {
-	// A new epoch each time: its clear message drops the last floor, and anything half-sent.
-	const uint32_t epoch = status_.floorEpoch + 1;
+	// A new epoch's clear message drops the last floor, and anything half-sent. Without one, the regions sent replace
+	// those already there, and the rest stay.
+	const uint32_t epoch = aNewEpoch ? status_.floorEpoch + 1 : status_.floorEpoch;
 	uint8_t* const ring = base_ + proto::kOffCollisionRing;
-	bool           sent = WriteByteRing(ring, proto::kColRingDataBytes, proto::kColClear, FloorClear(epoch));
-	for (const auto& [x, z] : FloorRegions(aFeet.x, aFeet.z))
+	bool           sent = !aNewEpoch || WriteByteRing(ring, proto::kColRingDataBytes, proto::kColClear, FloorClear(epoch));
+	for (const auto& [x, z] : FloorRegions(aCentre.x, aCentre.z))
 	{
 		// Each region's triangles first, then its voxels, as SkyCraft sends them.
-		sent = sent && WriteByteRing(ring, proto::kColRingDataBytes, proto::kColTris, FloorRegion(x, z, aFeet.y, epoch));
-		for (const std::vector<uint8_t>& voxels : FloorVoxels(x, z, aFeet.y, epoch))
+		sent = sent && WriteByteRing(ring, proto::kColRingDataBytes, proto::kColTris, FloorRegion(x, z, aCentre.y, epoch));
+		for (const std::vector<uint8_t>& voxels : FloorVoxels(x, z, aCentre.y, epoch))
 		{
 			sent = sent && WriteByteRing(ring, proto::kColRingDataBytes, proto::kColRegion, voxels);
 		}
@@ -272,8 +360,9 @@ void Link::SendFloor(const Vec3d& aFeet, LinkSink& aSink)
 	status_.floorSent = sent;
 	if (sent)
 	{
-		status_.floorCentre = aFeet;
-		aSink.Log(std::format("floor {} at height {:.2f} around Minecraft {:.1f} {:.1f}", epoch, aFeet.y, aFeet.x, aFeet.z));
+		status_.floorCentre = aCentre;
+		aSink.Log(aNewEpoch ? std::format("floor {} at height {:.2f} around Minecraft {:.1f} {:.1f}", epoch, aCentre.y, aCentre.x, aCentre.z)
+		                    : std::format("floor {} grows to Minecraft {:.1f} {:.1f}, at height {:.2f}", epoch, aCentre.x, aCentre.z, aCentre.y));
 	}
 	else
 	{

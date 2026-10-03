@@ -43,6 +43,25 @@ struct FakeMinecraft
 		std::memcpy(base + proto::kOffMcState, &state, sizeof state);
 	}
 
+	// McState with a tick stamped at aStamp (microseconds, the tests' clock): Minecraft's player standing at aFeet
+	// (Minecraft axes), its eye 1.62 up, having applied teleport aAck.
+	void Ticked(uint32_t aAck, const Vec3d& aFeet, double aStamp)
+	{
+		proto::McState state{};
+		std::memcpy(&state, base + proto::kOffMcState, sizeof state);
+		state.seq += 2;
+		state.flags = proto::kMcInWorld | proto::kMcOnGround;
+		state.teleportAck = aAck;
+		state.x = state.prevX = state.curX = aFeet.x;
+		state.y = state.prevY = state.curY = aFeet.y;
+		state.z = state.prevZ = state.curZ = aFeet.z;
+		state.tickEyeO = state.tickEye = 1.62f;
+		state.tickQpc = int64_t(aStamp * 1'000'000.0);
+		state.tickMs = 50.0f;
+		state.frameCounter += 1;
+		std::memcpy(base + proto::kOffMcState, &state, sizeof state);
+	}
+
 	void Send(uint32_t aType, const std::vector<uint8_t>& aPayload)
 	{
 		CHECK(WriteByteRing(base + proto::kOffRenderRing, proto::kRenRingDataBytes, aType, aPayload));
@@ -156,19 +175,28 @@ bool SlotsApart(FakeMinecraft& aMinecraft, const Sink& aSink)
 	return taken != middle && taken != aMinecraft.hudBack && middle != aMinecraft.hudBack;
 }
 
-// V at spike 3's corner, looking north: feet on the road at z 6.14, the camera 1.62 m above.
+// V at spike 3's corner, looking north: feet on the road at z 6.14, the camera 1.60 m above, as spike 4 measured.
 GamePose Corner(double aEast = 0.0, double aUp = 0.0)
 {
-	return { { -119.5 + aEast, -2007.5, 6.14 + aUp }, { -119.5 + aEast, -2007.5, 7.76 + aUp }, { 0.0f, 1.0f, 0.0f } };
+	return { { -119.5 + aEast, -2007.5, 6.14 + aUp }, { -119.5 + aEast, -2007.5, 7.74 + aUp }, { 0.0f, 1.0f, 0.0f } };
 }
 
+// A frame outside build mode, its clock in seconds and in microseconds for the ticks.
 Link::Frame At(double aNow, std::optional<GamePose> aPose = Corner(), bool aLinked = true)
 {
 	Link::Frame frame;
 	frame.now = aNow;
 	frame.tickMs = uint64_t(aNow * 1000.0);
+	frame.qpc = int64_t(aNow * 1'000'000.0);
+	frame.qpcPerSecond = 1'000'000;
 	frame.pose = aPose;
 	frame.linked = aLinked;
+	return frame;
+}
+
+Link::Frame InBuild(double aNow, std::optional<GamePose> aPose = Corner())
+{
+	Link::Frame frame = At(aNow, aPose);
 	frame.buildMode = true;
 	return frame;
 }
@@ -274,15 +302,15 @@ TEST(LinkTeleportsMinecraftsEyeToTheCamera)
 	Sink          sink;
 	link.Update(At(1.0), kSettings, sink);
 	const auto sky = minecraft.Sky();
-	CHECK_EQ(sky.flags, uint32_t(proto::kSkyInGame));  // build mode on: no menu flag
+	CHECK_EQ(sky.flags, uint32_t(proto::kSkyInGame | proto::kSkyMenuOpen));  // build mode off: the menu flag
 	CHECK_EQ(sky.teleportSeq, 1u);
 	CHECK_NEAR(sky.posX, -119.5, 1e-9);
-	CHECK_NEAR(sky.posY, 6.14, 1e-9);
+	CHECK_NEAR(sky.posY, 6.12, 1e-9);  // the camera, less Minecraft's standing eye height
 	CHECK_NEAR(sky.posZ, 2007.5, 1e-9);
 	CHECK_NEAR(sky.yaw, 180.0, 1e-4);
 	CHECK_NEAR(sky.pitch, 0.0, 1e-4);
 	link.Update(At(2.0, Corner(), false), kSettings, sink);
-	CHECK_EQ(minecraft.Sky().flags, 0u);  // unlinked
+	CHECK_EQ(minecraft.Sky().flags, uint32_t(proto::kSkyMenuOpen));  // unlinked
 }
 
 TEST(LinkStartsItsTeleportSequenceFromTheClock)
@@ -578,4 +606,175 @@ TEST(LinkCountsDroppedInputs)
 	CHECK(!link.Push(click));
 	link.Update(At(1.0), kSettings, sink);
 	CHECK_EQ(link.State().inputsDropped, 1ull);
+}
+
+TEST(LinkEntersBuildModeWithOneTeleportToVsFeet)
+{
+	FakeMinecraft                     minecraft;
+	Link                              link(minecraft.base, 0);
+	Sink                              sink;
+	std::vector<std::vector<uint8_t>> payloads;
+	minecraft.Beat(77, 1000);
+	minecraft.State(proto::kMcInWorld);
+	link.Update(At(1.0), kSettings, sink);
+	CHECK_EQ(minecraft.Sky().teleportSeq, 1u);  // outside build mode: Minecraft's eye at V's camera
+	CHECK_EQ(link.State().floorEpoch, 1u);
+	minecraft.Collision(payloads);
+	link.Update(InBuild(1.1), kSettings, sink);
+	// One teleport, to V's feet, and a fresh floor there.
+	CHECK_EQ(minecraft.Sky().teleportSeq, 2u);
+	CHECK_NEAR(minecraft.Sky().posY, 6.14, 1e-9);
+	CHECK_EQ(minecraft.Sky().flags, uint32_t(proto::kSkyInGame));
+	CHECK_EQ(link.State().floorEpoch, 2u);
+	CHECK_EQ(minecraft.Collision(payloads).size(), size_t(1 + 49 * 4));
+	CHECK(link.State().drive == DriveState::Waiting);
+	CHECK(sink.Logged("build mode: Minecraft's player goes to V's feet"));
+	// Minecraft hasn't let go: V is held where build mode started, though it moved (a key held from before).
+	link.Update(InBuild(1.2, Corner(3.0)), kSettings, sink);
+	CHECK(link.State().placeV.has_value());
+	CHECK_NEAR(link.State().placeV->x, -119.5, 1e-9);
+	CHECK_NEAR(link.State().placeV->z, 6.14, 1e-9);
+	// No teleports in build mode, and the position is V's feet, every frame.
+	CHECK_EQ(minecraft.Sky().teleportSeq, 2u);
+	CHECK_NEAR(minecraft.Sky().posX, -116.5, 1e-9);
+	CHECK_NEAR(minecraft.Sky().posY, 6.14, 1e-9);
+}
+
+TEST(LinkPlacesVUnderMinecraftsEyeOnceItLetsGo)
+{
+	FakeMinecraft minecraft;
+	Link          link(minecraft.base, 0);
+	Sink          sink;
+	minecraft.Beat(77, 1000);
+	minecraft.State(proto::kMcInWorld);
+	link.Update(At(1.0), kSettings, sink);
+	link.Update(At(1.05), kSettings, sink);  // a second level frame: V's eye height, 1.60
+	CHECK_NEAR(link.State().eyeHeight, 1.60, 1e-9);
+	link.Update(InBuild(1.1), kSettings, sink);
+	// Minecraft has applied teleport 2 and let its player go, and it has walked half a block east.
+	minecraft.Ticked(2, { -119.0, 6.14, 2007.5 }, 1.15);
+	link.Update(InBuild(1.2), kSettings, sink);
+	CHECK(link.State().drive == DriveState::Driving);
+	CHECK(sink.Logged("Minecraft let its player go"));
+	CHECK(link.State().placeV.has_value());
+	CHECK_NEAR(link.State().placeV->x, -119.0, 1e-9);
+	CHECK_NEAR(link.State().placeV->y, -2007.5, 1e-9);
+	CHECK_NEAR(link.State().placeV->z, 6.16, 1e-6);  // V's camera 1.60 up, at Minecraft's eye 1.62 up
+	CHECK_EQ(link.State().teleportAck, 2u);
+	CHECK(link.State().minecraftFlags & proto::kMcOnGround);
+	CHECK_EQ(link.State().waitedFrames, 0ull);
+	// Placed where it was sent: V's camera is right where Minecraft's eye was. No newer tick: this frame waited.
+	link.Update(InBuild(1.25, Corner(0.5, 0.02)), kSettings, sink);
+	CHECK(link.State().eyeDistance.has_value());
+	CHECK_NEAR(*link.State().eyeDistance, 0.0, 1e-6);
+	CHECK_EQ(link.State().waitedFrames, 1ull);
+}
+
+TEST(LinkKeepsItsFloorWhileMinecraftDrives)
+{
+	FakeMinecraft                     minecraft;
+	Link                              link(minecraft.base, 0);
+	Sink                              sink;
+	std::vector<std::vector<uint8_t>> payloads;
+	minecraft.Beat(77, 1000);
+	minecraft.State(proto::kMcInWorld);
+	link.Update(At(1.0), kSettings, sink);
+	link.Update(InBuild(1.1), kSettings, sink);
+	minecraft.Ticked(2, { -119.5, 6.14, 2007.5 }, 1.15);
+	link.Update(InBuild(1.2), kSettings, sink);
+	minecraft.Collision(payloads);
+	// V placed 1.5 m up, Minecraft's player having jumped: the floor stays.
+	link.Update(InBuild(1.3, Corner(0.0, 1.5)), kSettings, sink);
+	CHECK(minecraft.Collision(payloads).empty());
+	// Minecraft's player walked 20 m east: the floor grows around it at its height, with no clear, so no new epoch.
+	minecraft.Ticked(2, { -99.5, 6.14, 2007.5 }, 1.35);
+	link.Update(InBuild(1.4, Corner(20.0)), kSettings, sink);
+	const auto messages = minecraft.Collision(payloads);
+	CHECK_EQ(messages.size(), size_t(49 * 4));
+	CHECK_EQ(messages[0].type, uint32_t(proto::kColTris));
+	CHECK_EQ(link.State().floorEpoch, 2u);
+	CHECK_NEAR(link.State().floorCentre.x, -99.5, 1e-9);
+	CHECK_NEAR(link.State().floorCentre.y, 6.14, 1e-9);
+	CHECK(sink.Logged("floor 2 grows"));
+}
+
+TEST(LinkWaitsAgainWhenMinecraftHoldsItsPlayer)
+{
+	FakeMinecraft minecraft;
+	Link          link(minecraft.base, 0);
+	Sink          sink;
+	minecraft.Beat(77, 1000);
+	minecraft.State(proto::kMcInWorld);
+	link.Update(At(1.0), kSettings, sink);
+	link.Update(InBuild(1.1), kSettings, sink);
+	minecraft.Ticked(2, { -119.5, 6.14, 2007.5 }, 1.15);
+	link.Update(InBuild(1.2), kSettings, sink);
+	// Minecraft teleported its player by itself, and holds it: its acknowledgement falls behind. V stays where it is.
+	minecraft.Ticked(1, { -50.0, 6.14, 2007.5 }, 1.25);
+	link.Update(InBuild(1.3, Corner(1.0)), kSettings, sink);
+	CHECK(link.State().drive == DriveState::Waiting);
+	CHECK_NEAR(link.State().placeV->x, -118.5, 1e-9);
+	CHECK(sink.Logged("Minecraft holds its player again"));
+}
+
+TEST(LinkFollowsVAgainAfterBuildMode)
+{
+	FakeMinecraft minecraft;
+	Link          link(minecraft.base, 0);
+	Sink          sink;
+	minecraft.Beat(77, 1000);
+	minecraft.State(proto::kMcInWorld);
+	link.Update(At(1.0), kSettings, sink);
+	link.Update(InBuild(1.1), kSettings, sink);
+	minecraft.Ticked(2, { -119.5, 6.14, 2007.5 }, 1.15);
+	link.Update(InBuild(1.2), kSettings, sink);
+	link.Update(At(1.3, Corner(1.0)), kSettings, sink);  // build mode off
+	CHECK(link.State().drive == DriveState::Off);
+	CHECK(!link.State().placeV.has_value());
+	CHECK_EQ(minecraft.Sky().teleportSeq, 3u);  // a teleport at once, to V's camera
+	CHECK_NEAR(minecraft.Sky().posX, -118.5, 1e-9);
+	CHECK_NEAR(minecraft.Sky().posY, 6.12, 1e-9);
+	CHECK_EQ(minecraft.Sky().flags, uint32_t(proto::kSkyInGame | proto::kSkyMenuOpen));
+	CHECK(sink.Logged("build mode ended"));
+	// In and out again without V moving: V's camera is 2 cm from where build mode put Minecraft's player, inside the
+	// teleport step, and the teleport still goes at once.
+	link.Update(InBuild(2.0, Corner(1.0)), kSettings, sink);
+	CHECK_EQ(minecraft.Sky().teleportSeq, 4u);  // build mode's own
+	link.Update(At(2.2, Corner(1.0)), kSettings, sink);
+	CHECK_EQ(minecraft.Sky().teleportSeq, 5u);
+}
+
+TEST(LinkEndsBuildModeWhenMinecraftStaysTooFar)
+{
+	FakeMinecraft minecraft;
+	Link          link(minecraft.base, 0);
+	Sink          sink;
+	minecraft.Beat(77, 1000);
+	minecraft.State(proto::kMcInWorld);
+	link.Update(At(1.0), kSettings, sink);
+	link.Update(InBuild(1.1), kSettings, sink);
+	minecraft.Ticked(2, { -94.5, 6.14, 2007.5 }, 1.15);  // 25 m east of V, which stays put
+	for (int frame = 0; frame <= 10; ++frame)
+	{
+		link.Update(InBuild(1.2 + frame * 0.1), kSettings, sink);
+		CHECK(link.State().endBuild.empty() == (frame < 10));
+	}
+	CHECK_STR(link.State().endBuild, "Minecraft's player stayed over 20 m from V for a second");
+	CHECK_EQ(link.State().driveSkipped, 11ull);
+}
+
+TEST(LinkMeasuresVsEyeHeightOutsideBuildModeOnly)
+{
+	FakeMinecraft minecraft;
+	Link          link(minecraft.base, 0);
+	Sink          sink;
+	GamePose      pose = Corner();
+	pose.camera.z = 6.14 + 1.70;
+	link.Update(At(1.0, pose), kSettings, sink);
+	link.Update(At(1.1, pose), kSettings, sink);
+	CHECK_NEAR(link.State().eyeHeight, 1.70, 1e-9);
+	pose.camera.z = 6.14 + 1.20;
+	link.Update(InBuild(1.2, pose), kSettings, sink);
+	link.Update(InBuild(1.3, pose), kSettings, sink);
+	CHECK_NEAR(link.State().eyeHeight, 1.70, 1e-9);
 }

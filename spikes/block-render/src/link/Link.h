@@ -2,10 +2,12 @@
 
 #include "Coords.h"
 #include "link/Commands.h"
+#include "link/Drive.h"
 #include "link/Look.h"
 #include "link/Messages.h"
 #include "link/Overlay.h"
 #include "link/Rings.h"
+#include "link/Ticks.h"
 
 #include <array>
 #include <atomic>
@@ -14,9 +16,10 @@
 #include <string>
 #include <string_view>
 
-// The game side of SkyCraft's protocol, once a frame (the spec's "The link" and "Blocks"): the heartbeat and SkyState,
-// teleports and the floor, typed commands, Minecraft's events, the render ring, and HUD images. It works on the
-// mapping's memory, so the tests give it plain memory with a fake Minecraft.
+// The game side of SkyCraft's protocol, once a frame (the minecraft-link spec's "The link" and "Blocks"): the heartbeat
+// and SkyState, teleports and the floor, typed commands, Minecraft's events, the render ring, and HUD images. Spike 5
+// adds build mode's drive (its spec's "Part 1"): one teleport, then Minecraft drives and the link says where V goes.
+// It works on the mapping's memory, so the tests give it plain memory with a fake Minecraft.
 namespace cpmc::link
 {
 // V's pose in the game's world axes (metres: x east, y north, z up), as PlayerLocator finds it.
@@ -68,9 +71,11 @@ public:
 	{
 		double                  now = 0.0;          // seconds, on any steady clock
 		uint64_t                tickMs = 0;         // GetTickCount64(), the clock both heartbeats use
+		int64_t                 qpc = 0;            // QueryPerformanceCounter now: the clock Minecraft stamps its ticks with
+		int64_t                 qpcPerSecond = 0;   // its rate; 0: no ticks are interpolated
 		std::optional<GamePose> pose;               // nothing: V isn't there
 		bool                    linked = false;     // the user's Link or Unlink
-		bool                    buildMode = false;  // off sets SkyState's menu flag: Minecraft releases held keys
+		bool                    buildMode = false;  // Minecraft drives (spike 5); off sets SkyState's menu flag
 		bool                    takeHud = false;    // hand on HUD images this frame
 	};
 
@@ -123,12 +128,26 @@ public:
 		std::optional<double> lastEnter;  // when a typed command's Enter last went, on Frame::now's clock
 		uint64_t              hudImages = 0;
 		uint64_t              hudRefused = 0;
+		// Build mode's drive (spike 5)
+		uint32_t              minecraftFlags = 0;  // McState's: on ground, sneaking, sprinting, flying and the rest
+		uint32_t              teleportAck = 0;     // the last teleportSeq Minecraft applied, less 1 while it holds its player
+		DriveState            drive = DriveState::Off;
+		double                driveSince = 0.0;     // when the drive entered its state, on Frame::now's clock
+		uint64_t              driveSkipped = 0;     // frames whose target wasn't used, since the start
+		double                eyeHeight = 1.60;     // V's, measured outside build mode
+		double                renderDelayMs = 0.0;  // how far in the past Minecraft's ticks are interpolated
+		uint64_t              waitedFrames = 0;     // frames, while driving, that used up the newest tick, since the start
+		std::optional<double> eyeDistance;          // V's camera from where the last frame put Minecraft's eye, metres
+		std::optional<Vec3d>  placeV;               // this frame: where V's feet go (world axes); nothing: V is left be
+		std::string           endBuild;             // this frame: why build mode must end; empty: it goes on
 	};
 
 	const Status& State() const { return status_; }
 
 private:
-	void SendFloor(const Vec3d& aFeet, LinkSink& aSink);
+	// A floor around aCentre (Minecraft axes; its y is the height). A new epoch clears the last one first; without one,
+	// the floor grows, which never takes the ground from under Minecraft's player.
+	void SendFloor(const Vec3d& aCentre, bool aNewEpoch, LinkSink& aSink);
 	bool Take(const RingMessage& aMessage, const LinkSettings& aSettings, LinkSink& aSink);
 
 	uint8_t*              base_;
@@ -146,5 +165,10 @@ private:
 	uint64_t              problemsLogged_ = 0;  // resyncs and rejected messages already logged
 	double                problemLoggedAt_ = -1e9;
 	std::string           lastProblem_;
+	TickInterpolator      ticks_;
+	Drive                 drive_;
+	EyeHeight             eyeHeight_;
+	bool                  wasBuild_ = false;
+	std::optional<Vec3d>  lastEye_;  // where the last frame put Minecraft's eye, world axes
 };
 }
