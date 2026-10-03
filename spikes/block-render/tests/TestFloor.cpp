@@ -69,3 +69,28 @@ TEST(FloorClearHoldsTheEpoch)
 {
 	CHECK(FloorClear(0x01020304) == std::vector<uint8_t>({ 4, 3, 2, 1 }));
 }
+
+TEST(FloorVoxelsMakeItsRegionsKnown)
+{
+	// The floor's own region gets its voxels: one sub-voxel layer of the block row at 6.14. The regions just below and
+	// above come empty, so the feet's, the one under them and the one 8 blocks down are all known to SkyCraft.
+	const auto payloads = FloorVoxels(-15, 250, 6.14, 3);
+	CHECK_EQ(payloads.size(), size_t(3));
+	const int32_t expectedMinY[3] = { 0, -8, 8 };
+	const size_t  expectedBlocks[3] = { 64, 0, 0 };
+	for (size_t i = 0; i < payloads.size(); ++i)
+	{
+		proto::ColRegion region;
+		std::memcpy(&region, payloads[i].data(), sizeof region);
+		CHECK_EQ(region.minX, -120);
+		CHECK_EQ(region.minZ, 2000);
+		CHECK_EQ(region.minY, expectedMinY[i]);
+		CHECK_EQ(region.epoch, 3u);
+		CHECK_EQ(size_t(region.count), expectedBlocks[i]);
+		CHECK_EQ(payloads[i].size(), sizeof region + expectedBlocks[i] * sizeof(proto::ColBlock));
+	}
+	proto::ColBlock block;
+	std::memcpy(&block, payloads[0].data() + sizeof(proto::ColRegion), sizeof block);
+	CHECK(block.x == -120 && block.y == 6 && block.z == 2000);
+	CHECK(block.bits[0] == 0 && block.bits[1] == ~0ull && block.bits[2] == 0);
+}

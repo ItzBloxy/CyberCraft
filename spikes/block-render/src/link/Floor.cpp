@@ -2,6 +2,7 @@
 
 #include <skycraft_protocol.h>
 
+#include <array>
 #include <cmath>
 #include <cstring>
 
@@ -22,6 +23,17 @@ int32_t RegionOf(double aBlocks)
 {
 	return int32_t(std::floor(aBlocks / kRegionBlocks));
 }
+
+// A floor region's two triangles, covering its 8 by 8 blocks at height aY.
+std::array<McTriangle, 2> Triangles(int32_t aRegionX, int32_t aRegionZ, double aY)
+{
+	const float x0 = float(aRegionX * kRegionBlocks);
+	const float x1 = x0 + kRegionBlocks;
+	const float z0 = float(aRegionZ * kRegionBlocks);
+	const float z1 = z0 + kRegionBlocks;
+	const float y = float(aY);
+	return { McTriangle{ { x0, y, z0, x1, y, z0, x1, y, z1 } }, McTriangle{ { x0, y, z0, x1, y, z1, x0, y, z1 } } };
+}
 }
 
 std::vector<uint8_t> FloorClear(uint32_t aEpoch)
@@ -37,18 +49,24 @@ std::vector<uint8_t> FloorRegion(int32_t aRegionX, int32_t aRegionZ, double aY, 
 	proto::ColRegion region{ aRegionX * kRegionBlocks, regionY * kRegionBlocks, aRegionZ * kRegionBlocks,
 		                     aRegionX * kRegionBlocks + kRegionBlocks - 1, regionY * kRegionBlocks + kRegionBlocks - 1,
 		                     aRegionZ * kRegionBlocks + kRegionBlocks - 1, aEpoch, 2 };
-	const float x0 = float(aRegionX * kRegionBlocks);
-	const float x1 = x0 + kRegionBlocks;
-	const float z0 = float(aRegionZ * kRegionBlocks);
-	const float z1 = z0 + kRegionBlocks;
-	const float y = float(aY);
-	const proto::ColTri first{ { x0, y, z0, x1, y, z0, x1, y, z1 }, 0 };
-	const proto::ColTri second{ { x0, y, z0, x1, y, z1, x0, y, z1 }, 0 };
 	std::vector<uint8_t> bytes;
 	Append(bytes, region);
-	Append(bytes, first);
-	Append(bytes, second);
+	for (const McTriangle& triangle : Triangles(aRegionX, aRegionZ, aY))
+	{
+		proto::ColTri tri{};  // flags 0: not diggable, so attacking the floor does nothing
+		std::memcpy(tri.v, triangle.v, sizeof tri.v);
+		Append(bytes, tri);
+	}
 	return bytes;
+}
+
+std::vector<std::vector<uint8_t>> FloorVoxels(int32_t aRegionX, int32_t aRegionZ, double aY, uint32_t aEpoch)
+{
+	const int32_t                      regionY = RegionOf(aY);
+	const std::array<McTriangle, 2>    triangles = Triangles(aRegionX, aRegionZ, aY);
+	const std::vector<proto::ColBlock> blocks = VoxelizeRegion(aRegionX, regionY, aRegionZ, triangles);
+	return { RegionPayload(aRegionX, regionY, aRegionZ, aEpoch, blocks), RegionPayload(aRegionX, regionY - 1, aRegionZ, aEpoch, {}),
+		     RegionPayload(aRegionX, regionY + 1, aRegionZ, aEpoch, {}) };
 }
 
 std::vector<std::pair<int32_t, int32_t>> FloorRegions(double aX, double aZ)
