@@ -1,6 +1,11 @@
 #include "Status.h"
 
+#include "link/Turn.h"
+
+#include <skycraft_protocol.h>
+
 #include <format>
+#include <utility>
 
 namespace cpmc
 {
@@ -42,6 +47,47 @@ std::string Latency(const LatencySample& aSample)
 	return std::format("Minecraft {:.0f} ms, ours {:.1f} ms ({:.1f} frames)", aSample.minecraftMs, aSample.oursMs, aSample.oursFrames);
 }
 
+// How Minecraft's player moves, from McState's flags: "on the ground, sneaking", "in the air, flying".
+std::string MinecraftMovement(uint32_t aFlags)
+{
+	namespace proto = skycraft::proto;
+	std::string out = aFlags & proto::kMcOnGround ? "on the ground" : "in the air";
+	for (const auto& [flag, name] : { std::pair{ proto::kMcSneaking, "sneaking" }, std::pair{ proto::kMcSprinting, "sprinting" },
+	                                  std::pair{ proto::kMcSwimming, "swimming" }, std::pair{ proto::kMcFlying, "flying" },
+	                                  std::pair{ proto::kMcDead, "dead" } })
+	{
+		if (aFlags & flag)
+		{
+			out += std::string(", ") + name;
+		}
+	}
+	return out;
+}
+
+std::string FormatDrive(const LinkReport& aLink)
+{
+	std::string out = "drive=" + aLink.drive;
+	if (aLink.drive != "off")
+	{
+		out += std::format(" for {:.1f} s", aLink.driveFor);
+	}
+	out += std::format("; V's eye {:.2f} m above its feet", aLink.eyeHeight);
+	if (aLink.eyeDistanceLast)
+	{
+		out += std::format("; V's camera from Minecraft's eye {:.3f} m, {:.3f} m average and {:.3f} m worst in the last second",
+		                   *aLink.eyeDistanceLast, aLink.eyeDistanceAverage, aLink.eyeDistanceWorst);
+	}
+	out += std::format("; render delay {:.1f} ms, {} frames waited for a late tick in the last second; {} bad targets skipped "
+	                   "since the start; teleport {}; V's health {}; turn {}, {}; Minecraft's player {}\n",
+	                   aLink.renderDelayMs, aLink.waitedFrames, aLink.skippedFrames,
+	                   aLink.teleportMsAverage < 0.0 ? std::string("not called") : Ms(aLink.teleportMsAverage, aLink.teleportMsWorst),
+	                   aLink.health ? std::format("{:.0f}%", *aLink.health) : std::string("unknown"), aLink.turn ? "on" : "off",
+	                   aLink.turnRatio ? std::format("{:.4f} degrees a count from {} turns", *aLink.turnRatio, aLink.turnTurns)
+	                                   : std::format("ratio not measured yet ({} of {} turns)", aLink.turnTurns, link::TurnRatio::kKnown),
+	                   MinecraftMovement(aLink.minecraftFlags));
+	return out;
+}
+
 std::string FormatLink(const LinkReport& aLink)
 {
 	std::string       out;
@@ -59,6 +105,7 @@ std::string FormatLink(const LinkReport& aLink)
 	                   aLink.inputsForwarded, aLink.inputsHidden, OneLine(aLink.lastInput), aLink.inputsDropped,
 	                   aLink.inputHooked ? std::format("GetRawInputData hooked, {} keyboard and mouse events read", aLink.inputsRead)
 	                                     : std::string("GetRawInputData not hooked (see the log)"));
+	out += FormatDrive(aLink);
 	const std::string floor = aLink.floorSent ? std::format("floor {} at height {:.2f} around {:.1f} {:.1f}", aLink.floorEpoch,
 	                                                        aLink.floorCentre.y, aLink.floorCentre.x, aLink.floorCentre.z)
 	                                          : "floor not sent";

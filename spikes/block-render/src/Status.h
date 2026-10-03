@@ -42,6 +42,23 @@ struct LinkReport
 	uint64_t           inputsHidden = 0;     // from the game
 	uint64_t           inputsDropped = 0;    // with the input ring full
 	std::string        lastInput;            // the last forwarded
+	// Build mode's drive (spike 5's "Status")
+	std::string           drive = "off";             // off, waiting or driving
+	double                driveFor = 0.0;            // seconds in that state
+	double                eyeHeight = 1.60;          // V's, metres, measured outside build mode
+	std::optional<double> eyeDistanceLast;           // V's camera from where the last frame put Minecraft's eye; none:
+	double                eyeDistanceAverage = 0.0;  // not driving. Metres, in the last second
+	double                eyeDistanceWorst = 0.0;
+	double                renderDelayMs = 0.0;       // the tick interpolator's
+	uint64_t              waitedFrames = 0;          // frames that used up the newest tick, in the last second
+	uint64_t              skippedFrames = 0;         // bad targets, since the start
+	double                teleportMsAverage = -1.0;  // Teleport's call, in the last second; below 0: not called
+	double                teleportMsWorst = -1.0;
+	std::optional<double> health;                    // V's, percent; none: not read
+	bool                  turn = false;              // set turn 1: the mouse's turn is added to the teleport's yaw
+	std::optional<double> turnRatio;                 // degrees a count, once measured
+	uint64_t              turnTurns = 0;             // turns measured
+	uint32_t              minecraftFlags = 0;        // McState's
 	// The render ring
 	double      ringMb = 0.0;            // in the last second
 	double      ringMbWorstFrame = 0.0;  // the most in one frame of it
@@ -112,7 +129,7 @@ struct StatusReport
 };
 
 // Lines of "key=value": mode, frames, blocks, gpu, frame, streamline, hooks, request; with a link, its lines (link, build,
-// positions, ring, atlas, hud, latency, burst and processes); then one structure line per structure:
+// drive, positions, ring, atlas, hud, latency, burst and processes); then one structure line per structure:
 // "structure=<name> <min x> <min y> <min z> <max x> <max y> <max z>".
 std::string FormatStatus(const StatusReport& aReport);
 }

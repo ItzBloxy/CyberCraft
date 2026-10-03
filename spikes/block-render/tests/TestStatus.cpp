@@ -2,6 +2,8 @@
 
 #include "Status.h"
 
+#include <skycraft_protocol.h>
+
 TEST(StatusWritesOneLinePerItem)
 {
 	cpmc::StatusReport report;
@@ -164,4 +166,40 @@ TEST(StatusWritesBuildMode)
 	                  "the game, the last: the right button up; 2 dropped with the input ring full; GetRawInputData not hooked (see "
 	                  "the log)"));
 	CHECK(status.find("link=") < status.find("build=") && status.find("build=") < status.find("positions="));
+}
+
+TEST(StatusWritesTheDrive)
+{
+	cpmc::StatusReport report;
+	cpmc::LinkReport   link;
+	link.drive = "driving";
+	link.driveFor = 12.34;
+	link.eyeHeight = 1.6;
+	link.eyeDistanceLast = 0.012;
+	link.eyeDistanceAverage = 0.0104;
+	link.eyeDistanceWorst = 0.034;
+	link.renderDelayMs = 17.716;
+	link.waitedFrames = 2;
+	link.skippedFrames = 3;
+	link.teleportMsAverage = 0.045;
+	link.teleportMsWorst = 0.12;
+	link.health = 100.0;
+	link.turn = true;
+	link.turnRatio = -0.02134;
+	link.turnTurns = 12;
+	link.minecraftFlags = skycraft::proto::kMcInWorld | skycraft::proto::kMcOnGround | skycraft::proto::kMcSneaking;
+	report.link = link;
+	std::string status = cpmc::FormatStatus(report);
+	CHECK(Has(status, "drive=driving for 12.3 s; V's eye 1.60 m above its feet; V's camera from Minecraft's eye 0.012 m, "
+	                  "0.010 m average and 0.034 m worst in the last second; render delay 17.7 ms, 2 frames waited for a late "
+	                  "tick in the last second; 3 bad targets skipped since the start; teleport 0.045 ms average, 0.120 ms "
+	                  "worst; V's health 100%; turn on, -0.0213 degrees a count from 12 turns; Minecraft's player on the "
+	                  "ground, sneaking"));
+	CHECK(status.find("build=") < status.find("drive=") && status.find("drive=") < status.find("positions="));
+	// Before anything has been measured
+	report.link = cpmc::LinkReport{};
+	status = cpmc::FormatStatus(report);
+	CHECK(Has(status, "drive=off; V's eye 1.60 m above its feet; render delay 0.0 ms, 0 frames waited for a late tick in the "
+	                  "last second; 0 bad targets skipped since the start; teleport not called; V's health unknown; turn off, "
+	                  "ratio not measured yet (0 of 5 turns); Minecraft's player in the air"));
 }
