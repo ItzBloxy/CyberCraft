@@ -23,6 +23,55 @@ is teleported so that its camera lands on Minecraft's eye, smoothly enough to pl
 
 What Part 1 leaves for later is in step 2's "What it means for Part 2".
 
+## Part 2: Night City's shape in Minecraft
+
+Part 2 asked whether Minecraft can get Night City's real collision, read from the game's PhysX scene, fast enough and
+exactly enough that Minecraft's player walks the city as V does.
+
+**Yes.** Step 3 ("Step 3, in the game: Night City's shape") passed after one fix, and Part 3's follow-ups ("Part 3, in
+the game: the follow-ups and the query watch") closed what it left:
+- **Exact:** streets, kerbs, ramps and walls hold to the centimetre of spike 1's dumps; clicks place blocks against
+  them, and TNT lands on the street.
+- **Fast enough:** the exporter reads in `OnUpdate`, where the game never calls scene 0, at no measurable frame cost;
+  with 4 threads nearest Minecraft's player first, the worker keeps up with fast drops into the densest ground found.
+- **What isn't sent:** kinematic props, such as a breakable guard rail, by design; they wait for the Entities
+  brainstorm.
+
+## Part 3: V against Minecraft's blocks
+
+Part 3 asked whether Minecraft's blocks stop V outside build mode, and whatever else the city's walls stop, so that V
+can stand on a build after leaving build mode.
+
+**Yes, for V, cars and bullets; not for NPCs.** Step 4 ("Step 4, in the game: V against blocks"):
+- **V** walks into blocks and stops, stands and jumps on them, and stays on a tower when build mode ends, even
+  sneaking; a block appearing at V's feet holds V until V moves, and then V is put on top.
+- **Cars and ordinary bullets** stop at blocks; **NPCs** feel them, but their navigation walks them through or lifts
+  them on top.
+- **The bodies** follow the blocks within the second, made in at most 0.08 ms, at no measurable frame cost; PhysX's
+  origin moving never needed one posed again, and a load forgets them without touching anything.
+- **One GPU crash,** while blocks changed quickly in the first run: a race in the renderer that could explain it is
+  fixed, but the cause isn't settled, and DRED stays on to name it if it comes back.
+
+## Spike 5's answer
+
+> In build mode, can the user move as Minecraft's player (walking, sprinting, jumping, sneaking and flying with
+> Minecraft's physics, against its blocks and Night City's real collision), with V following smoothly and clicks
+> never refused? And outside build mode, do Minecraft's blocks stop V, and whatever else the city's walls stop, so
+> that V can stand on a build after leaving build mode?
+
+**Yes to both.** In build mode the user moves as Minecraft's player against its blocks and Night City's own collision,
+with V following smoothly and no click refused. Outside it, Minecraft's blocks stop V, cars and bullets, and V stands
+on a build after leaving build mode. NPCs are the exception: their navigation wins over collision.
+
+What's left:
+- **`set blocks 1` by default:** recommended, since builds are solid only with it and it costs nothing measurable. The
+  spec kept it off until step 4 passed; the change waits for the user's word.
+- **The GPU crash's cause,** from DRED's report if it comes back.
+- **SkyCraft's blocks from blasts:** a blast that digs into the city's ground leaves blocks in the air above it, which
+  the user would rather not have; SkyCraft has no setting for it, so it needs a Fabric mixin of our own or a change to
+  SkyCraft.
+- **NPCs and moving props:** for the Entities brainstorm, after spike 5.
+
 ## Step 1: the drive with `mclink`, without Cyberpunk
 
 Date: 2026-10-03. No Cyberpunk: `mclink`, BlockRender's link code in a console program, ran against the user's
