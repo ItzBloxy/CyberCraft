@@ -177,3 +177,38 @@ What that settles:
 Still to audit before step 4: `PxPhysics::createRigidStatic` and `createShape`, `PxRigidActor::attachShape` and
 `setGlobalPose`, `PxShape::setQueryFilterData`, `setSimulationFilterData` and `getMaterials`, `PxActor::getScene`, and
 `PxBase::release` for actors and shapes.
+
+## Addendum: spike 5's Part 3, the bodies and the query watch
+
+Date: 2026-10-04. The same DLLs and the same method, starting from the vtables in the table above, and read with Python
+and Capstone. Part 3 makes static actors for Minecraft's blocks (`spikes/block-render/src/physx/Bodies.cpp`), and its
+scene watch also hooks the scene's three queries (`SceneHooks.cpp`). Our side is `TestAudit`'s `BodyCallsUseTheGamesSlots`
+and `SceneWatchHooksTheGamesSlots`.
+
+| Table | Slot | Call | Function's RVA | How it was told |
+|---|---|---|---|---|
+| `NpPhysics` | 21 | `createRigidStatic(const PxTransform&)` | 0x48090 | calls PhysX's factory (0x32850), whose constructor (0x505d0) writes `NpRigidStatic`'s vtable; slot 22, `createRigidDynamic`, does the same with `NpRigidDynamic`'s |
+| `NpPhysics` | 27 | `createShape(const PxGeometry&, PxMaterial* const*, PxU16, bool, PxShapeFlags)` | 0x48270 | calls the factory's 0x32a40, whose constructor (0x65fb0) writes `NpShape`'s vtable |
+| `NpRigidStatic` | 0 | `release()` | 0x501b0 | calls the rigid actor's release (0x51130): "PxRigidActor::release: Actor is part of a pruning structure …" |
+| `NpRigidStatic` | 6 | `getScene()` | 0x50f00 | jumps to 0x22200, which `NpRigidDynamic`'s slot 6 shares: the actor's scene while it's being added or is in one, else null |
+| `NpRigidStatic` | 21 | `setGlobalPose(const PxTransform&, bool)` | 0x50300 | "PxRigidStatic::setGlobalPose: Actor is part of a pruning structure …" |
+| `NpRigidStatic` | 23 | `attachShape(PxShape&)` | 0x50b90 | "PxRigidActor::attachShape: Actor is part of a pruning structure …"; slot 24 has `detachShape`'s strings |
+| `NpShape` | 0 | `release()` | 0x661e0 | takes one from the reference count at +0x20, which slot 6, the game's extra getter, reads, and calls the count's own handler when it reaches 0 |
+| `NpShape` | 18 | `setLocalPose(const PxTransform&)` | 0x66700 | "PxShape::setLocalPose: Shape is a part of pruning structure …" |
+| `NpShape` | 20 | `setSimulationFilterData(const PxFilterData&)` | 0x66960 | writes 16 bytes at +0x60, which slot 21 (`getSimulationFilterData`, audited) reads, or buffers them while the scene simulates |
+| `NpShape` | 22 | `setQueryFilterData(const PxFilterData&)` | 0x66ac0 | writes 16 bytes at +0x50, which slot 23 (`getQueryFilterData`, audited) reads |
+| `NpShape` | 26 | `getMaterials(PxMaterial**, PxU32, PxU32)` | 0x66d60 | jumps to 0x67d30, which writes the pointer PhysX's material table holds for each of the shape's material indices; slot 24, `setMaterials`, calls it too, and slot 27 is `getMaterialFromInternalFaceIndex` ("PxShape::getMaterialFromInternalFaceIndex received 0xFFFFffff …") |
+| `NpScene` | 94 | `raycast(…)` | 0x60890 | takes its distance in XMM3 and its hit flags by address; the probe's raycast |
+| `NpScene` | 95 | `sweep(…)` | 0x60960 | " Precise sweep doesn't support MTD …" |
+| `NpScene` | 96 | `overlap(…)` | 0x60b70 | takes no float; the probe's and the exporter's overlap |
+
+What that settles:
+- **Every slot is where NVIDIA's header puts it,** `PxShape`'s one later, as our compiler lays them out with the repo's
+  `PxShape.h`.
+- **A shape keeps its materials:** the factory's `createShape` takes a reference on each material it's given (the loop at
+  0x32c20 adds one at the material's +0x20, from the same table `getMaterials` reads). So a shape BlockRender keeps holds
+  on to the material it copied, even after the game lets go of the shape it copied it from.
+- **An actor's release takes it out of its scene,** as NVIDIA's `NpRigidActorTemplate::release` does. BlockRender still
+  takes a body out first, with `removeActor` (slot 13, audited for the watch), then releases it.
+- **The hit flags go by address:** `PxHitFlags` has a copy constructor of its own, so MSVC passes it as a pointer to a
+  copy, in the game as in our hooks, which declare it the same way.

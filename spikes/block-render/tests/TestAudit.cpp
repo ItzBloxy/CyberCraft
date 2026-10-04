@@ -154,6 +154,30 @@ TEST(SceneWatchHooksTheGamesSlots)
 	expect(SceneCall::ShiftOrigin, SlotOf<PxScene>([](PxScene& a) { a.shiftOrigin(PxVec3(0.0f, 1024.0f, 0.0f)); }));
 }
 
+TEST(BodyCallsUseTheGamesSlots)
+{
+	// Part 3's bodies (physx/Bodies.cpp) are made, shaped, posed and released through these slots, as the audit's second
+	// addendum found them in the game's PhysX3_x64.dll. Each PxShape slot is one past NVIDIA's header's (see PxShape.h).
+	Fake                dummy;  // a shape: never touched
+	PxShape&            shape = reinterpret_cast<PxShape&>(dummy);
+	PxMaterial*         material = nullptr;
+	const PxBoxGeometry box(0.5f, 0.5f, 0.5f);
+	const PxTransform   pose(PxIdentity);
+	const PxFilterData  filter;
+	Expect("PxPhysics::createRigidStatic", SlotOf<PxPhysics>([&](PxPhysics& a) { (void)a.createRigidStatic(pose); }), 21);
+	Expect("PxPhysics::createShape",
+	       SlotOf<PxPhysics>([&](PxPhysics& a) { (void)a.createShape(box, &material, 1, true, PxShapeFlag::eSCENE_QUERY_SHAPE); }), 27);
+	Expect("PxActor::release", SlotOf<PxActor>([](PxActor& a) { a.release(); }), 0);
+	Expect("PxActor::getScene", SlotOf<PxActor>([](PxActor& a) { (void)a.getScene(); }), 6);
+	Expect("PxRigidActor::setGlobalPose", SlotOf<PxRigidActor>([&](PxRigidActor& a) { a.setGlobalPose(pose); }), 21);
+	Expect("PxRigidActor::attachShape", SlotOf<PxRigidActor>([&](PxRigidActor& a) { a.attachShape(shape); }), 23);
+	Expect("PxShape::release", SlotOf<PxShape>([](PxShape& a) { a.release(); }), 0);
+	Expect("PxShape::setLocalPose", SlotOf<PxShape>([&](PxShape& a) { a.setLocalPose(pose); }), 18);
+	Expect("PxShape::setSimulationFilterData", SlotOf<PxShape>([&](PxShape& a) { a.setSimulationFilterData(filter); }), 20);
+	Expect("PxShape::setQueryFilterData", SlotOf<PxShape>([&](PxShape& a) { a.setQueryFilterData(filter); }), 22);
+	Expect("PxShape::getMaterials", SlotOf<PxShape>([&](PxShape& a) { (void)a.getMaterials(&material, 1); }), 26);
+}
+
 TEST(ActorCallsUseTheGamesSlots)
 {
 	Expect("PxActor::getName", SlotOf<PxActor>([](PxActor& a) { (void)a.getName(); }), 8);
