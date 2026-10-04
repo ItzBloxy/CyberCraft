@@ -80,8 +80,8 @@ The spec's "Part 3" and "Step 4", in short:
   NVIDIA's headers, since the game's `PxShape` has one more virtual), `PxActor::getScene`, and `PxBase::release`.
   `addActor` and `removeActor` were audited for the scene watch (Task 32's addendum).
 - **The exporter skips our own actors,** so Minecraft never gets its blocks back as city shape.
-- **Step 4:** `box on` (a test box 3 m ahead of V) for every interaction first; then `set blocks 1`: building a wall and a
-  tower, leaving build mode on top, walking into blocks, TNT under V, and what NPCs, cars and bullets do.
+- **Step 4:** `box on` (a test box 3 m ahead of V) for every interaction first; then `set blocks 1`: building a wall
+  and a tower, leaving build mode on top, walking into blocks, TNT under V, and what NPCs, cars and bullets do.
 
 ### What Part 2 settled for Part 3
 
@@ -92,9 +92,9 @@ The spec's "Part 3" and "Step 4", in short:
 - **The game shifts the whole scene** (`PxScene::shiftOrigin`, (0, ±1024, 0), on worker threads, outside `OnUpdate`)
   when PhysX's origin moves. PhysX moves our bodies with it, so the spec's "pose again after an origin change" should
   find nothing to do. Keep the check, and expect no re-poses.
-- **V's two kinematic capsules:** V's controller is the radius 0.32 capsule (query filter `0:0:2000:0`, simulation filter
-  `1:0:41ce:0`), as spike 1 found, and as `OriginWatch` picks it (radius 0.6 at most). A second capsule, radius 1, has
-  query filter `0:0:400001:0` and no simulation filter. The game's street filters are `0:0:449c004:0` and
+- **V's two kinematic capsules:** V's controller is the radius 0.32 capsule (query filter `0:0:2000:0`, simulation
+  filter `1:0:41ce:0`), as spike 1 found, and as `OriginWatch` picks it (radius 0.6 at most). A second capsule, radius
+  1, has query filter `0:0:400001:0` and no simulation filter. The game's street filters are `0:0:449c004:0` and
   `5c004:0:13ce:0`, and terrain's `0:0:449c080:0`.
 - **Readability checks:** `ReadableMemory` now answers large ranges with `QueryWorkingSetEx` (`b5ac34f`). `VirtualQuery`
   costs about 3.5 ms a call in the game's 600 MB heap regions, so anything new that checks large arrays must not fall
@@ -117,8 +117,9 @@ All of these exist in the protocol and in SkyCraft's unchanged mod; BlockRender 
 - **The actor table** (game → Minecraft, seqlock, at `0x12000`): up to 256 records, each `formId`, flags (hostile, dead,
   essential, in combat), feet (Minecraft axes), yaw, width and height in blocks, health fraction, level and a 24-byte
   name.
-  - **On Minecraft's side** (`SkyCombat`), each record becomes a `SkyrimActorEntity`, an invisible `LivingEntity` stand-in
-    placed from the table every tick, and on the client every frame (`ProxySync`), so the crosshair and reach line up.
+  - **On Minecraft's side** (`SkyCombat`), each record becomes a `SkyrimActorEntity`, an invisible `LivingEntity`
+    stand-in placed from the table every tick, and on the client every frame (`ProxySync`), so the crosshair and reach
+    line up.
   - **What it does:** Minecraft's own combat hits it (swords, crits, sweeps, bows, tridents), and `SkyCombat` forwards
     one hit a tick as `kEvHitActor`. It also presses pressure plates and trips tripwires.
   - **It isn't solid:** `canBeCollidedWith` returns false, `isPushable` false, `noPhysics` and no gravity. A stand-in
@@ -190,8 +191,8 @@ first. The repo keeps only the protocol header (`extern/skycraft/`).
     default) and `drivelog <seconds>`, besides spike 4's.
   - **The overlay** (`blockrender_hud`) shows the ground line, with its buttons.
   - **The log** gets a `slow batch` line for any read over 3 ms, 120 at most.
-- **Spike 1's probe 0.4.0** (`PhysXProbe`) and its `physxprobe_hud` overlay are still installed: it shows V's distance to
-  PhysX's origin lines. **FreeFly** is installed too.
+- **Spike 1's probe 0.4.0** (`PhysXProbe`) and its `physxprobe_hud` overlay are still installed: it shows V's distance
+  to PhysX's origin lines. **FreeFly** is installed too.
 - **Minecraft:** the Modrinth App's `CyberCraft` instance, Minecraft 26.3, Fabric, SkyCraft 0.1.2. Its world wasn't
   cleared after step 3: at least the two stone blocks placed against the street and a wall are still there.
 - **The repo's CMake cache** has `CP2077_DIR` empty, so builds don't install into the game.
@@ -225,7 +226,8 @@ first. The repo keeps only the protocol header (`extern/skycraft/`).
 
 ## Gotchas
 
-- **Bash's working directory:** a `cd` in a Bash call moves it for later calls. Wrap it in a subshell, `(cd ... && ...)`.
+- **Bash's working directory:** a `cd` in a Bash call moves it for later calls. Wrap it in a subshell,
+  `(cd ... && ...)`.
 - **Backslashes:** the Bash tool turns `\\` into `\`. Write files with the Write or Edit tools when they hold
   backslashes.
 - **Tool paths:** `cmake`, `ctest` and `dumpbin` aren't on `PATH`; the plan's build steps have their full paths. `luac`
