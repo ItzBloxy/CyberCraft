@@ -3,8 +3,8 @@
 // on the finished frame; step 3: before DLSS; step 4: into the G-buffer). Spike 4 links it to SkyCraft's Minecraft
 // through SkyCraft's shared memory: Minecraft's player follows V, Minecraft's blocks and HUD are drawn in the game, and
 // in build mode (F8) the mouse buttons, the wheel and the keys 1 to 9 are Minecraft's. Spike 5 has Minecraft drive in
-// build mode: the movement keys are Minecraft's too, and V is teleported to its player's eye every frame; and it reads
-// Night City's shape for Minecraft from the game's PhysX.
+// build mode: the movement keys are Minecraft's too, and V is teleported to its player's eye every frame; it reads Night
+// City's shape for Minecraft from the game's PhysX; and it keeps Minecraft's solid blocks, for V to stand on.
 // Commands come through blockrender.request, in its folder or the overlay's, and status.txt in the overlay's folder says
 // what it's doing. See docs/superpowers/specs/2026-10-01-block-render-design.md, 2026-10-02-minecraft-link-design.md and
 // 2026-10-03-collision-and-movement-design.md.
@@ -60,7 +60,7 @@ namespace
 using Clock = std::chrono::steady_clock;
 using namespace std::chrono_literals;
 
-constexpr const char* kVersion = "0.13.0";
+constexpr const char* kVersion = "0.14.0";
 
 RED4ext::v1::PluginHandle g_handle = nullptr;
 const RED4ext::v1::Sdk*   g_sdk = nullptr;
@@ -1027,6 +1027,8 @@ cpmc::LinkReport LinkLines(const cpmc::Renderer::Stats& aStats, double aNow)
 		report.collisionWaiting = state.collisionWaiting;
 		report.collisionDropped = state.collisionDropped;
 		report.lastHold = state.lastHold;
+		report.solidSections = state.solidSections;
+		report.solidBlocks = state.solidBlocks;
 	}
 	report.groundWhy = g_groundWhy;
 	const cpmc::px::PhysxGround::Report& physx = g_ground.State();
@@ -1323,7 +1325,7 @@ RED4EXT_C_EXPORT void RED4EXT_CALL Query(RED4ext::v1::PluginInfo* aInfo)
 {
 	aInfo->name = L"BlockRender";
 	aInfo->author = L"Cyberpunk-Minecraft";
-	aInfo->version = RED4EXT_V1_SEMVER(0, 13, 0);
+	aInfo->version = RED4EXT_V1_SEMVER(0, 14, 0);
 	aInfo->runtime = RED4EXT_V1_RUNTIME_VERSION_LATEST;
 	aInfo->sdk = RED4EXT_V1_SDK_VERSION_CURRENT;
 }

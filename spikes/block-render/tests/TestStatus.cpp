@@ -211,6 +211,18 @@ TEST(StatusWritesTheDrive)
 	                  "ratio not measured yet (0 of 5 turns); Minecraft's player in the air"));
 }
 
+TEST(StatusWritesMinecraftsSolids)
+{
+	cpmc::StatusReport report;
+	cpmc::LinkReport   link;
+	link.solidSections = 625;
+	link.solidBlocks = 640000;
+	report.link = link;
+	const std::string status = cpmc::FormatStatus(report);
+	CHECK(Has(status, "solids=Minecraft's solid blocks: 640000 in 625 sections"));
+	CHECK(status.find("ground=") < status.find("solids=") && status.find("solids=") < status.find("ring="));
+}
+
 TEST(StatusWritesTheSceneWatch)
 {
 	cpmc::StatusReport report;
