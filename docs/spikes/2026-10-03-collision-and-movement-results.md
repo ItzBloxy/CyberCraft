@@ -457,3 +457,76 @@ What step 3 found:
     solid to stand on, but that's beyond this spike and needs its own brainstorm.
 - **Part 3's bodies can be added in `OnUpdate`:** the game's own calls never come then, with the exporter reading or
   not.
+
+## Part 3, offline: the worker and the solids
+
+Date: 2026-10-04. No Cyberpunk: `mclink` ran step 3's `city.txt` again with the new worker, and Part 3's `solids.txt`.
+The versions:
+- **Minecraft and SkyCraft** as in step 1: Minecraft 26.3 with Fabric in the `CyberCraft` instance, SkyCraft 0.1.2;
+- **BlockRender's link code and `mclink`** at `7e86cad`: the plan's Tasks 38 to 42, built RelWithDebInfo, 376 unit tests
+  passing;
+- **the machine:** 16 logical processors, so the worker ran 4 threads.
+
+The user started and stopped Minecraft. The agent ran `mclink` with both scripts, and read their output, Minecraft's
+log, Task 28's output and SkyCraft's classes. Plan: Task 43.
+
+### Verdict
+
+**Pass, but for the TNT, which SkyCraft's digging explains.** The new worker gives Minecraft the same city as Task 28's
+single thread, to the millimetre, and the link keeps Minecraft's solid blocks by section as SkyCraft sends them. The TNT
+went off 3.8 blocks higher than in Task 28, on blocks SkyCraft had made from Task 28's own blast, not on the sidewalk.
+
+### The checks
+
+- **The city, as Task 28 found it:**
+  - **Spot B's area:** `the city around region 10 0 250 is all in the ring: 1152 regions` 2.52 s after the dump (Task
+    28: 2.5 s). Minecraft let its player go after 0.05 s (0.02), its feet at 6.140, `on ground`.
+  - **The kerb:** walking west, the feet dropped 0.20, from 6.140 to 5.940, between x 79.6 and 78.6, and stayed `on
+    ground` on the road, to x 75.76 (75.97).
+  - **The barrier:** walking back east, the feet climbed the kerb between x 77.7 and 78.8 and stopped at x 84.635
+    (84.64), sliding 0.28 blocks south along it (0.30).
+  - **The ramp:** all in the ring 0.40 s after its dump (0.54 s), and let go after 0.05 s. Walking north, the feet rose
+    from 6.145 to 6.471 over 17.5 blocks, +0.326 (+0.325 over 17.3). Walking east, x stayed at 180.61 (180.62).
+  - **No `build mode ends:` line,** and `exit: 0`.
+- **The TNT: on SkyCraft's blocks.** Summoned 3 blocks west and 4 up, at 81.6 10.14 2007.8, it went off at 81.6 10.1
+  2007.8, radius 4.0, where Task 28's fell to 6.3. It hardly fell: it came to rest on a block's top at y 10.0, since
+  Minecraft puts a TNT's explosion 0.06 above its feet.
+  - **What it rested on:** as the world opened, SkyCraft sent sections 4 0 125 and 5 0 125, blocks from y 8 to 11 above
+    spot B, at x 77 to 85 and z 2003 to 2012: 35 solid blocks, by the new solids count. In Task 28's output those two
+    sections first came 10 ms after its own TNT went off; in the 13 s the player had stood there before, none had.
+  - **Why they're there:** SkyCraft digs into Skyrim's ground. By the strings in its classes (nothing was decompiled),
+    its explosion mixin hands each blast to `SkyDigBlast`, which marks cells of Skyrim's ground as dug (`markDug`), with
+    buildings resisting (`BUILDING_RESISTANCE`), and sets real blocks in the world (`materialize`, `blockFor`,
+    `setBlock`). SkyCraft's world, its "mirror world", is saved, so what Task 28's blast left stayed. This run's blast
+    added 6 blocks: 41 in the two sections afterwards, section 5's now reaching y 12.
+  - **Their meshes follow the city's voxels:** section 5's shrank from 6,222 vertices to 1,116 as spot B's voxels
+    arrived, and in Task 28's run grew back when the ramp's city replaced spot B's. SkyCraft has its own code for
+    drawing a dug hole's walls (`DigWalls`).
+  - So `city.txt` can't be run twice in the same world as it stands: each run's TNT digs at spot B, and leaves blocks.
+- **The worker:** 4 threads, a quarter of the processors. For spot B's area, 1,152 regions with 107,965 triangles
+  became 23,888 voxel blocks, as in Task 28, in 1,092 ms of the threads' time: 0.95 ms a region, against 0.74 ms on one
+  thread. Its threads were running 93% of that time, nothing waited, and `0 replaced`. By the end, 2,496 regions with
+  146,225 triangles made 40,626 voxel blocks, as in Task 28, in 1,743 ms, 95% of it running.
+- **How soon:** spot B's area was all in the ring 2.52 s after the dump, as with one thread. The threads' 1,092 ms is
+  about 0.3 s over 4 of them, so here the reads set the pace: `mclink` reads at 60 Hz with the plugin's 1.5 ms budget a
+  frame, about a batch a frame for spot B's 145.
+- **The solids** (`solids.txt`, the stand-in V at 280.5 6.14 2007.5, in section 17 0 125): the 3 × 3 × 3 sections
+  around it held
+  - 0 sections with 0 blocks before any block was placed;
+  - 1 section with 24 blocks after the stone box, `/fill 280 7 2004 282 8 2007 minecraft:stone`;
+  - 26 after the glass, the oak slab and the torch: the glass and the slab count, the torch doesn't;
+  - 0 sections with 0 blocks after the air fill: SkyCraft sent `section 17 0 125: removed`.
+
+  Every `render ring:` line said `0 rejected`, the glass's translucent triangles were dropped, 12 each time the section
+  came, as the link always drops them, and `exit: 0`. The totals were 41 solid blocks in 2 sections before and after,
+  SkyCraft's blocks at spot B, sent at once with the player still at the ramp where `city.txt` left it, and 65 and 67
+  with the box.
+
+### What it means for the game, and Part 3
+
+- **The worker makes the same city, faster:** the same voxels as Task 28's single thread, from 4 threads that Minecraft
+  hardly kept waiting. Offline the reads were the limit, not the worker; Task 46's fast drop is its real test.
+- **The solids are what Part 3's bodies need:** each section's blocks arrive as SkyCraft meshes it, and go when it
+  empties.
+- **Explosions make blocks:** where a blast digs into the city's ground, SkyCraft sets real blocks, kept in its saved
+  world. They're solid, so with Part 3's bodies they'll stop V too, and Task 52's TNT step should expect them.
