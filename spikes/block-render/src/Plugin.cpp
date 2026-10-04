@@ -62,7 +62,7 @@ namespace
 using Clock = std::chrono::steady_clock;
 using namespace std::chrono_literals;
 
-constexpr const char* kVersion = "0.15.0";
+constexpr const char* kVersion = "0.16.0";
 
 RED4ext::v1::PluginHandle g_handle = nullptr;
 const RED4ext::v1::Sdk*   g_sdk = nullptr;
@@ -128,7 +128,7 @@ DWORD                 g_mainThread = 0;   // OnUpdate's
 
 // Spike 5's V against blocks (its spec's "Part 3"). Main thread only.
 cpmc::px::Bodies g_bodies{ g_physx, g_ground };  // PhysX bodies for Minecraft's blocks around V, and step 4's test box
-bool             g_blocks = false;               // set blocks 1: the bodies, while drawing is on
+bool             g_blocks = true;                // set blocks 0|1: the bodies, while drawing is on; on since step 4 passed
 
 // This frame's figures, for bursts.
 struct FrameFigures
