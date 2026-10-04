@@ -274,3 +274,77 @@ waiting, dropped or unread. Minecraft's log has only the warning it gives on eve
 - **Walls not square to Minecraft's axes** make the player slide along them, which in the game V will follow. It's
   ordinary wall sliding, not a fault, but where Minecraft's player and the city disagree in step 3's game half,
   `shapes` will show the faces' filters and bounds.
+
+## Step 3, the opening check: the follow-ups and the scene watch
+
+Date: 2026-10-04. BlockRender 0.12.0 at `f4d5405` (the plan's Tasks 19 to 32, 358 unit tests passing), deployed to
+Cyberpunk 2077 2.31 as in step 2, with spike 1's PhysX probe still loaded. Minecraft as in step 1, linked through the
+mapping. The ground was the floor throughout: 0.12.0 has no exporter yet.
+
+The user played: Minecraft, the game, F8, the car and the walking and driving. The agent sent `scenewatch on` and
+`off`, recorded a drive log, and read the plugin's log and status. Plan: Task 33.
+
+### Verdict
+
+**Pass, and the exporter reads in `OnUpdate`, as planned.** Part 1's follow-ups all work in the game. In 140 s of
+watching, 37,770 calls to scene 0 came from 16 threads, and not one came while `OnUpdate` ran; no thread took the
+write lock. So `OnUpdate` is a quiet time for scene 0, and Tasks 34 to 36 go ahead as planned.
+
+### The checks
+
+- **The turn by default:** with nothing set, the drive line said `turn on, ratio not measured yet` (1 of 5 turns, from
+  the user's first moves). After a few turns it read −0.0500 degrees a count from 32 turns, as in step 2, and in
+  build mode V turned left and right with the mouse at once.
+- **The frame on entering build mode:** a 10 s drive log (688 frames) around one F8. The frame build mode started in
+  took 13.8 ms, like the frames around it (13.5 to 14.1 ms), against step 2's 53 and 56 ms; Minecraft let its player
+  go after 0.04 s. The log's worst frame, 19.0 ms, came 5 s after build mode had ended.
+- **In a car:** F8 said `build mode stays off: V is in a vehicle`, not "V isn't found". After a short drive and two
+  seconds standing, V's eye height still read 1.60 m, not the seat's 1.18. F8 then turned build mode on at once
+  (released after 0.04 s): out of the car, V can be placed again.
+- **The hooks:** at spot B (world −190.2, 617.6), `scenewatch on` hooked all 16 calls: every slot held the audited
+  function, so nothing else had hooked scene 0. The probe patches nothing.
+- **The watch,** 140 s: half a minute walking, a drive south across the y = 512 line and back north, then standing.
+  Its summary, by thread:
+
+  | Thread | add | remove | step | fetch | shift |
+  |---|---|---|---|---|---|
+  | 38768 | 634 | 640 | 604 | 579 | |
+  | 39168 | 780 | 682 | 607 | 595 | |
+  | 36500 | 572 | 676 | 608 | 629 | 1 |
+  | 37668 | 674 | 561 | 611 | 594 | |
+  | 38036 | 728 | 527 | 597 | 632 | |
+  | 37876 | 479 | 475 | 609 | 622 | |
+  | 7116 | 527 | 601 | 601 | 606 | |
+  | 32192 | 736 | 573 | 624 | 626 | 2 |
+  | 36416 | 615 | 648 | 655 | 641 | |
+  | 38408 | 703 | 538 | 601 | 594 | |
+  | 34212 | 624 | 715 | 620 | 642 | |
+  | 32372 | 706 | 820 | 627 | 622 | |
+  | 36028 | 648 | 539 | 581 | 622 | |
+  | 37720, the main thread | 12 | 4 | 168 | 63 | |
+  | 10428 | 623 | 699 | 621 | 652 | |
+  | 38264 | 650 | 719 | 585 | 600 | 1 |
+  | **All** | **9,711** | **9,417** | **9,319** | **9,319** | **4** |
+
+  - **Who:** 15 worker threads share the work evenly, each adding, removing, stepping and fetching. The main thread
+    makes a few of each.
+  - **How often:** scene 0 is stepped and fetched about 67 times a second, once a frame. About 70 actors are added
+    and 68 removed a second, while walking and driving: the city streaming in and out.
+  - **When:** none of the 37,770 calls came while `OnUpdate` ran, for any thread or kind.
+  - **The write lock:** never taken. The game doesn't use PhysX's write lock on scene 0, so our read lock keeps out
+    nothing; reading is safe because of when it happens, not because of the lock.
+  - **The origin:** 4 shifts while V drove across the line and back, each (0, ±1024, 0), the last (0, 1024, 0) going
+    north. They came from worker threads, outside `OnUpdate`: the game moves the whole scene with `shiftOrigin`.
+- **Unloading:** the plugin's log ends with its patches restored, and the game left no crash report.
+
+### What it means for the exporter, and for Part 3
+
+- **The exporter reads in `OnUpdate`,** under scene 0's read lock as spike 1 did. The game's own calls never
+  overlapped it in 140 s and about 9,000 frames. The likely reason is that the game runs its physics jobs in another
+  part of its frame from the one RED4ext's update runs in.
+- **The watch covered walking and driving only,** not loads or fast travel. The exporter reads only while V is found,
+  so loading screens don't read. Step 3's game half keeps the watch on while the exporter reads, to check the same
+  holds with `OnUpdate` doing more work.
+- **For Part 3's bodies:** the game shifts scene 0 itself when PhysX's origin moves, so PhysX moves our bodies with
+  everything else. Part 3 only has to know the origin moved, not pose the bodies again. Adding and removing them in
+  `OnUpdate` won't race the game's own adds and removes, which never come then.
