@@ -382,6 +382,20 @@ TEST(RouterEndsBuildModeWhenVCantBePlaced)
 	CHECK(inputs.size() == 1 && inputs[0].type == proto::kInReleaseAll);
 }
 
+TEST(RouterSaysWhyVCantBePlacedWhenTheLinkFindsNoV)
+{
+	// In a car the camera isn't V's eye, so the link finds no V; V's own reason still comes first.
+	Building           building;
+	link::Link::Status state = Linked();
+	state.inGame = false;
+	building.router.Update(true, state, "V is in a vehicle");
+	CHECK(!building.router.On());
+	CHECK_STR(building.router.Report().why, "V is in a vehicle");
+	CHECK_STR(building.router.TurnOn().value_or("on"), "V is in a vehicle");
+	building.router.Update(true, state);
+	CHECK_STR(building.router.TurnOn().value_or("on"), "V isn't found");
+}
+
 TEST(RouterEndsBuildModeWhenMinecraftsPlayerDies)
 {
 	Building           building;

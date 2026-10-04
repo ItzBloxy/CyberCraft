@@ -111,6 +111,23 @@ TEST(BuildModeGoesOnOnlyWithMinecraftInItsWorld)
 	CHECK(mode.TurnOn(Ready()));
 }
 
+TEST(BuildModeSaysWhyVCantBePlacedBeforeVIsntFound)
+{
+	// In a car the camera isn't V's eye, so the link finds no V, but the plugin still knows why V can't be placed.
+	BuildMode mode;
+	Situation situation = Ready();
+	situation.inGame = false;
+	situation.blocked = "V is in a vehicle";
+	CHECK(!mode.TurnOn(situation));
+	CHECK_STR(mode.Why(), "V is in a vehicle");
+	situation.blocked.clear();
+	CHECK(!mode.TurnOn(situation));
+	CHECK_STR(mode.Why(), "V isn't found");
+	situation.linked = false;
+	CHECK(!mode.TurnOn(situation));
+	CHECK_STR(mode.Why(), "it isn't linked");
+}
+
 TEST(BuildModeForwardsAndHidesTheButtons)
 {
 	BuildMode      mode = On();

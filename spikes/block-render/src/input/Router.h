@@ -44,8 +44,8 @@ public:
 	// From the main thread. The link: once the mapping opens, and null again at unload.
 	void SetLink(link::Link* aLink);
 	// Once a frame, after the link's update: whether the user linked, what the link says, and why V can't be placed, if
-	// it can't (spike 5). Build mode ends if Minecraft or V is gone, or the link, or V can't be placed, or Minecraft's
-	// player dies.
+	// it can't (spike 5), even when the link finds no V. Build mode ends if Minecraft or V is gone, or the link, or V
+	// can't be placed, or Minecraft's player dies; why V can't be placed is said before "V isn't found".
 	void Update(bool aLinked, const link::Link::Status& aState, const std::string& aVBlocked = {});
 	// The mouse's movement along x since the last call, in raw counts: for the turn a teleport adds back (spike 5).
 	int64_t TakeMouseX();

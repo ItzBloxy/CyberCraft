@@ -229,13 +229,17 @@ bool BuildMode::TurnOn(const Situation& aSituation)
 	{
 		why_ = aSituation.minecraft ? "Minecraft isn't in its world" : "Minecraft isn't there";
 	}
-	else if (!aSituation.inGame)
+	else if (!aSituation.linked)
 	{
-		why_ = aSituation.linked ? "V isn't found" : "it isn't linked";
+		why_ = "it isn't linked";
 	}
 	else if (!aSituation.blocked.empty())
 	{
-		why_ = aSituation.blocked;
+		why_ = aSituation.blocked;  // first: in a car the camera isn't V's eye, so the link finds no V
+	}
+	else if (!aSituation.inGame)
+	{
+		why_ = "V isn't found";
 	}
 	else
 	{

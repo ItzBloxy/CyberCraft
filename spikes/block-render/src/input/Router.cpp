@@ -105,11 +105,12 @@ void Router::Update(bool aLinked, const link::Link::Status& aState, const std::s
 	situation_.blocked = (aState.minecraftFlags & proto::kMcDead) ? "Minecraft's player is dead" : aVBlocked;
 	if (mode_.On())
 	{
-		std::string why = !aState.minecraft ? "Minecraft has gone"
-		                  : !aState.inWorld ? "Minecraft left its world"
-		                  : !aLinked        ? "unlinked"
-		                  : !aState.inGame  ? "V isn't found"
-		                                    : situation_.blocked;
+		std::string why = !aState.minecraft             ? "Minecraft has gone"
+		                  : !aState.inWorld             ? "Minecraft left its world"
+		                  : !aLinked                    ? "unlinked"
+		                  : !situation_.blocked.empty() ? situation_.blocked
+		                  : !aState.inGame              ? "V isn't found"
+		                                                : std::string();
 		if (!why.empty())
 		{
 			Off(std::move(why));

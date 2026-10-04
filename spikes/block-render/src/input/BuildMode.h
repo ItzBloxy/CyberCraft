@@ -41,7 +41,8 @@ struct Situation
 	bool        inGame = false;     // linked, with V found
 	bool        minecraft = false;  // Minecraft's heartbeat is fresh
 	bool        minecraftInWorld = false;
-	std::string blocked;  // why Minecraft can't drive V: V in a vehicle, a workspot or dead, or Minecraft's player dead (spike 5)
+	std::string blocked;  // why Minecraft can't drive V: V in a vehicle, a workspot or dead, or Minecraft's player dead (spike 5).
+	                      // Known even when the link finds no V, as in a car, where the camera isn't V's eye
 };
 
 // What becomes of one event.

@@ -369,10 +369,11 @@ void UpdateLink(double aNow, double aFrameMs)
 	}
 	g_camera = pose ? std::optional<cpmc::Vec3d>(cpmc::McFromWorld(pose->camera)) : std::nullopt;
 	const bool buildMode = g_router->On();
-	// While linked: V's yaw, and what keeps V from being placed. The turn ratio is measured outside build mode, while V
-	// can be placed, so its yaw is V's own doing.
+	// While linked: V's yaw, and what keeps V from being placed. Puppet finds V itself, so the reason is known without
+	// the camera too: in a car the camera isn't V's eye, and the link finds no V. The turn ratio is measured outside
+	// build mode, while V can be placed, so its yaw is V's own doing.
 	const std::optional<double> yaw = g_linked && pose ? g_puppet.Yaw() : std::nullopt;
-	const std::string           blocked = g_linked && pose ? g_puppet.Blocked() : std::string();
+	const std::string           blocked = g_linked ? g_puppet.Blocked() : std::string();
 	if (!buildMode && yaw && blocked.empty())
 	{
 		g_turnRatio.Note(mouseX, *yaw);
