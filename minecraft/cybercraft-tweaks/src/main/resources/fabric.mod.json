@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "id": "cybercraft_tweaks",
+  "version": "1.2.0",
+  "name": "CyberCraft Tweaks",
+  "description": "SkyCraft adjusted for Cyberpunk 2077's Night City: nothing digs into the game's ground, so blasts leave no blocks floating above it.",
+  "environment": "client",
+  "entrypoints": { "main": ["dev.cybercraft.tweaks.CyberCraftTweaks"] },
+  "mixins": ["cybercraft_tweaks.mixins.json"],
+  "depends": {
+    "fabricloader": ">=0.19.5",
+    "minecraft": "~26.3",
+    "java": ">=21",
+    "fabric-api": "*",
+    "skycraft": "0.1.2"
+  }
+}

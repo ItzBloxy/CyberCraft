@@ -1,0 +1,23 @@
+# After spike 5: TNT on Night City's ground, to check CyberCraft Tweaks (minecraft/cybercraft-tweaks), which stops
+# SkyCraft setting blocks where a blast digs into the game's ground. Spot B's dump goes to a fresh spot, 400 blocks east
+# of spike 3's corner, where nothing has blown up yet: with the mod, the solid blocks around the stand-in V are the same
+# after the TNT as before, where without it SkyCraft set some (Task 43 of the collision-and-movement plan). Start
+# Minecraft first; this waits for its world.
+status
+wait-world 180
+ground city
+at 480.5 6.14 2007.5
+look 270 0
+dump E:\Cyberpunk2077\red4ext\plugins\PhysXProbe\dumps\2026-10-01_14-37-07\collision.obj
+link on
+type /gamemode creative
+wait-ground 30
+build on
+track 1
+status
+# TNT 3 blocks west and 4 up, over the sidewalk: it lands on the street's voxels and goes off there.
+type /summon minecraft:tnt ~-3 ~4 ~
+wait 6
+status
+build off
+quit
