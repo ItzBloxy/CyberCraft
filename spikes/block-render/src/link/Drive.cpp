@@ -46,6 +46,11 @@ void EyeHeight::Note(const Vec3d& aFeet, const Vec3d& aCamera)
 	lastFeetZ_ = aFeet.z;
 }
 
+void EyeHeight::Break()
+{
+	lastFeetZ_.reset();
+}
+
 Vec3d FeetUnderEye(const TickSample& aMinecraft, double aEyeHeight)
 {
 	const Vec3d eye = WorldFromMc({ aMinecraft.feet.x, aMinecraft.feet.y + aMinecraft.eyeHeight, aMinecraft.feet.z });

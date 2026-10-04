@@ -778,3 +778,26 @@ TEST(LinkMeasuresVsEyeHeightOutsideBuildModeOnly)
 	link.Update(InBuild(1.3, pose), kSettings, sink);
 	CHECK_NEAR(link.State().eyeHeight, 1.70, 1e-9);
 }
+
+TEST(LinkMeasuresVsEyeHeightOnlyWhileVCanBePlaced)
+{
+	// In a car's seat, V's camera is 1.18 m above its feet (spike 5's step 2): that isn't V's eye height.
+	FakeMinecraft minecraft;
+	Link          link(minecraft.base, 0);
+	Sink          sink;
+	GamePose      pose = Corner();
+	link.Update(At(1.0, pose), kSettings, sink);  // getting into the car: V's feet are noted
+	pose.camera.z = 6.14 + 1.18;
+	Link::Frame seated = At(1.1, pose);
+	seated.placeable = false;
+	link.Update(seated, kSettings, sink);
+	seated.now = 1.2;
+	link.Update(seated, kSettings, sink);
+	CHECK_NEAR(link.State().eyeHeight, 1.60, 1e-9);
+	// Out of the car and standing, at the same height: the first frame only notes V's feet, the second measures.
+	pose.camera.z = 6.14 + 1.70;
+	link.Update(At(1.3, pose), kSettings, sink);
+	CHECK_NEAR(link.State().eyeHeight, 1.60, 1e-9);
+	link.Update(At(1.4, pose), kSettings, sink);
+	CHECK_NEAR(link.State().eyeHeight, 1.70, 1e-9);
+}

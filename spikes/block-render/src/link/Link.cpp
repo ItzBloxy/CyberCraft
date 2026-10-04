@@ -119,9 +119,13 @@ void Link::Update(const Frame& aFrame, const LinkSettings& aSettings, LinkSink& 
 	status_.placeV.reset();
 	status_.endBuild.clear();
 	status_.eyeDistance.reset();
-	if (aFrame.pose && !build)
+	if (aFrame.pose && !build && aFrame.placeable)
 	{
 		eyeHeight_.Note(aFrame.pose->feet, aFrame.pose->camera);
+	}
+	else
+	{
+		eyeHeight_.Break();
 	}
 	if (build && !wasBuild_)
 	{

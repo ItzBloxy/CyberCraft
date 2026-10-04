@@ -76,6 +76,8 @@ public:
 		std::optional<GamePose> pose;               // nothing: V isn't there
 		bool                    linked = false;     // the user's Link or Unlink
 		bool                    buildMode = false;  // Minecraft drives (spike 5); off sets SkyState's menu flag
+		bool                    placeable = true;   // nothing keeps V from being placed (a vehicle, a workspot, death),
+		                                            // so V's eye height can be measured
 		bool                    takeHud = false;    // hand on HUD images this frame
 	};
 

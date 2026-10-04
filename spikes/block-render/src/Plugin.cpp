@@ -397,6 +397,7 @@ void UpdateLink(double aNow, double aFrameMs)
 	frame.pose = pose;
 	frame.linked = g_linked;
 	frame.buildMode = buildMode;
+	frame.placeable = blocked.empty();
 	frame.takeHud = g_hudWanted;
 	const uint64_t drainedBefore = state.drainedBytes;
 	const uint64_t waitedBefore = state.waitedFrames;

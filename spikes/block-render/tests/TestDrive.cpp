@@ -150,3 +150,15 @@ TEST(EyeHeightAveragesOnlyWhileTheFeetStayLevel)
 	eye.Note({ 0.2, 0.0, 6.3 }, { 0.2, 0.0, 16.3 });  // a camera 10 m up isn't V's eye
 	CHECK_NEAR(eye.Value(), 1.61, 1e-9);
 }
+
+TEST(EyeHeightStartsAFreshRunAfterABreak)
+{
+	// A frame V can't be measured in, a car's seat say, breaks the run: the next frame only notes the feet.
+	EyeHeight eye;
+	eye.Note({ 0.0, 0.0, 6.0 }, { 0.0, 0.0, 7.7 });
+	eye.Break();
+	eye.Note({ 0.0, 0.0, 6.0 }, { 0.0, 0.0, 7.7 });
+	CHECK_NEAR(eye.Value(), 1.60, 1e-9);
+	eye.Note({ 0.0, 0.0, 6.0 }, { 0.0, 0.0, 7.7 });
+	CHECK_NEAR(eye.Value(), 1.70, 1e-9);
+}

@@ -24,11 +24,13 @@ const char* DriveStateName(DriveState aState);  // "off", "waiting", "driving"
 
 // V's eye height: the camera's height above V's feet, averaged over frames where V's feet don't move up or down, so a
 // jump, or a camera and feet read either side of a teleport, doesn't count. It's measured outside build mode only, and
-// V can't crouch in build mode, so it holds while Minecraft drives. Spike 4's measure, 1.60 m, until a frame is taken.
+// V can't crouch in build mode, so it holds while Minecraft drives. It's measured only while V can be placed, too: in a
+// car's seat the camera is 1.18 m above V's feet. Spike 4's measure, 1.60 m, until a frame is taken.
 class EyeHeight
 {
 public:
 	void   Note(const Vec3d& aFeet, const Vec3d& aCamera);  // world axes
+	void   Break();  // a frame V isn't measured in: the next frame's feet have nothing to be compared with
 	double Value() const { return value_; }
 
 private:
