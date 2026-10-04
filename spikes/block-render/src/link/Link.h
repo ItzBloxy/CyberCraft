@@ -9,6 +9,7 @@
 #include "link/Messages.h"
 #include "link/Overlay.h"
 #include "link/Rings.h"
+#include "link/Solids.h"
 #include "link/Ticks.h"
 
 #include <array>
@@ -22,9 +23,10 @@
 
 // The game side of SkyCraft's protocol, once a frame (the minecraft-link spec's "The link" and "Blocks"): the heartbeat
 // and SkyState, teleports and the floor, typed commands, Minecraft's events, the render ring, and HUD images. Spike 5
-// adds build mode's drive (its spec's "Part 1"): one teleport, then Minecraft drives and the link says where V goes. And
+// adds build mode's drive (its spec's "Part 1"): one teleport, then Minecraft drives and the link says where V goes;
 // Night City's ground (its "Part 2"): the city's collision instead of the floor, read around the centre and sent as it
-// changes. It works on the mapping's memory, so the tests give it plain memory with a fake Minecraft.
+// changes; and Minecraft's solid blocks by section (its "Part 3"), for V's bodies. It works on the mapping's memory, so
+// the tests give it plain memory with a fake Minecraft.
 namespace cpmc::link
 {
 // What Minecraft gets as the game's shape (set ground).
@@ -167,6 +169,8 @@ public:
 		bool                         atlasSeen = false;
 		uint64_t                     sectionsBeforeAtlas = 0;
 		uint64_t                     translucentDropped = 0;
+		size_t                       solidSections = 0;  // Minecraft's sections with solid blocks, kept (spike 5's "Part 3")
+		uint64_t                     solidBlocks = 0;    // and their solid blocks
 		// Events, input, commands and the HUD
 		uint64_t              explosions = 0;
 		uint64_t              otherEvents = 0;
@@ -191,6 +195,7 @@ public:
 	};
 
 	const Status& State() const { return status_; }
+	const Solids& SolidSections() const { return solids_; }  // Minecraft's solid blocks, by section
 
 private:
 	// A floor around aCentre (Minecraft axes; its y is the height). A new epoch clears the last one first; without one,
@@ -207,6 +212,7 @@ private:
 	std::mutex            inputMutex_;
 	std::atomic<uint64_t> inputsDropped_{ 0 };
 	Status                status_;
+	Solids                solids_;
 	bool                  wasThere_ = false;
 	uint32_t              lastPid_ = 0;
 	bool                  wasInGame_ = false;

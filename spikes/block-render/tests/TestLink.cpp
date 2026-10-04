@@ -229,6 +229,19 @@ std::vector<uint8_t> SectionPayload(int32_t aX, uint32_t aVertices, uint32_t aCl
 	return payload;
 }
 
+// A kRenSolids payload for section aX 0 0, with its first aBlocks blocks solid, as SkyCraft sends it.
+std::vector<uint8_t> SolidsPayload(int32_t aX, uint32_t aBlocks)
+{
+	std::vector<uint8_t> payload(16 + (aBlocks ? 512 : 0));
+	std::memcpy(payload.data(), &aX, 4);
+	std::memcpy(payload.data() + 12, &aBlocks, 4);
+	for (uint32_t bit = 0; bit < aBlocks; ++bit)
+	{
+		payload[16 + bit / 8] |= uint8_t(1u << (bit % 8));
+	}
+	return payload;
+}
+
 const LinkSettings kSettings;
 
 // Night City as a ground source: a street at Minecraft height 6.14 everywhere, two triangles over each box read.
@@ -495,6 +508,38 @@ TEST(LinkRejectsABadPayloadAndCarriesOn)
 	CHECK_EQ(sink.sections.size(), size_t(1));
 	CHECK_EQ(sink.sections[0].x, 2);
 	CHECK_EQ(link.State().resyncs, 0ull);
+}
+
+TEST(LinkKeepsMinecraftsSolids)
+{
+	// Solids are kept by section as Minecraft sends them, checked like the other render messages. A section with none
+	// left goes, and so does everything at a clear-all.
+	FakeMinecraft minecraft;
+	Link          link(minecraft.base, 0);
+	Sink          sink;
+	minecraft.Send(proto::kRenSolids, SolidsPayload(1, 3));
+	minecraft.Send(proto::kRenSolids, SolidsPayload(2, 5));
+	std::vector<uint8_t> bad = SolidsPayload(3, 4);
+	bad.resize(16);  // claims 4 blocks, without their bits
+	minecraft.Send(proto::kRenSolids, bad);
+	link.Update(At(1.0), kSettings, sink);
+	CHECK_EQ(link.SolidSections().Sections(), size_t(2));
+	CHECK_EQ(link.State().solidSections, size_t(2));
+	CHECK_EQ(link.State().solidBlocks, 8ull);
+	CHECK_EQ(link.State().messages[proto::kRenSolids], 3ull);
+	CHECK_EQ(link.State().rejected, 1ull);
+	CHECK(link.State().lastRejected.find("no room for their bits") != std::string::npos);
+	const Solids::Section* first = link.SolidSections().Find({ 1, 0, 0 });
+	CHECK(first != nullptr && first->bits[0] == 7);
+	minecraft.Send(proto::kRenSolids, SolidsPayload(1, 0));  // section 1 0 0 has none left
+	link.Update(At(1.1), kSettings, sink);
+	CHECK(link.SolidSections().Find({ 1, 0, 0 }) == nullptr);
+	CHECK_EQ(link.State().solidBlocks, 5ull);
+	minecraft.Send(proto::kRenClearAll, {});
+	link.Update(At(1.2), kSettings, sink);
+	CHECK_EQ(link.State().solidSections, size_t(0));
+	CHECK_EQ(link.State().solidBlocks, 0ull);
+	CHECK_EQ(sink.clears, 1);
 }
 
 TEST(LinkTypesCommandsThroughTheInputRing)

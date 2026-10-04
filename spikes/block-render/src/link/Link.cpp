@@ -330,6 +330,8 @@ void Link::Update(const Frame& aFrame, const LinkSettings& aSettings, LinkSink& 
 	                                   [&](const RingMessage& aMessage) { return Take(aMessage, aSettings, aSink); });
 	status_.drainMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - drainStart).count();
 	status_.drainedBytes += drained.bytes;
+	status_.solidSections = solids_.Sections();
+	status_.solidBlocks = solids_.Blocks();
 	if (drained.resynced)
 	{
 		++status_.resyncs;
@@ -401,10 +403,21 @@ bool Link::Take(const RingMessage& aMessage, const LinkSettings& aSettings, Link
 		return true;
 	case proto::kRenClearAll:
 		status_.atlasSeen = false;  // Minecraft sends its atlas next
+		solids_.Clear();
 		aSink.ClearAll();
 		return true;
+	case proto::kRenSolids:
+		if (const auto solids = ParseSolids(aMessage.payload, error))
+		{
+			solids_.Set(*solids);
+		}
+		else
+		{
+			reject();
+		}
+		return true;
 	default:
-		return false;  // atlas patches, lights, solids, digging, textures, avatar, scene, ragdoll: stepped over
+		return false;  // atlas patches, lights, digging, textures, avatar, scene, ragdoll: stepped over
 	}
 }
 

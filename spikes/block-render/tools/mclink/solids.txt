@@ -1,0 +1,26 @@
+# Spike 5's Part 3, offline: Minecraft's solid blocks, as SkyCraft sends them after each section's mesh (kRenSolids),
+# kept by the link's own code, against the real Minecraft (docs/superpowers/specs/2026-10-03-collision-and-movement-
+# design.md, "Solids"). Start Minecraft first: this waits for its world. The blocks go in section 17 0 125, east of
+# spike 3's corner and clear of the blocks built there and of city.txt's dumps; the stand-in V stands in it.
+status
+wait-world 180
+at 280.5 6.14 2007.5
+link on
+type /gamemode creative
+wait 3
+status
+# A 3 x 2 x 4 box of stone, from block 280 7 2004: 24 solid blocks.
+type /fill 280 7 2004 282 8 2007 minecraft:stone
+wait 2
+status
+# Glass and a slab count too, having collision shapes; a torch, with none, doesn't.
+type /setblock 284 7 2004 minecraft:glass
+type /setblock 285 7 2004 minecraft:oak_slab
+type /setblock 286 7 2004 minecraft:torch
+wait 2
+status
+# All broken again: the section has no solid blocks left, and goes.
+type /fill 280 7 2004 286 8 2007 minecraft:air
+wait 2
+status
+quit

@@ -62,6 +62,7 @@ add_library(render_core STATIC
 	src/link/Voxels.cpp
 	src/link/Ground.cpp
 	src/link/GroundWorker.cpp
+	src/link/Solids.cpp
 	src/physx/GameAbi.cpp
 	src/physx/ShapeTriangles.cpp
 	src/physx/OriginWatch.cpp
@@ -179,6 +180,7 @@ add_executable(render_tests
 	tests/TestVoxels.cpp
 	tests/TestGround.cpp
 	tests/TestGroundWorker.cpp
+	tests/TestSolids.cpp
 	tests/TestAudit.cpp
 	tests/TestGameAbi.cpp
 	tests/TestPrimitives.cpp

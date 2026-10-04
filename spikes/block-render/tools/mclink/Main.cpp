@@ -6,7 +6,8 @@
 //
 // It runs the script (McLinkScript.h) at 60 Hz with a stand-in V where the script says, or, in build mode, where the
 // drive puts it, as the plugin teleports V. With the city's ground, Night City's shape comes from a dump spike 1 saved.
-// It reports what Minecraft sends, and refuses to start while another game side uses the mapping.
+// It reports what Minecraft sends, its solid blocks among it, and refuses to start while another game side uses the
+// mapping.
 #include "DumpObj.h"
 #include "McLinkScript.h"
 
@@ -156,9 +157,33 @@ struct Report : LinkSink
 	std::vector<uint8_t> hud;
 };
 
-void PrintStatus(const Link::Status& aStatus, const Report& aReport)
+// Minecraft's solid blocks: all of them, and in the 3 x 3 x 3 sections around the stand-in V's, where V's bodies would go.
+void PrintSolids(const Solids& aSolids, const Vec3d& aFeet)
 {
-	const auto& s = aStatus;
+	const SectionPos at = SectionOf({ int32_t(std::floor(aFeet.x)), int32_t(std::floor(aFeet.y)), int32_t(std::floor(aFeet.z)) });
+	size_t           sections = 0;
+	uint64_t         blocks = 0;
+	for (int32_t dy = -1; dy <= 1; ++dy)
+	{
+		for (int32_t dz = -1; dz <= 1; ++dz)
+		{
+			for (int32_t dx = -1; dx <= 1; ++dx)
+			{
+				if (const Solids::Section* section = aSolids.Find({ at.x + dx, at.y + dy, at.z + dz }))
+				{
+					++sections;
+					blocks += section->count;
+				}
+			}
+		}
+	}
+	Say("solids: {} sections with {} solid blocks; around the stand-in V's section {} {} {}: {} sections with {} blocks", aSolids.Sections(),
+	    aSolids.Blocks(), at.x, at.y, at.z, sections, blocks);
+}
+
+void PrintStatus(const Link& aLink, const Report& aReport, const Vec3d& aFeet)
+{
+	const auto& s = aLink.State();
 	Say("Minecraft: {}{}{}, feet {:.3f} {:.3f} {:.3f}, eye {:.3f} ({:.2f} above the feet), frame {}",
 	    s.minecraft ? std::format("process {}", s.minecraftPid) : "absent", s.inWorld ? ", in its world" : "",
 	    s.screenOpen ? ", a screen open" : "", s.minecraftFeet.x, s.minecraftFeet.y, s.minecraftFeet.z, s.minecraftEye.y,
@@ -193,6 +218,7 @@ void PrintStatus(const Link::Status& aStatus, const Report& aReport)
 	    s.cityBatches, s.cityUnread, s.cityRegions, s.cityTriangles, s.workerThreads, s.workerRegions, s.workerTriangles, s.workerBlocks,
 	    s.workerMs, s.workerTicks ? 100.0 * double(s.workerCycles) / double(s.workerTicks) : 0.0, s.workerJobs, s.workerReplaced,
 	    double(s.collisionBytes) / 1048576.0, s.collisionWaiting, s.collisionDropped);
+	PrintSolids(aLink.SolidSections(), aFeet);
 }
 
 // Spike 1's saved collision as Night City's ground (step 3's offline half): the triangles touching each box read.
@@ -395,7 +421,7 @@ int main(int aArgc, char** aArgv)
 				    feet.y, feet.z);
 				break;
 			}
-			case Action::Kind::Status: PrintStatus(state, report); break;
+			case Action::Kind::Status: PrintStatus(link, report, feet); break;
 			case Action::Kind::Type:
 				if (!link.Type(action.text, error))
 				{
@@ -545,7 +571,7 @@ int main(int aArgc, char** aArgv)
 		}
 		std::this_thread::sleep_until(g_start + std::chrono::duration_cast<Clock::duration>(std::chrono::duration<double>(tick + kFrame)));
 	}
-	PrintStatus(link.State(), report);
+	PrintStatus(link, report, feet);
 	timeEndPeriod(1);
 	return exitCode;
 }
