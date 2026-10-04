@@ -11,7 +11,7 @@ using Kind = Action::Kind;
 TEST(ScriptsInTheRepoParse)
 {
 	// The tests run in spikes/block-render, where the scripts are.
-	for (const char* name : { "step1.txt", "again.txt", "eye.txt", "drive.txt", "relink.txt" })
+	for (const char* name : { "step1.txt", "again.txt", "eye.txt", "drive.txt", "relink.txt", "city.txt" })
 	{
 		std::ifstream     in(std::string("tools/mclink/") + name, std::ios::binary);
 		std::stringstream text;
@@ -132,4 +132,26 @@ TEST(ScriptRejectsBadLines)
 	CHECK(!ParseScript("link maybe", error).has_value());
 	CHECK(!ParseScript("type", error).has_value());
 	CHECK(!ParseScript("status now", error).has_value());
+}
+
+TEST(ScriptParsesTheGround)
+{
+	std::string error;
+	const auto  actions =
+	    ParseScript("ground city\ndump E:\\dumps\\2026-10-01_14-37-07\\collision.obj\nwait-ground\nwait-ground 60\nground floor\n", error);
+	CHECK(actions.has_value());
+	CHECK_EQ(actions->size(), size_t(5));
+	const auto& a = *actions;
+	CHECK(a[0].kind == Kind::Ground);
+	CHECK_STR(a[0].text, "city");
+	CHECK(a[1].kind == Kind::Dump);
+	CHECK_STR(a[1].text, "E:\\dumps\\2026-10-01_14-37-07\\collision.obj");
+	CHECK(a[2].kind == Kind::WaitGround);
+	CHECK_EQ(a[2].numbers[0], 30.0);
+	CHECK_EQ(a[3].numbers[0], 60.0);
+	CHECK_STR(a[4].text, "floor");
+	CHECK(!ParseScript("ground stone", error).has_value());
+	CHECK_STR(error, "line 1: ground takes floor or city: \"ground stone\"");
+	CHECK(!ParseScript("dump", error).has_value());
+	CHECK(!ParseScript("wait-ground 0", error).has_value());
 }

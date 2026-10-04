@@ -111,6 +111,7 @@ endif()
 # mclink: a console stand-in for the game's side of SkyCraft's protocol, run against the real Minecraft.
 add_executable(mclink
 	tools/mclink/Main.cpp
+	tools/mclink/DumpObj.cpp
 	tools/mclink/McLinkScript.cpp
 )
 target_include_directories(mclink PRIVATE tools/mclink)
@@ -170,6 +171,8 @@ add_executable(render_tests
 	tests/TestDrive.cpp
 	tests/TestTurn.cpp
 	tests/TestDriveLog.cpp
+	tests/TestDumpObj.cpp
+	tools/mclink/DumpObj.cpp
 	tools/mclink/McLinkScript.cpp
 )
 target_include_directories(render_tests PRIVATE tools/mclink)

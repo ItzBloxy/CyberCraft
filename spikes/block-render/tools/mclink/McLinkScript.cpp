@@ -173,6 +173,33 @@ std::optional<std::vector<Action>> ParseScript(std::string_view aText, std::stri
 				return fail(std::format("{} takes a number of seconds", verb));
 			}
 		}
+		else if (verb == "ground")
+		{
+			action.kind = Action::Kind::Ground;
+			if (words.size() != 2 || (words[1] != "floor" && words[1] != "city"))
+			{
+				return fail("ground takes floor or city");
+			}
+			action.text = std::string(words[1]);
+		}
+		else if (verb == "dump")
+		{
+			action.kind = Action::Kind::Dump;
+			action.text = std::string(rest);
+			if (action.text.empty())
+			{
+				return fail("dump takes a collision.obj");
+			}
+		}
+		else if (verb == "wait-ground")
+		{
+			action.kind = Action::Kind::WaitGround;
+			action.numbers[0] = 30;
+			if (words.size() > 1 && (!numbers(1) || action.numbers[0] <= 0))
+			{
+				return fail("wait-ground takes an optional number of seconds");
+			}
+		}
 		else if (verb == "floor" || verb == "status" || verb == "quit")
 		{
 			action.kind = verb == "floor" ? Action::Kind::Floor : verb == "status" ? Action::Kind::Status : Action::Kind::Quit;

@@ -1,12 +1,13 @@
-// mclink: a console stand-in for Cyberpunk's side of SkyCraft's protocol, for spike 4's step 1 and spike 5's. It runs
-// BlockRender's link code against the real Minecraft, without the game (docs/superpowers/specs/2026-10-02-minecraft-
-// link-design.md and 2026-10-03-collision-and-movement-design.md).
+// mclink: a console stand-in for Cyberpunk's side of SkyCraft's protocol, for spike 4's step 1 and spike 5's steps 1
+// and 3. It runs BlockRender's link code against the real Minecraft, without the game
+// (docs/superpowers/specs/2026-10-02-minecraft-link-design.md and 2026-10-03-collision-and-movement-design.md).
 //
 //     mclink.exe <script.txt>
 //
 // It runs the script (McLinkScript.h) at 60 Hz with a stand-in V where the script says, or, in build mode, where the
-// drive puts it, as the plugin teleports V. It reports what Minecraft sends, and refuses to start while another game
-// side uses the mapping.
+// drive puts it, as the plugin teleports V. With the city's ground, Night City's shape comes from a dump spike 1 saved.
+// It reports what Minecraft sends, and refuses to start while another game side uses the mapping.
+#include "DumpObj.h"
 #include "McLinkScript.h"
 
 #include "Coords.h"
@@ -182,7 +183,41 @@ void PrintStatus(const Link::Status& aStatus, const Report& aReport)
 	    s.inputsDropped, s.commandsWaiting, s.hudImages, s.hudRefused);
 	Say("drive: {}, teleport {} applied of {}; V's eye height {:.2f}; render delay {:.1f} ms, {} frames waited for a tick, {} targets skipped",
 	    DriveStateName(s.drive), s.teleportAck, s.teleportSeq, s.eyeHeight, s.renderDelayMs, s.waitedFrames, s.driveSkipped);
+	Say("ground: the {}, epoch {}; {}; {} batches read ({} unread), {} regions sent ({} triangles); the worker: {} regions, {} voxel "
+	    "blocks, {:.1f} ms, {} waiting; ring: {:.2f} MB, {} messages waiting, {} dropped",
+	    GroundName(s.ground), s.collisionEpoch,
+	    s.cityCentre ? std::format("around region {} {} {}, {} regions known, {} batches to read", s.cityCentre->x, s.cityCentre->y,
+	                               s.cityCentre->z, s.cityKnown, s.cityWaiting)
+	                 : "no centre yet",
+	    s.cityBatches, s.cityUnread, s.cityRegions, s.cityTriangles, s.workerRegions, s.workerBlocks, s.workerMs, s.workerJobs,
+	    double(s.collisionBytes) / 1048576.0, s.collisionWaiting, s.collisionDropped);
 }
+
+// Spike 1's saved collision as Night City's ground (step 3's offline half): the triangles touching each box read.
+struct DumpGround : GroundSource
+{
+	bool Read(const McBox& aBox, std::vector<McTriangle>& aOut) override
+	{
+		const double low[3] = { aBox.low.x, aBox.low.y, aBox.low.z };
+		const double high[3] = { aBox.high.x, aBox.high.y, aBox.high.z };
+		for (const McTriangle& triangle : triangles)
+		{
+			bool touches = true;
+			for (int axis = 0; axis < 3 && touches; ++axis)
+			{
+				touches = std::max({ triangle.v[axis], triangle.v[3 + axis], triangle.v[6 + axis] }) >= low[axis] &&
+				          std::min({ triangle.v[axis], triangle.v[3 + axis], triangle.v[6 + axis] }) <= high[axis];
+			}
+			if (touches)
+			{
+				aOut.push_back(triangle);
+			}
+		}
+		return true;
+	}
+
+	std::vector<McTriangle> triangles;  // Minecraft axes
+};
 
 // Minecraft's player's flags, as words.
 std::string Flags(uint32_t aFlags)
@@ -243,6 +278,7 @@ int main(int aArgc, char** aArgv)
 	bool   linked = false;
 	bool   build = false;
 	bool   hud = true;
+	DumpGround dump;
 
 	LARGE_INTEGER qpcRate;
 	QueryPerformanceFrequency(&qpcRate);
@@ -278,6 +314,7 @@ int main(int aArgc, char** aArgv)
 		frame.takeHud = hud;
 		frame.pose = GamePose{ WorldFromMc(feet), WorldFromMc({ feet.x, feet.y + kEyeHeight, feet.z }), ForwardFromLook(look) };
 		link.Update(frame, settings, report);
+		link.ReadGround(now, dump, 1.5);  // the plugin's budget a frame
 		const auto& state = link.State();
 		if (state.placeV)
 		{
@@ -327,6 +364,35 @@ int main(int aArgc, char** aArgv)
 			case Action::Kind::At: feet = { action.numbers[0], action.numbers[1], action.numbers[2] }; break;
 			case Action::Kind::Look: look = { float(action.numbers[0]), float(action.numbers[1]) }; break;
 			case Action::Kind::Floor: link.RequestFloor(); break;
+			case Action::Kind::Ground: settings.ground = action.text == "city" ? Ground::City : Ground::Floor; break;
+			case Action::Kind::Dump:
+			{
+				// Its triangles are relative to the feet of V when it was dumped: they go around the stand-in V's.
+				std::ifstream     file(action.text, std::ios::binary);
+				std::stringstream obj;
+				obj << file.rdbuf();
+				const auto triangles = file ? mclink::ParseDumpObj(obj.str(), "s0_static_", error) : std::nullopt;
+				if (!triangles)
+				{
+					Say("line {}: can't load {}: {}", action.line, action.text, file ? error : "it can't be read");
+					exitCode = 1;
+					next = script->size();
+					break;
+				}
+				dump.triangles = *triangles;
+				for (McTriangle& triangle : dump.triangles)
+				{
+					for (int k = 0; k < 3; ++k)
+					{
+						triangle.v[k * 3] = float(triangle.v[k * 3] + feet.x);
+						triangle.v[k * 3 + 1] = float(triangle.v[k * 3 + 1] + feet.y);
+						triangle.v[k * 3 + 2] = float(triangle.v[k * 3 + 2] + feet.z);
+					}
+				}
+				Say("dump: {} static triangles from {}, around Minecraft {:.2f} {:.2f} {:.2f}", dump.triangles.size(), action.text, feet.x,
+				    feet.y, feet.z);
+				break;
+			}
 			case Action::Kind::Status: PrintStatus(state, report); break;
 			case Action::Kind::Type:
 				if (!link.Type(action.text, error))
@@ -369,6 +435,21 @@ int main(int aArgc, char** aArgv)
 				Say("line {}: Minecraft wasn't in its world within {} s", action.line, action.numbers[0]);
 				exitCode = 1;
 				next = script->size();
+			}
+			break;
+		case Action::Kind::WaitGround:
+			done = state.ground == Ground::City && state.cityKnown > 0 && state.cityWaiting == 0 && state.workerJobs == 0 &&
+			       state.collisionWaiting == 0;
+			if (done)
+			{
+				Say("the city around region {} {} {} is all in the ring: {} regions", state.cityCentre->x, state.cityCentre->y,
+				    state.cityCentre->z, state.cityKnown);
+			}
+			else if (elapsed > action.numbers[0])
+			{
+				Say("line {}: the city wasn't all sent within {} s", action.line, action.numbers[0]);
+				exitCode = 1;
+				done = true;
 			}
 			break;
 		case Action::Kind::Type:

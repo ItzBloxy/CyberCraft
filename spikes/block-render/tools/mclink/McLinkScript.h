@@ -24,6 +24,9 @@
 //   save-hud <file.dds>            wait for the next HUD image (5 s at most), save it top row first, and check its alpha
 //   hold-check <seconds>           how far Minecraft's feet stray from the last teleport target meanwhile
 //   track <seconds>                print Minecraft's player and the drive four times a second meanwhile
+//   ground floor|city              what Minecraft gets as the game's shape (floor at first)
+//   dump <collision.obj>           spike 1's saved collision as the city: its static shapes, around the stand-in V's feet
+//   wait-ground [seconds]          until the city around the centre is all read and in the ring (30 s unless given)
 //   status                         print the link's state
 //   quit                           stop here
 namespace cpmc::mclink
@@ -49,6 +52,9 @@ struct Action
 		SaveHud,
 		HoldCheck,
 		Track,
+		Ground,
+		Dump,
+		WaitGround,
 		Status,
 		Quit,
 	};
@@ -56,7 +62,7 @@ struct Action
 	Kind        kind = Kind::Quit;
 	double      numbers[3]{};  // seconds; x, y, z; yaw and pitch; the scancode; the button (1 left, 2 middle, 3 right)
 	bool        on = false;    // link, build and hud
-	std::string text;          // the command, or the file
+	std::string text;          // the command, the file, or the ground
 	int         line = 0;
 };
 
