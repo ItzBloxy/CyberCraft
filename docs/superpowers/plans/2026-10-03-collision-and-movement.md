@@ -16924,7 +16924,7 @@ cd /d/Cyberpunk-Minecraft && git add docs \
        -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
 ```
 
-- [ ] **Step 4: Ask the user whether to finish the branch**
+- [x] **Step 4: Ask the user whether to finish the branch**
 
 With superpowers:finishing-a-development-branch, before Entities, which starts with its own brainstorm
 (`docs/superpowers/handoffs/2026-10-04-spike-5-part-3.md`, "After spike 5: Entities"). Every spike so far was merged into
