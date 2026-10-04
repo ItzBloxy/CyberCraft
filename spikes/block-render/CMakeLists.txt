@@ -70,6 +70,7 @@ add_library(render_core STATIC
 	src/physx/Session.cpp
 	src/physx/Export.cpp
 	src/physx/BoxMerge.cpp
+	src/physx/BodyPlan.cpp
 	src/link/Drive.cpp
 	src/link/Turn.cpp
 	src/log/DriveLog.cpp
@@ -192,6 +193,7 @@ add_executable(render_tests
 	tests/TestPhysxSession.cpp
 	tests/TestExport.cpp
 	tests/TestBoxMerge.cpp
+	tests/TestBodyPlan.cpp
 	tests/TestDrive.cpp
 	tests/TestTurn.cpp
 	tests/TestDriveLog.cpp
