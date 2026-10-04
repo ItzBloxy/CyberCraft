@@ -136,3 +136,44 @@ The RVAs above hold only for these exact files. A game patch that touches either
 3. **No faults:** a structured-exception guard is not a safety net in this game, because the crash handler fires
    first. The probe must avoid faulting, not rely on catching faults.
 4. **When to dump:** the automatic dump must wait until a save is loaded, not just until a player object exists.
+
+## Addendum: spike 5's scene watch
+
+Date: 2026-10-04. The same DLLs and the same method: our layout from `cl /d1reportAllClassLayout` on `PxScene.h`, and
+the game's `PhysX3_x64.dll` read with Python and Capstone. Spike 5's step 3 hooks 16 of `PxScene`'s slots to watch which
+threads write to scene 0, and when (`spikes/block-render/src/physx/SceneHooks.cpp`). Each hook calls the original
+through the slot's own signature, so each slot's function had to be the one NVIDIA's header puts there.
+
+| Slot | Call | Function's RVA | How it was told |
+|---|---|---|---|
+| 10 | `addActor(PxActor&)` | 0x520d0 | "PxScene::addActor(): actor is in a pruning structure …" |
+| 11 | `addActors(const PxPruningStructure&)` | 0x54a30 | tests the structure's valid flag at +0x50, then "PxScene::addActors(): Provided pruning structure is not valid." |
+| 12 | `addActors(PxActor* const*, PxU32)` | 0x54a20 | `xor r9d, r9d; jmp` to the internal add: no pruning structure, as `NpScene::addActors` passes `NULL` |
+| 13 | `removeActor(PxActor&, bool)` | 0x521e0 | "PxScene::removeActor(): Actor … not assigned to scene …" |
+| 14 | `removeActors(PxActor* const*, PxU32, bool)` | 0x54a90 | "PxScene::removeActors(): Actor … not assigned to scene …" |
+| 15 | `addAggregate(PxAggregate&)` | 0x524e0 | "PxScene::addAggregate(): Aggregate already assigned to a scene." |
+| 16 | `removeAggregate(PxAggregate&, bool)` | 0x525d0 | "PxScene::removeAggregate(): Aggregate … not assigned to scene …" |
+| 56 | `simulate(PxReal, PxBaseTask*, void*, PxU32, bool)` | 0x53760 | "PxScene::simulate: Simulation is still processing last simulate call …"; calls the shared step with 3 |
+| 57 | `advance(PxBaseTask*)` | 0x537a0 | "PxScene::advance: advance() called illegally! …" |
+| 58 | `collide(PxReal, PxBaseTask*, void*, PxU32, bool)` | 0x53880 | the same shared step as `simulate`, called with 1 |
+| 61 | `fetchResults(bool, PxU32*)` | 0x53980 | tests the simulation's stage at +0x1f54, then "PxScene::fetchResults: fetchResults() called illegally! …" |
+| 62 | `fetchResultsStart(const PxContactPairHeader*&, PxU32&, bool)` | 0x53a50 | "PXScene::fetchResultsStart: fetchResultsStart() called illegally! …" |
+| 64 | `fetchResultsFinish(PxU32*)` | 0x53d30 | calls only the fetch's last part (0x59730), which `fetchResults` (61) ends with; `fetchResultsStart` (62) shares its first part (0x59590) |
+| 107 | `lockWrite(const char*, PxU32)` | 0x55180 | "PxScene::lockWrite() detected after a PxScene::lockRead(), lock upgrading is not supported …" |
+| 108 | `unlockWrite()` | 0x55280 | "PxScene::unlockWrite() called without matching call to PxScene::lockWrite() …" |
+| 116 | `shiftOrigin(const PxVec3&)` | 0x55360 | "PxScene::shiftOrigin() not allowed while simulation is running. …" |
+
+What that settles:
+- **Every slot is where NVIDIA's header puts it,** as our compiler lays it out: `TestAudit`'s `SceneWatchHooksTheGamesSlots`
+  checks our side. The two `addActors` overloads sit in reverse order of declaration, as MSVC orders overloads, in the game
+  and in our layout alike.
+- **The calling convention:** on x64 a member function takes its object first, as a free function takes its first
+  parameter, so a hook declared as a free function with the object first, then the declared parameters, calls the
+  original correctly. `simulate` and `collide` take their time step in XMM1, which such a hook declares the same way. None
+  of the 16 returns a struct, the one case where a member function passes its hidden return pointer differently.
+- **The hooks check before they patch:** each slot must still hold the RVA above, plus where `PhysX3_x64.dll` is loaded.
+  If another hook got there first, nothing is patched, and `scenewatch on` says which slot differs.
+
+Still to audit before step 4: `PxPhysics::createRigidStatic` and `createShape`, `PxRigidActor::attachShape` and
+`setGlobalPose`, `PxShape::setQueryFilterData`, `setSimulationFilterData` and `getMaterials`, `PxActor::getScene`, and
+`PxBase::release` for actors and shapes.
