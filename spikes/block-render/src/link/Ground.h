@@ -6,6 +6,7 @@
 #include <array>
 #include <compare>
 #include <cstdint>
+#include <map>
 #include <optional>
 #include <span>
 #include <vector>
@@ -65,4 +66,53 @@ std::array<std::vector<McTriangle>, 8> FileBatch(const BatchPos& aBatch, std::sp
 
 // A hash of a region's triangles that doesn't depend on their order: a read can list the same shapes in another order.
 uint64_t TrianglesHash(std::span<const McTriangle> aTriangles);
+
+// Which batches to read, around a centre that moves (the spec's "The area", "Refreshing" and "Settling"): SkyCraft's
+// area, its order (nearest first, height counting double), its refresh of the regions next to the centre, and its
+// forgetting of regions far away, so they're read again on return.
+class GroundAreas
+{
+public:
+	static constexpr int32_t kAcross = 5;     // regions out from the centre's, each way horizontally
+	static constexpr int32_t kBelow = 3;      // regions below the centre's
+	static constexpr int32_t kAbove = 2;      // and above
+	static constexpr double  kRefresh = 1.0;  // seconds before a batch next to the centre is read again
+	static constexpr double  kSettle = 1.5;   // seconds SkyCraft gives the collision to stream in, after a load say
+
+	// Forgets every batch read, so each is read and sent again. Nothing is read before aReadyAt, nor before the time an
+	// earlier reset gave.
+	void Reset(double aReadyAt);
+	// Where the area is centred. Batches with no region within one more than the area are forgotten.
+	void Centre(const RegionPos& aCentre);
+
+	// The next batch to read: the nearest not read yet, or one next to the centre read kRefresh or more ago. Nothing
+	// before a centre is set, before the time Reset gave, or while every batch is read and fresh.
+	std::optional<BatchPos> Next(double aNow) const;
+
+	// aBatch was read at aNow and filed (FileBatch's order). Which of its regions to send, as indices into RegionsOf: those
+	// whose triangles changed, and every one the first time.
+	std::vector<size_t> Read(const BatchPos& aBatch, double aNow, const std::array<std::vector<McTriangle>, 8>& aFiled);
+
+	std::optional<RegionPos> CentreRegion() const { return centre_; }
+	size_t                   Known() const { return read_.size() * 8; }  // regions read since the last reset
+	size_t                   Waiting() const;                            // the area's batches not read yet
+
+private:
+	struct Wanted
+	{
+		BatchPos batch;
+		bool     nextToCentre = false;  // holds a region next to the centre: read again every kRefresh
+	};
+
+	struct Done
+	{
+		double                  at = 0.0;
+		std::array<uint64_t, 8> hashes{};
+	};
+
+	std::optional<RegionPos> centre_;
+	std::vector<Wanted>      wanted_;  // the area's batches, nearest first
+	std::map<BatchPos, Done> read_;
+	double                   readyAt_ = 0.0;
+};
 }

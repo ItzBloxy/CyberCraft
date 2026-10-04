@@ -6,6 +6,7 @@
 #include <cmath>
 #include <iterator>
 #include <limits>
+#include <set>
 
 using namespace cpmc;
 using namespace cpmc::link;
@@ -36,6 +37,34 @@ RegionPos Region(int32_t aX, int32_t aY, int32_t aZ)
 BatchPos Batch(int32_t aX, int32_t aY, int32_t aZ)
 {
 	return { aX, aY, aZ };
+}
+
+// SkyCraft's distance from aCentre to aBatch's nearest region: height counts double.
+int Nearest(const BatchPos& aBatch, const RegionPos& aCentre)
+{
+	int nearest = std::numeric_limits<int>::max();
+	for (const RegionPos& region : RegionsOf(aBatch))
+	{
+		const int dx = region.x - aCentre.x, dy = region.y - aCentre.y, dz = region.z - aCentre.z;
+		nearest = std::min(nearest, dx * dx + dz * dz + 2 * dy * dy);
+	}
+	return nearest;
+}
+
+// Reads every batch the areas offer at aNow, empty, as a source with nothing in the area would give them.
+std::vector<BatchPos> ReadAll(GroundAreas& aAreas, double aNow)
+{
+	std::vector<BatchPos> read;
+	while (const std::optional<BatchPos> batch = aAreas.Next(aNow))
+	{
+		aAreas.Read(*batch, aNow, {});
+		read.push_back(*batch);
+		if (read.size() > 1000)
+		{
+			break;  // it never ends: the test fails on the count
+		}
+	}
+	return read;
 }
 }
 
@@ -104,4 +133,113 @@ TEST(GroundHashesTrianglesWhateverTheirOrder)
 	CHECK(TrianglesHash(moved) != TrianglesHash(triangles));
 	CHECK(TrianglesHash(std::vector<McTriangle>{ triangles[0], triangles[0] }) != TrianglesHash(std::vector<McTriangle>{ triangles[0] }));
 	CHECK(TrianglesHash({}) != TrianglesHash(std::vector<McTriangle>{ triangles[0] }));
+}
+
+TEST(GroundAreasReadEveryBatchOfTheAreaNearestFirst)
+{
+	GroundAreas areas;
+	CHECK(!areas.Next(0.0));  // no centre yet
+	const RegionPos centre{ -15, 0, 250 };
+	areas.Centre(centre);
+	CHECK_EQ(areas.Waiting(), size_t(144));
+	const std::vector<BatchPos> read = ReadAll(areas, 0.0);
+	// x and z: 11 regions over 6 batches; y: 6 regions over 4.
+	CHECK_EQ(read.size(), size_t(6 * 6 * 4));
+	CHECK(read.front() == BatchOf(centre));
+	std::set<RegionPos> regions;
+	for (const BatchPos& batch : read)
+	{
+		const std::array<RegionPos, 8> its = RegionsOf(batch);
+		regions.insert(its.begin(), its.end());
+	}
+	for (int32_t dy = -3; dy <= 2; ++dy)
+	{
+		for (int32_t dz = -5; dz <= 5; ++dz)
+		{
+			for (int32_t dx = -5; dx <= 5; ++dx)
+			{
+				CHECK(regions.contains({ centre.x + dx, centre.y + dy, centre.z + dz }));
+			}
+		}
+	}
+	int last = -1;
+	for (const BatchPos& batch : read)
+	{
+		CHECK(Nearest(batch, centre) >= last);
+		last = Nearest(batch, centre);
+	}
+	CHECK_EQ(areas.Waiting(), size_t(0));
+	CHECK_EQ(areas.Known(), size_t(144 * 8));
+}
+
+TEST(GroundAreasWaitUntilTheyreReady)
+{
+	GroundAreas areas;
+	areas.Centre({ 0, 0, 0 });
+	CHECK(areas.Next(0.0).has_value());
+	areas.Reset(11.5);  // the link started at 10: the city's collision gets SkyCraft's 1.5 s to stream in
+	areas.Reset(10.2);  // and anything else that starts it over meanwhile doesn't cut that short
+	CHECK(!areas.Next(11.4));
+	CHECK(areas.Next(11.5) == BatchOf({ 0, 0, 0 }));
+}
+
+TEST(GroundAreasSendARegionAgainOnlyWhenItChanges)
+{
+	GroundAreas areas;
+	areas.Centre({ 0, 0, 0 });
+	std::array<std::vector<McTriangle>, 8> filed;
+	filed[0] = { Speck(4.0f, 4.0f, 4.0f) };
+	CHECK_EQ(areas.Read({ 0, 0, 0 }, 0.0, filed).size(), size_t(8));  // the first time: every region, empty ones too
+	CHECK(areas.Read({ 0, 0, 0 }, 1.0, filed).empty());
+	filed[3] = { Speck(12.0f, 4.0f, 12.0f) };
+	CHECK(areas.Read({ 0, 0, 0 }, 2.0, filed) == std::vector<size_t>({ 3 }));
+	filed[0].clear();
+	CHECK(areas.Read({ 0, 0, 0 }, 3.0, filed) == std::vector<size_t>({ 0 }));
+}
+
+TEST(GroundAreasReadTheBatchesNextToTheCentreEverySecond)
+{
+	GroundAreas     areas;
+	const RegionPos centre{ -15, 0, 250 };
+	areas.Centre(centre);
+	ReadAll(areas, 10.0);
+	CHECK(!areas.Next(10.9));
+	const std::vector<BatchPos> again = ReadAll(areas, 11.0);
+	// The batches holding SkyCraft's regions next to the centre: 1 each way across, and from 1 below to level.
+	std::set<BatchPos> next;
+	for (int32_t dy = -1; dy <= 0; ++dy)
+	{
+		for (int32_t dz = -1; dz <= 1; ++dz)
+		{
+			for (int32_t dx = -1; dx <= 1; ++dx)
+			{
+				next.insert(BatchOf({ centre.x + dx, centre.y + dy, centre.z + dz }));
+			}
+		}
+	}
+	CHECK_EQ(again.size(), size_t(8));
+	CHECK_EQ(next.size(), size_t(8));
+	for (const BatchPos& batch : again)
+	{
+		CHECK(next.contains(batch));
+	}
+}
+
+TEST(GroundAreasForgetWhatsFarBehind)
+{
+	GroundAreas areas;
+	areas.Centre({ 0, 0, 0 });
+	ReadAll(areas, 0.0);
+	// Seven regions east: the batches from region -6 to -1 are more than one past the area, and forgotten.
+	areas.Centre({ 7, 0, 0 });
+	CHECK_EQ(areas.Known(), size_t((144 - 72) * 8));
+	// Back again: they're read again, and each of their regions is sent again.
+	areas.Centre({ 0, 0, 0 });
+	CHECK_EQ(areas.Waiting(), size_t(72));
+	const std::optional<BatchPos> first = areas.Next(0.5);
+	CHECK(first.has_value() && first->x < 0);
+	CHECK_EQ(areas.Read(*first, 0.5, {}).size(), size_t(8));
+	const std::vector<BatchPos> rest = ReadAll(areas, 0.5);
+	CHECK_EQ(rest.size(), size_t(71));
+	CHECK(std::all_of(rest.begin(), rest.end(), [](const BatchPos& aBatch) { return aBatch.x < 0; }));
 }

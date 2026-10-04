@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <iterator>
 
 namespace cpmc::link
@@ -20,6 +21,27 @@ bool Usable(const McTriangle& aTriangle)
 {
 	return std::all_of(std::begin(aTriangle.v), std::end(aTriangle.v),
 	                   [](float aValue) { return std::isfinite(aValue) && std::fabs(aValue) <= kFarthest; });
+}
+
+// SkyCraft's distance, for its order: height counts double.
+int32_t Distance(const RegionPos& aRegion, const RegionPos& aCentre)
+{
+	const int32_t dx = aRegion.x - aCentre.x, dy = aRegion.y - aCentre.y, dz = aRegion.z - aCentre.z;
+	return dx * dx + dz * dz + 2 * dy * dy;
+}
+
+// Within the area around aCentre, and aMore regions each way.
+bool InArea(const RegionPos& aRegion, const RegionPos& aCentre, int32_t aMore)
+{
+	return std::abs(aRegion.x - aCentre.x) <= GroundAreas::kAcross + aMore && std::abs(aRegion.z - aCentre.z) <= GroundAreas::kAcross + aMore &&
+	       aRegion.y - aCentre.y >= -GroundAreas::kBelow - aMore && aRegion.y - aCentre.y <= GroundAreas::kAbove + aMore;
+}
+
+// SkyCraft's regions next to the centre, read again every second: the city streams its collision in as V moves.
+bool Near(const RegionPos& aRegion, const RegionPos& aCentre)
+{
+	return std::abs(aRegion.x - aCentre.x) <= 1 && std::abs(aRegion.z - aCentre.z) <= 1 && aRegion.y - aCentre.y >= -1 &&
+	       aRegion.y - aCentre.y <= 0;
 }
 
 uint64_t Fnv1a(const void* aData, size_t aBytes)
@@ -116,5 +138,95 @@ uint64_t TrianglesHash(std::span<const McTriangle> aTriangles)
 		hash += Fnv1a(triangle.v, sizeof triangle.v);
 	}
 	return hash;
+}
+
+void GroundAreas::Reset(double aReadyAt)
+{
+	read_.clear();
+	readyAt_ = std::max(readyAt_, aReadyAt);
+}
+
+void GroundAreas::Centre(const RegionPos& aCentre)
+{
+	if (centre_ == aCentre)
+	{
+		return;
+	}
+	centre_ = aCentre;
+	// Each batch holding a region of the area, ordered by its nearest region, as SkyCraft orders its regions.
+	struct Candidate
+	{
+		Wanted  wanted;
+		int32_t distance = 0;
+	};
+	std::map<BatchPos, Candidate> batches;
+	for (int32_t dy = -kBelow; dy <= kAbove; ++dy)
+	{
+		for (int32_t dz = -kAcross; dz <= kAcross; ++dz)
+		{
+			for (int32_t dx = -kAcross; dx <= kAcross; ++dx)
+			{
+				const RegionPos region{ aCentre.x + dx, aCentre.y + dy, aCentre.z + dz };
+				const auto [it, added] = batches.try_emplace(BatchOf(region), Candidate{ { BatchOf(region) }, Distance(region, aCentre) });
+				it->second.distance = std::min(it->second.distance, Distance(region, aCentre));
+				it->second.wanted.nextToCentre = it->second.wanted.nextToCentre || Near(region, aCentre);
+			}
+		}
+	}
+	std::vector<Candidate> ordered;
+	for (const auto& [batch, candidate] : batches)
+	{
+		ordered.push_back(candidate);
+	}
+	std::stable_sort(ordered.begin(), ordered.end(), [](const Candidate& aA, const Candidate& aB) { return aA.distance < aB.distance; });
+	wanted_.clear();
+	for (const Candidate& candidate : ordered)
+	{
+		wanted_.push_back(candidate.wanted);
+	}
+	// Batches left behind are forgotten, so they're read and sent again on return.
+	std::erase_if(read_, [&](const auto& aEntry) {
+		const std::array<RegionPos, 8> regions = RegionsOf(aEntry.first);
+		return std::none_of(regions.begin(), regions.end(), [&](const RegionPos& aRegion) { return InArea(aRegion, aCentre, 1); });
+	});
+}
+
+std::optional<BatchPos> GroundAreas::Next(double aNow) const
+{
+	if (!centre_ || aNow < readyAt_)
+	{
+		return std::nullopt;
+	}
+	for (const Wanted& wanted : wanted_)
+	{
+		const auto done = read_.find(wanted.batch);
+		if (done == read_.end() || (wanted.nextToCentre && aNow - done->second.at >= kRefresh))
+		{
+			return wanted.batch;
+		}
+	}
+	return std::nullopt;
+}
+
+std::vector<size_t> GroundAreas::Read(const BatchPos& aBatch, double aNow, const std::array<std::vector<McTriangle>, 8>& aFiled)
+{
+	const auto [done, first] = read_.try_emplace(aBatch);
+	done->second.at = aNow;
+	std::vector<size_t> send;
+	for (size_t i = 0; i < aFiled.size(); ++i)
+	{
+		const uint64_t hash = TrianglesHash(aFiled[i]);
+		if (first || done->second.hashes[i] != hash)
+		{
+			send.push_back(i);
+		}
+		done->second.hashes[i] = hash;
+	}
+	return send;
+}
+
+size_t GroundAreas::Waiting() const
+{
+	return size_t(std::count_if(wanted_.begin(), wanted_.end(), [&](const Wanted& aWanted) { return !read_.contains(aWanted.batch); }));
 }
 }
