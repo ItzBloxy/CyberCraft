@@ -530,3 +530,78 @@ went off 3.8 blocks higher than in Task 28, on blocks SkyCraft had made from Tas
   empties.
 - **Explosions make blocks:** where a blast digs into the city's ground, SkyCraft sets real blocks, kept in its saved
   world. They're solid, so with Part 3's bodies they'll stop V too, and Task 52's TNT step should expect them.
+
+## Part 3, in the game: the follow-ups and the query watch
+
+Date: 2026-10-04. BlockRender 0.14.0 at `247ff14` (the plan's Tasks 38 to 45, 378 unit tests), deployed as in step 2,
+on game 2.3.1. Minecraft as in step 1. At spike 3's corner, over the city for the drops, and on an open street.
+
+The user played: Minecraft, the game, the turns, F8, the flying, walking, driving, shooting and building. The agent sent
+`scenewatch on` and `off`, recorded the status twice a second during the drops and the solids, and read the plugin's
+log and `turn.txt`. Plan: Task 46.
+
+### Verdict
+
+**Pass.** Part 2's follow-ups work in the game, and the query watch clears the way for Part 3's bodies:
+- build mode turns at once after a game start, with the last session's ratio;
+- four fast drops all landed, the worker's queue draining within two seconds;
+- a region costs what its triangles cost, with the worker's threads running 91 to 98% of the time: Part 2's slow
+  regions were dense ones, not starved ones;
+- no other thread called scene 0 while `OnUpdate` ran, queries included, so Tasks 47 to 52 add the bodies there as
+  planned;
+- Minecraft's solid blocks are counted one by one as they're placed and broken.
+
+### The checks
+
+- **The turn, measured and saved:** the log read `BlockRender 0.14.0 loaded` and `the turn: nothing remembered, so build
+  mode turns once V has turned 5 times`. After the user turned V a few times, the drive line read `turn on, -0.0500
+  degrees a count from 29 turns`, the log `the turn: -0.0500 degrees a count, measured, and saved in turn.txt for the
+  next session`, and `turn.txt` its two comment lines and `ratio = -0.050000`.
+- **The turn after a game start:** the game restarted, Minecraft left running, the log read `the turn: -0.0500 degrees a
+  count, remembered from the last session, until this one has measured its own`. With F8 pressed before any turn, the
+  drive line read `turn on, -0.0500 degrees a count, remembered from the last session (0 of 5 turns measured)`, and V
+  turned with the mouse at once.
+- **The drops** (eye heights, in Minecraft's y; the feet are 1.62 lower): every one landed, and none went below the
+  ground.
+
+  | Drop | From | Landed, feet at | Most regions waiting | The worker as it landed |
+  |---|---|---|---|---|
+  | 1 | 217.9 | −11.03 | 98, none 2 s later | 1.43 ms a region of 149 triangles, then 1.71 of 229, running 93 to 94% |
+  | 2 | 227.8 | 10.96 | 50, none a second later | 1.67 ms of 192, 7.41 of 984, 10.99 of 1,437, running 92 to 95% |
+  | 3 | 270.3 | 14.52 | 6 | 1.53 ms of 242, then 7.55 of 1,407, running 91 to 93% |
+  | 4 | 139.8 | −10.27 | 16, none a second later | 1.72 ms of 208, 6.10 of 1,330, 14.97 of 2,142, running 94 to 98% |
+
+  - **Drop 1** came down about 227 blocks, to the height of the grass Part 2's drop fell through, world z −11.03.
+    Flying on afterwards, regions of 1,791 and 2,489 triangles took 14.85 and 19.08 ms.
+  - **High up,** the regions are empty: up to 192 waited for a moment, at 0.02 ms each, and were gone within a second.
+  - **Nothing was replaced:** `0 replaced` throughout.
+- **Why a region costs more in the game:** at 4.6 to 9.6 µs a triangle, mostly 7 to 8, a region costs what its
+  triangles cost, as offline, where spot B's cost 7.9 µs a triangle on one thread (Task 28) and 10 on four (Task 43).
+  The regions under the drops hold about 1,000 to 2,500 triangles, 10 to 25 times spot B's 94, and the threads were
+  running 91 to 98% of the time, so the game's own threads weren't keeping them waiting. Part 2's 3.4 to 15 ms a region
+  came from that density, and its fall-through from one thread working through 1,516 such regions in turn.
+- **The query watch:** `scenewatch on: 19 of scene 0's calls hooked; from a second on, the status sums them by thread`.
+  The user walked for half a minute, drove for half a minute, fired a few shots at a wall and stood still. Then
+  `scenewatch off`, and the log's summary, for 132 s:
+  - **the main thread:** 4 adds, 5 removes, 256 steps, 56 fetches and 40,991 queries, 1,044 of them in `OnUpdate`:
+    about 8 a second, BlockRender's own reads of the city;
+  - **15 other threads:** each about 330 to 470 adds, 280 to 510 removes, 555 to 615 steps, 556 to 647 fetches, and
+    58,300 to 60,500 queries; 892,876 queries in all, about 6,800 a second;
+  - `no other thread called while OnUpdate ran; no shifts`.
+- **The decision:** no other thread called scene 0 while `OnUpdate` ran, neither the writes Task 33 watched nor the
+  queries, so the bodies are added, removed and posed in `OnUpdate`, as Tasks 47 to 52 plan. PhysX's batched queries
+  don't go through the scene's vtable; step 4's box checks what's left.
+- **The solids:** before building, `solids=Minecraft's solid blocks: 136 in 11 sections`. Four blocks placed a second or
+  two apart took it to 137 in 12 sections, then 138, 139 and 140; broken again, to 139, 138, 137 and 136 in 11
+  sections. Each change came with one solids message, within the status's second, and every ring line said `0
+  rejected`.
+- **Quitting:** both runs' logs ended with their 25 vtable entries restored, without a warning, and the game left no
+  crash report.
+
+### What it means for Part 3
+
+- **The follow-ups are done:** the turn is kept between sessions, and the worker keeps up with fast drops into the
+  densest ground found so far.
+- **Bodies in `OnUpdate`:** the game never calls scene 0 from another thread then, so adding and removing bodies there
+  can't race the game's own queries or writes.
+- **The solids arrive as blocks change,** one message a section, ready for the bodies.
