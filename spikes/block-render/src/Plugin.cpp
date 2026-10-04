@@ -105,7 +105,7 @@ double                           g_lastFrameAt = 0.0;  // SteadySeconds() at the
 // Spike 5: build mode's drive (its spec's "Part 1"). Main thread only.
 cpmc::Puppet          g_puppet{ g_log };  // the game's script calls that place V
 cpmc::link::TurnRatio g_turnRatio;        // the mouse's counts to V's degrees, measured outside build mode
-bool                  g_turn = false;     // set turn 1: each teleport's yaw gains the frame's turn from the mouse
+bool                  g_turn = true;      // set turn 1, the default since step 2: the teleport's yaw gains the mouse's turn
 cpmc::DriveLog        g_driveLog;
 
 // This frame's figures, for bursts.
