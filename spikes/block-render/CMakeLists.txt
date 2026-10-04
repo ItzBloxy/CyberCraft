@@ -67,6 +67,7 @@ add_library(render_core STATIC
 	src/physx/OriginWatch.cpp
 	src/physx/SceneWatch.cpp
 	src/physx/Session.cpp
+	src/physx/Export.cpp
 	src/link/Drive.cpp
 	src/link/Turn.cpp
 	src/log/DriveLog.cpp
@@ -186,6 +187,7 @@ add_executable(render_tests
 	tests/TestOriginWatch.cpp
 	tests/TestSceneWatch.cpp
 	tests/TestPhysxSession.cpp
+	tests/TestExport.cpp
 	tests/TestDrive.cpp
 	tests/TestTurn.cpp
 	tests/TestDriveLog.cpp
