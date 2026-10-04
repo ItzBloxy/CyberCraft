@@ -210,3 +210,67 @@ from the plan, in a car (below), and a few small things are left for Part 2.
 - **The sense of speed:** a field-of-view kick while Minecraft's player sprints would match Minecraft's own. It's a
   choice for later, not a fault in the drive.
 - **The render delay** in the game is 13 to 17 ms, so V's view runs that far behind Minecraft's newest position.
+
+## Step 3, offline: Night City's shape from spike 1's dumps
+
+Date: 2026-10-04. No Cyberpunk: `mclink` sent Minecraft the static shapes of two of spike 1's saved dumps, through
+Part 2's own filing, voxelizing and message code, and drove Minecraft's player over them. The versions:
+- **Minecraft and SkyCraft** as in step 1: Minecraft 26.3 with Fabric in the `CyberCraft` instance, SkyCraft 0.1.2;
+- **BlockRender's link code and `mclink`** at `7a387de`: the plan's Tasks 19 to 27, built RelWithDebInfo, 317 unit tests
+  passing;
+- **the dumps:** spot B (`2026-10-01_14-37-07`, 64,192 static triangles) at Minecraft 80.5 6.14 2007.5, and the ramp
+  (`2026-10-01_14-46-55`, 21,242) 100 blocks farther east, each moved to the stand-in V's feet, east of spike 3's
+  corner and clear of the blocks built there.
+
+The user started and stopped Minecraft. The agent ran `mclink` with step 3's script, `city.txt`, and read its output,
+Minecraft's log and the dumps' triangles. Plan: Task 28.
+
+### Verdict
+
+**Step 3's offline half: pass.** Minecraft's player walked real Night City geometry as V would: down a kerb, back up it,
+into a barrier and up a ramp, and TNT landed on the street. Every check passed on its numbers, and nothing in the code
+changed after running it. One expectation was worded loosely: `mclink` logs `explosion at 81.6 6.3 2007.8`, without the
+plugin's word "Minecraft". One thing the plan didn't predict: pushed into a wall, the player slides slowly along it,
+since the walls here aren't square to Minecraft's axes (below).
+
+### The checks
+
+- **The city, not the floor:** `Minecraft is there` 0.27 s after `mclink` started, and SkyCraft opened its world by
+  itself. `the ground is the city now` and `the city starts over, as collision epoch 1` came at 1.87 s, then spot B's
+  dump and epoch 2 at 1.95 s. No floor was sent until the script's switch at the ramp, and SkyCraft logged each epoch's
+  clear.
+- **All of spot B's area sent:** `the city around region 10 0 250 is all in the ring: 1152 regions`, 2.5 s after the
+  dump. The ground line then read 145 batches (none unread), 1,152 regions with 107,965 triangles, and 23,888 voxel
+  blocks from the worker in 852 ms, 0.74 ms a region; 6.01 MB through the ring, with nothing waiting or dropped.
+- **Released at once:** `Minecraft let its player go after 0.02 s: V follows it`, its feet at 6.140, `on ground`.
+- **The kerb:** walking west, the feet dropped 0.20, from 6.140 to 5.940, between x 79.6 and 78.5, about 2 blocks out,
+  and stayed `on ground` on the road, to x 75.97. In the dump the road is 0.200 below the sidewalk, from about 1.7
+  blocks out.
+- **The barrier:** walking back east, the feet climbed the kerb at about x 79.0 and stopped at x 84.64, 4.1 blocks east
+  of the start, where they stayed.
+- **The TNT:** summoned 3 blocks west and 4 up, it went off at 81.6 6.3 2007.8, radius 4.0: on the sidewalk's voxels,
+  whose top is the 1/8-block layer above 6.14. Fallen through them, it would have gone off tens of blocks lower.
+- **The ramp:** after `ground floor`, the ramp's dump and `ground city`, `the city around region 22 0 250 is all in the
+  ring: 1152 regions` came 0.54 s after the dump, and Minecraft let its player go after 0.05 s. Walking north for 4 s,
+  the feet rose steadily from 6.145 to 6.470 over 17.3 blocks (+0.325), `on ground` throughout; in the dump the lane
+  rises 0.329 over those 17.3 blocks. Walking east, x stayed at 180.62, the ramp's wall.
+- **Sliding along walls:** pushed into the barrier with W held, the player slid 0.30 blocks south over 0.8 s, and 0.11
+  along the ramp's wall, stopping when W was let go. In the dumps both faces point about 8° off Minecraft's −x, toward
+  the south (normals (−0.989, 0, 0.145) and (−0.992, 0, 0.130)), so a push due east glides south along them, as along any
+  angled wall. Axis-aligned voxels couldn't turn the push sideways, so SkyCraft collides its player with the triangles
+  themselves.
+- **No `build mode ends:` line,** and `exit: 0`.
+
+By the end, after the area followed the player 2 regions north, the ground line read 464 batches, 2,496 regions with
+146,225 triangles, 40,626 voxel blocks in 1,377 ms (0.55 ms a region) and 8.83 MB through the ring, with nothing
+waiting, dropped or unread. Minecraft's log has only the warning it gives on every run as SkyCraft hides its window.
+
+### What it means for the game
+
+- **The ground streams fast enough:** a whole area, 1,152 regions, reached Minecraft within 2.5 s of reading spot B's
+  triangles, and Minecraft let its player go within 0.05 s of build mode. In the game the reads are spread over frames
+  within the 1.5 ms budget, and the area is read before build mode starts, so it should be ready as here.
+- **Kerbs, barriers and ramps behave as Night City's own:** the feet's heights match the dumps' surfaces within 5 mm.
+- **Walls not square to Minecraft's axes** make the player slide along them, which in the game V will follow. It's
+  ordinary wall sliding, not a fault, but where Minecraft's player and the city disagree in step 3's game half,
+  `shapes` will show the faces' filters and bounds.
