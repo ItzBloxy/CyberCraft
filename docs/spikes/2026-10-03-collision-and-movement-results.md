@@ -605,3 +605,119 @@ log and `turn.txt`. Plan: Task 46.
 - **Bodies in `OnUpdate`:** the game never calls scene 0 from another thread then, so adding and removing bodies there
   can't race the game's own queries or writes.
 - **The solids arrive as blocks change,** one message a section, ready for the bodies.
+
+## Step 4, in the game: V against blocks
+
+Date: 2026-10-04. BlockRender 0.15.0 at `a377189` (the plan's Tasks 47 to 51, 392 unit tests), deployed as in step 2,
+on game 2.3.1; then, after a GPU crash in the first run, with the renderer's fix at `ead8772` (396 unit tests) and a
+smaller overlay at `87adb6c`, and from the third run with DRED on (`settings.txt`: `dred = 1`). Minecraft as in step 1.
+At the corner and around it, with a box test near the x = 512 origin line.
+
+The user played: Minecraft, the game, the saves and loads, F8, the walking, jumping, driving, shooting and building.
+The agent sent requests (`mc` among them), recorded the status a few times a second, and read the plugin's log, the
+game's crash report and the Windows system log. Plan: Task 52.
+
+### Verdict
+
+**Part 3's question is answered: yes.** With bodies, Minecraft's blocks stop V as the city's walls do:
+- V walks into them and stops, stands and jumps on them, and stays on a tower when build mode ends;
+- a car stops at them, and so do ordinary bullets; NPCs feel them, but their navigation walks them through or lifts
+  them on top;
+- the bodies follow the blocks as they're placed and broken, within the second, each made in at most 0.08 ms, and cost
+  nothing measurable in frame time;
+- PhysX's origin moving never needed a body posed again, and a load lost the box without anything touched.
+
+One GPU crash happened, in the first run, while blocks were changed quickly. A race in BlockRender's renderer, there
+since spike 4, could explain it and is fixed, but whether it was the cause isn't settled (below). Nothing crashed in
+the two runs after the fix, 571 block changes in one of them.
+
+### The checks
+
+- **Loading (step 2 of the task):** `BlockRender 0.15.0 loaded`, the turn remembered from the last session, and
+  `bodies=off: 0 sections with bodies, 0 boxes; 0 made, 0 removed, 0 failed and 0 lost since the start, the slowest
+  making 0.00 ms; made of what V stands on, once copied; 0 origin changes, 0 bodies posed again; the test box off`.
+- **The box:** `box on: 2 x 2 x 1 m, centred at world 236.95 -2171.95 18.25, made of a static heightField's: query
+  filter 0:0:449c080:0, simulation filter 1c080:0:104a:0, flags 0xb`: what V stood on was terrain, with the grass's
+  filter of step 3, not the street's. Nobody can see the box; the overlay put its nearest face 1.59 m away, as V faced
+  heading 310, across the world's axes.
+  - **Walked into,** V stopped 0.40 m from its face: the controller's 0.32 m radius and PhysX's contact gap. Nothing
+    faulted.
+  - **On it,** V's feet were at 18.74 against its top at 18.75, 1.05 m above the ground; Minecraft's player stayed on
+    its own ground, as the box is the game's alone.
+  - **Shot,** the bullets went through, but they were ricochet rounds, which don't count; with ordinary rounds, bullets
+    stop at blocks (below).
+  - **Driven into,** the car stopped at it.
+- **The origin:** the box was made again near the x = 512 line, at world 523.51 −1823.51 29.29. By then PhysX's origin
+  had changed 3 times with the first box standing, as V drove across the line. Walking across the line and back, then
+  into the box, took the count to 7, still with `0 bodies posed again`: the game moved our actor with its scene each
+  time, as step 3's watch suggested. V stopped at the box again, and stood on it.
+- **A load with the box standing:** nothing faulted, and once V was found again the line read `1 lost` and `the test
+  box off`: forgotten, not touched. PhysX's origin was back to (0, −2048, 0) at the corner.
+- **Blocks on:** `set blocks 1: Minecraft's blocks around V get bodies`, and at once 2 sections with bodies and 3
+  boxes, for earlier builds near the corner.
+- **A wall and a tower:** a wall 5 long and 3 high and a tower 5 high took the solids from 135 to 155. Each block
+  placed or broken made its section's body again: 4 made became 36, in 3 to 6 boxes over 2 sections, the slowest in
+  0.02 ms. Leaving build mode on top, V stood on the tower, feet at 11.00.
+- **Leaving build mode sneaking:** V's controller started about 0.33 m inside the top block, and was pushed up onto it.
+- **The wall and a step:** the wall stopped V, and V jumped onto a one-block step, feet at 7.00.
+- **Blocks placed and broken by command:** the plan's relative coordinates follow Minecraft's player, which moves with
+  V, so the agent placed and broke them by their block coordinates instead.
+  - **Beside V:** V stood on a block boundary, so two stones went in, at −134 6 2004 and 2005. They stopped V 0.47 m
+    short; broken again, V walked through where they were.
+  - **At V's feet:** a stone at −111 6 2008 left V's controller still, its feet 0.93 m inside the block, while
+    Minecraft pushed its own player out sideways at once. Any movement input then put V on top of the block, feet at
+    7.00. Broken again, V was back on the street.
+- **TNT under V,** in the third run: a platform 3 by 3 and one high merged into one box. Minecraft's player had dropped
+  into the platform's middle block (its eye 0.82 m above the feet it was teleported to), so the TNT went in by its
+  coordinates, on the platform beside V. It went off 4 s later at Minecraft −57.5 6.1 2024.5, radius 4.0.
+  - **The platform** was gone, and its body with it.
+  - **SkyCraft's blocks:** the solids went from 165 to 194, as SkyCraft dug into the street and set about 38 blocks of
+    stone, copper ore and coal ore, in the air above the blast, as at spot B in Task 43. Their section's body was made
+    again with 8 boxes.
+  - **V** dropped about 0.9 m to the street, nothing under V, and walked away freely.
+- **NPCs, a car and bullets,** at a wall across a pavement: NPCs walked through it or were lifted on top of it, as
+  their navigation wins over collision; a car stopped at it; ordinary bullets stopped at it.
+- **The cost,** standing by a build, 10 s each:
+
+  | Bodies | With bodies | Frame time |
+  |---|---|---|
+  | On | 4 sections, 10 boxes | 15.84 ms |
+  | Off | none | 15.87 ms |
+  | On again | 3 sections, 8 boxes | 15.86 ms |
+
+  The slowest making since the start was 0.08 ms.
+- **What the bodies were made of:** in the first run, terrain's heightfield, where V stood for the box; in the later
+  runs, the street's triangle mesh, `query filter 0:0:449c004:0, simulation filter 5c004:0:13ce:0`, as step 3 found it.
+- **Quitting:** the runs after the fix ended with their 25 vtable entries restored, no warning, and no crash report.
+
+### The GPU crash
+
+- **When:** in the first run, at step 14's platform. After eight block changes in 2.4 s, the game froze for 11.3 s;
+  then BlockRender logged `the D3D12 device was removed (0x887a0006), so drawing is off`, and the game's crash reporter
+  `Gpu Crash for unknown reasons!`: `DXGI_ERROR_DEVICE_HUNG`. Windows logged three NVIDIA driver errors (event 153) from
+  20:22:18 and a driver reset at 20:22:31.
+- **Where:** the game's breadcrumbs had every pass up to `PostGBufferOverrides` finished and `RenderDistantShadows` not
+  started. BlockRender inserts its G-buffer list about there, but it isn't in the game's breadcrumbs, so whether it ran
+  before or after `PostGBufferOverrides` isn't known.
+- **A race that could explain it:** a render thread records our list, which draws each section's buffer, and the fence
+  after it is signalled once the game's `ExecuteCommandLists` returns. The main thread's upload, replacing a section in
+  between, stamped the old buffer with the fence before our list, so it could be freed while our list still waited on
+  the GPU. Rapid block changes make that likelier. `ead8772` keeps such a buffer until the fence after the list
+  (`render/Retired`, 4 tests, each broken once), and logs each time it does.
+- **Not settled:** in the next run, 571 block changes in about a minute of fast building, with bodies on, the fix never
+  had to keep a buffer: the race's window is a submission's length, and may rarely or never open. The crash may have
+  been that race, or something else. DRED stays on, so a device removal would log the list that stopped and any page
+  fault, with the resource allocated or freed there by name. There was none in the runs after.
+- **Not the bodies:** they're PhysX's, on the CPU, and the crash was the GPU's.
+
+### What it means for Part 3, and spike 5
+
+- **Part 3 works:** V walks, stands and jumps on Minecraft's blocks in Night City, cars and bullets stop at them, and
+  the bodies follow the blocks at no measurable cost. Spike 5's three parts are answered.
+- **What's left:**
+  - **the GPU crash's cause,** if it comes back, from DRED's report;
+  - **SkyCraft's blocks from blasts:** the user finds blocks in the air above a blast odd, and would rather not have
+    them. SkyCraft has no setting for it (`skycraft.properties` holds only `join=`), so it means a small Fabric mixin of
+    our own, or a change to SkyCraft;
+  - **NPCs and moving props:** NPCs' navigation walks them through blocks, and kinematic props aren't sent; both wait
+    for the Entities brainstorm.
