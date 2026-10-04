@@ -1,8 +1,8 @@
-# Plan tooling, as spikes 3 and 4 used it
+# Plan tooling, as spikes 3, 4 and 5 used it
 
 Spike 3 (block rendering) kept its plan verified: every code step was compiled and tested in a scratch copy first, then
 the plan's tasks were replayed in a fresh clone exactly as written, checking every expected result, before they ran in
-the real repo. These scripts did that, and spike 4 (the Minecraft link) did the same. They live in the session's
+the real repo. These scripts did that, and spikes 4 (the Minecraft link) and 5 (collision and movement) did the same. They live in the session's
 scratchpad while in use; this is a copy, so the next spike can start from them. Adapt before reuse.
 
 - **`planlib.py`:** reads a plan's tasks and steps, and applies a step whose title says `Write`, `Edit`, `Delete` or
@@ -39,3 +39,15 @@ scratchpad while in use; this is a copy, so the next spike can start from them. 
 `run_plan.py` copies SkyCraft's header from the scratchpad's `dl/` and checks the plan's hashes, and runs `mclink`
 without Minecraft; `replay.py` has spike 3's header download, the atlas from the user's jar and the dump conversion.
 `run_plan.py`'s last task defaults to Part 1's 10: pass the tasks to run.
+
+**Spike 5's Part 2 versions** replaced `run_plan.py`, `gen_plan.py`, `mutate.py` and `b.sh`, and added three scripts.
+Their paths point at that session's scratchpad (`verify2/`, `snap6/`, `replay6/`): adapt before reuse.
+- **`run_plan.py`** also checks that BlockRender imports nothing from PhysX (`dumpbin /imports`), and in `execute` mode
+  ran Part 2 in the real repo, task range by task range, stopping at each step done by hand.
+- **`gen_plan.py`** reads the scratch copy from `GEN_CLONE` when set: a worktree at the clone's head, so a plan can be
+  generated while `mutate.py` is changing the clone's files.
+- **`mutate.py`** runs its whole list when imported, so don't import it to inspect the list: read the file.
+- **`fold.sh`** folds fixup commits into the tasks they belong to, rebuilding the clone's history from the tag before the
+  first one named, and moves the tags only if the rebuilt tree is the same.
+- **`replay_tasks.sh`** replays task ranges in a fresh clone of the real repo and compares each task's commit with the
+  clone's tag for it; **`replay_from.sh`** replays again from a task whose commit already matched, after a fold.

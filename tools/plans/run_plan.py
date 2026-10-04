@@ -1,4 +1,4 @@
-"""Replay the minecraft-link plan in a fresh clone, or execute it in the real repo, task by task, checking every
+"""Replay the collision-and-movement plan in a fresh clone, or execute it in the real repo, task by task, checking every
 expectation it states.
 
     uv run --no-project python run_plan.py replay|execute <plan.md> <repo> [first task] [last task] [first step]
@@ -12,7 +12,7 @@ expectation it states.
   from clean after a step changes a header.
 - "Run mclink without Minecraft": it must open the mapping, find Minecraft absent, and exit 0.
 - "Check the overlay's syntax": `luac -p` must accept the CET overlay.
-- "Build and run the tests; the new one must fail": a clean build whose test output has the plan's expected lines.
+- "Build and run the tests; the new one(s) must fail": a clean build whose test output has the plan's expected lines.
 - "Deploy", "In the game" and "Record" steps are done by hand: the run stops at the first.
 - "Run the new tool's test; it must fail": pytest must stop on the plan's missing module. "Run the tools' tests; they
   must pass": all of `tools/`'s Python tests, with the plan's count.
@@ -31,7 +31,7 @@ import planlib  # noqa: E402
 HERE = Path(__file__).parent
 CMAKE = r"C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe"
 SDK = "D:/Cyberpunk-Minecraft/extern/RED4ext.SDK"
-VERIFIED = HERE / "verify"
+VERIFIED = HERE / "verify2"
 
 mode = sys.argv[1]
 plan_path = Path(sys.argv[2]).resolve()
@@ -40,7 +40,7 @@ first = int(sys.argv[4]) if len(sys.argv) > 4 else 1
 last = int(sys.argv[5]) if len(sys.argv) > 5 else 10
 first_step = int(sys.argv[6]) if len(sys.argv) > 6 else 1
 project = repo / "spikes" / "block-render"
-log = open(HERE / f"{mode}.log", "a", encoding="utf-8")
+log = open(HERE / f"{mode}6.log", "a", encoding="utf-8")
 
 
 def say(text):
@@ -116,7 +116,7 @@ for step in planlib.read_plan(plan_path):
         if f"\n{total}\n" not in step.body:
             fail(step, f"{total} bytes in all")
         say(f"{label}: copied, {len(expected)} hashes and {total} bytes match")
-    elif title.startswith("Build and run the tests; the new one must fail"):  # before "must fail": it builds
+    elif title.startswith(("Build and run the tests; the new one must fail", "Build and run the tests; the new ones must fail")):  # before "must fail": it builds
         code, lines = build()
         if code != 0 or lines:
             fail(step, f"exit {code}:\n" + "\n".join(lines[:30]))
@@ -155,6 +155,14 @@ for step in planlib.read_plan(plan_path):
         if code != 0 or not re.search(rf"\b{count} passed\b", out):
             fail(step, f"expected {count} passed:\n{out[-1500:]}")
         say(f"{label}: {count} passed")
+    elif title.startswith("Check that BlockRender imports nothing from PhysX"):
+        tools = Path(r"C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC")
+        dumpbin = next(tools.glob("*/bin/Hostx64/x64/dumpbin.exe"))
+        code, out = run([str(dumpbin), "-imports", "-nologo", str(project / "build" / "RelWithDebInfo" / "BlockRender.dll")], project)
+        imports = [line.strip() for line in out.splitlines() if line.strip().lower().endswith(".dll")]
+        if code != 0 or "KERNEL32.dll" not in imports or any("physx" in name.lower() for name in imports):
+            fail(step, "dumpbin said:\n" + out[:1500])
+        say(f"{label}: {len(imports)} DLLs imported, none of them PhysX's")
     elif title.startswith("Check the overlay's syntax"):
         code, out = run(["luac", "-p", str(project / "tools" / "blockrender_hud" / "init.lua")], project)
         if code != 0:
