@@ -4,7 +4,6 @@
 
 #include <array>
 #include <cmath>
-#include <cstring>
 
 namespace cpmc::link
 {
@@ -45,19 +44,7 @@ std::vector<uint8_t> FloorClear(uint32_t aEpoch)
 
 std::vector<uint8_t> FloorRegion(int32_t aRegionX, int32_t aRegionZ, double aY, uint32_t aEpoch)
 {
-	const int32_t     regionY = RegionOf(aY);
-	proto::ColRegion region{ aRegionX * kRegionBlocks, regionY * kRegionBlocks, aRegionZ * kRegionBlocks,
-		                     aRegionX * kRegionBlocks + kRegionBlocks - 1, regionY * kRegionBlocks + kRegionBlocks - 1,
-		                     aRegionZ * kRegionBlocks + kRegionBlocks - 1, aEpoch, 2 };
-	std::vector<uint8_t> bytes;
-	Append(bytes, region);
-	for (const McTriangle& triangle : Triangles(aRegionX, aRegionZ, aY))
-	{
-		proto::ColTri tri{};  // flags 0: not diggable, so attacking the floor does nothing
-		std::memcpy(tri.v, triangle.v, sizeof tri.v);
-		Append(bytes, tri);
-	}
-	return bytes;
+	return TrisPayload(aRegionX, RegionOf(aY), aRegionZ, aEpoch, Triangles(aRegionX, aRegionZ, aY));
 }
 
 FloorVoxeler::FloorVoxeler(double aY) : regionY_(RegionOf(aY))

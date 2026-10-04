@@ -79,6 +79,19 @@ bool TriBoxOverlap(const float* aCentre, float aHalf, const float* aA, const flo
 	}
 	return true;
 }
+
+// A region message's header: the region's inclusive block box, the epoch and the count.
+proto::ColRegion Header(int32_t aRegionX, int32_t aRegionY, int32_t aRegionZ, uint32_t aEpoch, size_t aCount)
+{
+	return { aRegionX * kRegionBlocks,
+		     aRegionY * kRegionBlocks,
+		     aRegionZ * kRegionBlocks,
+		     aRegionX * kRegionBlocks + kRegionBlocks - 1,
+		     aRegionY * kRegionBlocks + kRegionBlocks - 1,
+		     aRegionZ * kRegionBlocks + kRegionBlocks - 1,
+		     aEpoch,
+		     uint32_t(aCount) };
+}
 }
 
 std::vector<proto::ColBlock> VoxelizeRegion(int32_t aRegionX, int32_t aRegionY, int32_t aRegionZ, std::span<const McTriangle> aTriangles)
@@ -240,19 +253,27 @@ std::vector<proto::ColBlock> VoxelizeRegion(int32_t aRegionX, int32_t aRegionY, 
 std::vector<uint8_t> RegionPayload(int32_t aRegionX, int32_t aRegionY, int32_t aRegionZ, uint32_t aEpoch,
                                    std::span<const proto::ColBlock> aBlocks)
 {
-	const proto::ColRegion header{ aRegionX * kRegionBlocks,
-		                           aRegionY * kRegionBlocks,
-		                           aRegionZ * kRegionBlocks,
-		                           aRegionX * kRegionBlocks + kRegionBlocks - 1,
-		                           aRegionY * kRegionBlocks + kRegionBlocks - 1,
-		                           aRegionZ * kRegionBlocks + kRegionBlocks - 1,
-		                           aEpoch,
-		                           uint32_t(aBlocks.size()) };
-	std::vector<uint8_t> payload(sizeof header + aBlocks.size_bytes());
+	const proto::ColRegion header = Header(aRegionX, aRegionY, aRegionZ, aEpoch, aBlocks.size());
+	std::vector<uint8_t>   payload(sizeof header + aBlocks.size_bytes());
 	std::memcpy(payload.data(), &header, sizeof header);
 	if (!aBlocks.empty())
 	{
 		std::memcpy(payload.data() + sizeof header, aBlocks.data(), aBlocks.size_bytes());
+	}
+	return payload;
+}
+
+std::vector<uint8_t> TrisPayload(int32_t aRegionX, int32_t aRegionY, int32_t aRegionZ, uint32_t aEpoch,
+                                 std::span<const McTriangle> aTriangles)
+{
+	const proto::ColRegion header = Header(aRegionX, aRegionY, aRegionZ, aEpoch, aTriangles.size());
+	std::vector<uint8_t>   payload(sizeof header + aTriangles.size() * sizeof(proto::ColTri));
+	std::memcpy(payload.data(), &header, sizeof header);
+	for (size_t i = 0; i < aTriangles.size(); ++i)
+	{
+		proto::ColTri tri{};
+		std::memcpy(tri.v, aTriangles[i].v, sizeof tri.v);
+		std::memcpy(payload.data() + sizeof header + i * sizeof tri, &tri, sizeof tri);
 	}
 	return payload;
 }

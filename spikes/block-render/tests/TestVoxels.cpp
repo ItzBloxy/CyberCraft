@@ -144,3 +144,21 @@ TEST(VoxelsRegionPayload)
 	std::memcpy(&header, empty.data(), sizeof header);
 	CHECK(header.minY == -8 && header.maxY == -1 && header.count == 0);
 }
+
+TEST(VoxelsTrisPayload)
+{
+	const std::vector<McTriangle> triangles = { Tri(-120.0f, 6.14f, 2000.0f, -112.0f, 6.14f, 2000.0f, -112.0f, 6.14f, 2008.0f) };
+	const auto                    payload = TrisPayload(-15, 0, 250, 9, triangles);
+	CHECK_EQ(payload.size(), sizeof(proto::ColRegion) + sizeof(proto::ColTri));
+	proto::ColRegion header;
+	std::memcpy(&header, payload.data(), sizeof header);
+	CHECK(header.minX == -120 && header.minY == 0 && header.minZ == 2000);
+	CHECK(header.maxX == -113 && header.maxY == 7 && header.maxZ == 2007);
+	CHECK_EQ(header.epoch, 9u);
+	CHECK_EQ(header.count, 1u);
+	proto::ColTri tri;
+	std::memcpy(&tri, payload.data() + sizeof header, sizeof tri);
+	CHECK(std::memcmp(tri.v, triangles[0].v, sizeof tri.v) == 0);
+	CHECK_EQ(tri.flags, 0u);  // not diggable
+	CHECK_EQ(TrisPayload(-15, 0, 250, 9, {}).size(), sizeof(proto::ColRegion));
+}

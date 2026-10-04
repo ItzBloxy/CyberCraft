@@ -33,4 +33,9 @@ std::vector<proto::ColBlock> VoxelizeRegion(int32_t aRegionX, int32_t aRegionY, 
 // With no blocks, it marks the region known and empty.
 std::vector<uint8_t> RegionPayload(int32_t aRegionX, int32_t aRegionY, int32_t aRegionZ, uint32_t aEpoch,
                                    std::span<const proto::ColBlock> aBlocks);
+
+// A triangles message's payload (kColTris): the region's inclusive block box, the epoch, the count and the triangles,
+// each with flags 0: not diggable, so attacking them does nothing. Minecraft files them under the box's corner region.
+std::vector<uint8_t> TrisPayload(int32_t aRegionX, int32_t aRegionY, int32_t aRegionZ, uint32_t aEpoch,
+                                 std::span<const McTriangle> aTriangles);
 }
