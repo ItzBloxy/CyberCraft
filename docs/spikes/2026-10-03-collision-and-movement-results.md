@@ -348,3 +348,110 @@ write lock. So `OnUpdate` is a quiet time for scene 0, and Tasks 34 to 36 go ahe
 - **For Part 3's bodies:** the game shifts scene 0 itself when PhysX's origin moves, so PhysX moves our bodies with
   everything else. Part 3 only has to know the origin moved, not pose the bodies again. Adding and removing them in
   `OnUpdate` won't race the game's own adds and removes, which never come then.
+
+## Step 3, in the game: Night City's shape
+
+Date: 2026-10-04. BlockRender 0.13.0 at `dfc7d43` (the plan's Tasks 19 to 35, 364 unit tests), then with one fix at
+`b5ac34f` (365 unit tests), deployed as in step 2, the ground the city from loading on. Minecraft as in step 1. At
+spike 3's corner, then across the city, at spot B and at the ramp.
+
+The user played: Minecraft, the game, F8, the walking, flying and building. The agent sent requests (`scenewatch`,
+`shapes`, `set exportbudget`, `set ground`, `mc`), recorded the status a few times a second, and read the plugin's
+log. Plan: Task 36.
+
+### Verdict
+
+**Pass, after one fix.** With the fix, Minecraft gets Night City's shape around V as the game has it:
+- the streets, kerbs, ramps and walls hold, to the centimetre of spike 1's dumps;
+- clicks place blocks against them, and TNT lands on the street;
+- it costs nothing measurable in frame time.
+
+What step 3 found:
+- **The fix:** the first reads stalled about 9 ms once a second, in `VirtualQuery`. They no longer do.
+- **Kinematic props aren't sent:** a breakable guard rail is a kinematic actor, which the exporter leaves out by
+  design, so Minecraft's player walks through it.
+- **The worker can fall behind:** in a fast drop into dense ground it queued 1,500 regions, and the player fell through
+  the grass once.
+- **The turn ratio isn't kept between sessions,** so after loading, build mode can't turn until V has turned 5 times.
+- **Risk 11 happens:** entering build mode under an overhang lifts Minecraft's player, and V, on top of it.
+
+### The checks
+
+- **The city around V (step 2 of the task):** the log read `BlockRender 0.13.0 loaded`, `the ground is the city now`,
+  `Minecraft is there`, `the city starts over, as collision epoch 1`, and epoch 2 when the link started; no floor. A few
+  seconds after the link the ground line read 1,152 regions known around region −15 0 250, PhysX's origin
+  (0, −2048, 0), and nothing unreadable. Standing, about 8 batches a second are read again: those next to V.
+- **The stall, and its fix:** standing still, one batch read a second took 7.3 to 10.5 ms (0.33 to 0.49 ms a frame on
+  average), and the frame's worst rose to 20 to 28 ms against a 15.5 ms average.
+  - **Not the cause:** raising the budget to 20 ms changed nothing, since the batches next to V fall due at different
+    times.
+  - **Where the time went:** the slow batches' own log lines (`71b93fd`) put nearly all of each in `VirtualQuery`: 1 to
+    4 calls a batch, 2.8 to 13.4 ms, about 3.5 ms a call, on regions of 582 to 764 MB. The calls were for heightfields'
+    sample arrays, which run past the 16 pages `QueryWorkingSetEx` answered. The memory checks start afresh each frame,
+    so each frame paid them again. Mesh triangles looked at were only 0 to 4,286 a batch.
+  - **The fix (`b5ac34f`):** `QueryWorkingSetEx` now answers any range up to 256 MB, 256 pages a call, at a cost per
+    page, and `VirtualQuery` only pages outside the working set. A new test checks a 300-page range takes no
+    `VirtualQuery` and that a no-access page in it still fails.
+  - **After it:** reads took 0.05 ms a frame on average and 1.4 to 2.2 ms at worst, the frame's worst 17 to 20 ms, and
+    no batch reached 3 ms, the first area's included.
+- **Building on the city:** F8 released Minecraft's player in 0.05 to 0.06 s. Walking the street, kerbs, stairs and
+  ramps near the corner, V stayed on the visible ground and stopped at walls.
+- **The guard rail:** V and Minecraft's player walked through a guard rail beside a path. `shapes` there:
+  - **What it is:** a chain of kinematic actors, each a 2.9 m section of capsules and boxes, standing 1.1 m on the path
+    (world z 6.05 to 7.14), simulation and scene-query shapes;
+  - **Its filters:** the capsules have query filter `0:0:4480008:0` and simulation filter `8:0:13cc:80000000`, the boxes
+    `0:0:1c000:0` and `5c000:0:40000:80000000`;
+  - **Why it's out:** the exporter keeps only static actors, so it's left out by design, though V's controller collides
+    with it in the game. It is most likely breakable, kinematic until something hits it;
+  - **Telling props from characters:** V's controller's capsule has query filter `0:0:400001:0` and an NPC-style
+    hitbox capsule `0:0:2000:0`, so filters could tell props from characters (risk 4). Spike 1's census of scene 0,
+    taken at spot B, counted 85 shapes with the rail's query filter.
+- **The scene watch while the exporter read:** 354 s of walking, 16 threads, 3,058 adds, 3,067 removes and 24,814 steps
+  and fetches; none came while `OnUpdate` ran, and no thread took the write lock. `OnUpdate` stays quiet with the
+  exporter reading in it.
+- **Under an overhang:** leaving build mode under a structure and pressing F8 put Minecraft's player, and so V, on top
+  of it: V's feet went to Minecraft y 13.3, where the streets nearby are at about 6.6. Minecraft let go after 0.06 s.
+  Risk 11 happens, as the spec expected.
+- **Blocks against the city:** stone placed against the street and against a wall both landed where the crosshair was.
+- **Flying ahead of the regions:** over several minutes of sprint-flying up to y 230, the batches to read stayed at 0,
+  but for 16 to 31 for a moment in steep drops. Dropping onto a street, the player landed on it.
+  - **The fall-through:** dropping about 150 blocks in 3 s onto grass at world z −11.03, the player fell through it, to
+    y −60. Every batch had been read (none waiting), but the worker had 857 and then 1,516 regions
+    queued, at 3.4 to 15 ms a region, against 0.74 offline at spot B: one thread voxelizing the drop's dense ground
+    took seconds.
+  - **After the queue drained,** later drops landed on the grass. The grass there is static, and kept: flat meshes,
+    boxes and the terrain's heightfield, filter `0:0:449c080:0`. With V under the game's own floor, the game put V
+    back up by itself.
+- **TNT on the street:** summoned 2 blocks east and 4 up, it went off at Minecraft −208.8 4.6 2175.9, with the
+  player's feet at 4.55: on the street's voxels.
+- **The cost,** standing in build mode, 10 s each:
+
+  | Ground | Frame time | The second's worst frame, averaged | Reading a frame | Worst read |
+  |---|---|---|---|---|
+  | City | 15.87 ms | 21.9 ms | 0.036 ms | 1.22 ms |
+  | Floor | 16.16 ms | 22.5 ms | none | none |
+  | City again | 15.92 ms | 23.3 ms | 0.037 ms | 1.30 ms |
+
+  Switching back to the city started it over (epoch 4), and the whole area was read again within 3 s.
+- **Spot B and the ramp:** walked as `city.txt` walked them offline.
+  - **Spot B:** the sidewalk at world z 74.43 (the dump's V at 74.432), and the road 0.20 lower beyond the kerb (74.23),
+    as offline. V stepped down onto it and back up, and stopped at the barrier.
+  - **The ramp:** walking north, the lane rose from 74.08 to 74.43 over 16.7 m, against offline's 0.325 over 17.3.
+    Walking east at the dump's spot, V stopped at x −177.68.
+- **The turn after loading:** after each restart of the game, build mode couldn't turn until the turn ratio had been
+  measured again from 5 turns outside build mode. The plugin measures it each session and forgets it.
+- **Quitting:** the plugin's log ended with its patches restored, and the game left no crash report in any of the
+  session's four runs.
+
+### What it means for Part 3, and the follow-ups
+
+- **The exporter's shape is right where it reads:** heights match the dumps within a centimetre, and what's static is
+  all there. What it misses is by design (kinematic props) or by speed (the worker on fast drops).
+- **Before Part 3, the follow-ups:**
+  - remember the turn ratio between sessions, so build mode turns at once after loading;
+  - the worker: more threads, and the regions nearest Minecraft's player voxelized first, so a fast drop can't
+    outrun it;
+  - a choice: whether Minecraft gets kinematic props like the rail, kept by their filters, and leaving out characters'
+    capsules.
+- **Part 3's bodies can be added in `OnUpdate`:** the game's own calls never come then, with the exporter reading or
+  not.
