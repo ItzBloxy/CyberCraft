@@ -4,7 +4,8 @@
 // through SkyCraft's shared memory: Minecraft's player follows V, Minecraft's blocks and HUD are drawn in the game, and
 // in build mode (F8) the mouse buttons, the wheel and the keys 1 to 9 are Minecraft's. Spike 5 has Minecraft drive in
 // build mode: the movement keys are Minecraft's too, and V is teleported to its player's eye every frame; it reads Night
-// City's shape for Minecraft from the game's PhysX; and it keeps Minecraft's solid blocks, for V to stand on.
+// City's shape for Minecraft from the game's PhysX; and it makes Minecraft's solid blocks around V into PhysX bodies,
+// for V to stand on.
 // Commands come through blockrender.request, in its folder or the overlay's, and status.txt in the overlay's folder says
 // what it's doing. See docs/superpowers/specs/2026-10-01-block-render-design.md, 2026-10-02-minecraft-link-design.md and
 // 2026-10-03-collision-and-movement-design.md.
@@ -29,6 +30,7 @@
 #include "log/Dumps.h"
 #include "log/FrameLog.h"
 #include "log/FrameLogData.h"
+#include "physx/Bodies.h"
 #include "physx/Export.h"
 #include "physx/SceneHooks.h"
 #include "physx/Session.h"
@@ -60,7 +62,7 @@ namespace
 using Clock = std::chrono::steady_clock;
 using namespace std::chrono_literals;
 
-constexpr const char* kVersion = "0.14.0";
+constexpr const char* kVersion = "0.15.0";
 
 RED4ext::v1::PluginHandle g_handle = nullptr;
 const RED4ext::v1::Sdk*   g_sdk = nullptr;
@@ -123,6 +125,10 @@ std::string           g_groundWhy;        // why the ground fell back to the flo
 std::optional<double> g_watchSince;       // scenewatch on: since when (SteadySeconds)
 std::string           g_lastWatch;        // the last watch's summary, once it's off
 DWORD                 g_mainThread = 0;   // OnUpdate's
+
+// Spike 5's V against blocks (its spec's "Part 3"). Main thread only.
+cpmc::px::Bodies g_bodies{ g_physx, g_ground };  // PhysX bodies for Minecraft's blocks around V, and step 4's test box
+bool             g_blocks = false;               // set blocks 1: the bodies, while drawing is on
 
 // This frame's figures, for bursts.
 struct FrameFigures
@@ -397,8 +403,9 @@ void UpdateLink(double aNow, double aFrameMs)
 		g_groundWhy = why;
 		Log("the ground falls back to the floor: {}", why);
 	}
-	std::optional<cpmc::link::GamePose> pose;
-	if (const std::optional<cpmc::PlayerPose> player = cpmc::LocatePlayer(); player && player->camera)
+	const std::optional<cpmc::PlayerPose> player = cpmc::LocatePlayer();
+	std::optional<cpmc::link::GamePose>   pose;
+	if (player && player->camera)
 	{
 		pose = cpmc::link::GamePose{ player->feet, player->camera->position, player->camera->forward };
 	}
@@ -463,14 +470,16 @@ void UpdateLink(double aNow, double aFrameMs)
 		row.turn = placed.turn;
 		g_driveLog.Add(row);
 	}
-	// Night City's shape, given V's feet from before this frame's teleport: V's controller is within a frame's move of
-	// them, whether the teleport has moved it yet or not.
-	g_ground.Frame(pose ? std::optional<cpmc::Vec3d>(pose->feet) : std::nullopt);
+	// Night City's shape, and V's bodies, given V's feet from before this frame's teleport, in a car too: V's controller is
+	// within a frame's move of them, whether the teleport has moved it yet or not. The city is read only with V's camera.
+	const std::optional<cpmc::Vec3d> feet = player ? std::optional<cpmc::Vec3d>(player->feet) : std::nullopt;
+	g_ground.Frame(feet);
 	g_link->ReadGround(aNow, g_ground, g_exportBudget);
 	for (const std::string& line : g_ground.TakeSlowBatches())
 	{
 		Log("{}", line);
 	}
+	g_bodies.Frame(feet, g_blocks && g_renderer->ModeName() != "off", g_link->SolidSections());
 	g_second.cityReadMsSum += state.cityReadMs;
 	g_second.cityReadMsWorst = std::max(g_second.cityReadMsWorst, state.cityReadMs);
 	if (std::exchange(g_buildWanted, false))
@@ -638,6 +647,17 @@ void Set(const cpmc::Request& aRequest)
 		g_world.MarkAllDirty();
 		return Report(std::format("set ao {}", g_meshOptions.ambientOcclusion ? 1 : 0));
 	}
+	if (aRequest.what == "blocks")
+	{
+		if (aRequest.number != 0.0 && aRequest.number != 1.0)
+		{
+			return Report("set blocks: 0 leaves Minecraft's blocks without bodies, and 1 gives those around V bodies V stands on");
+		}
+		g_blocks = aRequest.number == 1.0;
+		return Report(!g_blocks                            ? "set blocks 0: the bodies go"
+		              : g_renderer->ModeName() == "off" ? "set blocks 1: the bodies come once drawing is on"
+		                                                  : "set blocks 1: Minecraft's blocks around V get bodies");
+	}
 	if (aRequest.what.starts_with("hooks."))
 	{
 		const std::string_view               name = std::string_view(aRequest.what).substr(6);
@@ -772,6 +792,18 @@ void Shapes()
 	Report(std::format("shapes: {} lines in the log, of the shapes within 2 m of V's middle", lines.size()));
 }
 
+// box on|off (spike 5's step 4): a test box 3 m ahead of V, made as the bodies for blocks are, before any block is.
+void BoxRequest(bool aOn)
+{
+	const std::optional<cpmc::PlayerPose> player = cpmc::LocatePlayer();
+	if (!player)
+	{
+		return Report(std::format("box {}: there's no player", aOn ? "on" : "off"));
+	}
+	g_ground.Frame(player->feet);  // scene 0 and PhysX's origin this frame, from V's controller
+	Report(g_bodies.Box(aOn, player->feet, player->forward));
+}
+
 // The command in aFolder's blockrender.request, if there is one: in the plugin's folder, where the agent writes it, or
 // the overlay's, where its buttons do. The overlay can't rename a finished file into place, so there a command counts
 // only once its line ends (aWholeLine).
@@ -831,6 +863,7 @@ void RunRequest(const std::filesystem::path& aFolder, bool aWholeLine)
 		break;
 	case cpmc::Request::Kind::SceneWatch: SceneWatch(request->what == "on"); break;
 	case cpmc::Request::Kind::Shapes: Shapes(); break;
+	case cpmc::Request::Kind::Box: BoxRequest(request->what == "on"); break;
 	}
 }
 
@@ -1038,6 +1071,20 @@ cpmc::LinkReport LinkLines(const cpmc::Renderer::Stats& aStats, double aNow)
 	report.shapesLeft = physx.left;
 	report.shapesUnreadable = physx.unreadable;
 	report.physxWhy = physx.why;
+	const cpmc::px::Bodies::Report& bodies = g_bodies.State();
+	report.bodiesOn = g_blocks && g_renderer->ModeName() != "off";
+	report.bodiesWhy = bodies.why;
+	report.bodySections = bodies.sections;
+	report.bodyBoxes = bodies.boxes;
+	report.bodiesMade = bodies.made;
+	report.bodiesRemoved = bodies.removed;
+	report.bodiesFailed = bodies.failed;
+	report.bodiesLost = bodies.lost;
+	report.bodySlowestMs = bodies.slowestMs;
+	report.bodiesMadeOf = bodies.madeOf;
+	report.originChanges = bodies.originChanges;
+	report.bodiesReposed = bodies.reposed;
+	report.box = bodies.box;
 	report.health = g_linked ? g_puppet.Health() : std::nullopt;  // once a second, so fall damage shows
 	report.turn = g_turn;
 	report.turnRatio = g_turnRatio.Ratio();
@@ -1130,6 +1177,11 @@ void WriteStatus(double aNow)
 	                    : g_lastWatch.empty() ? std::string()
 	                                          : "off; the last watch, " + g_lastWatch;
 	report.structures = g_structures;
+	if (const std::optional<cpmc::Vec3d> box = g_bodies.State().box)
+	{
+		// Step 4's test box can't be seen: as a structure, the overlay shows how far V is from it.
+		report.structures.push_back({ "testbox", { box->x - 1.0, box->y - 1.0, box->z - 0.5 }, { box->x + 1.0, box->y + 1.0, box->z + 0.5 } });
+	}
 	report.link = LinkLines(stats, aNow);
 	StartSecond(aNow);
 	std::error_code error;
@@ -1325,7 +1377,7 @@ RED4EXT_C_EXPORT void RED4EXT_CALL Query(RED4ext::v1::PluginInfo* aInfo)
 {
 	aInfo->name = L"BlockRender";
 	aInfo->author = L"Cyberpunk-Minecraft";
-	aInfo->version = RED4EXT_V1_SEMVER(0, 14, 0);
+	aInfo->version = RED4EXT_V1_SEMVER(0, 15, 0);
 	aInfo->runtime = RED4EXT_V1_RUNTIME_VERSION_LATEST;
 	aInfo->sdk = RED4EXT_V1_SDK_VERSION_CURRENT;
 }

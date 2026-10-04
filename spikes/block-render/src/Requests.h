@@ -24,6 +24,7 @@ namespace cpmc
 //   drivelog <seconds>         (spike 5: build mode's drive, a row a frame, for 1 to 60 seconds)
 //   scenewatch on|off          (spike 5's step 3: who calls scene 0, and when)
 //   shapes                     (spike 5: the game's shapes within 2 m of V, into the log)
+//   box on|off                 (spike 5's step 4: a test box 3 m ahead of V, made as the bodies for blocks are)
 struct Request
 {
 	enum class Kind
@@ -42,6 +43,7 @@ struct Request
 		DriveLog,
 		SceneWatch,
 		Shapes,
+		Box,
 	};
 
 	Kind        kind = Kind::Log;

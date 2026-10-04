@@ -89,9 +89,22 @@ struct LinkReport
 	uint64_t                       shapesLeft = 0;            // given by the overlap but not kept: simulation-only, triggers
 	uint64_t                       shapesUnreadable = 0;
 	std::string                    physxWhy;                  // why the exporter couldn't read, while it can't
-	// Minecraft's solid blocks (spike 5's "Part 3")
-	size_t   solidSections = 0;
-	uint64_t solidBlocks = 0;
+	// Minecraft's solid blocks, and V's bodies for them (spike 5's "Part 3"): the counts are since the start
+	size_t               solidSections = 0;
+	uint64_t             solidBlocks = 0;
+	bool                 bodiesOn = false;  // set blocks 1, with drawing on
+	std::string          bodiesWhy;         // why they wait, while they do
+	size_t               bodySections = 0;
+	size_t               bodyBoxes = 0;
+	uint64_t             bodiesMade = 0;
+	uint64_t             bodiesRemoved = 0;
+	uint64_t             bodiesFailed = 0;
+	uint64_t             bodiesLost = 0;
+	double               bodySlowestMs = 0.0;
+	std::string          bodiesMadeOf;      // empty: not copied yet
+	uint64_t             originChanges = 0;
+	uint64_t             bodiesReposed = 0;
+	std::optional<Vec3d> box;               // the test box's centre, world axes, while it stands
 	// The render ring
 	double      ringMb = 0.0;            // in the last second
 	double      ringMbWorstFrame = 0.0;  // the most in one frame of it
@@ -163,7 +176,8 @@ struct StatusReport
 };
 
 // Lines of "key=value": mode, frames, blocks, gpu, frame, streamline, hooks, request; with a link, its lines (link, build,
-// drive, positions, ground, solids, ring, atlas, hud, latency, burst and processes); then one structure line per structure:
+// drive, positions, ground, solids, bodies, ring, atlas, hud, latency, burst and processes); then one structure line per
+// structure:
 // "structure=<name> <min x> <min y> <min z> <max x> <max y> <max z>".
 std::string FormatStatus(const StatusReport& aReport);
 }

@@ -4,7 +4,8 @@
 -- switch BlockRender's drawing mode, link it to Minecraft, type commands into Minecraft, and cycle when Minecraft's
 -- HUD shows, through blockrender.request in this folder. A line under them shows build mode, which F8 toggles, and
 -- Minecraft's hotbar slot; and since spike 5, one shows build mode's drive, with buttons for its turn and its drive log,
--- and one the ground Minecraft gets, with buttons to switch it and to log the shapes around V.
+-- and one the ground Minecraft gets, with buttons to switch it and to log the shapes around V; and one V's bodies for
+-- Minecraft's blocks, with buttons to turn them on and off, and step 4's test box.
 -- Delete this folder to remove it.
 local status = nil       -- status.txt's lines, except the structures
 local structures = {}    -- { name, min = { x, y, z }, max = { x, y, z } }, in world coordinates
@@ -14,6 +15,9 @@ local drive = nil        -- the drive line's state, V's camera from Minecraft's 
 local turn = nil         -- the drive line's turn setting: "on" or "off"
 local ground = nil       -- the ground line's setting, "floor" or "city", and how much of the city is known
 local groundName = nil   -- "floor" or "city"
+local bodies = nil       -- the bodies line: on or off, and how many, or why they wait; and the test box
+local blocksOn = nil     -- whether bodies are on: "on" or "off"
+local boxOn = false      -- whether the test box stands
 local player = nil       -- the lines about V
 local sinceRead = 1.0
 local frames = { sum = 0.0, count = 0, worst = 0.0 }  -- this second's frame times, from onUpdate
@@ -68,6 +72,9 @@ local function readStatus()
     turn = nil
     ground = nil
     groundName = nil
+    bodies = nil
+    blocksOn = nil
+    boxOn = false
     for line in file:lines() do
         local name, a, b, c, d, e, f = line:match("^structure=(%S+) (%S+) (%S+) (%S+) (%S+) (%S+) (%S+)$")
         hudSetting = line:match("^hud=([^,]+),") or hudSetting
@@ -89,6 +96,15 @@ local function readStatus()
             local known = line:match("(%d+ regions known, %d+ batches to read)")
             local fallback = line:match("; it fell back from the city: (.*)$")
             ground = setting .. (known and (", " .. known) or "") .. (fallback and (", fell back: " .. fallback) or "")
+        end
+        local state = line:match("^bodies=(%a+)")
+        if state ~= nil then
+            blocksOn = state
+            boxOn = line:match("the test box at world") ~= nil
+            local counts = line:match("^bodies=%a+: (%d+ sections with bodies, %d+ boxes)")
+            local waiting = line:match("; waiting: (.*)$")
+            bodies = state .. (counts and (", " .. counts) or "") .. (waiting and (", waiting: " .. waiting) or "")
+                .. (boxOn and ", the test box standing" or "")
         end
         if name ~= nil then
             table.insert(structures, {
@@ -223,6 +239,18 @@ registerForEvent("onDraw", function()
             ImGui.SameLine()
             if ImGui.Button("Shapes") then
                 request("shapes")
+            end
+        end
+        if bodies ~= nil then
+            ImGui.Text("Bodies: " .. bodies)
+            -- "###blocks" and "###box" keep the buttons' IDs the same while their labels change.
+            ImGui.SameLine()
+            if ImGui.Button("Blocks: " .. blocksOn .. "###blocks") then
+                request("set blocks " .. (blocksOn == "on" and 0 or 1))
+            end
+            ImGui.SameLine()
+            if ImGui.Button((boxOn and "Box: on" or "Box: off") .. "###box") then
+                request("box " .. (boxOn and "off" or "on"))
             end
         end
         ImGui.Separator()

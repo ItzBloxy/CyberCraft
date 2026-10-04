@@ -223,6 +223,40 @@ TEST(StatusWritesMinecraftsSolids)
 	CHECK(status.find("ground=") < status.find("solids=") && status.find("solids=") < status.find("ring="));
 }
 
+TEST(StatusWritesTheBodies)
+{
+	cpmc::StatusReport report;
+	cpmc::LinkReport   link;
+	report.link = link;
+	std::string status = cpmc::FormatStatus(report);
+	CHECK(Has(status, "bodies=off: 0 sections with bodies, 0 boxes; 0 made, 0 removed, 0 failed and 0 lost since the start, the slowest "
+	                  "making 0.00 ms; made of what V stands on, once copied; 0 origin changes, 0 bodies posed again; the test box off"));
+	CHECK(status.find("solids=") < status.find("bodies=") && status.find("bodies=") < status.find("ring="));
+	link.bodiesOn = true;
+	link.bodiesWhy = "they wait for V to stand on the city, to be made of what it's made of";
+	report.link = link;
+	CHECK(cpmc::FormatStatus(report).find("bodies=on: 0 sections with bodies, ") != std::string::npos);
+	CHECK(cpmc::FormatStatus(report).find("; the test box off; waiting: they wait for V to stand on the city, to be made of what it's "
+	                                      "made of\n") != std::string::npos);
+	link.bodiesWhy.clear();
+	link.bodySections = 3;
+	link.bodyBoxes = 7;
+	link.bodiesMade = 5;
+	link.bodiesRemoved = 2;
+	link.bodiesFailed = 1;
+	link.bodiesLost = 0;
+	link.bodySlowestMs = 0.416;
+	link.bodiesMadeOf = "a static triangleMesh's: query filter 0:0:449c004:0, simulation filter 5c004:0:13ce:0, flags 0x7";
+	link.originChanges = 1;
+	link.bodiesReposed = 0;
+	link.box = cpmc::Vec3d{ -116.5, -2002.25, 6.64 };
+	report.link = link;
+	CHECK(Has(cpmc::FormatStatus(report),
+	          "bodies=on: 3 sections with bodies, 7 boxes; 5 made, 2 removed, 1 failed and 0 lost since the start, the slowest "
+	          "making 0.42 ms; made of a static triangleMesh's: query filter 0:0:449c004:0, simulation filter 5c004:0:13ce:0, flags "
+	          "0x7; 1 origin change, 0 bodies posed again; the test box at world -116.50 -2002.25 6.64"));
+}
+
 TEST(StatusWritesTheSceneWatch)
 {
 	cpmc::StatusReport report;

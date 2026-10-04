@@ -168,6 +168,19 @@ TEST(RequestsForTheSceneWatch)
 	CHECK_STR(error, "scenewatch takes on or off");
 }
 
+TEST(RequestsForTheBodies)
+{
+	std::string error;
+	const auto  on = cpmc::ParseRequest("box on", error);
+	CHECK(on && on->kind == cpmc::Request::Kind::Box && on->what == "on");
+	const auto off = cpmc::ParseRequest("box off", error);
+	CHECK(off && off->kind == cpmc::Request::Kind::Box && off->what == "off");
+	CHECK(!cpmc::ParseRequest("box", error));
+	CHECK_STR(error, "box takes on or off");
+	const auto blocks = cpmc::ParseRequest("set blocks 1", error);
+	CHECK(blocks && blocks->kind == cpmc::Request::Kind::Set && blocks->what == "blocks" && blocks->number == 1.0);
+}
+
 TEST(RequestsForTheGround)
 {
 	std::string error;

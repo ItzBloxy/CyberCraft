@@ -144,6 +144,19 @@ std::string FormatGround(const LinkReport& aLink)
 	return out + "\n";
 }
 
+// V's bodies for Minecraft's blocks, and step 4's test box, which stands whether the bodies are on or off.
+std::string FormatBodies(const LinkReport& aLink)
+{
+	return std::format("bodies={}: {} sections with bodies, {} boxes; {} made, {} removed, {} failed and {} lost since the start, the "
+	                   "slowest making {:.2f} ms; made of {}; {} origin change{}, {} bodies posed again; {}{}\n",
+	                   aLink.bodiesOn ? "on" : "off", aLink.bodySections, aLink.bodyBoxes, aLink.bodiesMade, aLink.bodiesRemoved,
+	                   aLink.bodiesFailed, aLink.bodiesLost, aLink.bodySlowestMs,
+	                   aLink.bodiesMadeOf.empty() ? "what V stands on, once copied" : OneLine(aLink.bodiesMadeOf), aLink.originChanges,
+	                   aLink.originChanges == 1 ? "" : "s", aLink.bodiesReposed,
+	                   aLink.box ? "the test box at world " + Position(*aLink.box) : std::string("the test box off"),
+	                   aLink.bodiesWhy.empty() ? "" : "; waiting: " + OneLine(aLink.bodiesWhy));
+}
+
 std::string FormatLink(const LinkReport& aLink)
 {
 	std::string       out;
@@ -171,6 +184,7 @@ std::string FormatLink(const LinkReport& aLink)
 	                   aLink.inGame || aLink.teleports > 0 ? ", the last to " + Position(aLink.target) : "", floor);
 	out += FormatGround(aLink);
 	out += std::format("solids=Minecraft's solid blocks: {} in {} sections\n", aLink.solidBlocks, aLink.solidSections);
+	out += FormatBodies(aLink);
 	out += std::format("ring={:.2f} MB in the last second, at most {:.2f} MB in one frame; drain {:.3f} ms average, {:.3f} ms worst; {}; "
 	                   "{} rejected, {} resyncs\n",
 	                   aLink.ringMb, aLink.ringMbWorstFrame, aLink.drainMsAverage, aLink.drainMsWorst,
