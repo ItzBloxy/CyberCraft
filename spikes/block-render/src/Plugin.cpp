@@ -29,6 +29,7 @@
 #include "log/Dumps.h"
 #include "log/FrameLog.h"
 #include "log/FrameLogData.h"
+#include "physx/Export.h"
 #include "physx/SceneHooks.h"
 #include "physx/Session.h"
 #include "render/Hud.h"
@@ -58,7 +59,7 @@ namespace
 using Clock = std::chrono::steady_clock;
 using namespace std::chrono_literals;
 
-constexpr const char* kVersion = "0.12.0";
+constexpr const char* kVersion = "0.13.0";
 
 RED4ext::v1::PluginHandle g_handle = nullptr;
 const RED4ext::v1::Sdk*   g_sdk = nullptr;
@@ -113,6 +114,9 @@ cpmc::DriveLog        g_driveLog;
 
 // Spike 5's Night City in Minecraft (its spec's "Part 2"). Main thread only.
 cpmc::px::Session     g_physx;            // the game's PhysX, checked against the audit
+cpmc::px::PhysxGround g_ground{ g_physx };  // Night City's shape, read for the link
+double                g_exportBudget = 1.5;  // set exportbudget: ms a frame the link may spend reading the city
+std::string           g_groundWhy;        // why the ground fell back to the floor, if it did
 std::optional<double> g_watchSince;       // scenewatch on: since when (SteadySeconds)
 std::string           g_lastWatch;        // the last watch's summary, once it's off
 DWORD                 g_mainThread = 0;   // OnUpdate's
@@ -147,6 +151,15 @@ struct SecondFigures
 	double   teleportMsSum = 0.0;
 	double   teleportMsWorst = 0.0;
 	uint64_t teleportCalls = 0;
+	// The city's
+	double   cityReadMsSum = 0.0;
+	double   cityReadMsWorst = 0.0;
+	uint64_t cityBatchesAtStart = 0;
+	uint64_t cityTrianglesAtStart = 0;
+	uint64_t workerRegionsAtStart = 0;
+	uint64_t workerBlocksAtStart = 0;
+	double   workerMsAtStart = 0.0;
+	uint64_t collisionBytesAtStart = 0;
 };
 SecondFigures g_second;
 
@@ -371,6 +384,13 @@ void UpdateLink(double aNow, double aFrameMs)
 		return;
 	}
 	const cpmc::link::Link::Status&     state = g_link->State();
+	if (std::string why; g_linkSettings.ground == cpmc::link::Ground::City && !g_physx.Audited(why))
+	{
+		// PhysX isn't the build the audit checked: nothing of it is read, and Minecraft gets the floor.
+		g_linkSettings.ground = cpmc::link::Ground::Floor;
+		g_groundWhy = why;
+		Log("the ground falls back to the floor: {}", why);
+	}
 	std::optional<cpmc::link::GamePose> pose;
 	if (const std::optional<cpmc::PlayerPose> player = cpmc::LocatePlayer(); player && player->camera)
 	{
@@ -437,6 +457,12 @@ void UpdateLink(double aNow, double aFrameMs)
 		row.turn = placed.turn;
 		g_driveLog.Add(row);
 	}
+	// Night City's shape, given V's feet from before this frame's teleport: V's controller is within a frame's move of
+	// them, whether the teleport has moved it yet or not.
+	g_ground.Frame(pose ? std::optional<cpmc::Vec3d>(pose->feet) : std::nullopt);
+	g_link->ReadGround(aNow, g_ground, g_exportBudget);
+	g_second.cityReadMsSum += state.cityReadMs;
+	g_second.cityReadMsWorst = std::max(g_second.cityReadMsWorst, state.cityReadMs);
 	if (std::exchange(g_buildWanted, false))
 	{
 		const std::optional<std::string> why = g_router->TurnOn();
@@ -550,6 +576,28 @@ bool SetLinkSetting(const cpmc::Request& aRequest)
 			return true;
 		}
 		g_hudScale = uint32_t(value);
+	}
+	else if (name == "ground")
+	{
+		std::string why;
+		if (value == 1.0 && !g_physx.Audited(why))
+		{
+			Report("set ground city: " + why + ", so the ground stays the floor");
+			return true;
+		}
+		g_linkSettings.ground = value == 1.0 ? cpmc::link::Ground::City : cpmc::link::Ground::Floor;
+		g_groundWhy.clear();
+		Report(std::format("set ground {}", cpmc::link::GroundName(g_linkSettings.ground)));
+		return true;
+	}
+	else if (name == "exportbudget")
+	{
+		if (value < 0.1 || value > 20.0)
+		{
+			Report("set exportbudget: from 0.1 to 20 ms a frame");
+			return true;
+		}
+		g_exportBudget = value;
 	}
 	else if (name == "turn")
 	{
@@ -696,6 +744,24 @@ void SceneWatch(bool aOn)
 	                   cpmc::px::kSceneCalls));
 }
 
+// shapes (spike 5's "Requests"): every shape within 2 m of V's middle, into the log with its filters. Where Minecraft's
+// player and V disagree about the ground, these say why.
+void Shapes()
+{
+	const std::optional<cpmc::PlayerPose> pose = cpmc::LocatePlayer();
+	if (!pose)
+	{
+		return Report("shapes: there's no player");
+	}
+	g_ground.Frame(pose->feet);
+	const std::vector<std::string> lines = g_ground.Describe({ pose->feet.x, pose->feet.y, pose->feet.z + 1.0 }, 2.0);
+	for (const std::string& line : lines)
+	{
+		Log("shapes: {}", line);
+	}
+	Report(std::format("shapes: {} lines in the log, of the shapes within 2 m of V's middle", lines.size()));
+}
+
 // The command in aFolder's blockrender.request, if there is one: in the plugin's folder, where the agent writes it, or
 // the overlay's, where its buttons do. The overlay can't rename a finished file into place, so there a command counts
 // only once its line ends (aWholeLine).
@@ -754,6 +820,7 @@ void RunRequest(const std::filesystem::path& aFolder, bool aWholeLine)
 		                                         : "drivelog: one is already recording");
 		break;
 	case cpmc::Request::Kind::SceneWatch: SceneWatch(request->what == "on"); break;
+	case cpmc::Request::Kind::Shapes: Shapes(); break;
 	}
 }
 
@@ -901,7 +968,32 @@ cpmc::LinkReport LinkLines(const cpmc::Renderer::Stats& aStats, double aNow)
 		report.teleportMsAverage = g_second.teleportCalls ? g_second.teleportMsSum / double(g_second.teleportCalls) : -1.0;
 		report.teleportMsWorst = g_second.teleportCalls ? g_second.teleportMsWorst : -1.0;
 		report.minecraftFlags = state.minecraftFlags;
+		report.ground = cpmc::link::GroundName(state.ground);
+		report.collisionEpoch = state.collisionEpoch;
+		report.cityCentre = state.cityCentre;
+		report.cityKnown = state.cityKnown;
+		report.cityWaiting = state.cityWaiting;
+		report.cityReadMsAverage = g_second.frames ? g_second.cityReadMsSum / double(g_second.frames) : 0.0;
+		report.cityReadMsWorst = g_second.cityReadMsWorst;
+		report.cityBatches = double(state.cityBatches - g_second.cityBatchesAtStart) / seconds;
+		report.cityTriangles = double(state.cityTriangles - g_second.cityTrianglesAtStart) / seconds;
+		report.workerBlocks = double(state.workerBlocks - g_second.workerBlocksAtStart) / seconds;
+		const uint64_t regions = state.workerRegions - g_second.workerRegionsAtStart;
+		report.workerMsPerRegion = regions ? (state.workerMs - g_second.workerMsAtStart) / double(regions) : -1.0;
+		report.workerJobs = state.workerJobs;
+		report.collisionMb = double(state.collisionBytes - g_second.collisionBytesAtStart) / 1048576.0 / seconds;
+		report.collisionWaiting = state.collisionWaiting;
+		report.collisionDropped = state.collisionDropped;
+		report.lastHold = state.lastHold;
 	}
+	report.groundWhy = g_groundWhy;
+	const cpmc::px::PhysxGround::Report& physx = g_ground.State();
+	report.physxOrigin = physx.origin;
+	report.controllerSearches = physx.searches;
+	report.shapesKept = physx.kept;
+	report.shapesLeft = physx.left;
+	report.shapesUnreadable = physx.unreadable;
+	report.physxWhy = physx.why;
 	report.health = g_linked ? g_puppet.Health() : std::nullopt;  // once a second, so fall damage shows
 	report.turn = g_turn;
 	report.turnRatio = g_turnRatio.Ratio();
@@ -950,6 +1042,12 @@ void StartSecond(double aNow)
 		g_second.messagesAtStart = state.messages;
 		g_second.bytesAtStart = state.bytes;
 		g_second.waitedAtStart = state.waitedFrames;
+		g_second.cityBatchesAtStart = state.cityBatches;
+		g_second.cityTrianglesAtStart = state.cityTriangles;
+		g_second.workerRegionsAtStart = state.workerRegions;
+		g_second.workerBlocksAtStart = state.workerBlocks;
+		g_second.workerMsAtStart = state.workerMs;
+		g_second.collisionBytesAtStart = state.collisionBytes;
 	}
 }
 
@@ -1118,6 +1216,7 @@ RED4EXT_C_EXPORT bool RED4EXT_CALL Main(RED4ext::v1::PluginHandle aHandle, RED4e
 		g_hudDir = g_pluginDir.parent_path().parent_path().parent_path() / "bin" / "x64" / "plugins" / "cyber_engine_tweaks" / "mods" /
 		           "blockrender_hud";
 		const cpmc::PluginSettings settings = cpmc::ParseSettings(ReadSmallFile(g_pluginDir / "settings.txt"));
+		g_linkSettings.ground = cpmc::link::Ground::City;  // Night City's shape from step 3 on; the floor is the fallback
 		g_frameLog = new cpmc::FrameLog(g_log);
 		g_dumps = new cpmc::Dumps(g_log, g_pluginDir);
 		g_renderer = new cpmc::Renderer(g_log, g_pluginDir);
@@ -1169,7 +1268,7 @@ RED4EXT_C_EXPORT void RED4EXT_CALL Query(RED4ext::v1::PluginInfo* aInfo)
 {
 	aInfo->name = L"BlockRender";
 	aInfo->author = L"Cyberpunk-Minecraft";
-	aInfo->version = RED4EXT_V1_SEMVER(0, 12, 0);
+	aInfo->version = RED4EXT_V1_SEMVER(0, 13, 0);
 	aInfo->runtime = RED4EXT_V1_RUNTIME_VERSION_LATEST;
 	aInfo->sdk = RED4EXT_V1_SDK_VERSION_CURRENT;
 }

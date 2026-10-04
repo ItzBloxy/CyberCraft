@@ -16,6 +16,8 @@ class Session
 public:
 	// Scene 0, checked; null, with aWhy saying why, if PhysX isn't the audited build or has no scene 0 now.
 	physx::PxScene* Scene0(std::string& aWhy);
+	// Whether PhysX is the audited build, with aWhy if it isn't: if not, nothing of it is ever read.
+	bool Audited(std::string& aWhy) { return CheckBuild(aWhy); }
 
 	const ModuleBases& Bases() const { return bases_; }  // where the audited DLLs are, once Scene0 has found them
 	ReadableMemory&    Memory() { return memory_; }

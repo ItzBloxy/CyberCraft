@@ -211,3 +211,35 @@ TEST(StatusWritesTheSceneWatch)
 	report.sceneWatch = "on for 12 s: thread 9120, the main thread: step 720, fetch 720; no shifts";
 	CHECK(Has(cpmc::FormatStatus(report), "scenewatch=on for 12 s: thread 9120, the main thread: step 720, fetch 720; no shifts"));
 }
+
+TEST(StatusWritesTheGround)
+{
+	cpmc::StatusReport report;
+	cpmc::LinkReport   link;
+	link.groundWhy = "PhysX3_x64.dll isn't the audited build";
+	report.link = link;
+	CHECK(Has(cpmc::FormatStatus(report), "ground=floor; it fell back from the city: PhysX3_x64.dll isn't the audited build"));
+	link.ground = "city";
+	link.collisionEpoch = 2;
+	link.cityCentre = cpmc::link::RegionPos{ -15, 0, 250 };
+	link.cityKnown = 1152;
+	link.cityReadMsAverage = 0.4;
+	link.cityReadMsWorst = 1.25;
+	link.cityBatches = 2.0;
+	link.cityTriangles = 1300.0;
+	link.workerBlocks = 450.0;
+	link.workerMsPerRegion = 0.68;
+	link.collisionMb = 0.12;
+	link.lastHold = 0.07;
+	link.physxOrigin = cpmc::Vec3d{ 0.0, 1024.0, 0.0 };
+	link.controllerSearches = 2;
+	link.shapesKept = 1500;
+	link.shapesLeft = 30;
+	report.link = link;
+	CHECK(Has(cpmc::FormatStatus(report),
+	          "ground=city, epoch 2, around region -15 0 250: 1152 regions known, 0 batches to read; read 0.40 ms a frame on average, 1.25 ms "
+	          "at worst; 2.0 batches, 1300 triangles and 450 voxel blocks a second; the worker 0.68 ms a region, 0 regions waiting; the "
+	          "ring 0.12 MB a second, 0 messages waiting for room, 0 too big; Minecraft held its player 0.07 s when build mode last "
+	          "started; PhysX's origin (0, 1024, 0), V's controller looked for 2 times; shapes since the start: 1500 kept, 30 left out, "
+	          "0 unreadable"));
+}

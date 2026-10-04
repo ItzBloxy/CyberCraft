@@ -167,3 +167,19 @@ TEST(RequestsForTheSceneWatch)
 	CHECK(!cpmc::ParseRequest("scenewatch", error));
 	CHECK_STR(error, "scenewatch takes on or off");
 }
+
+TEST(RequestsForTheGround)
+{
+	std::string error;
+	const auto  city = cpmc::ParseRequest("set ground city", error);
+	CHECK(city && city->kind == cpmc::Request::Kind::Set && city->what == "ground" && city->number == 1.0);
+	const auto floor = cpmc::ParseRequest("set ground floor", error);
+	CHECK(floor && floor->what == "ground" && floor->number == 0.0);
+	CHECK(!cpmc::ParseRequest("set ground 1", error));
+	CHECK_STR(error, "set ground takes floor or city");
+	const auto budget = cpmc::ParseRequest("set exportbudget 2.5", error);
+	CHECK(budget && budget->kind == cpmc::Request::Kind::Set && budget->what == "exportbudget" && budget->number == 2.5);
+	const auto shapes = cpmc::ParseRequest("shapes", error);
+	CHECK(shapes && shapes->kind == cpmc::Request::Kind::Shapes);
+	CHECK(!cpmc::ParseRequest("shapes all", error));
+}

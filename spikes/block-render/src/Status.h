@@ -2,6 +2,7 @@
 
 #include "Coords.h"
 #include "Measurements.h"
+#include "link/Ground.h"
 
 #include <cstdint>
 #include <optional>
@@ -59,6 +60,30 @@ struct LinkReport
 	std::optional<double> turnRatio;                 // degrees a count, once measured
 	uint64_t              turnTurns = 0;             // turns measured
 	uint32_t              minecraftFlags = 0;        // McState's
+	// The ground (spike 5's "Part 2"): figures a second are over the last second
+	std::string                    ground = "floor";          // what Minecraft gets as the game's shape
+	std::string                    groundWhy;                 // why it fell back to the floor, if it did
+	uint32_t                       collisionEpoch = 0;
+	std::optional<link::RegionPos> cityCentre;                // the region the city's area is around
+	size_t                         cityKnown = 0;             // regions read around it
+	size_t                         cityWaiting = 0;           // the area's batches not read yet
+	double                         cityReadMsAverage = 0.0;   // reading, a frame
+	double                         cityReadMsWorst = 0.0;
+	double                         cityBatches = 0.0;         // a second
+	double                         cityTriangles = 0.0;       // a second, filed into regions sent
+	double                         workerBlocks = 0.0;        // voxel blocks made, a second
+	double                         workerMsPerRegion = -1.0;  // below 0: no region voxelized in the last second
+	size_t                         workerJobs = 0;            // regions waiting for it
+	double                         collisionMb = 0.0;         // the city's, into the collision ring, a second
+	size_t                         collisionWaiting = 0;      // messages waiting for room
+	uint64_t                       collisionDropped = 0;      // too big for it, since the start
+	std::optional<double>          lastHold;                  // seconds Minecraft held its player when build mode last started
+	std::optional<Vec3d>           physxOrigin;               // the last PhysX origin read, world axes
+	uint64_t                       controllerSearches = 0;    // times V's controller was looked for among all the capsules
+	uint64_t                       shapesKept = 0;            // since the start
+	uint64_t                       shapesLeft = 0;            // given by the overlap but not kept: simulation-only, triggers
+	uint64_t                       shapesUnreadable = 0;
+	std::string                    physxWhy;                  // why the exporter couldn't read, while it can't
 	// The render ring
 	double      ringMb = 0.0;            // in the last second
 	double      ringMbWorstFrame = 0.0;  // the most in one frame of it

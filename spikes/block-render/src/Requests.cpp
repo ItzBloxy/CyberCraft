@@ -94,16 +94,17 @@ std::optional<Request> ParseRequest(std::string_view aText, std::string& aError)
 	}
 	const std::string_view command = words[0];
 	const size_t           arguments = words.size() - 1;
-	if (command == "log" || command == "clear" || command == "reload" || command == "floor")
+	if (command == "log" || command == "clear" || command == "reload" || command == "floor" || command == "shapes")
 	{
 		if (arguments != 0)
 		{
 			return Fail(aError, std::string(command) + " takes nothing after it");
 		}
-		const Request::Kind kind = command == "log"     ? Request::Kind::Log
-		                           : command == "clear" ? Request::Kind::Clear
-		                           : command == "floor" ? Request::Kind::Floor
-		                                                : Request::Kind::Reload;
+		const Request::Kind kind = command == "log"      ? Request::Kind::Log
+		                           : command == "clear"  ? Request::Kind::Clear
+		                           : command == "floor"  ? Request::Kind::Floor
+		                           : command == "shapes" ? Request::Kind::Shapes
+		                                                 : Request::Kind::Reload;
 		return Request{ kind };
 	}
 	if (command == "link" || command == "build" || command == "scenewatch")
@@ -173,6 +174,14 @@ std::optional<Request> ParseRequest(std::string_view aText, std::string& aError)
 			return Fail(aError, "drivelog takes a number of seconds from 1 to 60");
 		}
 		return Request{ Request::Kind::DriveLog, {}, *seconds };
+	}
+	if (command == "set" && arguments >= 1 && words[1] == "ground")
+	{
+		if (arguments != 2 || !OneOf(words[2], { "floor", "city" }))
+		{
+			return Fail(aError, "set ground takes floor or city");
+		}
+		return Request{ Request::Kind::Set, "ground", words[2] == "city" ? 1.0 : 0.0 };
 	}
 	if (command == "set")
 	{

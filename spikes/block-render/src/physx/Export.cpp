@@ -126,6 +126,7 @@ bool PhysxGround::Prepare()
 		return false;
 	}
 	report_.origin = origin;
+	report_.why.clear();
 	scene_ = scene;
 	return true;
 }

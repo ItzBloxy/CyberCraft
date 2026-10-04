@@ -3,7 +3,8 @@
 -- frame time as CET sees it, which works without BlockRender too and goes into frames.txt here as well. Its buttons
 -- switch BlockRender's drawing mode, link it to Minecraft, type commands into Minecraft, and cycle when Minecraft's
 -- HUD shows, through blockrender.request in this folder. A line under them shows build mode, which F8 toggles, and
--- Minecraft's hotbar slot; and since spike 5, one shows build mode's drive, with buttons for its turn and its drive log.
+-- Minecraft's hotbar slot; and since spike 5, one shows build mode's drive, with buttons for its turn and its drive log,
+-- and one the ground Minecraft gets, with buttons to switch it and to log the shapes around V.
 -- Delete this folder to remove it.
 local status = nil       -- status.txt's lines, except the structures
 local structures = {}    -- { name, min = { x, y, z }, max = { x, y, z } }, in world coordinates
@@ -11,6 +12,8 @@ local hudSetting = nil   -- the hud line's setting: "never", "in build mode" or 
 local build = nil        -- the build line's first two parts: on, or off and why; and the slot
 local drive = nil        -- the drive line's state, V's camera from Minecraft's eye, and V's health
 local turn = nil         -- the drive line's turn setting: "on" or "off"
+local ground = nil       -- the ground line's setting, "floor" or "city", and how much of the city is known
+local groundName = nil   -- "floor" or "city"
 local player = nil       -- the lines about V
 local sinceRead = 1.0
 local frames = { sum = 0.0, count = 0, worst = 0.0 }  -- this second's frame times, from onUpdate
@@ -63,6 +66,8 @@ local function readStatus()
     build = nil
     drive = nil
     turn = nil
+    ground = nil
+    groundName = nil
     for line in file:lines() do
         local name, a, b, c, d, e, f = line:match("^structure=(%S+) (%S+) (%S+) (%S+) (%S+) (%S+) (%S+)$")
         hudSetting = line:match("^hud=([^,]+),") or hudSetting
@@ -77,6 +82,13 @@ local function readStatus()
             drive = state .. (eye and (", V's camera " .. eye .. " from Minecraft's eye") or "")
                 .. (health and (", V's health " .. health) or "")
             turn = line:match("; turn (%a+),")
+        end
+        local setting = line:match("^ground=(%a+)")
+        if setting ~= nil then
+            groundName = setting
+            local known = line:match("(%d+ regions known, %d+ batches to read)")
+            local fallback = line:match("; it fell back from the city: (.*)$")
+            ground = setting .. (known and (", " .. known) or "") .. (fallback and (", fell back: " .. fallback) or "")
         end
         if name ~= nil then
             table.insert(structures, {
@@ -199,6 +211,18 @@ registerForEvent("onDraw", function()
             ImGui.SameLine()
             if ImGui.Button("Drive log 10 s") then
                 request("drivelog 10")
+            end
+        end
+        if ground ~= nil then
+            ImGui.Text("Ground: " .. ground)
+            -- "###ground" keeps the button's ID the same while its label changes.
+            ImGui.SameLine()
+            if ImGui.Button((groundName == "city" and "Use the floor" or "Use the city") .. "###ground") then
+                request("set ground " .. (groundName == "city" and "floor" or "city"))
+            end
+            ImGui.SameLine()
+            if ImGui.Button("Shapes") then
+                request("shapes")
             end
         end
         ImGui.Separator()

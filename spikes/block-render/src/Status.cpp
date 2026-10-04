@@ -88,6 +88,37 @@ std::string FormatDrive(const LinkReport& aLink)
 	return out;
 }
 
+std::string FormatGround(const LinkReport& aLink)
+{
+	if (aLink.ground != "city")
+	{
+		return std::format("ground=floor{}\n", aLink.groundWhy.empty() ? "" : "; it fell back from the city: " + OneLine(aLink.groundWhy));
+	}
+	std::string out = std::format("ground=city, epoch {}", aLink.collisionEpoch);
+	out += aLink.cityCentre ? std::format(", around region {} {} {}: {} regions known, {} batches to read", aLink.cityCentre->x,
+	                                      aLink.cityCentre->y, aLink.cityCentre->z, aLink.cityKnown, aLink.cityWaiting)
+	                        : ", no centre yet";
+	out += std::format("; read {:.2f} ms a frame on average, {:.2f} ms at worst; {:.1f} batches, {:.0f} triangles and {:.0f} voxel blocks "
+	                   "a second; the worker {}, {} regions waiting; the ring {:.2f} MB a second, {} messages waiting for room, {} too big",
+	                   aLink.cityReadMsAverage, aLink.cityReadMsWorst, aLink.cityBatches, aLink.cityTriangles, aLink.workerBlocks,
+	                   aLink.workerMsPerRegion < 0.0 ? std::string("idle") : std::format("{:.2f} ms a region", aLink.workerMsPerRegion),
+	                   aLink.workerJobs, aLink.collisionMb, aLink.collisionWaiting, aLink.collisionDropped);
+	if (aLink.lastHold)
+	{
+		out += std::format("; Minecraft held its player {:.2f} s when build mode last started", *aLink.lastHold);
+	}
+	out += aLink.physxOrigin
+	           ? std::format("; PhysX's origin ({:.0f}, {:.0f}, {:.0f})", aLink.physxOrigin->x, aLink.physxOrigin->y, aLink.physxOrigin->z)
+	           : std::string("; PhysX's origin unknown");
+	out += std::format(", V's controller looked for {} times; shapes since the start: {} kept, {} left out, {} unreadable",
+	                   aLink.controllerSearches, aLink.shapesKept, aLink.shapesLeft, aLink.shapesUnreadable);
+	if (!aLink.physxWhy.empty())
+	{
+		out += "; nothing can be read now: " + OneLine(aLink.physxWhy);
+	}
+	return out + "\n";
+}
+
 std::string FormatLink(const LinkReport& aLink)
 {
 	std::string       out;
@@ -113,6 +144,7 @@ std::string FormatLink(const LinkReport& aLink)
 	                   aLink.minecraft ? Position(aLink.minecraftEye) : "unknown", aLink.camera ? Position(*aLink.camera) : "unknown",
 	                   aLink.minecraft || aLink.camera ? " (Minecraft axes)" : "", aLink.teleports,
 	                   aLink.inGame || aLink.teleports > 0 ? ", the last to " + Position(aLink.target) : "", floor);
+	out += FormatGround(aLink);
 	out += std::format("ring={:.2f} MB in the last second, at most {:.2f} MB in one frame; drain {:.3f} ms average, {:.3f} ms worst; {}; "
 	                   "{} rejected, {} resyncs\n",
 	                   aLink.ringMb, aLink.ringMbWorstFrame, aLink.drainMsAverage, aLink.drainMsWorst,

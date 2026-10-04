@@ -15,6 +15,7 @@ namespace cpmc
 //   clear
 //   reload
 //   set <name> <value>         (name: lower-case letters, digits, '.' and '_'; value: a finite number)
+//   set ground floor|city      (spike 5: what Minecraft gets as the game's shape; the number is 0 or 1)
 //   link on|off                (spike 4: the in-game flag)
 //   build on|off               (build mode, as F8: on links first, if it isn't linked)
 //   floor                      (a fresh floor around V)
@@ -22,6 +23,7 @@ namespace cpmc
 //                               '/' and runs verbatim to the end of the line)
 //   drivelog <seconds>         (spike 5: build mode's drive, a row a frame, for 1 to 60 seconds)
 //   scenewatch on|off          (spike 5's step 3: who calls scene 0, and when)
+//   shapes                     (spike 5: the game's shapes within 2 m of V, into the log)
 struct Request
 {
 	enum class Kind
@@ -39,6 +41,7 @@ struct Request
 		Build,
 		DriveLog,
 		SceneWatch,
+		Shapes,
 	};
 
 	Kind        kind = Kind::Log;
