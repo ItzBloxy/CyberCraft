@@ -78,7 +78,9 @@ struct AppendStats
 	uint32_t planes = 0;
 	uint32_t unknownGeometry = 0;
 	uint32_t badTriangles = 0;
-	uint32_t unreadable = 0;  // meshes that failed their checks
+	uint32_t unreadable = 0;     // meshes that failed their checks
+	uint64_t meshTriangles = 0;  // triangle meshes' triangles looked at, all of each mesh's
+	uint64_t fieldCells = 0;     // heightfield cells looked at, those under the region
 };
 
 // World-space triangles of a live shape that touch aRegion. The caller has checked the shape (see CheckObject);

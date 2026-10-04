@@ -4,6 +4,7 @@
 #include "physx/ShapeTriangles.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <format>
 
@@ -191,18 +192,35 @@ std::optional<Vec3d> PhysxGround::Origin(PxScene& aScene, const Vec3d& aFeet)
 
 bool PhysxGround::Read(const link::McBox& aBox, std::vector<link::McTriangle>& aOut)
 {
+	// The diagnostics' clock and counters: where a slow batch's time goes.
+	using Clock = std::chrono::steady_clock;
+	const auto      msSince = [](Clock::time_point aStart) { return std::chrono::duration<double, std::milli>(Clock::now() - aStart).count(); };
+	const auto      start = Clock::now();
+	ReadableMemory& memory = session_.Memory();
+	const size_t    queriesBefore = memory.SlowQueries();
+	const double    queryMsBefore = memory.SlowMs();
+	const bool      preparing = !prepared_;
 	if (!Prepare())
 	{
 		return false;
 	}
-	ReadableMemory&    memory = session_.Memory();
+	const double       prepareMs = msSince(start);
 	const ModuleBases& bases = session_.Bases();
 	const Vec3d        origin = *report_.origin;
 	const PxBounds3    box = PhysxBox(aBox, origin);
 	std::vector<Tri>   triangles;
 	AppendStats        stats;
+	size_t             shapes = 0;
+	double             slowestMs = 0.0;
+	const char*        slowestKind = "nothing";
+	uint64_t           slowestScanned = 0;
+	size_t             slowestKept = 0;
 	scene_->lockRead();
-	for (const PxOverlapHit& hit : Overlap(*scene_, PxBoxGeometry(box.getExtents()), PxTransform(box.getCenter()), PxQueryFlag::eSTATIC))
+	const auto                      overlapStart = Clock::now();
+	const std::vector<PxOverlapHit> hits =
+	    Overlap(*scene_, PxBoxGeometry(box.getExtents()), PxTransform(box.getCenter()), PxQueryFlag::eSTATIC);
+	const double overlapMs = msSince(overlapStart);
+	for (const PxOverlapHit& hit : hits)
 	{
 		const ObjectCheck actor = CheckObject(memory, bases, hit.actor, kActorBytes);
 		const ObjectCheck shape = CheckObject(memory, bases, hit.shape);
@@ -212,15 +230,39 @@ bool PhysxGround::Read(const link::McBox& aBox, std::vector<link::McTriangle>& a
 			++report_.unreadable;
 			continue;
 		}
-		if (!KeptShape(actor.cls, hit.shape->getFlags(), hit.shape->getGeometryType()))
+		const PxGeometryType::Enum geometry = hit.shape->getGeometryType();
+		if (!KeptShape(actor.cls, hit.shape->getFlags(), geometry))
 		{
 			++report_.left;
 			continue;
 		}
 		++report_.kept;
+		++shapes;
+		const auto     shapeStart = Clock::now();
+		const uint64_t scannedBefore = stats.meshTriangles + stats.fieldCells;
+		const size_t   keptBefore = triangles.size();
 		AppendTriangles(*hit.shape, hit.actor->getGlobalPose(), box, memory, bases, triangles, stats);
+		if (const double ms = msSince(shapeStart); ms > slowestMs)
+		{
+			slowestMs = ms;
+			slowestKind = GeometryName(geometry);
+			slowestScanned = stats.meshTriangles + stats.fieldCells - scannedBefore;
+			slowestKept = triangles.size() - keptBefore;
+		}
 	}
 	scene_->unlockRead();
+	if (const double totalMs = msSince(start); totalMs >= 3.0 && slowLogged_ < 120)
+	{
+		++slowLogged_;
+		slow_.push_back(std::format(
+		    "slow batch, Minecraft {:.0f} {:.0f} {:.0f} to {:.0f} {:.0f} {:.0f}: {:.2f} ms; {}{:.2f} ms preparing, {:.2f} ms in the "
+		    "overlap, {} shapes kept of {} hits; VirtualQuery {} calls, {:.2f} ms, the largest region so far {:.0f} MB; {} mesh triangles "
+		    "and {} heightfield cells looked at, {} triangles kept; the slowest shape a {}, {} looked at, {} kept, {:.2f} ms",
+		    aBox.low.x, aBox.low.y, aBox.low.z, aBox.high.x, aBox.high.y, aBox.high.z, totalMs, preparing ? "the frame's first, " : "",
+		    prepareMs, overlapMs, shapes, hits.size(), memory.SlowQueries() - queriesBefore, memory.SlowMs() - queryMsBefore,
+		    double(memory.LargestRegion()) / (1024.0 * 1024.0), stats.meshTriangles, stats.fieldCells, triangles.size(), slowestKind,
+		    slowestScanned, slowestKept, slowestMs));
+	}
 	report_.unreadable += stats.unreadable;
 	report_.triangles += triangles.size();
 	for (const Tri& tri : triangles)

@@ -461,6 +461,10 @@ void UpdateLink(double aNow, double aFrameMs)
 	// them, whether the teleport has moved it yet or not.
 	g_ground.Frame(pose ? std::optional<cpmc::Vec3d>(pose->feet) : std::nullopt);
 	g_link->ReadGround(aNow, g_ground, g_exportBudget);
+	for (const std::string& line : g_ground.TakeSlowBatches())
+	{
+		Log("{}", line);
+	}
 	g_second.cityReadMsSum += state.cityReadMs;
 	g_second.cityReadMsWorst = std::max(g_second.cityReadMsWorst, state.cityReadMs);
 	if (std::exchange(g_buildWanted, false))

@@ -3,6 +3,8 @@
 #include <Windows.h>
 #include <psapi.h>
 
+#include <algorithm>
+#include <chrono>
 #include <iterator>
 
 namespace cpmc
@@ -91,10 +93,14 @@ bool ReadableMemory::Find(uintptr_t aAddress, Region& aOut)
 	}
 	MEMORY_BASIC_INFORMATION info{};
 	++slowQueries_;
-	if (VirtualQuery(reinterpret_cast<const void*>(aAddress), &info, sizeof(info)) == 0)
+	const auto   start = std::chrono::steady_clock::now();
+	const SIZE_T got = VirtualQuery(reinterpret_cast<const void*>(aAddress), &info, sizeof(info));
+	slowMs_ += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+	if (got == 0)
 	{
 		return false;
 	}
+	largestRegion_ = std::max(largestRegion_, size_t(info.RegionSize));
 	const auto base = reinterpret_cast<uintptr_t>(info.BaseAddress);
 	aOut.end = base + info.RegionSize;
 	aOut.readable = info.State == MEM_COMMIT && ReadableProtection(info.Protect);

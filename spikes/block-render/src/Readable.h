@@ -21,7 +21,9 @@ public:
 
 	void Clear();
 
-	size_t SlowQueries() const { return slowQueries_; }  // the VirtualQuery calls made so far
+	size_t SlowQueries() const { return slowQueries_; }      // the VirtualQuery calls made so far
+	double SlowMs() const { return slowMs_; }                // the time they took
+	size_t LargestRegion() const { return largestRegion_; }  // the largest region one of them reported, in bytes
 
 private:
 	struct Region
@@ -39,5 +41,7 @@ private:
 
 	std::map<uintptr_t, Region> regions_;  // by start address
 	size_t                      slowQueries_ = 0;
+	double                      slowMs_ = 0.0;
+	size_t                      largestRegion_ = 0;
 };
 }

@@ -388,6 +388,7 @@ void AppendTriangles(const PxShape& aShape, const PxTransform& aActorPose, const
 			++aStats.unreadable;
 			break;
 		}
+		aStats.meshTriangles += triangleCount;
 		MeshTriangles(vertices, vertexCount, triangles, indices16, triangleCount, geometry.scale, pose, aRegion, aOut,
 		              aStats.badTriangles);
 		break;
@@ -425,6 +426,7 @@ void AppendTriangles(const PxShape& aShape, const PxTransform& aActorPose, const
 		const CellRange cells = HeightfieldCellsUnder(view, pose, aRegion);
 		if (!cells.Empty())
 		{
+			aStats.fieldCells += uint64_t(cells.r1 - cells.r0) * (cells.c1 - cells.c0);
 			HeightfieldTriangles(view, cells, pose, aRegion, aOut);
 		}
 		break;

@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 // Night City's shape for Minecraft, from the game's PhysX (spike 5's "The exporter"): scene 0's static scene-query
@@ -60,6 +61,10 @@ public:
 
 	const Report& State() const { return report_; }
 
+	// Diagnostics for step 3: a line for each batch read that took 3 ms or more, saying where its time went, for the
+	// plugin's log. At most 120 lines in all.
+	std::vector<std::string> TakeSlowBatches() { return std::exchange(slow_, {}); }
+
 private:
 	// Scene 0 and PhysX's origin, once a frame, the first time they're needed.
 	bool Prepare();
@@ -71,7 +76,9 @@ private:
 	std::optional<Vec3d>  feet_;
 	bool                  prepared_ = false;
 	physx::PxScene*       scene_ = nullptr;
-	const physx::PxActor* controller_ = nullptr;
-	Report                report_;
+	const physx::PxActor*    controller_ = nullptr;
+	Report                   report_;
+	std::vector<std::string> slow_;
+	uint32_t                 slowLogged_ = 0;
 };
 }
