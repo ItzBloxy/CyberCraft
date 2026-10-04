@@ -13,8 +13,9 @@ namespace
 {
 constexpr DWORD kReadable = PAGE_READONLY | PAGE_READWRITE | PAGE_WRITECOPY | PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE |
                             PAGE_EXECUTE_WRITECOPY;
-constexpr uintptr_t kPage = 4096;  // x64 Windows' page size
-constexpr size_t    kMostPages = 16;
+constexpr uintptr_t kPage = 4096;          // x64 Windows' page size
+constexpr size_t    kChunkPages = 256;     // pages asked about in one QueryWorkingSetEx call
+constexpr size_t    kMostPages = 1 << 16;  // longer ranges, over 256 MB, go to VirtualQuery
 
 bool ReadableProtection(DWORD aProtect)
 {
@@ -59,22 +60,27 @@ bool ReadableMemory::Resident(uintptr_t aStart, uintptr_t aEnd) const
 	{
 		return false;
 	}
-	PSAPI_WORKING_SET_EX_INFORMATION entries[kMostPages]{};
-	for (size_t i = 0; i < pages; ++i)
+	PSAPI_WORKING_SET_EX_INFORMATION entries[kChunkPages]{};
+	for (size_t done = 0; done < pages;)
 	{
-		entries[i].VirtualAddress = reinterpret_cast<void*>(first + i * kPage);
-	}
-	if (!QueryWorkingSetEx(GetCurrentProcess(), entries, DWORD(pages * sizeof(entries[0]))))
-	{
-		return false;
-	}
-	for (size_t i = 0; i < pages; ++i)
-	{
-		const PSAPI_WORKING_SET_EX_BLOCK& block = entries[i].VirtualAttributes;
-		if (!block.Valid || !ReadableProtection(DWORD(block.Win32Protection)))
+		const size_t count = std::min(kChunkPages, pages - done);
+		for (size_t i = 0; i < count; ++i)
+		{
+			entries[i].VirtualAddress = reinterpret_cast<void*>(first + (done + i) * kPage);
+		}
+		if (!QueryWorkingSetEx(GetCurrentProcess(), entries, DWORD(count * sizeof(entries[0]))))
 		{
 			return false;
 		}
+		for (size_t i = 0; i < count; ++i)
+		{
+			const PSAPI_WORKING_SET_EX_BLOCK& block = entries[i].VirtualAttributes;
+			if (!block.Valid || !ReadableProtection(DWORD(block.Win32Protection)))
+			{
+				return false;
+			}
+		}
+		done += count;
 	}
 	return true;
 }

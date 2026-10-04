@@ -97,3 +97,31 @@ TEST(ReadableMemoryAnswersPagesInTheWorkingSetWithoutVirtualQuery)
 	CHECK_EQ(memory.SlowQueries(), size_t(1));
 	VirtualFree(base, 0, MEM_RELEASE);
 }
+
+TEST(ReadableMemoryAnswersLargeRangesInTheWorkingSetWithoutVirtualQuery)
+{
+	// A heightfield's samples or a mesh's triangles run to hundreds of pages, in heaps whose regions are hundreds of
+	// megabytes: in step 3 one VirtualQuery there took about 3.5 ms. Pages in the working set are answered without it.
+	const size_t page = PageSize();
+	const size_t pages = 300;
+	auto*        base = static_cast<uint8_t*>(VirtualAlloc(nullptr, (pages + 1) * page, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE));
+	CHECK(base != nullptr);
+	if (!base)
+	{
+		return;
+	}
+	for (size_t i = 0; i < pages; ++i)
+	{
+		base[i * page] = 1;  // written to, so in the working set
+	}
+	ReadableMemory memory;
+	CHECK(memory.Range(base + 100, pages * page - 200));
+	CHECK_EQ(memory.SlowQueries(), size_t(0));
+	CHECK(memory.Range(base, (pages + 1) * page));  // the last page never touched: VirtualQuery answers
+	CHECK_EQ(memory.SlowQueries(), size_t(1));
+	DWORD old = 0;
+	VirtualProtect(base + 150 * page, page, PAGE_NOACCESS, &old);
+	memory.Clear();
+	CHECK(!memory.Range(base, pages * page));  // a page in the middle would fault
+	VirtualFree(base, 0, MEM_RELEASE);
+}
