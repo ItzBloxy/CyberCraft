@@ -196,6 +196,13 @@ TEST(StatusWritesTheDrive)
 	                  "worst; V's health 100%; turn on, -0.0213 degrees a count from 12 turns; Minecraft's player on the "
 	                  "ground, sneaking"));
 	CHECK(status.find("build=") < status.find("drive=") && status.find("drive=") < status.find("positions="));
+	// The last session's ratio, until this one has measured its own
+	link.turnRatio = -0.05;
+	link.turnRemembered = true;
+	link.turnTurns = 2;
+	report.link = link;
+	CHECK(cpmc::FormatStatus(report).find("; turn on, -0.0500 degrees a count, remembered from the last session (2 of 5 turns "
+	                                      "measured); ") != std::string::npos);
 	// Before anything has been measured
 	report.link = cpmc::LinkReport{};
 	status = cpmc::FormatStatus(report);

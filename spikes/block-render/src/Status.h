@@ -57,7 +57,8 @@ struct LinkReport
 	double                teleportMsWorst = -1.0;
 	std::optional<double> health;                    // V's, percent; none: not read
 	bool                  turn = false;              // set turn 1: the mouse's turn is added to the teleport's yaw
-	std::optional<double> turnRatio;                 // degrees a count, once measured
+	std::optional<double> turnRatio;                 // degrees a count, once measured or remembered
+	bool                  turnRemembered = false;    // turnRatio is the last session's, from turn.txt
 	uint64_t              turnTurns = 0;             // turns measured
 	uint32_t              minecraftFlags = 0;        // McState's
 	// The ground (spike 5's "Part 2"): figures a second are over the last second

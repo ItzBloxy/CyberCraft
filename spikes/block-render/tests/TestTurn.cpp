@@ -112,6 +112,40 @@ TEST(TurnRatioEndsALongTurnAnyway)
 	CHECK_NEAR(ratio.Ratio().value_or(0.0), -0.02, 1e-12);
 }
 
+TEST(TurnRatioUsesARememberedRatioUntilItsOwnIsKnown)
+{
+	// The last session's ratio turns build mode at once after a game start; this session's own takes over at kKnown turns.
+	TurnRatio ratio;
+	ratio.Remember(-0.05);
+	CHECK(ratio.Remembered());
+	CHECK(!ratio.Measured().has_value());
+	CHECK_NEAR(ratio.Ratio().value_or(0.0), -0.05, 1e-12);
+	CHECK_NEAR(ratio.Turn(100), -5.0, 1e-12);
+	double yaw = 0.0;
+	ratio.Note(0, yaw);
+	for (int turn = 0; turn < 4; ++turn)
+	{
+		Turn(ratio, yaw, 30, 10, -0.02);
+	}
+	CHECK(ratio.Remembered());  // 4 of 5 turns: still the remembered one
+	CHECK_NEAR(ratio.Ratio().value_or(0.0), -0.05, 1e-12);
+	Turn(ratio, yaw, 30, 10, -0.02);
+	CHECK(!ratio.Remembered());
+	CHECK_NEAR(ratio.Measured().value_or(0.0), -0.02, 1e-12);
+	CHECK_NEAR(ratio.Ratio().value_or(0.0), -0.02, 1e-12);
+}
+
+TEST(TurnFileKeepsTheRatioForTheNextSession)
+{
+	CHECK_NEAR(ParseTurnFile(TurnFileText(-0.0493)).value_or(0.0), -0.0493, 1e-9);
+	CHECK_NEAR(ParseTurnFile("# a comment\r\n  ratio=0.0312  \r\n").value_or(0.0), 0.0312, 1e-12);
+	for (const char* bad : { "", "ratio", "ratio =", "ratio = abc", "ratio = -0.05x", "ratio = 0", "ratio = 0.00001", "ratio = -2",
+	                         "ratio = nan", "ratio = inf", "# ratio = -0.05", "turn = -0.05" })
+	{
+		CHECK(!ParseTurnFile(bad).has_value());
+	}
+}
+
 TEST(TurnRatioDropsATurnBrokenOff)
 {
 	// V gets into a car mid-turn, and the car turns V: that turn is dropped, and the yaw starts afresh after.

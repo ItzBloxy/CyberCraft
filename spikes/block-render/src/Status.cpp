@@ -64,6 +64,18 @@ std::string MinecraftMovement(uint32_t aFlags)
 	return out;
 }
 
+// The turn's ratio: this session's, the last session's until then, or none yet.
+std::string TurnRatioText(const LinkReport& aLink)
+{
+	if (!aLink.turnRatio)
+	{
+		return std::format("ratio not measured yet ({} of {} turns)", aLink.turnTurns, link::TurnRatio::kKnown);
+	}
+	return aLink.turnRemembered ? std::format("{:.4f} degrees a count, remembered from the last session ({} of {} turns measured)",
+	                                          *aLink.turnRatio, aLink.turnTurns, link::TurnRatio::kKnown)
+	                            : std::format("{:.4f} degrees a count from {} turns", *aLink.turnRatio, aLink.turnTurns);
+}
+
 std::string FormatDrive(const LinkReport& aLink)
 {
 	std::string out = "drive=" + aLink.drive;
@@ -82,9 +94,7 @@ std::string FormatDrive(const LinkReport& aLink)
 	                   aLink.renderDelayMs, aLink.waitedFrames, aLink.skippedFrames,
 	                   aLink.teleportMsAverage < 0.0 ? std::string("not called") : Ms(aLink.teleportMsAverage, aLink.teleportMsWorst),
 	                   aLink.health ? std::format("{:.0f}%", *aLink.health) : std::string("unknown"), aLink.turn ? "on" : "off",
-	                   aLink.turnRatio ? std::format("{:.4f} degrees a count from {} turns", *aLink.turnRatio, aLink.turnTurns)
-	                                   : std::format("ratio not measured yet ({} of {} turns)", aLink.turnTurns, link::TurnRatio::kKnown),
-	                   MinecraftMovement(aLink.minecraftFlags));
+	                   TurnRatioText(aLink), MinecraftMovement(aLink.minecraftFlags));
 	return out;
 }
 

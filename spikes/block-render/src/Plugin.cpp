@@ -44,6 +44,7 @@
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <cmath>
 #include <filesystem>
 #include <format>
 #include <fstream>
@@ -110,6 +111,8 @@ double                           g_lastFrameAt = 0.0;  // SteadySeconds() at the
 cpmc::Puppet          g_puppet{ g_log };  // the game's script calls that place V
 cpmc::link::TurnRatio g_turnRatio;        // the mouse's counts to V's degrees, measured outside build mode
 bool                  g_turn = true;      // set turn 1, the default since step 2: the teleport's yaw gains the mouse's turn
+std::optional<double> g_savedTurn;        // the ratio turn.txt holds: read at load, or saved since
+bool                  g_turnSaveLogged = false;
 cpmc::DriveLog        g_driveLog;
 
 // Spike 5's Night City in Minecraft (its spec's "Part 2"). Main thread only.
@@ -905,6 +908,33 @@ void WriteDriveLog(const cpmc::DriveLog::Finished& aLog, const std::string& aFol
 	Report(std::format("drivelog: written to logs\\{}\\drive.csv ({} frames)", aFolderName, aLog.rows));
 }
 
+// turn.txt keeps the turn ratio for the next session, so build mode turns at once after a game start: saved once this
+// session has measured its own, and again whenever that changes, written whole and then renamed into place.
+void SaveTurnRatio()
+{
+	const std::optional<double> measured = g_turnRatio.Measured();
+	if (!measured || (g_savedTurn && std::abs(*measured - *g_savedTurn) < 1e-6))
+	{
+		return;
+	}
+	const std::filesystem::path temporary = g_pluginDir / "turn.tmp";
+	{
+		std::ofstream out(temporary, std::ios::binary);
+		out << cpmc::link::TurnFileText(*measured);
+	}
+	std::error_code error;
+	std::filesystem::rename(temporary, g_pluginDir / "turn.txt", error);
+	if (error)
+	{
+		return;  // tried again next second
+	}
+	g_savedTurn = measured;
+	if (!std::exchange(g_turnSaveLogged, true))
+	{
+		Log("the turn: {:.4f} degrees a count, measured, and saved in turn.txt for the next session", *measured);
+	}
+}
+
 // The link's lines of the status (the spec's "Measurements"), from the second since the last status.
 cpmc::LinkReport LinkLines(const cpmc::Renderer::Stats& aStats, double aNow)
 {
@@ -1001,6 +1031,7 @@ cpmc::LinkReport LinkLines(const cpmc::Renderer::Stats& aStats, double aNow)
 	report.health = g_linked ? g_puppet.Health() : std::nullopt;  // once a second, so fall damage shows
 	report.turn = g_turn;
 	report.turnRatio = g_turnRatio.Ratio();
+	report.turnRemembered = g_turnRatio.Remembered();
 	report.turnTurns = g_turnRatio.Turns();
 	report.atlas = aStats.atlasWidth == 0 ? "none yet"
 	                                      : std::format("{} x {}, {} levels, {}", aStats.atlasWidth, aStats.atlasHeight, aStats.atlasLevels,
@@ -1196,6 +1227,7 @@ bool OnUpdate(RED4ext::CGameApplication*)
 		{
 			Log("{}", line);
 		}
+		SaveTurnRatio();
 		WriteStatus(seconds);
 	}
 	cpmc::px::SetInUpdate(false);
@@ -1221,6 +1253,11 @@ RED4EXT_C_EXPORT bool RED4EXT_CALL Main(RED4ext::v1::PluginHandle aHandle, RED4e
 		           "blockrender_hud";
 		const cpmc::PluginSettings settings = cpmc::ParseSettings(ReadSmallFile(g_pluginDir / "settings.txt"));
 		g_linkSettings.ground = cpmc::link::Ground::City;  // Night City's shape from step 3 on; the floor is the fallback
+		g_savedTurn = cpmc::link::ParseTurnFile(ReadSmallFile(g_pluginDir / "turn.txt"));
+		if (g_savedTurn)
+		{
+			g_turnRatio.Remember(*g_savedTurn);  // build mode turns at once, until this session has measured its own
+		}
 		g_frameLog = new cpmc::FrameLog(g_log);
 		g_dumps = new cpmc::Dumps(g_log, g_pluginDir);
 		g_renderer = new cpmc::Renderer(g_log, g_pluginDir);
@@ -1243,6 +1280,9 @@ RED4EXT_C_EXPORT bool RED4EXT_CALL Main(RED4ext::v1::PluginHandle aHandle, RED4e
 		Log("BlockRender {} loaded (game {}.{}.{}), {}; dred {}, debug layer {}; requests go in {}", kVersion,
 		    unsigned(aSdk->runtime->major), aSdk->runtime->minor, aSdk->runtime->patch, g_hooked ? "hooked" : "NOT hooked",
 		    settings.dred ? "on" : "off", settings.debugLayer ? "on" : "off", (g_pluginDir / "blockrender.request").string());
+		Log("the turn: {}", g_savedTurn ? std::format("{:.4f} degrees a count, remembered from the last session, until this one has "
+		                                              "measured its own", *g_savedTurn)
+		                                : std::string("nothing remembered, so build mode turns once V has turned 5 times"));
 		break;
 	}
 	case RED4ext::v1::EMainReason::Unload:
