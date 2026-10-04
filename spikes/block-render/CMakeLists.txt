@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.25)
 
-project(BlockRender VERSION 0.11.0 LANGUAGES C CXX)
+project(BlockRender VERSION 0.12.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -66,6 +66,7 @@ add_library(render_core STATIC
 	src/physx/ShapeTriangles.cpp
 	src/physx/OriginWatch.cpp
 	src/physx/SceneWatch.cpp
+	src/physx/Session.cpp
 	src/link/Drive.cpp
 	src/link/Turn.cpp
 	src/log/DriveLog.cpp
@@ -94,6 +95,7 @@ add_library(render_runtime STATIC
 	src/log/Dumps.cpp
 	src/render/Renderer.cpp
 	src/input/RawInputHook.cpp
+	src/physx/SceneHooks.cpp
 )
 target_link_libraries(render_runtime PUBLIC render_core RED4ext::SDK d3d12)
 
@@ -183,6 +185,7 @@ add_executable(render_tests
 	tests/TestHeightfield.cpp
 	tests/TestOriginWatch.cpp
 	tests/TestSceneWatch.cpp
+	tests/TestPhysxSession.cpp
 	tests/TestDrive.cpp
 	tests/TestTurn.cpp
 	tests/TestDriveLog.cpp

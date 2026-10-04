@@ -159,6 +159,10 @@ std::string FormatStatus(const StatusReport& aReport)
 	out += std::format("streamline={} frames in the last second\n", aReport.streamlineFrames);
 	out += std::format("hooks={}\n", OneLine(aReport.hooks));
 	out += std::format("request={}\n", OneLine(aReport.lastRequest));
+	if (!aReport.sceneWatch.empty())
+	{
+		out += std::format("scenewatch={}\n", OneLine(aReport.sceneWatch));
+	}
 	if (aReport.link)
 	{
 		out += FormatLink(*aReport.link);

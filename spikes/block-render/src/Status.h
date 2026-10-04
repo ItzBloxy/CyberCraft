@@ -124,6 +124,7 @@ struct StatusReport
 	uint32_t               streamlineFrames = 0;  // frames Streamline started in the last second
 	std::string            hooks;
 	std::string               lastRequest;
+	std::string               sceneWatch;  // spike 5's step 3: the watch's summary; empty until it's first on
 	std::vector<Structure>    structures;
 	std::optional<LinkReport> link;  // spike 4's lines, once the plugin has tried the mapping
 };

@@ -203,3 +203,11 @@ TEST(StatusWritesTheDrive)
 	                  "last second; 0 bad targets skipped since the start; teleport not called; V's health unknown; turn off, "
 	                  "ratio not measured yet (0 of 5 turns); Minecraft's player in the air"));
 }
+
+TEST(StatusWritesTheSceneWatch)
+{
+	cpmc::StatusReport report;
+	CHECK(cpmc::FormatStatus(report).find("scenewatch=") == std::string::npos);  // never on: no line
+	report.sceneWatch = "on for 12 s: thread 9120, the main thread: step 720, fetch 720; no shifts";
+	CHECK(Has(cpmc::FormatStatus(report), "scenewatch=on for 12 s: thread 9120, the main thread: step 720, fetch 720; no shifts"));
+}

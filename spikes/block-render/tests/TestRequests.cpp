@@ -156,3 +156,14 @@ TEST(RequestsTypeIntoMinecraft)
 	CHECK(!cpmc::ParseRequest("mc /say a\nb", error));  // one line only
 	CHECK(error.find("printable ASCII") != std::string::npos);
 }
+
+TEST(RequestsForTheSceneWatch)
+{
+	std::string error;
+	const auto  on = cpmc::ParseRequest("scenewatch on", error);
+	CHECK(on && on->kind == cpmc::Request::Kind::SceneWatch && on->what == "on");
+	const auto off = cpmc::ParseRequest("scenewatch off\n", error);
+	CHECK(off && off->kind == cpmc::Request::Kind::SceneWatch && off->what == "off");
+	CHECK(!cpmc::ParseRequest("scenewatch", error));
+	CHECK_STR(error, "scenewatch takes on or off");
+}

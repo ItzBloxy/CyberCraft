@@ -21,6 +21,7 @@ namespace cpmc
 //   mc <set>|<command>         (a set: creative, tnt-kit, tnt-ahead, wall, tnt-cube, field or wipe; a command starts with
 //                               '/' and runs verbatim to the end of the line)
 //   drivelog <seconds>         (spike 5: build mode's drive, a row a frame, for 1 to 60 seconds)
+//   scenewatch on|off          (spike 5's step 3: who calls scene 0, and when)
 struct Request
 {
 	enum class Kind
@@ -37,6 +38,7 @@ struct Request
 		Mc,
 		Build,
 		DriveLog,
+		SceneWatch,
 	};
 
 	Kind        kind = Kind::Log;

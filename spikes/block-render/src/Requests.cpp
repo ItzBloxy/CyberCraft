@@ -106,13 +106,16 @@ std::optional<Request> ParseRequest(std::string_view aText, std::string& aError)
 		                                                : Request::Kind::Reload;
 		return Request{ kind };
 	}
-	if (command == "link" || command == "build")
+	if (command == "link" || command == "build" || command == "scenewatch")
 	{
 		if (arguments != 1 || !OneOf(words[1], { "on", "off" }))
 		{
 			return Fail(aError, std::string(command) + " takes on or off");
 		}
-		return Request{ command == "link" ? Request::Kind::Link : Request::Kind::Build, std::string(words[1]) };
+		const Request::Kind kind = command == "link"    ? Request::Kind::Link
+		                           : command == "build" ? Request::Kind::Build
+		                                                : Request::Kind::SceneWatch;
+		return Request{ kind, std::string(words[1]) };
 	}
 	if (command == "mc")
 	{

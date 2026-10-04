@@ -3,7 +3,8 @@
 // on the finished frame; step 3: before DLSS; step 4: into the G-buffer). Spike 4 links it to SkyCraft's Minecraft
 // through SkyCraft's shared memory: Minecraft's player follows V, Minecraft's blocks and HUD are drawn in the game, and
 // in build mode (F8) the mouse buttons, the wheel and the keys 1 to 9 are Minecraft's. Spike 5 has Minecraft drive in
-// build mode: the movement keys are Minecraft's too, and V is teleported to its player's eye every frame.
+// build mode: the movement keys are Minecraft's too, and V is teleported to its player's eye every frame; and it reads
+// Night City's shape for Minecraft from the game's PhysX.
 // Commands come through blockrender.request, in its folder or the overlay's, and status.txt in the overlay's folder says
 // what it's doing. See docs/superpowers/specs/2026-10-01-block-render-design.md, 2026-10-02-minecraft-link-design.md and
 // 2026-10-03-collision-and-movement-design.md.
@@ -28,6 +29,8 @@
 #include "log/Dumps.h"
 #include "log/FrameLog.h"
 #include "log/FrameLogData.h"
+#include "physx/SceneHooks.h"
+#include "physx/Session.h"
 #include "render/Hud.h"
 #include "render/Renderer.h"
 #include "track/GpuApi.h"
@@ -55,7 +58,7 @@ namespace
 using Clock = std::chrono::steady_clock;
 using namespace std::chrono_literals;
 
-constexpr const char* kVersion = "0.11.0";
+constexpr const char* kVersion = "0.12.0";
 
 RED4ext::v1::PluginHandle g_handle = nullptr;
 const RED4ext::v1::Sdk*   g_sdk = nullptr;
@@ -107,6 +110,12 @@ cpmc::Puppet          g_puppet{ g_log };  // the game's script calls that place 
 cpmc::link::TurnRatio g_turnRatio;        // the mouse's counts to V's degrees, measured outside build mode
 bool                  g_turn = true;      // set turn 1, the default since step 2: the teleport's yaw gains the mouse's turn
 cpmc::DriveLog        g_driveLog;
+
+// Spike 5's Night City in Minecraft (its spec's "Part 2"). Main thread only.
+cpmc::px::Session     g_physx;            // the game's PhysX, checked against the audit
+std::optional<double> g_watchSince;       // scenewatch on: since when (SteadySeconds)
+std::string           g_lastWatch;        // the last watch's summary, once it's off
+DWORD                 g_mainThread = 0;   // OnUpdate's
 
 // This frame's figures, for bursts.
 struct FrameFigures
@@ -650,6 +659,43 @@ void TypeRequest(const std::string& aWhat)
 	Report("mc " + aWhat + ": typing it into Minecraft's chat");
 }
 
+// The scene watch's summary (spike 5's "The scene watch"): each thread's calls on scene 0.
+std::string WatchSummary()
+{
+	const cpmc::px::SceneRecorder& recorder = cpmc::px::Recorder();
+	return cpmc::px::WatchSummary(recorder.Threads(), g_mainThread, recorder.Shifts(), recorder.ShiftCount());
+}
+
+// scenewatch on|off (spike 5's "The scene watch"): hooks on scene 0's calls, which the status sums by thread.
+void SceneWatch(bool aOn)
+{
+	if (!aOn)
+	{
+		if (!cpmc::px::SceneHooksInstalled())
+		{
+			return Report("scenewatch off: it's off already");
+		}
+		cpmc::px::RemoveSceneHooks();
+		g_lastWatch = std::format("{:.0f} s: {}", cpmc::SteadySeconds() - *g_watchSince, WatchSummary());
+		g_watchSince.reset();
+		Log("scene watch, {}", g_lastWatch);
+		return Report("scenewatch off: the hooks are out, and the status keeps what the watch saw");
+	}
+	if (cpmc::px::SceneHooksInstalled())
+	{
+		return Report("scenewatch on: it's on already");
+	}
+	std::string           why;
+	physx::PxScene* const scene = g_physx.Scene0(why);
+	if (!scene || !cpmc::px::InstallSceneHooks(scene, g_physx.Bases().physx3, why))
+	{
+		return Report("scenewatch: " + why);
+	}
+	g_watchSince = cpmc::SteadySeconds();
+	Report(std::format("scenewatch on: {} of scene 0's calls hooked; from a second on, the status sums them by thread",
+	                   cpmc::px::kSceneCalls));
+}
+
 // The command in aFolder's blockrender.request, if there is one: in the plugin's folder, where the agent writes it, or
 // the overlay's, where its buttons do. The overlay can't rename a finished file into place, so there a command counts
 // only once its line ends (aWholeLine).
@@ -707,6 +753,7 @@ void RunRequest(const std::filesystem::path& aFolder, bool aWholeLine)
 		Report(g_driveLog.Start(request->number) ? std::format("drivelog: recording the drive for {:g} s", request->number)
 		                                         : "drivelog: one is already recording");
 		break;
+	case cpmc::Request::Kind::SceneWatch: SceneWatch(request->what == "on"); break;
 	}
 }
 
@@ -933,6 +980,9 @@ void WriteStatus(double aNow)
 	                                      cpmc::HookGroupsSummary(), g_frameLog->State(), g_dumps->State())
 	                        : "not installed (see red4ext\\logs)";
 	report.lastRequest = g_lastRequest;
+	report.sceneWatch = g_watchSince ? std::format("on for {:.0f} s: {}", aNow - *g_watchSince, WatchSummary())
+	                    : g_lastWatch.empty() ? std::string()
+	                                          : "off; the last watch, " + g_lastWatch;
 	report.structures = g_structures;
 	report.link = LinkLines(stats, aNow);
 	StartSecond(aNow);
@@ -970,6 +1020,8 @@ bool OnExit(RED4ext::CGameApplication*)
 // and the status once a second.
 bool OnUpdate(RED4ext::CGameApplication*)
 {
+	cpmc::px::SetInUpdate(true);  // the scene watch's hooks note calls the game makes meanwhile
+	g_mainThread = GetCurrentThreadId();
 	const auto   now = Clock::now();
 	const double seconds = cpmc::SteadySeconds();
 	const double frameMs = g_lastFrameAt > 0.0 ? (seconds - g_lastFrameAt) * 1000.0 : 0.0;
@@ -1044,6 +1096,7 @@ bool OnUpdate(RED4ext::CGameApplication*)
 		}
 		WriteStatus(seconds);
 	}
+	cpmc::px::SetInUpdate(false);
 	return false;
 }
 }
@@ -1102,6 +1155,7 @@ RED4EXT_C_EXPORT bool RED4EXT_CALL Main(RED4ext::v1::PluginHandle aHandle, RED4e
 		}
 		cpmc::d3d::RemovePatches();
 		cpmc::slhooks::Remove();
+		cpmc::px::RemoveSceneHooks();
 		delete g_link;  // main thread only, as everything of the link's
 		g_link = nullptr;
 		g_mapping.Close();  // Minecraft sees the heartbeat stop
@@ -1115,7 +1169,7 @@ RED4EXT_C_EXPORT void RED4EXT_CALL Query(RED4ext::v1::PluginInfo* aInfo)
 {
 	aInfo->name = L"BlockRender";
 	aInfo->author = L"Cyberpunk-Minecraft";
-	aInfo->version = RED4EXT_V1_SEMVER(0, 11, 0);
+	aInfo->version = RED4EXT_V1_SEMVER(0, 12, 0);
 	aInfo->runtime = RED4EXT_V1_RUNTIME_VERSION_LATEST;
 	aInfo->sdk = RED4EXT_V1_SDK_VERSION_CURRENT;
 }
