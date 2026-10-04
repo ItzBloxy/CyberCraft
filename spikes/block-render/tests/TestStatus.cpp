@@ -236,6 +236,10 @@ TEST(StatusWritesTheGround)
 	link.cityTriangles = 1300.0;
 	link.workerBlocks = 450.0;
 	link.workerMsPerRegion = 0.68;
+	link.workerTrianglesPerRegion = 120.4;
+	link.workerRunning = 0.93;
+	link.workerThreads = 4;
+	link.workerReplaced = 12;
 	link.collisionMb = 0.12;
 	link.lastHold = 0.07;
 	link.physxOrigin = cpmc::Vec3d{ 0.0, 1024.0, 0.0 };
@@ -245,8 +249,9 @@ TEST(StatusWritesTheGround)
 	report.link = link;
 	CHECK(Has(cpmc::FormatStatus(report),
 	          "ground=city, epoch 2, around region -15 0 250: 1152 regions known, 0 batches to read; read 0.40 ms a frame on average, 1.25 ms "
-	          "at worst; 2.0 batches, 1300 triangles and 450 voxel blocks a second; the worker 0.68 ms a region, 0 regions waiting; the "
-	          "ring 0.12 MB a second, 0 messages waiting for room, 0 too big; Minecraft held its player 0.07 s when build mode last "
+	          "at worst; 2.0 batches, 1300 triangles and 450 voxel blocks a second; the worker 0.68 ms a region of 120 triangles, its "
+	          "threads running 93% of that time; 4 threads, 0 regions waiting, 12 replaced by newer ones since the start; the ring 0.12 "
+	          "MB a second, 0 messages waiting for room, 0 too big; Minecraft held its player 0.07 s when build mode last "
 	          "started; PhysX's origin (0, 1024, 0), V's controller looked for 2 times; shapes since the start: 1500 kept, 30 left out, "
 	          "0 unreadable"));
 }

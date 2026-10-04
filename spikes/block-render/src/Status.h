@@ -74,7 +74,11 @@ struct LinkReport
 	double                         cityTriangles = 0.0;       // a second, filed into regions sent
 	double                         workerBlocks = 0.0;        // voxel blocks made, a second
 	double                         workerMsPerRegion = -1.0;  // below 0: no region voxelized in the last second
+	double                         workerTrianglesPerRegion = 0.0;  // of those regions
+	double                         workerRunning = 0.0;       // the share of that time its threads were running
+	unsigned                       workerThreads = 0;         // none: it hasn't started
 	size_t                         workerJobs = 0;            // regions waiting for it
+	uint64_t                       workerReplaced = 0;        // regions given again before it started them, since the start
 	double                         collisionMb = 0.0;         // the city's, into the collision ring, a second
 	size_t                         collisionWaiting = 0;      // messages waiting for room
 	uint64_t                       collisionDropped = 0;      // too big for it, since the start

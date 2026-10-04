@@ -98,6 +98,22 @@ std::string FormatDrive(const LinkReport& aLink)
 	return out;
 }
 
+// The ground's worker: how long a region took in the last second, of how many triangles, and how much of that time its
+// threads ran, which says whether the game's threads kept them waiting.
+std::string Worker(const LinkReport& aLink)
+{
+	if (aLink.workerThreads == 0)
+	{
+		return "the worker not started yet";
+	}
+	const std::string work = aLink.workerMsPerRegion < 0.0
+	                             ? std::string("idle")
+	                             : std::format("{:.2f} ms a region of {:.0f} triangles, its threads running {:.0f}% of that time",
+	                                           aLink.workerMsPerRegion, aLink.workerTrianglesPerRegion, aLink.workerRunning * 100.0);
+	return std::format("the worker {}; {} threads, {} regions waiting, {} replaced by newer ones since the start", work,
+	                   aLink.workerThreads, aLink.workerJobs, aLink.workerReplaced);
+}
+
 std::string FormatGround(const LinkReport& aLink)
 {
 	if (aLink.ground != "city")
@@ -109,10 +125,9 @@ std::string FormatGround(const LinkReport& aLink)
 	                                      aLink.cityCentre->y, aLink.cityCentre->z, aLink.cityKnown, aLink.cityWaiting)
 	                        : ", no centre yet";
 	out += std::format("; read {:.2f} ms a frame on average, {:.2f} ms at worst; {:.1f} batches, {:.0f} triangles and {:.0f} voxel blocks "
-	                   "a second; the worker {}, {} regions waiting; the ring {:.2f} MB a second, {} messages waiting for room, {} too big",
+	                   "a second; {}; the ring {:.2f} MB a second, {} messages waiting for room, {} too big",
 	                   aLink.cityReadMsAverage, aLink.cityReadMsWorst, aLink.cityBatches, aLink.cityTriangles, aLink.workerBlocks,
-	                   aLink.workerMsPerRegion < 0.0 ? std::string("idle") : std::format("{:.2f} ms a region", aLink.workerMsPerRegion),
-	                   aLink.workerJobs, aLink.collisionMb, aLink.collisionWaiting, aLink.collisionDropped);
+	                   Worker(aLink), aLink.collisionMb, aLink.collisionWaiting, aLink.collisionDropped);
 	if (aLink.lastHold)
 	{
 		out += std::format("; Minecraft held its player {:.2f} s when build mode last started", *aLink.lastHold);

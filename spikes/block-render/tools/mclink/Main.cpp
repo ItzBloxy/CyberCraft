@@ -183,13 +183,15 @@ void PrintStatus(const Link::Status& aStatus, const Report& aReport)
 	    s.inputsDropped, s.commandsWaiting, s.hudImages, s.hudRefused);
 	Say("drive: {}, teleport {} applied of {}; V's eye height {:.2f}; render delay {:.1f} ms, {} frames waited for a tick, {} targets skipped",
 	    DriveStateName(s.drive), s.teleportAck, s.teleportSeq, s.eyeHeight, s.renderDelayMs, s.waitedFrames, s.driveSkipped);
-	Say("ground: the {}, epoch {}; {}; {} batches read ({} unread), {} regions sent ({} triangles); the worker: {} regions, {} voxel "
-	    "blocks, {:.1f} ms, {} waiting; ring: {:.2f} MB, {} messages waiting, {} dropped",
+	Say("ground: the {}, epoch {}; {}; {} batches read ({} unread), {} regions sent ({} triangles); the worker: {} threads, {} regions "
+	    "({} triangles), {} voxel blocks, {:.1f} ms, its threads running {:.0f}% of it, {} waiting, {} replaced; ring: {:.2f} MB, {} "
+	    "messages waiting, {} dropped",
 	    GroundName(s.ground), s.collisionEpoch,
 	    s.cityCentre ? std::format("around region {} {} {}, {} regions known, {} batches to read", s.cityCentre->x, s.cityCentre->y,
 	                               s.cityCentre->z, s.cityKnown, s.cityWaiting)
 	                 : "no centre yet",
-	    s.cityBatches, s.cityUnread, s.cityRegions, s.cityTriangles, s.workerRegions, s.workerBlocks, s.workerMs, s.workerJobs,
+	    s.cityBatches, s.cityUnread, s.cityRegions, s.cityTriangles, s.workerThreads, s.workerRegions, s.workerTriangles, s.workerBlocks,
+	    s.workerMs, s.workerTicks ? 100.0 * double(s.workerCycles) / double(s.workerTicks) : 0.0, s.workerJobs, s.workerReplaced,
 	    double(s.collisionBytes) / 1048576.0, s.collisionWaiting, s.collisionDropped);
 }
 

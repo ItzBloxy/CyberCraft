@@ -160,8 +160,11 @@ struct SecondFigures
 	uint64_t cityBatchesAtStart = 0;
 	uint64_t cityTrianglesAtStart = 0;
 	uint64_t workerRegionsAtStart = 0;
+	uint64_t workerTrianglesAtStart = 0;
 	uint64_t workerBlocksAtStart = 0;
 	double   workerMsAtStart = 0.0;
+	uint64_t workerCyclesAtStart = 0;
+	uint64_t workerTicksAtStart = 0;
 	uint64_t collisionBytesAtStart = 0;
 };
 SecondFigures g_second;
@@ -1013,8 +1016,13 @@ cpmc::LinkReport LinkLines(const cpmc::Renderer::Stats& aStats, double aNow)
 		report.cityTriangles = double(state.cityTriangles - g_second.cityTrianglesAtStart) / seconds;
 		report.workerBlocks = double(state.workerBlocks - g_second.workerBlocksAtStart) / seconds;
 		const uint64_t regions = state.workerRegions - g_second.workerRegionsAtStart;
+		const uint64_t ticks = state.workerTicks - g_second.workerTicksAtStart;
 		report.workerMsPerRegion = regions ? (state.workerMs - g_second.workerMsAtStart) / double(regions) : -1.0;
+		report.workerTrianglesPerRegion = regions ? double(state.workerTriangles - g_second.workerTrianglesAtStart) / double(regions) : 0.0;
+		report.workerRunning = ticks ? double(state.workerCycles - g_second.workerCyclesAtStart) / double(ticks) : 0.0;
+		report.workerThreads = state.workerThreads;
 		report.workerJobs = state.workerJobs;
+		report.workerReplaced = state.workerReplaced;
 		report.collisionMb = double(state.collisionBytes - g_second.collisionBytesAtStart) / 1048576.0 / seconds;
 		report.collisionWaiting = state.collisionWaiting;
 		report.collisionDropped = state.collisionDropped;
@@ -1080,8 +1088,11 @@ void StartSecond(double aNow)
 		g_second.cityBatchesAtStart = state.cityBatches;
 		g_second.cityTrianglesAtStart = state.cityTriangles;
 		g_second.workerRegionsAtStart = state.workerRegions;
+		g_second.workerTrianglesAtStart = state.workerTriangles;
 		g_second.workerBlocksAtStart = state.workerBlocks;
 		g_second.workerMsAtStart = state.workerMs;
+		g_second.workerCyclesAtStart = state.workerCycles;
+		g_second.workerTicksAtStart = state.workerTicks;
 		g_second.collisionBytesAtStart = state.collisionBytes;
 	}
 }

@@ -40,9 +40,10 @@ uint32_t FirstTeleportSeq()
 	return uint32_t(std::chrono::steady_clock::now().time_since_epoch().count()) | 1u;
 }
 
-Link::Link(uint8_t* aBase, uint32_t aFirstTeleportSeq)
+Link::Link(uint8_t* aBase, uint32_t aFirstTeleportSeq, unsigned aGroundThreads)
     : base_(aBase), overlay_(aBase + proto::kOffOverlayCtl, aBase + proto::kOffOverlaySlotHdr, aBase + proto::kOffOverlayPixels,
                              proto::kOverlaySlotBytes)
+    , groundThreads_(aGroundThreads)
 {
 	status_.teleportSeq = aFirstTeleportSeq;
 }
@@ -269,9 +270,14 @@ void Link::Update(const Frame& aFrame, const LinkSettings& aSettings, LinkSink& 
 	status_.cityKnown = areas_.Known();
 	status_.cityWaiting = areas_.Waiting();
 	status_.workerJobs = worker_ ? worker_->Waiting() : 0;
+	status_.workerThreads = worker_ ? worker_->Threads() : 0;
 	status_.workerRegions = worker_ ? worker_->Regions() : 0;
+	status_.workerTriangles = worker_ ? worker_->Triangles() : 0;
 	status_.workerBlocks = worker_ ? worker_->Blocks() : 0;
+	status_.workerReplaced = worker_ ? worker_->Replaced() : 0;
 	status_.workerMs = worker_ ? worker_->Ms() : 0.0;
+	status_.workerCycles = worker_ ? worker_->Cycles() : 0;
+	status_.workerTicks = worker_ ? worker_->Ticks() : 0;
 	status_.collisionWaiting = outbox_.size();
 
 	// The position: the last teleport's target, or in build mode V's feet, every frame, so that a teleport Minecraft
@@ -442,7 +448,13 @@ void Link::ReadGround(double aNow, GroundSource& aSource, double aBudgetMs)
 	}
 	if (!worker_)
 	{
-		worker_ = std::make_unique<GroundWorker>();
+		worker_ = std::make_unique<GroundWorker>(groundThreads_);
+	}
+	if (focus_ != areas_.CentreRegion())
+	{
+		// The worker starts the regions nearest the city's centre first: Minecraft's player while it drives, V otherwise.
+		focus_ = areas_.CentreRegion();
+		worker_->Focus(*focus_);
 	}
 	const auto              start = std::chrono::steady_clock::now();
 	std::vector<McTriangle> triangles;

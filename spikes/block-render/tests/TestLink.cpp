@@ -951,6 +951,36 @@ TEST(LinkCentresTheCityOnMinecraftsPlayerWhileItDrives)
 	CHECK(messages.size() == 1 && messages[0].type == proto::kColClear);
 }
 
+TEST(LinkGivesTheWorkerTheCitysCentreFirst)
+{
+	// V's region, -15 0 250, is the second of its batch's eight, as the batch lists them. With the city centred there, the
+	// worker's one thread starts with it, then the regions next to it.
+	FakeMinecraft                     minecraft;
+	Link                              link(minecraft.base, 0, 1);
+	Sink                              sink;
+	Street                            street;
+	std::vector<std::vector<uint8_t>> payloads;
+	minecraft.Beat(77, 1000);
+	link.Update(At(1.0), City(), sink);
+	minecraft.Collision(payloads);  // the clear
+	payloads.clear();
+	link.ReadGround(2.5, street, 0.0);
+	CHECK(Finish(link, At(2.5), City(), sink));
+	const auto messages = minecraft.Collision(payloads);
+	CHECK_EQ(messages.size(), size_t(16));
+	if (messages.size() == 16)
+	{
+		CHECK(HeaderOf(payloads[0]).minX == -120 && HeaderOf(payloads[0]).minY == 0 && HeaderOf(payloads[0]).minZ == 2000);
+		CHECK_EQ(HeaderOf(payloads[14]).minY, 8);  // the farthest, a region up and across: last
+		CHECK_EQ(HeaderOf(payloads[14]).minX, -128);
+		CHECK_EQ(HeaderOf(payloads[14]).minZ, 2008);
+	}
+	CHECK_EQ(link.State().workerThreads, 1u);
+	CHECK_EQ(link.State().workerTriangles, 8ull);  // the street's two, in each of the four regions it crosses
+	CHECK(link.State().workerCycles > 0 && link.State().workerTicks > 0);
+	CHECK_EQ(link.State().workerReplaced, 0ull);
+}
+
 TEST(LinkKeepsTheCitysMessagesUntilTheRingHasRoom)
 {
 	FakeMinecraft                     minecraft;

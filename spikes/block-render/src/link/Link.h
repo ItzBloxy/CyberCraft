@@ -79,8 +79,9 @@ uint32_t FirstTeleportSeq();
 class Link
 {
 public:
-	// aBase: the mapping's memory, laid out as skycraft_protocol.h has it. aFirstTeleportSeq: tests give their own.
-	explicit Link(uint8_t* aBase, uint32_t aFirstTeleportSeq = FirstTeleportSeq());
+	// aBase: the mapping's memory, laid out as skycraft_protocol.h has it. aFirstTeleportSeq and aGroundThreads, the
+	// ground worker's threads: tests give their own.
+	explicit Link(uint8_t* aBase, uint32_t aFirstTeleportSeq = FirstTeleportSeq(), unsigned aGroundThreads = GroundWorker::DefaultThreads());
 
 	struct Frame
 	{
@@ -143,9 +144,14 @@ public:
 		uint64_t                 cityTriangles = 0;     // their triangles
 		double                   cityReadMs = 0.0;      // the last ReadGround's
 		size_t                   workerJobs = 0;        // regions given to the worker whose messages aren't taken yet
+		unsigned                 workerThreads = 0;     // its threads, once it's made
 		uint64_t                 workerRegions = 0;     // regions it voxelized, since the start
+		uint64_t                 workerTriangles = 0;   // their triangles
 		uint64_t                 workerBlocks = 0;      // voxel blocks it made
-		double                   workerMs = 0.0;        // its time
+		uint64_t                 workerReplaced = 0;    // regions it was given again before it started them
+		double                   workerMs = 0.0;        // its time, all threads together
+		uint64_t                 workerCycles = 0;      // its threads' CPU cycles meanwhile, and the processor clock's:
+		uint64_t                 workerTicks = 0;       // the share of that time they were running
 		size_t                   collisionWaiting = 0;  // the city's messages waiting for room in the collision ring
 		uint64_t                 collisionBytes = 0;    // the city's, written into it since the start
 		uint64_t                 collisionDropped = 0;  // messages too big for it
@@ -220,7 +226,9 @@ private:
 	bool                              cityClear_ = false;  // a clear is due before the city's next regions
 	bool                              centred_ = false;    // the last update knew the city's centre, linked
 	GroundAreas                       areas_;
+	unsigned                          groundThreads_;
 	std::unique_ptr<GroundWorker>     worker_;  // made when the city is first read
+	std::optional<RegionPos>          focus_;   // the worker's, as last given it: the city's centre
 	std::deque<GroundWorker::Message> outbox_;  // the city's messages, waiting for room in the collision ring
 };
 }
