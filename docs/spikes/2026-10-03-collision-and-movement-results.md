@@ -451,7 +451,7 @@ What step 3 found:
   - remember the turn ratio between sessions, so build mode turns at once after loading;
   - the worker: more threads, and the regions nearest Minecraft's player voxelized first, so a fast drop can't
     outrun it;
-  - a choice: whether Minecraft gets kinematic props like the rail, kept by their filters, and leaving out characters'
-    capsules.
+  - kinematic props like the rail: deferred by the user. Moving props may suit Minecraft entities better, as boats are
+    solid to stand on, but that's beyond this spike and needs its own brainstorm.
 - **Part 3's bodies can be added in `OnUpdate`:** the game's own calls never come then, with the exporter reading or
   not.
