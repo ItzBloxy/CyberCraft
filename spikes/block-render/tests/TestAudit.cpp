@@ -1,6 +1,7 @@
 #include "Harness.h"
 
 #include "physx/PxHeaders.h"
+#include "physx/SceneWatch.h"
 
 #include <array>
 #include <cstdint>
@@ -16,6 +17,8 @@
 // second argument, which is where a call that returns a struct passes the hidden return pointer. Calling through a
 // fake object is outside standard C++, but it compiles to exactly what BlockRender does to the game's objects.
 using namespace physx;
+using cpmc::px::InfoOf;
+using cpmc::px::SceneCall;
 
 namespace
 {
@@ -112,6 +115,35 @@ TEST(SceneCallsUseTheGamesSlots)
 	Expect("PxScene::overlap", SlotOf<PxScene>([&](PxScene& a) { (void)a.overlap(box, pose, overlaps); }), 96);
 	Expect("PxScene::lockRead", SlotOf<PxScene>([](PxScene& a) { a.lockRead(); }), 105);
 	Expect("PxScene::unlockRead", SlotOf<PxScene>([](PxScene& a) { a.unlockRead(); }), 106);
+}
+
+TEST(SceneWatchHooksTheGamesSlots)
+{
+	// The scene watch's hooks go on these slots, and call on with these signatures (physx/SceneHooks.cpp).
+	Fake                       dummy;  // an actor, an aggregate and a pruning structure: never touched
+	PxActor&                   actor = reinterpret_cast<PxActor&>(dummy);
+	PxActor* const             actors[1] = { &actor };
+	PxAggregate&               aggregate = reinterpret_cast<PxAggregate&>(dummy);
+	const PxPruningStructure&  pruning = reinterpret_cast<const PxPruningStructure&>(dummy);
+	const PxContactPairHeader* pairs = nullptr;
+	PxU32                      pairCount = 0;
+	const auto expect = [](SceneCall aCall, int aSlot) { Expect(InfoOf(aCall).name, aSlot, int(InfoOf(aCall).slot)); };
+	expect(SceneCall::AddActor, SlotOf<PxScene>([&](PxScene& a) { a.addActor(actor); }));
+	expect(SceneCall::AddActorsPruning, SlotOf<PxScene>([&](PxScene& a) { a.addActors(pruning); }));
+	expect(SceneCall::AddActors, SlotOf<PxScene>([&](PxScene& a) { a.addActors(actors, 1); }));
+	expect(SceneCall::RemoveActor, SlotOf<PxScene>([&](PxScene& a) { a.removeActor(actor); }));
+	expect(SceneCall::RemoveActors, SlotOf<PxScene>([&](PxScene& a) { a.removeActors(actors, 1); }));
+	expect(SceneCall::AddAggregate, SlotOf<PxScene>([&](PxScene& a) { a.addAggregate(aggregate); }));
+	expect(SceneCall::RemoveAggregate, SlotOf<PxScene>([&](PxScene& a) { a.removeAggregate(aggregate); }));
+	expect(SceneCall::Simulate, SlotOf<PxScene>([](PxScene& a) { a.simulate(1.0f / 60.0f); }));
+	expect(SceneCall::Advance, SlotOf<PxScene>([](PxScene& a) { a.advance(); }));
+	expect(SceneCall::Collide, SlotOf<PxScene>([](PxScene& a) { a.collide(1.0f / 60.0f); }));
+	expect(SceneCall::FetchResults, SlotOf<PxScene>([](PxScene& a) { (void)a.fetchResults(); }));
+	expect(SceneCall::FetchResultsStart, SlotOf<PxScene>([&](PxScene& a) { (void)a.fetchResultsStart(pairs, pairCount); }));
+	expect(SceneCall::FetchResultsFinish, SlotOf<PxScene>([](PxScene& a) { a.fetchResultsFinish(); }));
+	expect(SceneCall::LockWrite, SlotOf<PxScene>([](PxScene& a) { a.lockWrite(); }));
+	expect(SceneCall::UnlockWrite, SlotOf<PxScene>([](PxScene& a) { a.unlockWrite(); }));
+	expect(SceneCall::ShiftOrigin, SlotOf<PxScene>([](PxScene& a) { a.shiftOrigin(PxVec3(0.0f, 1024.0f, 0.0f)); }));
 }
 
 TEST(ActorCallsUseTheGamesSlots)

@@ -65,6 +65,7 @@ add_library(render_core STATIC
 	src/physx/GameAbi.cpp
 	src/physx/ShapeTriangles.cpp
 	src/physx/OriginWatch.cpp
+	src/physx/SceneWatch.cpp
 	src/link/Drive.cpp
 	src/link/Turn.cpp
 	src/log/DriveLog.cpp
@@ -181,6 +182,7 @@ add_executable(render_tests
 	tests/TestMeshes.cpp
 	tests/TestHeightfield.cpp
 	tests/TestOriginWatch.cpp
+	tests/TestSceneWatch.cpp
 	tests/TestDrive.cpp
 	tests/TestTurn.cpp
 	tests/TestDriveLog.cpp
