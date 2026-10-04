@@ -891,17 +891,25 @@ TEST(LinkSendsTheCityOnceMinecraftIsThereAndItsCollisionHasSettled)
 	payloads.clear();
 	messages = minecraft.Collision(payloads);
 	CHECK_EQ(messages.size(), size_t(16));  // its eight regions, each its triangles, then its voxels
-	if (messages.size() == 16)
+	size_t streets = 0, above = 0;
+	for (size_t i = 0; i + 1 < messages.size(); i += 2)
 	{
-		CHECK_EQ(messages[0].type, uint32_t(proto::kColTris));
-		CHECK_EQ(HeaderOf(payloads[0]).count, 2u);  // the street's two triangles
-		CHECK_EQ(messages[1].type, uint32_t(proto::kColRegion));
-		CHECK_EQ(HeaderOf(payloads[1]).minX, -128);
-		CHECK_EQ(HeaderOf(payloads[1]).count, 64u);  // the street, in block row 6
-		CHECK_EQ(HeaderOf(payloads[1]).epoch, 1u);
-		CHECK_EQ(HeaderOf(payloads[9]).minY, 8);  // the regions above: empty, and known
-		CHECK_EQ(HeaderOf(payloads[9]).count, 0u);
+		// The worker's threads may finish the regions in any order, each region's two messages together.
+		CHECK(messages[i].type == proto::kColTris && messages[i + 1].type == proto::kColRegion);
+		const proto::ColRegion tris = HeaderOf(payloads[i]);
+		const proto::ColRegion voxels = HeaderOf(payloads[i + 1]);
+		CHECK(tris.minX == voxels.minX && tris.minY == voxels.minY && tris.minZ == voxels.minZ && voxels.epoch == 1);
+		if (voxels.minY == 0)
+		{
+			streets += tris.count == 2 && voxels.count == 64;  // the street's two triangles, in block row 6
+		}
+		else
+		{
+			above += voxels.minY == 8 && tris.count == 0 && voxels.count == 0;  // the regions above: empty, and known
+		}
 	}
+	CHECK_EQ(streets, size_t(4));
+	CHECK_EQ(above, size_t(4));
 	CHECK_EQ(link.State().cityBatches, 1ull);
 	CHECK_EQ(link.State().cityRegions, 8ull);
 	CHECK_EQ(link.State().cityTriangles, 8ull);
@@ -943,7 +951,7 @@ TEST(LinkCentresTheCityOnMinecraftsPlayerWhileItDrives)
 	CHECK(messages.size() == 1 && messages[0].type == proto::kColClear);
 }
 
-TEST(LinkKeepsTheCitysMessagesInOrderUntilTheRingHasRoom)
+TEST(LinkKeepsTheCitysMessagesUntilTheRingHasRoom)
 {
 	FakeMinecraft                     minecraft;
 	Link                              link(minecraft.base, 0);
@@ -963,7 +971,8 @@ TEST(LinkKeepsTheCitysMessagesInOrderUntilTheRingHasRoom)
 	link.ReadGround(2.5, street, 0.0);
 	CHECK(Finish(link, At(2.5), City(), sink));
 	CHECK_EQ(link.State().collisionWaiting, size_t(16));
-	// Minecraft reads again: the next update writes them all, in their order.
+	// Minecraft reads again: the next update writes them all, each region's triangles then its voxels, whichever of the
+	// worker's threads finished first.
 	minecraft.Collision(payloads);
 	payloads.clear();
 	link.Update(At(2.6), City(), sink);
@@ -971,12 +980,19 @@ TEST(LinkKeepsTheCitysMessagesInOrderUntilTheRingHasRoom)
 	const auto messages = minecraft.Collision(payloads);
 	CHECK_EQ(messages.size(), size_t(16));
 	const std::array<RegionPos, 8> regions = RegionsOf({ -8, 0, 125 });
-	for (size_t i = 0; i < 8 && messages.size() == 16; ++i)
+	std::array<bool, 8>            seen{};
+	for (size_t i = 0; i + 1 < messages.size(); i += 2)
 	{
-		CHECK(messages[2 * i].type == proto::kColTris && messages[2 * i + 1].type == proto::kColRegion);
-		CHECK(HeaderOf(payloads[2 * i]).minX == regions[i].x * 8 && HeaderOf(payloads[2 * i]).minY == regions[i].y * 8 &&
-		      HeaderOf(payloads[2 * i]).minZ == regions[i].z * 8);
+		CHECK(messages[i].type == proto::kColTris && messages[i + 1].type == proto::kColRegion);
+		const proto::ColRegion tris = HeaderOf(payloads[i]);
+		const proto::ColRegion voxels = HeaderOf(payloads[i + 1]);
+		CHECK(tris.minX == voxels.minX && tris.minY == voxels.minY && tris.minZ == voxels.minZ);
+		for (size_t r = 0; r < regions.size(); ++r)
+		{
+			seen[r] = seen[r] || (tris.minX == regions[r].x * 8 && tris.minY == regions[r].y * 8 && tris.minZ == regions[r].z * 8);
+		}
 	}
+	CHECK(std::all_of(seen.begin(), seen.end(), [](bool aSeen) { return aSeen; }));
 }
 
 TEST(LinkStartsTheCityOverWhenMinecraftComesBack)

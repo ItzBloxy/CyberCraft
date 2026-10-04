@@ -456,12 +456,14 @@ void Link::ReadGround(double aNow, GroundSource& aSource, double aBudgetMs)
 		}
 		std::array<std::vector<McTriangle>, 8> filed = FileBatch(*batch, triangles);
 		const std::array<RegionPos, 8>         regions = RegionsOf(*batch);
+		std::vector<GroundWorker::Job>         jobs;
 		for (const size_t i : areas_.Read(*batch, aNow, filed))
 		{
 			++status_.cityRegions;
 			status_.cityTriangles += filed[i].size();
-			worker_->Add({ status_.collisionEpoch, regions[i], std::move(filed[i]) });
+			jobs.push_back({ status_.collisionEpoch, regions[i], std::move(filed[i]) });
 		}
+		worker_->Add(std::move(jobs));
 		++status_.cityBatches;
 		if (std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count() >= aBudgetMs)
 		{
