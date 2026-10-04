@@ -364,7 +364,7 @@ TEST(LinkSendsTheFloorOnceMinecraftIsThere)
 	CHECK_EQ(messages[3].type, uint32_t(proto::kColRegion));
 	CHECK_EQ(messages[4].type, uint32_t(proto::kColRegion));
 	CHECK_EQ(messages[5].type, uint32_t(proto::kColTris));
-	CHECK(payloads[2] == FloorVoxels(-18, 247, 6.14, 1)[0]);  // the first region's, the floor's own
+	CHECK(payloads[2] == FloorVoxeler(6.14).Column(-18, 247, 1)[0]);  // the first region's, the floor's own
 	CHECK_EQ(minecraft.Sky().collisionEpoch, 1u);
 	minecraft.Beat(77, 2100);
 	link.Update(At(2.1), kSettings, sink);

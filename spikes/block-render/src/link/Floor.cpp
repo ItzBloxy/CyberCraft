@@ -60,13 +60,22 @@ std::vector<uint8_t> FloorRegion(int32_t aRegionX, int32_t aRegionZ, double aY, 
 	return bytes;
 }
 
-std::vector<std::vector<uint8_t>> FloorVoxels(int32_t aRegionX, int32_t aRegionZ, double aY, uint32_t aEpoch)
+FloorVoxeler::FloorVoxeler(double aY) : regionY_(RegionOf(aY))
 {
-	const int32_t                      regionY = RegionOf(aY);
-	const std::array<McTriangle, 2>    triangles = Triangles(aRegionX, aRegionZ, aY);
-	const std::vector<proto::ColBlock> blocks = VoxelizeRegion(aRegionX, regionY, aRegionZ, triangles);
-	return { RegionPayload(aRegionX, regionY, aRegionZ, aEpoch, blocks), RegionPayload(aRegionX, regionY - 1, aRegionZ, aEpoch, {}),
-		     RegionPayload(aRegionX, regionY + 1, aRegionZ, aEpoch, {}) };
+	const std::array<McTriangle, 2> triangles = Triangles(0, 0, aY);
+	blocks_ = VoxelizeRegion(0, regionY_, 0, triangles);
+}
+
+std::vector<std::vector<uint8_t>> FloorVoxeler::Column(int32_t aRegionX, int32_t aRegionZ, uint32_t aEpoch) const
+{
+	std::vector<proto::ColBlock> blocks = blocks_;
+	for (proto::ColBlock& block : blocks)
+	{
+		block.x += aRegionX * kRegionBlocks;
+		block.z += aRegionZ * kRegionBlocks;
+	}
+	return { RegionPayload(aRegionX, regionY_, aRegionZ, aEpoch, blocks), RegionPayload(aRegionX, regionY_ - 1, aRegionZ, aEpoch, {}),
+		     RegionPayload(aRegionX, regionY_ + 1, aRegionZ, aEpoch, {}) };
 }
 
 std::vector<std::pair<int32_t, int32_t>> FloorRegions(double aX, double aZ)

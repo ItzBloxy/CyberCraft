@@ -351,11 +351,12 @@ void Link::SendFloor(const Vec3d& aCentre, bool aNewEpoch, LinkSink& aSink)
 	const uint32_t epoch = aNewEpoch ? status_.floorEpoch + 1 : status_.floorEpoch;
 	uint8_t* const ring = base_ + proto::kOffCollisionRing;
 	bool           sent = !aNewEpoch || WriteByteRing(ring, proto::kColRingDataBytes, proto::kColClear, FloorClear(epoch));
+	const FloorVoxeler voxeler(aCentre.y);
 	for (const auto& [x, z] : FloorRegions(aCentre.x, aCentre.z))
 	{
 		// Each region's triangles first, then its voxels, as SkyCraft sends them.
 		sent = sent && WriteByteRing(ring, proto::kColRingDataBytes, proto::kColTris, FloorRegion(x, z, aCentre.y, epoch));
-		for (const std::vector<uint8_t>& voxels : FloorVoxels(x, z, aCentre.y, epoch))
+		for (const std::vector<uint8_t>& voxels : voxeler.Column(x, z, epoch))
 		{
 			sent = sent && WriteByteRing(ring, proto::kColRingDataBytes, proto::kColRegion, voxels);
 		}
