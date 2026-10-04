@@ -299,17 +299,21 @@ spikes/block-render/
   src/link/Ticks.*        Minecraft's ticks, interpolated on our clock (SkyCraft's Game.cpp, credited)
   src/link/Drive.*        build mode's drive: entering, waiting, driving, leaving, and V's target
   src/link/Voxels.*       triangles to 1/8-block voxels and ColBlocks (SkyCraft's triangle-box test, credited)
-  src/link/Ground.*       the floor's and the city's regions: what to read next, filing, hashes, messages, the worker
+  src/link/Ground.*       the city's regions and batches: what to read next, filing, hashes, the GroundSource
+  src/link/GroundWorker.* the worker thread: each region's voxels and messages
   src/link/Solids.*       Minecraft's solid blocks by section, from kRenSolids
   src/link/Floor.*        + the floor's voxel regions
   src/link/Link.*         + the clock-started teleportSeq, no teleports while driving, the ground's messages, solids
   src/input/BuildMode.*   + the movement keys, and the crouch keys hidden
-  src/physx/              spike 1's reader, moved in and trimmed: its headers, the audited tables, the checks,
-                          ShapeTriangles, and the session (scene 0, the read lock, overlap, V's controller)
-  src/physx/Export.*      the city's batches, read on the main thread within the budget
+  src/physx/              spike 1's reader, moved in and trimmed: its headers, the audited tables, ShapeTriangles
+                          and the origin watch
+  src/physx/Session.*     the audited build, and scene 0
+  src/physx/Export.*      the city's shapes as Minecraft's triangles, read under scene 0's read lock (a GroundSource),
+                          with V's controller for the origin; and the shapes request
   src/physx/BoxMerge.*    a section's solid blocks as few boxes (pure)
   src/physx/Bodies.*      the blocks' static actors: made, posed, rebuilt and removed
-  src/physx/SceneWatch.*  step 3's log of who writes to scene 0, and when (hooks, on request)
+  src/physx/SceneWatch.*  step 3's record of who calls scene 0, and when, and its summary (pure)
+  src/physx/SceneHooks.*  the scene watch's hooks, on request
   src/Puppet.*            the game's script calls: Teleport, V's yaw, in a vehicle, dead, health
   src/Plugin.cpp, Requests.*, Status.*   + the new requests, the status lines and the update order
   tools/mclink/           + held keys, build mode's drive, and the dump loader
@@ -322,15 +326,16 @@ The names are proposals; the plan settles them.
 ## Build
 
 - **As in spike 4,** with these changes:
-  - `render_core` gains the pure parts: `link/Ticks`, `Drive`, `Voxels`, `Ground` and `Solids`, `physx/BoxMerge`, and
-    the plain-data half of `ShapeTriangles`;
-  - `render_runtime` gains the parts that touch the game: the PhysX session, `Export`, `Bodies`, `SceneWatch` and
-    `Puppet`;
+  - `render_core` gains the pure parts: `link/Ticks`, `Drive`, `Voxels`, `Ground`, `GroundWorker` and `Solids`,
+    `physx/BoxMerge` and `SceneWatch`; and spike 1's reader, `Session` and `Export`, which call PhysX only through its
+    tables and so build and link without the game, as the probe's `probe_core` did;
+  - `render_runtime` gains the parts that change the game: `SceneHooks` and `Bodies`; and the plugin, `Puppet`;
   - the PhysX headers come from `extern/physx-3.4.2` as system includes, with `PX_PHYSX_STATIC_LIB`, as in spike 1.
     PhysX is called only through its virtual tables and inline header code, and `PxGetPhysics` through
     `GetProcAddress`, so the DLL imports nothing from PhysX;
   - `mclink` gains the dump loader and held keys, and still links only `render_core`.
-- **The version** becomes 0.11.0, in the log line and in `Query`.
+- **The version** becomes 0.11.0, in the log line and in `Query`: Part 1's. Part 2's deploys are 0.12.0 (the scene
+  watch) and 0.13.0 (the city).
 - **Deploying is unchanged:** `CP2077_DIR` is set only to deploy, with the game closed, and cleared straight after.
 
 ## Part 1: build mode while Minecraft drives
@@ -366,9 +371,10 @@ In `OnUpdate`, after `Link::Update` has read `McState`:
 2. **V's target** is Minecraft's eye (the interpolated feet plus the interpolated eye height), in world axes, less V's
    own eye height.
    - **V's eye height** is the camera's height above V's feet, averaged over the frames before build mode starts
-     while V's feet aren't moving up or down (1.60 m standing in spike 4). It isn't read during build mode: a camera
-     and feet read in the same frame may straddle a teleport, and V can't crouch in build mode, so the height doesn't
-     change. If V was crouched when build mode started, it stays crouched, and its eye height is measured as it is.
+     while V's feet aren't moving up or down and V can be placed (1.60 m standing in spike 4), so a car's seat or a
+     workspot doesn't count. It isn't read during build mode: a camera and feet read in the same frame may straddle a
+     teleport, and V can't crouch in build mode, so the height doesn't change. If V was crouched when build mode
+     started, it stays crouched, and its eye height is measured as it is.
    - **Horizontally,** V's feet go straight under Minecraft's eye. If V's camera sits off V's feet horizontally, the
      status's camera-to-eye distance shows by how much.
    - **So V's camera lands on Minecraft's eye.** Standing, V's feet are 2 cm from Minecraft's. Sneaking, Minecraft's
@@ -382,7 +388,8 @@ In `OnUpdate`, after `Link::Update` has read `McState`:
    - If that fights Cyberpunk's turning, `set turn 1` adds the frame's turn from the raw mouse movement the input patch
      sees. Counts become degrees by a ratio measured while V turns outside build mode: the median of the last turns'
      ratios, so a menu's cursor, or a turn the game makes by itself, doesn't move it.
-   - Which of the two works is step 2's opening check.
+   - Which of the two works was step 2's opening check. V's own yaw locked turning left and right, and the turn made
+     it smooth, so `set turn 1` is the default from Part 2 on.
 4. **The rest of the link,** as now:
    - the look from V's camera into `SkyState`, and V's feet as its position;
    - the ground around Minecraft's player. In `floor` mode the floor stays at the height it had when build mode
@@ -721,17 +728,17 @@ plugin's folder or the overlay's. The new commands:
 
 | Command | Does |
 |---|---|
-| `set ground floor\|city` | What Minecraft gets as the game's shape: the flat floor, or Night City's collision |
-| `set exportbudget <ms>` | The exporter's main-thread budget a frame (1.5) |
-| `set turn 0\|1` | Adds the frame's mouse turn to the teleport's yaw (0) |
+| `set ground floor\|city` | What Minecraft gets as the game's shape: the flat floor, or Night City's collision (city, from step 3 on) |
+| `set exportbudget <ms>` | The exporter's main-thread budget a frame, from 0.1 to 20 (1.5) |
+| `set turn 0\|1` | Adds the frame's mouse turn to the teleport's yaw (1, since step 2) |
 | `drivelog <seconds>` | Records the drive, a CSV row a frame, for 1 to 60 s, into `logs\<time>\drive.csv` |
 | `set blocks 0\|1` | Bodies for Minecraft's blocks around V (0) |
-| `shapes` | Logs the static shapes within 2 m of Minecraft's player (or V, outside build mode): geometry, actor, filters |
+| `shapes` | Logs every shape within 2 m of V's middle, which in build mode is where Minecraft's player is: geometry, actor, bounds, flags, filters, and whether the exporter keeps it |
 | `box on\|off` | Step 4's test box, 3 m ahead of V, made as the bodies are |
 | `scenewatch on\|off` | Step 3's watch of scene 0: which threads add, remove, step, fetch, lock and shift it, and when |
 
 The overlay gains buttons for the turn and the drive log, the ground, blocks, the box and `shapes`, and the drive,
-ground and bodies lines. Part 1 adds the first two buttons and the drive line.
+ground and bodies lines. Part 1 adds the first two buttons and the drive line, and Part 2 the ground's line and buttons.
 
 ## Measurements and the status
 
@@ -811,7 +818,7 @@ ground and bodies lines. Part 1 adds the first two buttons and the drive line.
   - nearest-first order, the budget, and sending again only on a changed hash;
   - the messages' layout, `ColBlock`'s bit order included;
   - PhysX to world to Minecraft coordinates, with an origin;
-  - which shapes are kept: static scene-query shapes, not simulation-only ones, triggers, or our own bodies;
+  - which shapes are kept: static scene-query shapes, not simulation-only ones, triggers or planes;
   - the exporter idle without Minecraft;
   - the scene watch's summary of recorded calls: by thread, and inside `OnUpdate` or not;
   - the dump loader, on a small OBJ.
@@ -821,7 +828,8 @@ ground and bodies lines. Part 1 adds the first two buttons and the drive line.
   - which sections get bodies around V, and the two-section hysteresis;
   - bodies only while `blocks` and drawing are both on;
   - a box from Minecraft's axes to a world box shape;
-  - posing again after an origin change.
+  - posing again after an origin change;
+  - the exporter leaving out our own bodies.
 
 ### `mclink`
 
@@ -1026,3 +1034,36 @@ above already include them.
 - **The status's drive line** leaves why build mode is off to the `build=` line, and adds V's eye height, the turn,
   and Minecraft's player's movement flags.
 - **The overlay** shows a short drive line, with buttons for `set turn` and `drivelog 10`.
+
+Part 2's plan changed or settled these too, and the sections above agree with them:
+- **Part 1's follow-ups come first** (Tasks 19 to 22): `set turn 1` by default; why V can't be placed said before "V
+  isn't found", asked of `Puppet` whenever linked, camera or not; V's eye height measured only while V can be placed;
+  and the floor's voxels made once a height and moved to each region, which takes entering build mode from about 45 ms
+  of voxelizing to about 1.3. The field-of-view kick while sprinting stays a non-goal.
+- **Step 3's order:** offline first, as the brainstorm chose; then the scene watch, with the follow-ups, in the game,
+  before the exporter is built, since the watch decides where it reads; then the city in the game.
+- **One collision epoch:** the floor's epoch becomes the collision ring's, which the city's clears move on too, and
+  `SkyState` reports.
+- **Filing:** each triangle goes under every region of its batch whose blocks, half a block more each way, its bounds
+  touch, as SkyCraft's `SendTriangles` keeps them; the batch is read a quarter block more each way, as SkyCraft's
+  harvest reads a region.
+- **A batch's regions are all sent the first time,** empty ones too, so Minecraft knows them; after that only those whose
+  triangles' hash changed. The hash is a sum, so it ignores the triangles' order.
+- **V found again** has the whole area read again after the settle, without a clear: a load and a car's camera look
+  the same to the link. A second reason to start over never cuts a settle short.
+- **The city's messages wait in order** for room in the ring; one too big for it, over half its 32 MB, is dropped and
+  counted rather than holding the rest up.
+- **The worker** is its own unit, `link/GroundWorker`. It counts a job as waiting until its messages are taken, and
+  leaves a region out, counted, rather than end the game on a C++ exception.
+- **The exporter reads with one overlap of static actors a batch;** `KeptShape` keeps their scene-query shapes that
+  aren't triggers or planes. Part 3 adds leaving out BlockRender's own bodies.
+- **PhysX's origin** is read once a frame, only on frames that read, from V's controller and V's feet as they were
+  before that frame's teleport: the controller is within a frame's move of them, moved yet or not.
+- **`shapes`** logs every shape within 2 m of V's middle, static or dynamic, with its bounds and whether it's kept.
+- **The scene watch** is a record of atomics (`physx/SceneWatch`) and its hooks (`physx/SceneHooks`), which check each
+  slot still holds the audited function before patching anything. It follows the write lock from the moment the hooks
+  go in, but counts calls only from a second later, so a lock a thread already held can't make its calls look
+  unlocked. Its status line shows once it has been on, and keeps the last watch's summary after `off`.
+- **Where the code goes:** spike 1's reader, the session and the exporter build in `render_core`, as the probe's did in
+  `probe_core`; only the hooks go in `render_runtime`.
+- **Versions:** 0.12.0 for the scene watch and 0.13.0 for the city, so each deploy's log says which it is.
