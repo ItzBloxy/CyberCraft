@@ -128,6 +128,34 @@ void FetchResultsFinish(PxScene* aThis, PxU32* aError)
 	Original<void (*)(PxScene*, PxU32*)>(SceneCall::FetchResultsFinish)(aThis, aError);
 }
 
+// The queries are const members, which take their object first all the same.
+bool Raycast(PxScene* aThis, const PxVec3& aOrigin, const PxVec3& aDirection, const PxReal aDistance, PxRaycastCallback& aHits,
+             PxHitFlags aFlags, const PxQueryFilterData& aFilter, PxQueryFilterCallback* aFilterCall, const PxQueryCache* aCache)
+{
+	Record(aThis, SceneCall::Raycast);
+	return Original<bool (*)(PxScene*, const PxVec3&, const PxVec3&, const PxReal, PxRaycastCallback&, PxHitFlags, const PxQueryFilterData&,
+	                         PxQueryFilterCallback*, const PxQueryCache*)>(SceneCall::Raycast)(aThis, aOrigin, aDirection, aDistance, aHits,
+	                                                                                           aFlags, aFilter, aFilterCall, aCache);
+}
+
+bool Sweep(PxScene* aThis, const PxGeometry& aGeometry, const PxTransform& aPose, const PxVec3& aDirection, const PxReal aDistance,
+           PxSweepCallback& aHits, PxHitFlags aFlags, const PxQueryFilterData& aFilter, PxQueryFilterCallback* aFilterCall,
+           const PxQueryCache* aCache, const PxReal aInflation)
+{
+	Record(aThis, SceneCall::Sweep);
+	return Original<bool (*)(PxScene*, const PxGeometry&, const PxTransform&, const PxVec3&, const PxReal, PxSweepCallback&, PxHitFlags,
+	                         const PxQueryFilterData&, PxQueryFilterCallback*, const PxQueryCache*, const PxReal)>(SceneCall::Sweep)(
+	    aThis, aGeometry, aPose, aDirection, aDistance, aHits, aFlags, aFilter, aFilterCall, aCache, aInflation);
+}
+
+bool Overlap(PxScene* aThis, const PxGeometry& aGeometry, const PxTransform& aPose, PxOverlapCallback& aHits,
+             const PxQueryFilterData& aFilter, PxQueryFilterCallback* aFilterCall)
+{
+	Record(aThis, SceneCall::Overlap);
+	return Original<bool (*)(PxScene*, const PxGeometry&, const PxTransform&, PxOverlapCallback&, const PxQueryFilterData&,
+	                         PxQueryFilterCallback*)>(SceneCall::Overlap)(aThis, aGeometry, aPose, aHits, aFilter, aFilterCall);
+}
+
 void LockWrite(PxScene* aThis, const char* aFile, PxU32 aLine)
 {
 	Record(aThis, SceneCall::LockWrite);
@@ -173,6 +201,9 @@ const std::array<void*, kSceneCalls> kHooks = {
 	reinterpret_cast<void*>(&FetchResults),
 	reinterpret_cast<void*>(&FetchResultsStart),
 	reinterpret_cast<void*>(&FetchResultsFinish),
+	reinterpret_cast<void*>(&Raycast),
+	reinterpret_cast<void*>(&Sweep),
+	reinterpret_cast<void*>(&Overlap),
 	reinterpret_cast<void*>(&LockWrite),
 	reinterpret_cast<void*>(&UnlockWrite),
 	reinterpret_cast<void*>(&ShiftOrigin),

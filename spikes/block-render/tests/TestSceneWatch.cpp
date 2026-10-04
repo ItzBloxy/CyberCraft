@@ -79,7 +79,25 @@ TEST(SceneWatchSummarizesByThreadAndKind)
 	recorder.Note(SceneCall::UnlockWrite, 200, false);  // not counted: it mirrors lockWrite
 	CHECK_STR(WatchSummary(recorder.Threads(), 100, recorder.Shifts(), recorder.ShiftCount()),
 	          "thread 100, the main thread: step 3, fetch 3; thread 200: add 2 (1 in OnUpdate, 1 of them without the write lock), "
-	          "lock 1; no shifts");
+	          "lock 1; other threads made 1 call while OnUpdate ran; no shifts");
+}
+
+TEST(SceneWatchCountsQueries)
+{
+	// Part 3 adds and removes actors in OnUpdate, so no other thread may query scene 0 then either. The main thread's
+	// queries in OnUpdate are BlockRender's own: the exporter's overlaps, say.
+	SceneRecorder recorder;
+	recorder.Start();
+	recorder.Note(SceneCall::Overlap, 100, true);
+	recorder.Note(SceneCall::Raycast, 100, true);
+	recorder.Note(SceneCall::Raycast, 200, false);
+	CHECK_STR(WatchSummary(recorder.Threads(), 100, recorder.Shifts(), recorder.ShiftCount()),
+	          "thread 100, the main thread: query 2 (2 in OnUpdate); thread 200: query 1; no other thread called while OnUpdate ran; no "
+	          "shifts");
+	recorder.Note(SceneCall::Sweep, 200, true);
+	CHECK_STR(WatchSummary(recorder.Threads(), 100, recorder.Shifts(), recorder.ShiftCount()),
+	          "thread 100, the main thread: query 2 (2 in OnUpdate); thread 200: query 2 (1 in OnUpdate); other threads made 1 call "
+	          "while OnUpdate ran; no shifts");
 }
 
 TEST(SceneWatchKeepsTheLatestShifts)
@@ -112,7 +130,8 @@ TEST(SceneWatchCountsThreadsPastItsTableTogether)
 	CHECK_EQ(threads.size(), SceneRecorder::kThreads);
 	CHECK_EQ(threads.back().id, 0u);  // the other threads
 	CHECK_EQ(threads.back().calls[size_t(SceneCall::Simulate)], uint32_t(40 - (SceneRecorder::kThreads - 1)));
-	CHECK(WatchSummary(threads, 1, {}, 0).find("; the other threads: step 9; no shifts") != std::string::npos);
+	CHECK(WatchSummary(threads, 1, {}, 0).find("; the other threads: step 9; no other thread called while OnUpdate ran; no shifts") !=
+	      std::string::npos);
 	recorder.Reset();
 	CHECK(recorder.Threads().empty());
 }

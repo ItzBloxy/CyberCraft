@@ -6,7 +6,7 @@
 #include <cstdint>
 #include <string>
 
-// Step 3's scene watch, in the game (spike 5's "The scene watch"): hooks on the 16 audited slots of scene 0's vtable.
+// Step 3's scene watch, in the game (spike 5's "The scene watch"): hooks on 19 audited slots of scene 0's vtable.
 // Each hook records its call and calls on: no lock, no allocation, on whichever thread the game calls from. The small
 // five-plane scenes share the vtable; their calls go straight on, unrecorded. Main thread only, but for the hooks.
 namespace cpmc::px

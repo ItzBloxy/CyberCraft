@@ -127,6 +127,11 @@ TEST(SceneWatchHooksTheGamesSlots)
 	const PxPruningStructure&  pruning = reinterpret_cast<const PxPruningStructure&>(dummy);
 	const PxContactPairHeader* pairs = nullptr;
 	PxU32                      pairCount = 0;
+	const PxBoxGeometry        box(1.0f, 1.0f, 1.0f);
+	const PxTransform          pose(PxIdentity);
+	PxRaycastBuffer            ray;
+	PxSweepBuffer              sweep;
+	PxOverlapBuffer            overlaps;
 	const auto expect = [](SceneCall aCall, int aSlot) { Expect(InfoOf(aCall).name, aSlot, int(InfoOf(aCall).slot)); };
 	expect(SceneCall::AddActor, SlotOf<PxScene>([&](PxScene& a) { a.addActor(actor); }));
 	expect(SceneCall::AddActorsPruning, SlotOf<PxScene>([&](PxScene& a) { a.addActors(pruning); }));
@@ -141,6 +146,9 @@ TEST(SceneWatchHooksTheGamesSlots)
 	expect(SceneCall::FetchResults, SlotOf<PxScene>([](PxScene& a) { (void)a.fetchResults(); }));
 	expect(SceneCall::FetchResultsStart, SlotOf<PxScene>([&](PxScene& a) { (void)a.fetchResultsStart(pairs, pairCount); }));
 	expect(SceneCall::FetchResultsFinish, SlotOf<PxScene>([](PxScene& a) { a.fetchResultsFinish(); }));
+	expect(SceneCall::Raycast, SlotOf<PxScene>([&](PxScene& a) { (void)a.raycast(PxVec3(0.0f), PxVec3(0.0f, 0.0f, -1.0f), 1.0f, ray); }));
+	expect(SceneCall::Sweep, SlotOf<PxScene>([&](PxScene& a) { (void)a.sweep(box, pose, PxVec3(1.0f, 0.0f, 0.0f), 1.0f, sweep); }));
+	expect(SceneCall::Overlap, SlotOf<PxScene>([&](PxScene& a) { (void)a.overlap(box, pose, overlaps); }));
 	expect(SceneCall::LockWrite, SlotOf<PxScene>([](PxScene& a) { a.lockWrite(); }));
 	expect(SceneCall::UnlockWrite, SlotOf<PxScene>([](PxScene& a) { a.unlockWrite(); }));
 	expect(SceneCall::ShiftOrigin, SlotOf<PxScene>([](PxScene& a) { a.shiftOrigin(PxVec3(0.0f, 1024.0f, 0.0f)); }));

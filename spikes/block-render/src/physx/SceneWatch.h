@@ -8,8 +8,10 @@
 #include <vector>
 
 // Step 3's watch of scene 0 (spike 5's "The scene watch"): which of the game's threads add and remove actors, step and
-// fetch the simulation, take the write lock and shift the origin, and whether while OnUpdate runs. That decides where
-// the exporter can read the scene. This is the record the hooks keep, and its summary; SceneHooks.h installs the hooks.
+// fetch the simulation, take the write lock and shift the origin, and whether while OnUpdate runs. That decided where
+// the exporter can read the scene. Part 3 adds actors to the scene in OnUpdate, so the watch also counts the scene's
+// queries (raycasts, sweeps and overlaps), which no other thread may make meanwhile. This is the record the hooks keep,
+// and its summary; SceneHooks.h installs the hooks.
 namespace cpmc::px
 {
 // The calls watched, in PxScene's vtable order.
@@ -28,12 +30,15 @@ enum class SceneCall : uint8_t
 	FetchResults,
 	FetchResultsStart,
 	FetchResultsFinish,
+	Raycast,
+	Sweep,
+	Overlap,
 	LockWrite,
 	UnlockWrite,
 	ShiftOrigin,
 };
 
-constexpr size_t kSceneCalls = 16;
+constexpr size_t kSceneCalls = 19;
 
 // A call's name, its slot in PxScene's vtable, and the RVA in PhysX3_x64.dll of the function the audit found there.
 struct SceneCallInfo
@@ -116,8 +121,9 @@ private:
 	std::atomic<bool>              started_{ false };
 };
 
-// The status's line for a watch: each thread's calls by kind (add, remove, step, fetch, lock and shift), and of each
-// kind, how many came while OnUpdate ran and how many of those without the write lock; then the shifts.
+// The status's line for a watch: each thread's calls by kind (add, remove, step, fetch, query, lock and shift), and of
+// each kind, how many came while OnUpdate ran, and of those that write, how many without the write lock; then how many
+// calls other threads than aMainThread, OnUpdate's own, made while it ran; then the shifts.
 std::string WatchSummary(const std::vector<SceneRecorder::Thread>& aThreads, uint32_t aMainThread,
                          const std::vector<SceneRecorder::Shift>& aShifts, uint64_t aShiftCount);
 }

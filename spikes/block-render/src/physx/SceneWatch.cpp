@@ -24,16 +24,21 @@ constexpr SceneCallInfo kInfo[kSceneCalls] = {
 	{ "fetchResults", 61, 0x53980 },
 	{ "fetchResultsStart", 62, 0x53a50 },
 	{ "fetchResultsFinish", 64, 0x53d30 },
+	{ "raycast", 94, 0x60890 },
+	{ "sweep", 95, 0x60960 },
+	{ "overlap", 96, 0x60b70 },
 	{ "lockWrite", 107, 0x55180 },
 	{ "unlockWrite", 108, 0x55280 },
 	{ "shiftOrigin", 116, 0x55360 },
 };
 
-// The summary's kinds of call. unlockWrite only mirrors lockWrite, so it isn't counted.
+// The summary's kinds of call, and whether they write to the scene. unlockWrite only mirrors lockWrite, so it isn't
+// counted.
 struct Kind
 {
 	const char*                      name;
 	std::initializer_list<SceneCall> calls;
+	bool                             writes = true;
 };
 
 const Kind kKinds[] = {
@@ -41,6 +46,7 @@ const Kind kKinds[] = {
 	{ "remove", { SceneCall::RemoveActor, SceneCall::RemoveActors, SceneCall::RemoveAggregate } },
 	{ "step", { SceneCall::Simulate, SceneCall::Advance, SceneCall::Collide } },
 	{ "fetch", { SceneCall::FetchResults, SceneCall::FetchResultsStart, SceneCall::FetchResultsFinish } },
+	{ "query", { SceneCall::Raycast, SceneCall::Sweep, SceneCall::Overlap }, false },
 	{ "lock", { SceneCall::LockWrite } },
 	{ "shift", { SceneCall::ShiftOrigin } },
 };
@@ -178,6 +184,7 @@ std::string WatchSummary(const std::vector<SceneRecorder::Thread>& aThreads, uin
                          const std::vector<SceneRecorder::Shift>& aShifts, uint64_t aShiftCount)
 {
 	std::string out;
+	uint64_t    othersInUpdate = 0;  // calls other threads made while OnUpdate ran
 	for (const SceneRecorder::Thread& thread : aThreads)
 	{
 		std::string kinds;
@@ -195,9 +202,11 @@ std::string WatchSummary(const std::vector<SceneRecorder::Thread>& aThreads, uin
 				kinds += std::format("{}{} {}", kinds.empty() ? "" : ", ", kind.name, calls);
 				if (inUpdate != 0)
 				{
-					kinds += std::format(" ({} in OnUpdate, {} of them without the write lock)", inUpdate, unlocked);
+					kinds += kind.writes ? std::format(" ({} in OnUpdate, {} of them without the write lock)", inUpdate, unlocked)
+					                     : std::format(" ({} in OnUpdate)", inUpdate);
 				}
 			}
+			othersInUpdate += thread.id != aMainThread ? inUpdate : 0;
 		}
 		const std::string who = thread.id == 0            ? "the other threads"
 		                        : thread.id == aMainThread ? std::format("thread {}, the main thread", thread.id)
@@ -207,6 +216,12 @@ std::string WatchSummary(const std::vector<SceneRecorder::Thread>& aThreads, uin
 	if (out.empty())
 	{
 		out = "no calls yet";
+	}
+	else
+	{
+		out += othersInUpdate == 0 ? "; no other thread called while OnUpdate ran"
+		                           : std::format("; other threads made {} call{} while OnUpdate ran", othersInUpdate,
+		                                         othersInUpdate == 1 ? "" : "s");
 	}
 	if (aShiftCount == 0 || aShifts.empty())
 	{
