@@ -172,6 +172,7 @@ add_executable(render_tests
 	tests/TestLink.cpp
 	tests/TestMcLinkScript.cpp
 	tests/TestPendingSections.cpp
+	tests/TestRetired.cpp
 	tests/TestHud.cpp
 	tests/TestMeasurements.cpp
 	tests/TestProcessUsage.cpp

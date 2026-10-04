@@ -752,8 +752,13 @@ uint64_t Renderer::Signal()
 
 void Renderer::Retire(gpu::ComPtr<ID3D12Resource> aResource)
 {
-	// Every list of ours that used it has been submitted, and the fence was signalled after each.
-	retired_.emplace_back(std::move(aResource), fenceValue_);
+	// Every list of ours that used it has been submitted, and the fence was signalled after each, unless one is on its way
+	// to the GPU from a render thread: then it waits for the fence after that one.
+	if (retired_.Retire(std::move(aResource), fenceValue_))
+	{
+		log_.Push(std::format("renderer: an old buffer waits for a list of ours on its way to the GPU ({} since the start)",
+		                      retired_.Waited()));
+	}
 }
 
 void Renderer::ReadTimings(uint32_t aSlot)
@@ -791,7 +796,7 @@ void Renderer::Upload()
 	{
 		return;  // the device was removed: the plugin reports it
 	}
-	std::erase_if(retired_, [completed](const auto& aEntry) { return aEntry.second <= completed; });
+	retired_.Free(completed);
 	const bool atlasDue = atlas_ && !atlasUploaded_;
 	if ((pending_.Size() == 0 && !atlasDue) || completed < uploadFence_)
 	{
@@ -872,7 +877,7 @@ void Renderer::Upload()
 	}
 	for (auto& buffer : staging)
 	{
-		retired_.emplace_back(std::move(buffer), uploadFence_);
+		retired_.RetireAfter(std::move(buffer), uploadFence_);  // only the upload list reads them
 	}
 	if (failed)
 	{
@@ -1360,6 +1365,7 @@ ID3D12CommandList* Renderer::RecordPredlss(ID3D12CommandQueue* aQueue, ID3D12Gra
 	}
 	++recordings_;
 	t_insertedSlot = slot;
+	retired_.ListRecorded();  // until OnSubmitted signals after it, what it draws isn't freed
 	return list;
 }
 
@@ -1538,6 +1544,7 @@ ID3D12CommandList* Renderer::RecordGbuffer(ID3D12CommandQueue* aQueue)
 		++stats_.partial;
 	}
 	t_insertedSlot = slot;
+	retired_.ListRecorded();  // until OnSubmitted signals after it, what it draws isn't freed
 	return list;
 }
 
@@ -1551,6 +1558,7 @@ void Renderer::OnSubmitted(ID3D12CommandQueue*, UINT, ID3D12CommandList* const*)
 	t_insertedSlot.reset();
 	std::lock_guard lock(mutex_);
 	slotFence_[slot] = Signal();  // signalled whatever the mode is now: our list went to the GPU
+	retired_.ListSubmitted(slotFence_[slot]);
 	++stats_.drawn;
 	consecutiveSkips_ = 0;
 }
@@ -1998,7 +2006,7 @@ void Renderer::Shutdown()
 	sections_.clear();
 	pending_.Clear();
 	watch_.reset();
-	retired_.clear();
+	retired_.Clear();
 	oldDepthCopies_.clear();
 	lists_ = {};
 	allocators_ = {};

@@ -10,6 +10,7 @@
 #include "render/Gpu.h"
 #include "render/Hud.h"
 #include "render/PendingSections.h"
+#include "render/Retired.h"
 #include "render/Shaders.h"
 #include "world/BlockWorld.h"
 #include "world/Vertex.h"
@@ -280,7 +281,7 @@ private:
 	bool                                                           atlasUploaded_ = false;
 	std::map<SectionPos, SectionGpu>                               sections_;
 	PendingSections                                                pending_;
-	std::vector<std::pair<gpu::ComPtr<ID3D12Resource>, uint64_t>> retired_;
+	Retired<gpu::ComPtr<ID3D12Resource>>                           retired_;
 
 	struct UploadWatch  // the section TimeUpload times
 	{
