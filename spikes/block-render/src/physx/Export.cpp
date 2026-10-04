@@ -56,10 +56,21 @@ std::vector<PxOverlapHit> Overlap(PxScene& aScene, const PxGeometry& aGeometry, 
 }
 }
 
-bool KeptShape(AuditedClass aActor, PxShapeFlags aFlags, PxGeometryType::Enum aGeometry)
+bool KeptShape(AuditedClass aActor, PxShapeFlags aFlags, PxGeometryType::Enum aGeometry, bool aOurs)
 {
 	return aActor == AuditedClass::RigidStatic && aFlags.isSet(PxShapeFlag::eSCENE_QUERY_SHAPE) && !aFlags.isSet(PxShapeFlag::eTRIGGER_SHAPE) &&
-	       aGeometry != PxGeometryType::ePLANE;
+	       aGeometry != PxGeometryType::ePLANE && !aOurs;
+}
+
+void OwnActors::Set(std::vector<const void*> aActors)
+{
+	std::sort(aActors.begin(), aActors.end());
+	sorted_ = std::move(aActors);
+}
+
+bool OwnActors::Has(const void* aActor) const
+{
+	return std::binary_search(sorted_.begin(), sorted_.end(), aActor);
 }
 
 Vec3d McFromPhysx(const PxVec3& aPoint, const Vec3d& aOrigin)
@@ -231,7 +242,7 @@ bool PhysxGround::Read(const link::McBox& aBox, std::vector<link::McTriangle>& a
 			continue;
 		}
 		const PxGeometryType::Enum geometry = hit.shape->getGeometryType();
-		if (!KeptShape(actor.cls, hit.shape->getFlags(), geometry))
+		if (!KeptShape(actor.cls, hit.shape->getFlags(), geometry, own_.Has(hit.actor)))
 		{
 			++report_.left;
 			continue;
@@ -306,13 +317,14 @@ std::vector<std::string> PhysxGround::Describe(const Vec3d& aWorld, double aRadi
 		}
 		const PxShapeFlags         flags = hit.shape->getFlags();
 		const PxGeometryType::Enum geometry = hit.shape->getGeometryType();
+		const bool                 ours = own_.Has(hit.actor);
 		const char*                kind = actor.cls == AuditedClass::RigidStatic ? "static"
 		                                  : static_cast<const PxRigidBody&>(*hit.actor).getRigidBodyFlags().isSet(PxRigidBodyFlag::eKINEMATIC)
 		                                      ? "kinematic"
 		                                      : "dynamic";
 		const PxBounds3 bounds = hit.actor->getWorldBounds(1.0f);
 		lines.push_back(std::format("{} {} of actor {}, actor bounds ({:.2f}, {:.2f}, {:.2f}) to ({:.2f}, {:.2f}, {:.2f}) in world axes; "
-		                            "{}{}{}; query filter {}, simulation filter {}{}",
+		                            "{}{}{}; query filter {}, simulation filter {}{}{}",
 		                            kind, GeometryName(geometry), static_cast<const void*>(hit.actor), bounds.minimum.x + origin.x,
 		                            bounds.minimum.y + origin.y, bounds.minimum.z + origin.z, bounds.maximum.x + origin.x,
 		                            bounds.maximum.y + origin.y, bounds.maximum.z + origin.z,
@@ -320,7 +332,8 @@ std::vector<std::string> PhysxGround::Describe(const Vec3d& aWorld, double aRadi
 		                            flags.isSet(PxShapeFlag::eSCENE_QUERY_SHAPE) ? ", scene query" : ", not scene query",
 		                            flags.isSet(PxShapeFlag::eTRIGGER_SHAPE) ? ", trigger" : "", FilterKey(hit.shape->getQueryFilterData()),
 		                            FilterKey(hit.shape->getSimulationFilterData()),
-		                            KeptShape(actor.cls, flags, geometry) ? "; the exporter keeps it" : ""));
+		                            KeptShape(actor.cls, flags, geometry, ours) ? "; the exporter keeps it" : "",
+		                            ours ? "; BlockRender's own body" : ""));
 	}
 	scene_->unlockRead();
 	if (lines.empty())

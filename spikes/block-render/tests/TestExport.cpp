@@ -12,12 +12,28 @@ TEST(ExportKeepsStaticSceneQueryShapes)
 	const PxShapeFlags queryOnly(PxShapeFlag::eSCENE_QUERY_SHAPE);
 	const PxShapeFlags simulationOnly(PxShapeFlag::eSIMULATION_SHAPE);
 	const PxShapeFlags trigger = PxShapeFlag::eTRIGGER_SHAPE | PxShapeFlag::eSCENE_QUERY_SHAPE;
-	CHECK(KeptShape(AuditedClass::RigidStatic, both, PxGeometryType::eTRIANGLEMESH));
-	CHECK(KeptShape(AuditedClass::RigidStatic, queryOnly, PxGeometryType::eBOX));
-	CHECK(!KeptShape(AuditedClass::RigidStatic, simulationOnly, PxGeometryType::eBOX));  // V's controller doesn't sweep against it
-	CHECK(!KeptShape(AuditedClass::RigidStatic, trigger, PxGeometryType::eBOX));
-	CHECK(!KeptShape(AuditedClass::RigidStatic, both, PxGeometryType::ePLANE));
-	CHECK(!KeptShape(AuditedClass::RigidDynamic, both, PxGeometryType::eCONVEXMESH));  // cars, litter, controllers
+	CHECK(KeptShape(AuditedClass::RigidStatic, both, PxGeometryType::eTRIANGLEMESH, false));
+	CHECK(KeptShape(AuditedClass::RigidStatic, queryOnly, PxGeometryType::eBOX, false));
+	CHECK(!KeptShape(AuditedClass::RigidStatic, simulationOnly, PxGeometryType::eBOX, false));  // V's controller doesn't sweep against it
+	CHECK(!KeptShape(AuditedClass::RigidStatic, trigger, PxGeometryType::eBOX, false));
+	CHECK(!KeptShape(AuditedClass::RigidStatic, both, PxGeometryType::ePLANE, false));
+	CHECK(!KeptShape(AuditedClass::RigidDynamic, both, PxGeometryType::eCONVEXMESH, false));  // cars, litter, controllers
+}
+
+TEST(ExportLeavesOutBlockRendersOwnBodies)
+{
+	// Part 3's bodies are static scene-query shapes like the city's, made of what V stands on: the exporter leaves them
+	// out, so Minecraft never gets its own blocks back as Night City's shape.
+	const PxShapeFlags both = PxShapeFlag::eSIMULATION_SHAPE | PxShapeFlag::eSCENE_QUERY_SHAPE;
+	CHECK(!KeptShape(AuditedClass::RigidStatic, both, PxGeometryType::eBOX, true));
+	int       a = 0, b = 0, c = 0;
+	OwnActors own;
+	CHECK(!own.Has(&a));
+	own.Set({ &c, &a });
+	CHECK(own.Has(&a) && own.Has(&c) && !own.Has(&b));
+	CHECK_EQ(own.Size(), size_t(2));
+	own.Set({});
+	CHECK(!own.Has(&a));
 }
 
 TEST(ExportTurnsPhysxIntoMinecraftWithTheOrigin)
