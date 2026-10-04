@@ -311,12 +311,13 @@ spikes/block-render/
   src/physx/Export.*      the city's shapes as Minecraft's triangles, read under scene 0's read lock (a GroundSource),
                           with V's controller for the origin; and the shapes request
   src/physx/BoxMerge.*    a section's solid blocks as few boxes (pure)
+  src/physx/BodyPlan.*    which sections get bodies around V, and when; where their boxes stand (pure)
   src/physx/Bodies.*      the blocks' static actors: made, posed, rebuilt and removed
   src/physx/SceneWatch.*  step 3's record of who calls scene 0, and when, and its summary (pure)
   src/physx/SceneHooks.*  the scene watch's hooks, on request
   src/Puppet.*            the game's script calls: Teleport, V's yaw, in a vehicle, dead, health
   src/Plugin.cpp, Requests.*, Status.*   + the new requests, the status lines and the update order
-  tools/mclink/           + held keys, build mode's drive, and the dump loader
+  tools/mclink/           + held keys, build mode's drive, the dump loader, and the solids
   tools/blockrender_hud/init.lua         + the new lines and buttons
   tests/                  + the new unit tests
 ```
@@ -327,15 +328,16 @@ The names are proposals; the plan settles them.
 
 - **As in spike 4,** with these changes:
   - `render_core` gains the pure parts: `link/Ticks`, `Drive`, `Voxels`, `Ground`, `GroundWorker` and `Solids`,
-    `physx/BoxMerge` and `SceneWatch`; and spike 1's reader, `Session` and `Export`, which call PhysX only through its
-    tables and so build and link without the game, as the probe's `probe_core` did;
+    `physx/BoxMerge`, `BodyPlan` and `SceneWatch`; and spike 1's reader, `Session` and `Export`, which call PhysX only
+    through its tables and so build and link without the game, as the probe's `probe_core` did;
   - `render_runtime` gains the parts that change the game: `SceneHooks` and `Bodies`; and the plugin, `Puppet`;
   - the PhysX headers come from `extern/physx-3.4.2` as system includes, with `PX_PHYSX_STATIC_LIB`, as in spike 1.
     PhysX is called only through its virtual tables and inline header code, and `PxGetPhysics` through
     `GetProcAddress`, so the DLL imports nothing from PhysX;
   - `mclink` gains the dump loader and held keys, and still links only `render_core`.
 - **The version** becomes 0.11.0, in the log line and in `Query`: Part 1's. Part 2's deploys are 0.12.0 (the scene
-  watch) and 0.13.0 (the city).
+  watch) and 0.13.0 (the city), and Part 3's 0.14.0 (the follow-ups, the queries watched and the solids) and 0.15.0
+  (the bodies).
 - **Deploying is unchanged:** `CP2077_DIR` is set only to deploy, with the game closed, and cleared straight after.
 
 ## Part 1: build mode while Minecraft drives
@@ -387,7 +389,8 @@ In `OnUpdate`, after `Link::Update` has read `McState`:
    - The yaw is V's current one, from `GetWorldYaw` as FreeFly reads it.
    - If that fights Cyberpunk's turning, `set turn 1` adds the frame's turn from the raw mouse movement the input patch
      sees. Counts become degrees by a ratio measured while V turns outside build mode: the median of the last turns'
-     ratios, so a menu's cursor, or a turn the game makes by itself, doesn't move it.
+     ratios, so a menu's cursor, or a turn the game makes by itself, doesn't move it. The ratio is kept in `turn.txt`
+     for the next session, which uses it until it has measured its own, so build mode turns at once after a game start.
    - Which of the two works was step 2's opening check. V's own yaw locked turning left and right, and the turn made
      it smooth, so `set turn 1` is the default from Part 2 on.
 4. **The rest of the link,** as now:
@@ -498,12 +501,14 @@ The floor's epochs:
 - **The budget:** batches are read in `OnUpdate`, under scene 0's read lock as spike 1 read it, until 1.5 ms have
   gone (`set exportbudget`). A batch is always read whole. Whether `OnUpdate` is a safe time to read every frame is
   what the scene watch (below) settles first.
-- **The worker:** one thread takes each batch's triangles and, for each region:
-  - voxelizes it at 1/8 block with SkyCraft's triangle-box test;
-  - builds its messages: the triangles (`kColTris`), then the voxels (`kColRegion`).
+- **The worker:** a few threads (a quarter of the processors, from 1 to 4, below normal priority, so the game's own
+  threads come first) take each batch's regions, the one nearest Minecraft's player first, and for each:
+  - voxelize it at 1/8 block with SkyCraft's triangle-box test;
+  - build its messages: the triangles (`kColTris`), then the voxels (`kColRegion`).
 
-  The main thread writes the finished messages into the collision ring, in order. If the ring has no room, they wait
-  for the next frame.
+  A region's newer job replaces one of its region that hasn't started, and doesn't start while an older one is under
+  way. The main thread writes the finished messages into the collision ring, each region's two together, in the order
+  they finish. If the ring has no room, they wait for the next frame.
 - **Refreshing:**
   - the city streams its collision in as V moves, so the batches next to the centre are read again every second;
   - a region is sent again only if its triangles' hash has changed;
@@ -530,8 +535,11 @@ only if the game takes the write lock. So step 3 opens with a watch:
   - stepping the simulation (`simulate`, or `collide` and `advance`) and fetching its results (`fetchResults`, or
     `fetchResultsStart` and `fetchResultsFinish`);
   - the write lock (`lockWrite`, `unlockWrite`);
-  - `shiftOrigin`, with its shift, which settles whether the game moves the whole scene when PhysX's origin moves.
-- **The status** sums them by thread, and says which came while `OnUpdate` was running.
+  - `shiftOrigin`, with its shift, which settles whether the game moves the whole scene when PhysX's origin moves;
+  - from Part 3, the scene's queries (`raycast`, `sweep` and `overlap`): part 3 writes to the scene, and a query on
+    another thread could read its query structures while a body changes them.
+- **The status** sums them by thread, says which came while `OnUpdate` was running, and how many calls threads other
+  than `OnUpdate`'s made meanwhile.
 - **What it decides:**
   - if the game never writes to scene 0 during `OnUpdate`, or always takes the write lock to do it (which our read
     lock then excludes), the reads and part 3's writes stay in `OnUpdate`;
@@ -556,7 +564,7 @@ Minecraft's player then walks real Night City geometry without the game, within 
 
 The link keeps `kRenSolids` by section instead of stepping over it.
 - **Checks,** like the other render messages: coordinates within spike 4's ranges, a count up to 4,096, and 512 bytes
-  of bits when the count isn't 0.
+  of bits when the count isn't 0, as many of them set as the count says, as SkyCraft counts them.
 - **Changes:** a count of 0 removes the section, and clear-all clears them all.
 - **When:** solids are kept whether drawing is on or not, as sections are.
 
@@ -577,15 +585,17 @@ The link keeps `kRenSolids` by section instead of stepping over it.
   standing on them. Leaving while sneaking starts V's controller about a third of a metre inside the top block, and
   step 4 checks what the controller does then.
 - **When:** while `blocks` is on and drawing is on, so blocks nobody can see never leave invisible walls. They stay
-  while unlinked, or with Minecraft gone, as the drawn blocks do.
+  while unlinked, or with Minecraft gone, as the drawn blocks do, and follow V in a car too, from V's feet.
 - **Off by default:** `set blocks 1` turns them on. It stays off by default until step 4 passes.
 
 ### What they're made of
 
 - **Filters and material,** copied from the static shape under V's feet:
-  - found with a ray down when the first body is made;
+  - found with a ray down when the first body is made: the nearest static shape it passes through that's both a
+    scene-query and a simulation shape, not a trigger, and not one of ours;
   - what's copied: the query and simulation filter data, the first material, and the shape flags. So the blocks are
     made of whatever V already stands on;
+  - a shape of ours, never attached, keeps the material alive: PhysX takes a reference on each material a shape has;
   - bodies wait until V stands on a static shape to copy from;
   - the status shows what was copied.
 - **`userData`** stays empty. One actor in scene 0 already has none.
@@ -614,10 +624,11 @@ into `docs/spikes/2026-10-01-physx-abi-audit.md` as an addendum.
 - **Before step 4,** the calls that make and manage bodies:
   - `PxPhysics::createRigidStatic` and `createShape`;
   - `PxRigidActor::attachShape` and `setGlobalPose`;
-  - `PxShape::setQueryFilterData`, `setSimulationFilterData` and `getMaterials`, each one slot later than in NVIDIA's
-    headers;
+  - `PxShape::setLocalPose`, `setQueryFilterData`, `setSimulationFilterData` and `getMaterials`, each one slot later
+    than in NVIDIA's headers;
   - `PxActor::getScene`, and `PxBase::release` for actors and shapes. `addActor` and `removeActor` are already done
-    for the watch.
+    for the watch;
+  - and for the watch, the scene's `raycast`, `sweep` and `overlap`, slots 94 to 96.
 - **Already audited:** the probe's own calls, listed as such: `PxScene::overlap`, `raycast`, `lockRead` and
   `unlockRead`, the actors' `getGlobalPose`, `getNbShapes` and `getShapes`, and the shapes' getters (their filter data
   and flags among them).
@@ -626,16 +637,17 @@ into `docs/spikes/2026-10-01-physx-abi-audit.md` as an addendum.
 
 Step 3's scene watch decides where the adds, removes and poses run, as it does for the exporter's reads:
 - the starting point is `OnUpdate` on the main thread;
-- they move if the watch finds the game writing to scene 0 without its write lock while `OnUpdate` runs. If the game
-  does take the write lock, our writes take it too.
+- they move if the watch finds any other thread calling scene 0 while `OnUpdate` runs, its queries included, since
+  PhysX doesn't lock a scene's queries against changes. Step 3 found the game never takes the write lock.
 
 ### Loads
 
-When V is lost (a load):
-- the bodies are removed from scene 0 if PhysX still lists that scene;
-- otherwise they're forgotten without being touched.
+While V isn't found, as in a load, nothing is touched: step 3's watch never covered a load. Once V is found again:
+- each body is kept if scene 0 is the scene it went into and still lists it, with the shapes we gave it: PhysX reuses a
+  released actor's memory, so an actor of the game's could stand at its address;
+- otherwise it's forgotten without being touched, and made again if it's still wanted.
 
-Step 4 loads a save with bodies present.
+Before any touch, at any time, a body must pass the same checks. Step 4 loads a save with the test box present.
 
 ## The steps
 
@@ -705,6 +717,9 @@ Part 1 in BlockRender 0.11.0, deployed. At spike 3's corner, with `ground floor`
 
 ### Step 4: V against blocks
 
+- **First, with no bodies:** Part 2's follow-ups (the turn remembered across a game start, and a fast drop onto the
+  ground), and the scene watch with its queries, a minute of walking, driving and shooting: no other thread may call
+  scene 0 while `OnUpdate` runs. Minecraft's solid blocks are checked offline first, with `mclink`.
 - **The opening check:** `box on`, with a save made just before, one interaction at a time:
   - walk into the box, stand on it, jump onto it, shoot it, and drive into it;
   - with the box placed just short of an origin line (the probe's overlay shows the distance), cross the line and
@@ -747,15 +762,19 @@ ground and bodies lines. Part 1 adds the first two buttons and the drive line, a
   - the setting, and the regions known around the centre;
   - reading time a frame (average and worst), and batches a second;
   - triangles and voxel blocks a second;
-  - the worker's time a region, and the batches waiting;
+  - the worker's time a region, its triangles a region, the share of that time its threads ran, its threads, and the
+    regions waiting;
   - ring bytes a second, and messages waiting for room;
   - how long Minecraft held its player when build mode last started.
-- **Bodies:**
+- **Solids:** Minecraft's solid blocks the link keeps, and their sections.
+- **Bodies,** whether they're on or off, since the test box stands either way:
   - on or off;
   - sections with bodies, and their boxes;
-  - adds, removes and rebuilds a second, and the worst rebuild's time;
+  - made, removed, failed and lost since the start, and the slowest making;
   - the copied filters and material;
-  - origin changes, and whether the game moved our bodies or we posed them again.
+  - origin changes, and whether the game moved our bodies or we posed them again;
+  - the test box, and why bodies wait, while they do. The box is also a structure, so the overlay shows V's distance
+    to it.
 - **Scene watch,** while on: each thread's calls to add, remove, step, fetch, lock and shift scene 0, which of them
   came while `OnUpdate` was running, and each `shiftOrigin`'s shift.
 - **Frame rates:** with the drive, the exporter and the bodies each on and off.
@@ -769,7 +788,8 @@ ground and bodies lines. Part 1 adds the first two buttons and the drive line, a
   - every PhysX object is checked against the audited vtables before any call, and the DLLs' timestamps and sizes
     against the audited build. A failed check keeps parts 2 and 3 off, and the status says why;
   - every array is checked for readability before it's read, as spike 1's reader does;
-  - our own actors are kept by pointer, and checked before each use;
+  - our own actors are kept by pointer, and checked before each use: still listed by scene 0, the scene they went
+    into;
   - a teleport's target is checked (finite, within 20 m of V) before the call.
 - **Shared memory is untrusted:** `kRenSolids` is checked like every render message, and `McState`'s ticks must be
   finite, with a `tickMs` from 1 to 1,000, before the interpolator takes them.
@@ -823,12 +843,16 @@ ground and bodies lines. Part 1 adds the first two buttons and the drive line, a
   - the scene watch's summary of recorded calls: by thread, and inside `OnUpdate` or not;
   - the dump loader, on a small OBJ.
 - **Part 3:**
+  - Part 2's follow-ups: a remembered turn ratio, used until the session's own is known, and `turn.txt`'s text; the
+    worker's threads, the job nearest its focus first, a newer job replacing one not started, a region's jobs in
+    order, and its threads' running time;
+  - the scene watch's queries, and the calls other threads make while `OnUpdate` runs;
   - solids from `kRenSolids`, and their checks;
   - the box merge: the boxes cover exactly the solid blocks, with no overlaps;
   - which sections get bodies around V, and the two-section hysteresis;
   - bodies only while `blocks` and drawing are both on;
   - a box from Minecraft's axes to a world box shape;
-  - posing again after an origin change;
+  - whether a body stands where it should after an origin change;
   - the exporter leaving out our own bodies.
 
 ### `mclink`
@@ -1067,3 +1091,26 @@ Part 2's plan changed or settled these too, and the sections above agree with th
 - **Where the code goes:** spike 1's reader, the session and the exporter build in `render_core`, as the probe's did in
   `probe_core`; only the hooks go in `render_runtime`.
 - **Versions:** 0.12.0 for the scene watch and 0.13.0 for the city, so each deploy's log says which it is.
+
+Part 3's plan changed or settled these too, and the sections above agree with them:
+- **Part 2's follow-ups come first,** as the user asked: the turn ratio kept in `turn.txt` between sessions; and the
+  ground's worker on a few threads, below normal priority, the region nearest Minecraft's player first, a region's jobs
+  in order, with its threads' running share in the status, which settles whether the game's threads or denser regions
+  made a region cost more in the game.
+- **The scene watch counts the scene's queries too:** step 3 settled that no game thread writes to scene 0 while
+  `OnUpdate` runs, which is what the exporter's reads need. The bodies write there, so no other thread may query the
+  scene then either; step 4 opens with the watch, before any body exists.
+- **Solids' checks:** a message's count must also equal the bits it sets.
+- **The bookkeeping is pure (`physx/BodyPlan`):** it says what to remove and make, bodies on or off, and the bodies say
+  what they did, so a frame where PhysX can't be reached changes nothing; `physx/Bodies` is the PhysX side.
+- **Ours, before each touch,** and **loads:** a body is touched only while scene 0 is the scene it went into and lists
+  it, and it still has our shapes (their count, the first box's size and our query filter), since PhysX reuses a
+  released actor's memory. Nothing is touched while V isn't found, since step 3's watch never covered a load; the spec
+  had removed bodies as V was lost.
+- **What bodies are made of:** the ray down takes the nearest static shape that's a scene-query and a simulation shape,
+  not a trigger and not ours; a shape of ours keeps the copied material alive.
+- **The audit** adds `PxShape::setLocalPose`, which poses each box on its body, and the scene's three queries.
+- **In a car,** the bodies follow V's feet; the city is still read only with V's camera.
+- **The status** counts bodies since the start, and shows them with bodies off, since the test box stands either way;
+  the box is a structure, so the overlay shows V's distance to it.
+- **Versions:** 0.14.0 for the follow-ups, the queries watched and the solids, and 0.15.0 for the bodies.

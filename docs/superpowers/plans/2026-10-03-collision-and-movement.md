@@ -11943,17 +11943,18 @@ cd /d/Cyberpunk-Minecraft && git add docs/spikes/2026-10-03-collision-and-moveme
 
 At the end: what ran as written, what changed, and what step 3 found.
 
-- [ ] **Step 2: Plan Part 3**
+- [x] **Step 2: Plan Part 3**
 
-Use superpowers:writing-plans to add Part 3's tasks, from Task 38 on, to this plan: V against blocks (the spec's
-"Part 3" and step 4), with the audit of the calls that make bodies first. Verify them as Parts 1 and 2 were. Changes to
-the spec found while planning go in its "Changes while planning".
+Use superpowers:writing-plans to add Part 3's tasks, from Task 38 on, to this plan: Part 2's two follow-ups first, as
+the user asked, then V against blocks (the spec's "Part 3" and step 4), with the audit of the calls that make bodies
+before step 4. Verify them as Parts 1 and 2 were. Changes to the spec found while planning go in its "Changes while
+planning".
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add docs/superpowers \
-  && git commit -q -m "collision-and-movement plan: Part 2 closed, Part 3 planned" \
+  && git commit -q -m "collision-and-movement plan: Part 3 planned" \
        -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
 ```
 
@@ -12013,3 +12014,4952 @@ Part 2 ran on 2026-10-04, and step 3 passed after one fix. The results are in
   - the worker: more threads, and the regions nearest Minecraft's player first.
 - **Deferred, by the user's choice:** kinematic props such as the rail. Moving props may suit Minecraft entities better,
   as boats are solid to stand on, but that's beyond this spike, so it waits for its own brainstorm.
+
+---
+
+# Collision and Movement Implementation Plan, Part 3 (step 4)
+
+> Planned on 2026-10-04, after Part 2 ran. As Parts 1 and 2: inline, with superpowers:executing-plans, never through
+> sub-agents. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Part 3 of spike 5, and its last. Minecraft's blocks become solid for V outside build mode: a PhysX static
+actor for each section with solid blocks around V, so V stands on a build, bumps into its walls, and is left standing on
+it when build mode ends on top. Part 2's two follow-ups come first. Step 4 checks it in the game, with a test box before
+any block.
+
+**Architecture:**
+- **Part 2's follow-ups** (Tasks 38 to 40): the turn ratio kept in `turn.txt` between sessions; and the ground's worker
+  on several threads, the regions nearest Minecraft's player first, with the figures that say why a region took long.
+- **Before the bodies** (Tasks 41 to 46): the scene watch also counts scene 0's queries, since the bodies are added in
+  OnUpdate and no other thread may query the scene meanwhile; the link keeps `kRenSolids` by section (`link/Solids`),
+  checked against the real Minecraft with `mclink`; BlockRender 0.14.0; the audit's addendum for every PhysX call Part 3
+  adds; and, in the game, the follow-ups and the query watch, which settles where bodies may be added.
+- **The bodies** (Tasks 47 to 52): `physx/BoxMerge` (a section's solid blocks as few boxes) and `physx/BodyPlan` (which
+  sections get bodies around V, and when), both pure; the exporter leaving BlockRender's own bodies out; `physx/Bodies`,
+  the PhysX actors, made of whatever V stands on; BlockRender 0.15.0, with `set blocks` and `box on|off`; then step 4 in
+  the game.
+
+**Tech stack:** as Part 2's.
+
+**Spec:** the spec's "Part 3: V against blocks", "Step 4", "The audit", "Requests", "Measurements and the status",
+"Safety" and "Error handling", with what planning changed in its "Changes while planning".
+
+## Before you start (Part 3)
+
+- **Part 1's and Part 2's "Before you start" hold:** the branch, the shell and `CMAKE`, Write, Edit and Copy steps, the
+  user, the game and deploying, no faults, and the commits.
+- **Already verified,** as Parts 1 and 2 were:
+  - all the code has been compiled and tested once already, in a scratch clone, and the tasks replayed in a fresh
+    clone, applying every file step exactly as written and checking every build, test, `mclink` and overlay step;
+  - zero compiler warnings at `/W4`, and BlockRender's DLL imports nothing from PhysX (`dumpbin /imports`);
+  - each new test was broken once, by a mutation of the code it covers, and failed as it should;
+  - every PhysX call Part 3 adds was found in the game's `PhysX3_x64.dll` (Task 45's addendum).
+
+  So a failure while following the plan most likely means a transcription slip: compare against the plan's code first.
+- **What no unit test covers:** `physx/Bodies` calls PhysX on the game's own objects, so only the game runs it. Task 52
+  does, with the test box before any block.
+- **Test counts:** 365 at the start. Then 367, 370, 371, 372 and 376 after Tasks 38 to 42; 377 and 378 after Tasks 44
+  and 45; and 381, 389, 390, 390 and 392 after Tasks 47 to 51.
+- **What only Minecraft and the game can test:** the worker and the solids against the real Minecraft in Task 43; the
+  follow-ups, the query watch and the solids in the game in Task 46; and step 4 in Task 52, all with the user.
+- **Task 46 decides where the bodies are added.** If it finds another thread calling scene 0 while OnUpdate runs, stop
+  after it: Tasks 47 to 52 add and remove bodies in OnUpdate, and are planned again first.
+- **Deploys:** Task 46 deploys BlockRender 0.14.0, and Task 52 0.15.0, each with the game closed and `CP2077_DIR`
+  cleared straight after.
+
+## File map (Part 3)
+
+All paths under `src/`, `tests/` and `tools/` are relative to `spikes/block-render/`.
+
+| File | Responsibility |
+|---|---|
+| `CMakeLists.txt` | The new sources and tests, and versions 0.14.0 and 0.15.0 |
+| `src/link/Turn.*` | The last session's ratio, used until this one's is known, and `turn.txt`'s text |
+| `src/link/GroundWorker.*` | Several threads, the job nearest the focus first, a region's jobs in order, the threads' running time |
+| `src/link/Link.*` | The worker's focus and figures, and Minecraft's solids kept |
+| `src/link/Solids.*` | Minecraft's solid blocks by section, from `kRenSolids` |
+| `src/physx/SceneWatch.*`, `SceneHooks.*` | The scene's three queries, watched too |
+| `src/physx/BoxMerge.*` | A section's solid blocks as few boxes |
+| `src/physx/BodyPlan.*` | Which sections get bodies around V, and when; where their boxes stand |
+| `src/physx/Export.*` | BlockRender's own bodies left out; scene 0 and the origin shared with the bodies |
+| `src/physx/Session.h` | `PxGetPhysics`'s object, for making bodies |
+| `src/physx/Bodies.*` | The bodies' PhysX actors, made of what V stands on, and step 4's test box |
+| `src/Plugin.cpp` | `turn.txt`; the worker's, the solids' and the bodies' status; `set blocks`, `box on|off`, the bodies each frame |
+| `src/Requests.*`, `src/Status.*` | `box on|off`; the turn, the worker, the solids and the bodies in the status |
+| `tools/mclink/Main.cpp`, `solids.txt` | The worker's figures and the solids; the solids' script |
+| `tools/blockrender_hud/init.lua` | The bodies' line, with Blocks and Box buttons |
+| `tests/TestSolids.cpp`, `TestBoxMerge.cpp`, `TestBodyPlan.cpp` | One test file per new pure unit; the others gain tests |
+| `docs/spikes/2026-10-01-physx-abi-audit.md` | The addendum: the bodies' and the queries' slots |
+
+---
+
+### Task 38: Build mode's turn ratio is remembered between sessions
+
+Part 2's first follow-up, promised to the user. Build mode turns the view by each frame's mouse counts times a ratio,
+measured from 5 turns outside build mode each session (`link/Turn.h`), so after every game start build mode couldn't
+turn until V had turned 5 times. Now the plugin saves the measured ratio in `turn.txt`, in its folder, once a second
+whenever it has changed, written whole and then renamed into place; at load it reads it back, and `TurnRatio::Remember`
+uses it until this session has measured its own. The drive line says which it uses, and the log says what was
+remembered at load and when this session's ratio is first saved. Delete `turn.txt` to measure afresh.
+
+**Files:**
+- Modify: `src/link/Turn.h`, `src/link/Turn.cpp`, `src/Status.h`, `src/Status.cpp`, `src/Plugin.cpp`,
+  `tests/TestTurn.cpp`, `tests/TestStatus.cpp`
+
+- [ ] **Step 1: Edit `tests/TestTurn.cpp`: the failing tests**
+
+```cpp
+TEST(TurnRatioDropsATurnBrokenOff)
+```
+```cpp
+TEST(TurnRatioUsesARememberedRatioUntilItsOwnIsKnown)
+{
+	// The last session's ratio turns build mode at once after a game start; this session's own takes over at kKnown turns.
+	TurnRatio ratio;
+	ratio.Remember(-0.05);
+	CHECK(ratio.Remembered());
+	CHECK(!ratio.Measured().has_value());
+	CHECK_NEAR(ratio.Ratio().value_or(0.0), -0.05, 1e-12);
+	CHECK_NEAR(ratio.Turn(100), -5.0, 1e-12);
+	double yaw = 0.0;
+	ratio.Note(0, yaw);
+	for (int turn = 0; turn < 4; ++turn)
+	{
+		Turn(ratio, yaw, 30, 10, -0.02);
+	}
+	CHECK(ratio.Remembered());  // 4 of 5 turns: still the remembered one
+	CHECK_NEAR(ratio.Ratio().value_or(0.0), -0.05, 1e-12);
+	Turn(ratio, yaw, 30, 10, -0.02);
+	CHECK(!ratio.Remembered());
+	CHECK_NEAR(ratio.Measured().value_or(0.0), -0.02, 1e-12);
+	CHECK_NEAR(ratio.Ratio().value_or(0.0), -0.02, 1e-12);
+}
+
+TEST(TurnFileKeepsTheRatioForTheNextSession)
+{
+	CHECK_NEAR(ParseTurnFile(TurnFileText(-0.0493)).value_or(0.0), -0.0493, 1e-9);
+	CHECK_NEAR(ParseTurnFile("# a comment\r\n  ratio=0.0312  \r\n").value_or(0.0), 0.0312, 1e-12);
+	for (const char* bad : { "", "ratio", "ratio =", "ratio = abc", "ratio = -0.05x", "ratio = 0", "ratio = 0.00001", "ratio = -2",
+	                         "ratio = nan", "ratio = inf", "# ratio = -0.05", "turn = -0.05" })
+	{
+		CHECK(!ParseTurnFile(bad).has_value());
+	}
+}
+
+TEST(TurnRatioDropsATurnBrokenOff)
+```
+
+- [ ] **Step 2: Edit `tests/TestStatus.cpp`: the failing test**
+
+```cpp
+	CHECK(status.find("build=") < status.find("drive=") && status.find("drive=") < status.find("positions="));
+```
+```cpp
+	CHECK(status.find("build=") < status.find("drive=") && status.find("drive=") < status.find("positions="));
+	// The last session's ratio, until this one has measured its own
+	link.turnRatio = -0.05;
+	link.turnRemembered = true;
+	link.turnTurns = 2;
+	report.link = link;
+	CHECK(cpmc::FormatStatus(report).find("; turn on, -0.0500 degrees a count, remembered from the last session (2 of 5 turns "
+	                                      "measured); ") != std::string::npos);
+```
+
+- [ ] **Step 3: Build; it must fail**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C" | sort -u | head -3
+```
+Expected: `error C2039: 'turnRemembered': is not a member of 'cpmc::LinkReport'`, and `error C2039: 'Remember': is not a
+member of 'cpmc::link::TurnRatio'`.
+
+- [ ] **Step 4: Edit `src/link/Turn.h`**
+
+```cpp
+#include <optional>
+```
+```cpp
+#include <optional>
+#include <string>
+#include <string_view>
+```
+```cpp
+// game made by itself doesn't move it. Pure.
+namespace cpmc::link
+{
+```
+```cpp
+// game made by itself doesn't move it. The last session's ratio, kept in turn.txt, is used until this session has its
+// own, so build mode turns at once after a game start. Pure.
+namespace cpmc::link
+{
+// turn.txt, in the plugin's folder, keeps the last ratio measured for the next session. Its text, and the ratio in it:
+// nothing unless a line "ratio = <degrees a count>" holds a finite number from 0.0001 to 1 either way.
+std::string           TurnFileText(double aRatio);
+std::optional<double> ParseTurnFile(std::string_view aText);
+
+```
+```cpp
+	void Break();
+
+	std::optional<double> Ratio() const;                 // degrees a count, once kKnown turns have counted
+	double                Turn(int64_t aCounts) const;   // aCounts in degrees; 0 while the ratio isn't known
+```
+```cpp
+	void Break();
+	// A ratio from an earlier session (turn.txt), used until this session's own kKnown turns have counted.
+	void Remember(double aRatio) { remembered_ = aRatio; }
+
+	std::optional<double> Measured() const;    // this session's, the median of the last turns, once kKnown have counted
+	std::optional<double> Ratio() const;       // degrees a count: this session's, or until it's known the remembered one
+	bool                  Remembered() const;  // whether Ratio is the remembered one
+	double                Turn(int64_t aCounts) const;   // aCounts in degrees; 0 while there's no ratio
+```
+```cpp
+	uint64_t              turns_ = 0;
+```
+```cpp
+	uint64_t              turns_ = 0;
+	std::optional<double> remembered_;
+```
+
+- [ ] **Step 5: Edit `src/link/Turn.cpp`**
+
+```cpp
+#include <algorithm>
+#include <cmath>
+```
+```cpp
+#include <algorithm>
+#include <charconv>
+#include <cmath>
+#include <format>
+```
+```cpp
+{
+void TurnRatio::Note(int64_t aCounts, double aYaw)
+```
+```cpp
+{
+namespace
+{
+std::string_view Trim(std::string_view aText)
+{
+	const auto space = [](char aChar) { return aChar == ' ' || aChar == '\t' || aChar == '\r'; };
+	while (!aText.empty() && space(aText.front()))
+	{
+		aText.remove_prefix(1);
+	}
+	while (!aText.empty() && space(aText.back()))
+	{
+		aText.remove_suffix(1);
+	}
+	return aText;
+}
+}
+
+std::string TurnFileText(double aRatio)
+{
+	return std::format("# BlockRender: build mode's turn, in degrees a count of the mouse, as last measured outside build mode.\n"
+	                   "# Delete this file to have it measured afresh.\nratio = {:.6f}\n",
+	                   aRatio);
+}
+
+std::optional<double> ParseTurnFile(std::string_view aText)
+{
+	for (size_t start = 0; start < aText.size();)
+	{
+		const size_t           end = std::min(aText.find('\n', start), aText.size());
+		const std::string_view line = aText.substr(start, end - start);
+		start = end + 1;
+		const size_t equals = line.find('=');
+		if (equals == std::string_view::npos || Trim(line.substr(0, equals)) != "ratio")
+		{
+			continue;  // a comment, or another line
+		}
+		const std::string_view value = Trim(line.substr(equals + 1));
+		double                 ratio = 0.0;
+		const auto [stop, error] = std::from_chars(value.data(), value.data() + value.size(), ratio);
+		if (error != std::errc() || stop != value.data() + value.size() || !std::isfinite(ratio) || std::abs(ratio) < 1e-4 ||
+		    std::abs(ratio) > 1.0)
+		{
+			return std::nullopt;
+		}
+		return ratio;
+	}
+	return std::nullopt;
+}
+
+void TurnRatio::Note(int64_t aCounts, double aYaw)
+```
+```cpp
+std::optional<double> TurnRatio::Ratio() const
+```
+```cpp
+std::optional<double> TurnRatio::Measured() const
+```
+```cpp
+double TurnRatio::Turn(int64_t aCounts) const
+```
+```cpp
+std::optional<double> TurnRatio::Ratio() const
+{
+	const std::optional<double> measured = Measured();
+	return measured ? measured : remembered_;
+}
+
+bool TurnRatio::Remembered() const
+{
+	return remembered_.has_value() && ratios_.size() < kKnown;
+}
+
+double TurnRatio::Turn(int64_t aCounts) const
+```
+
+- [ ] **Step 6: Edit `src/Status.h`**
+
+```cpp
+	std::optional<double> turnRatio;                 // degrees a count, once measured
+```
+```cpp
+	std::optional<double> turnRatio;                 // degrees a count, once measured or remembered
+	bool                  turnRemembered = false;    // turnRatio is the last session's, from turn.txt
+```
+
+- [ ] **Step 7: Edit `src/Status.cpp`**
+
+```cpp
+std::string FormatDrive(const LinkReport& aLink)
+```
+```cpp
+// The turn's ratio: this session's, the last session's until then, or none yet.
+std::string TurnRatioText(const LinkReport& aLink)
+{
+	if (!aLink.turnRatio)
+	{
+		return std::format("ratio not measured yet ({} of {} turns)", aLink.turnTurns, link::TurnRatio::kKnown);
+	}
+	return aLink.turnRemembered ? std::format("{:.4f} degrees a count, remembered from the last session ({} of {} turns measured)",
+	                                          *aLink.turnRatio, aLink.turnTurns, link::TurnRatio::kKnown)
+	                            : std::format("{:.4f} degrees a count from {} turns", *aLink.turnRatio, aLink.turnTurns);
+}
+
+std::string FormatDrive(const LinkReport& aLink)
+```
+```cpp
+	                   aLink.turnRatio ? std::format("{:.4f} degrees a count from {} turns", *aLink.turnRatio, aLink.turnTurns)
+	                                   : std::format("ratio not measured yet ({} of {} turns)", aLink.turnTurns, link::TurnRatio::kKnown),
+	                   MinecraftMovement(aLink.minecraftFlags));
+```
+```cpp
+	                   TurnRatioText(aLink), MinecraftMovement(aLink.minecraftFlags));
+```
+
+- [ ] **Step 8: Edit `src/Plugin.cpp`**
+
+```cpp
+#include <chrono>
+```
+```cpp
+#include <chrono>
+#include <cmath>
+```
+```cpp
+bool                  g_turn = true;      // set turn 1, the default since step 2: the teleport's yaw gains the mouse's turn
+```
+```cpp
+bool                  g_turn = true;      // set turn 1, the default since step 2: the teleport's yaw gains the mouse's turn
+std::optional<double> g_savedTurn;        // the ratio turn.txt holds: read at load, or saved since
+bool                  g_turnSaveLogged = false;
+```
+```cpp
+// The link's lines of the status (the spec's "Measurements"), from the second since the last status.
+```
+```cpp
+// turn.txt keeps the turn ratio for the next session, so build mode turns at once after a game start: saved once this
+// session has measured its own, and again whenever that changes, written whole and then renamed into place.
+void SaveTurnRatio()
+{
+	const std::optional<double> measured = g_turnRatio.Measured();
+	if (!measured || (g_savedTurn && std::abs(*measured - *g_savedTurn) < 1e-6))
+	{
+		return;
+	}
+	const std::filesystem::path temporary = g_pluginDir / "turn.tmp";
+	{
+		std::ofstream out(temporary, std::ios::binary);
+		out << cpmc::link::TurnFileText(*measured);
+	}
+	std::error_code error;
+	std::filesystem::rename(temporary, g_pluginDir / "turn.txt", error);
+	if (error)
+	{
+		return;  // tried again next second
+	}
+	g_savedTurn = measured;
+	if (!std::exchange(g_turnSaveLogged, true))
+	{
+		Log("the turn: {:.4f} degrees a count, measured, and saved in turn.txt for the next session", *measured);
+	}
+}
+
+// The link's lines of the status (the spec's "Measurements"), from the second since the last status.
+```
+```cpp
+	report.turnRatio = g_turnRatio.Ratio();
+```
+```cpp
+	report.turnRatio = g_turnRatio.Ratio();
+	report.turnRemembered = g_turnRatio.Remembered();
+```
+```cpp
+		}
+		WriteStatus(seconds);
+```
+```cpp
+		}
+		SaveTurnRatio();
+		WriteStatus(seconds);
+```
+```cpp
+		g_linkSettings.ground = cpmc::link::Ground::City;  // Night City's shape from step 3 on; the floor is the fallback
+```
+```cpp
+		g_linkSettings.ground = cpmc::link::Ground::City;  // Night City's shape from step 3 on; the floor is the fallback
+		g_savedTurn = cpmc::link::ParseTurnFile(ReadSmallFile(g_pluginDir / "turn.txt"));
+		if (g_savedTurn)
+		{
+			g_turnRatio.Remember(*g_savedTurn);  // build mode turns at once, until this session has measured its own
+		}
+```
+```cpp
+		    settings.dred ? "on" : "off", settings.debugLayer ? "on" : "off", (g_pluginDir / "blockrender.request").string());
+```
+```cpp
+		    settings.dred ? "on" : "off", settings.debugLayer ? "on" : "off", (g_pluginDir / "blockrender.request").string());
+		Log("the turn: {}", g_savedTurn ? std::format("{:.4f} degrees a count, remembered from the last session, until this one has "
+		                                              "measured its own", *g_savedTurn)
+		                                : std::string("nothing remembered, so build mode turns once V has turned 5 times"));
+```
+
+- [ ] **Step 9: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `367 test(s), 0 failure(s)`.
+
+- [ ] **Step 10: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "collision-and-movement: build mode's turn ratio is remembered between sessions" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 39: The ground's worker runs several threads, the nearest region first
+
+Part 2's second follow-up. In a creative drop of about 150 blocks in 3 s into dense ground, every batch had been read,
+but the one worker thread had 857, then 1,516 regions queued, at 3.4 to 15 ms a region against 0.74 offline, and
+Minecraft's player fell through the grass once. Part 2's recorded status shows the queue: as the area followed the
+falling player down, its batches were read within a few frames each, up to 319,000 triangles a second, 240 to 280 to a
+region against spot B's 94; the one thread took the regions in the order they were read, so those of the ground under
+the player waited behind the ones read before them, higher up. `GroundWorker` changes:
+- **Several threads** (a quarter of the processors, from 1 to 4), below normal priority, so the game's own threads come
+  first.
+- **The job nearest a focus starts first** (`Focus`, SkyCraft's distance, height counting double); until a focus is
+  set, jobs start in the order they came. Jobs are given a batch at a time (`Add` takes several), so the nearest of a
+  batch's eight starts first.
+- **A region's jobs stay in order:** a newer job replaces one of its region that hasn't started, and one under way
+  holds back the next job of its region, so an older region's messages can't come after a newer one's and undo it.
+- **Why a region takes long** (the follow-up's open question: the game's threads taking the cores, or denser regions):
+  the worker counts the triangles it voxelized, and its threads' own CPU cycles (`QueryThreadCycleTime`) against the
+  processor clock's (`rdtsc`) while they voxelized. Cycles over ticks is the share of that time the threads ran: near
+  1, the regions cost what they cost; well below, other threads kept them waiting. Task 46 reads both in the drop.
+- **`Take` never waits:** if a thread holds the jobs for a moment, the messages come at the next call, so the main
+  thread is never held up by a thread below its priority; the counters are atomics.
+
+The regions' messages now come in the order they finish, each region's two together, so the Link tests that relied on
+the order they were given check by region instead.
+
+**Files:**
+- Modify: `src/link/GroundWorker.h`, `src/link/GroundWorker.cpp`, `src/link/Link.cpp`, `tests/TestGroundWorker.cpp`,
+  `tests/TestLink.cpp`
+
+- [ ] **Step 1: Write the failing tests, `tests/TestGroundWorker.cpp`**
+
+```cpp
+#include "Harness.h"
+
+#include "link/GroundWorker.h"
+
+#include <algorithm>
+#include <chrono>
+#include <cstring>
+#include <thread>
+
+using namespace cpmc::link;
+
+namespace
+{
+// Takes the worker's messages until aCount have come, or 5 s have gone.
+std::vector<GroundWorker::Message> TakeAll(GroundWorker& aWorker, size_t aCount)
+{
+	std::vector<GroundWorker::Message> messages;
+	for (int i = 0; i < 5000 && messages.size() < aCount; ++i)
+	{
+		for (GroundWorker::Message& message : aWorker.Take())
+		{
+			messages.push_back(std::move(message));
+		}
+		if (messages.size() < aCount)
+		{
+			std::this_thread::sleep_for(std::chrono::milliseconds(1));
+		}
+	}
+	return messages;
+}
+
+// A flat floor over the region's 8 x 8 blocks, at height aY.
+std::vector<McTriangle> Floor(const RegionPos& aRegion, float aY)
+{
+	const float x = float(aRegion.x * kRegionBlocks), z = float(aRegion.z * kRegionBlocks);
+	return { { { x, aY, z, x + 8, aY, z, x + 8, aY, z + 8 } }, { { x, aY, z, x + 8, aY, z + 8, x, aY, z + 8 } } };
+}
+
+// Dense ground: the floor's two triangles 75 times over, which takes the worker about a tenth of a second.
+std::vector<McTriangle> Dense(const RegionPos& aRegion)
+{
+	std::vector<McTriangle> triangles;
+	for (int i = 0; i < 75; ++i)
+	{
+		for (const McTriangle& triangle : Floor(aRegion, 3.0f))
+		{
+			triangles.push_back(triangle);
+		}
+	}
+	return triangles;
+}
+
+proto::ColRegion HeaderOf(const GroundWorker::Message& aMessage)
+{
+	proto::ColRegion header{};
+	std::memcpy(&header, aMessage.payload.data(), sizeof header);
+	return header;
+}
+
+// Waits up to 5 s for a job to be under way.
+bool UnderWay(const GroundWorker& aWorker)
+{
+	for (int i = 0; i < 5000 && aWorker.Busy() == 0; ++i)
+	{
+		std::this_thread::sleep_for(std::chrono::milliseconds(1));
+	}
+	return aWorker.Busy() > 0;
+}
+}
+
+TEST(GroundWorkerMakesEachRegionsMessages)
+{
+	GroundWorker                 worker(1);
+	const std::vector<RegionPos> regions = { { -15, 0, 250 }, { -14, 0, 250 }, { -15, -1, 250 } };
+	std::vector<GroundWorker::Job> jobs;
+	for (const RegionPos& region : regions)
+	{
+		jobs.push_back({ 3, region, region.y == 0 ? Floor(region, 6.14f) : std::vector<McTriangle>() });
+	}
+	worker.Add(std::move(jobs));
+	CHECK_EQ(worker.Waiting(), size_t(3));
+	const auto messages = TakeAll(worker, 6);
+	CHECK_EQ(messages.size(), size_t(6));
+	CHECK_EQ(worker.Waiting(), size_t(0));  // every job's messages taken
+	for (size_t i = 0; i < regions.size() && messages.size() == 6; ++i)
+	{
+		// Each region's triangles, then its voxels, in the order they came: there's no focus.
+		const RegionPos&              r = regions[i];
+		const std::vector<McTriangle> triangles = r.y == 0 ? Floor(r, 6.14f) : std::vector<McTriangle>();
+		CHECK_EQ(messages[2 * i].type, uint32_t(proto::kColTris));
+		CHECK(messages[2 * i].payload == TrisPayload(r.x, r.y, r.z, 3, triangles));
+		CHECK_EQ(messages[2 * i + 1].type, uint32_t(proto::kColRegion));
+		CHECK(messages[2 * i + 1].payload == RegionPayload(r.x, r.y, r.z, 3, VoxelizeRegion(r.x, r.y, r.z, triangles)));
+		CHECK_EQ(messages[2 * i + 1].epoch, 3u);
+	}
+	CHECK(worker.Take().empty());  // taken already
+	CHECK_EQ(worker.Regions(), 3ull);
+	CHECK_EQ(worker.Triangles(), 4ull);  // the two floors' two each
+	CHECK_EQ(worker.Blocks(), 128ull);   // and their 64 blocks each
+	CHECK_EQ(worker.Failed(), 0ull);
+	CHECK(worker.Ms() > 0.0);
+	CHECK(worker.Cycles() > 0 && worker.Ticks() > 0);  // the thread's own time, against the clock's
+}
+
+TEST(GroundWorkerStartsTheJobNearestItsFocus)
+{
+	// Minecraft's player is at region 49 0 0: of the 50 regions given together, the worker starts there and works back.
+	GroundWorker worker(1);
+	worker.Focus({ 49, 0, 0 });
+	std::vector<GroundWorker::Job> jobs;
+	for (int32_t x = 0; x < 50; ++x)
+	{
+		jobs.push_back({ 1, { x, 0, 0 }, Floor({ x, 0, 0 }, 3.0f) });
+	}
+	worker.Add(std::move(jobs));
+	const auto messages = TakeAll(worker, 100);
+	CHECK_EQ(messages.size(), size_t(100));
+	for (size_t i = 0; i < messages.size(); ++i)
+	{
+		CHECK_EQ(HeaderOf(messages[i]).minX, (49 - int32_t(i / 2)) * 8);
+	}
+}
+
+TEST(GroundWorkerReplacesAJobNotStarted)
+{
+	// While the one thread voxelizes dense ground, a region is given twice: the newer job replaces the older, which was
+	// still waiting, so only the newer triangles go out.
+	GroundWorker worker(1);
+	worker.Add({ { 1, { 0, 0, 0 }, Dense({ 0, 0, 0 }) } });
+	CHECK(UnderWay(worker));
+	worker.Add({ { 1, { 5, 0, 0 }, Floor({ 5, 0, 0 }, 3.0f) } });
+	worker.Add({ { 1, { 5, 0, 0 }, Floor({ 5, 0, 0 }, 4.0f) } });
+	CHECK_EQ(worker.Replaced(), 1ull);
+	CHECK_EQ(worker.Waiting(), size_t(2));
+	const auto messages = TakeAll(worker, 4);
+	CHECK_EQ(messages.size(), size_t(4));
+	if (messages.size() == 4)
+	{
+		CHECK_EQ(HeaderOf(messages[0]).minX, 0);
+		CHECK(messages[2].payload == TrisPayload(5, 0, 0, 1, Floor({ 5, 0, 0 }, 4.0f)));
+	}
+	CHECK(worker.Take().empty());  // nothing more: the replaced job was never made
+	CHECK_EQ(worker.Waiting(), size_t(0));
+	CHECK_EQ(worker.Regions(), 2ull);
+}
+
+TEST(GroundWorkerKeepsARegionsJobsInOrder)
+{
+	// Two threads: a region's newer job doesn't start while its older one is under way, so the older one's messages,
+	// though slower to make, can't come after it and undo it.
+	GroundWorker worker(2);
+	worker.Add({ { 1, { 0, 0, 0 }, Dense({ 0, 0, 0 }) } });
+	CHECK(UnderWay(worker));
+	worker.Add({ { 1, { 0, 0, 0 }, Floor({ 0, 0, 0 }, 4.0f) } });
+	const auto messages = TakeAll(worker, 4);
+	CHECK_EQ(messages.size(), size_t(4));
+	if (messages.size() == 4)
+	{
+		CHECK_EQ(HeaderOf(messages[0]).count, 150u);  // the dense ground's triangles first
+		CHECK(messages[2].payload == TrisPayload(0, 0, 0, 1, Floor({ 0, 0, 0 }, 4.0f)));
+	}
+	CHECK_EQ(worker.Replaced(), 0ull);
+}
+
+TEST(GroundWorkerRunsSeveralThreads)
+{
+	CHECK(GroundWorker::DefaultThreads() >= 1 && GroundWorker::DefaultThreads() <= 4);
+	GroundWorker worker(3);
+	CHECK_EQ(worker.Threads(), 3u);
+	std::vector<GroundWorker::Job> jobs;
+	for (int32_t x = 0; x < 30; ++x)
+	{
+		jobs.push_back({ 1, { x, 0, 0 }, Floor({ x, 0, 0 }, 3.0f) });
+	}
+	worker.Add(std::move(jobs));
+	const auto messages = TakeAll(worker, 60);
+	CHECK_EQ(messages.size(), size_t(60));
+	std::vector<bool> seen(30, false);
+	for (size_t i = 0; i + 1 < messages.size(); i += 2)
+	{
+		// Each region's two messages stay together, whichever thread made them.
+		const int32_t x = HeaderOf(messages[i]).minX / 8;
+		CHECK(messages[i].type == proto::kColTris && messages[i + 1].type == proto::kColRegion);
+		CHECK_EQ(HeaderOf(messages[i + 1]).minX, x * 8);
+		if (x >= 0 && x < 30)
+		{
+			seen[size_t(x)] = true;
+		}
+	}
+	CHECK(std::all_of(seen.begin(), seen.end(), [](bool aSeen) { return aSeen; }));
+	CHECK_EQ(worker.Waiting(), size_t(0));
+}
+
+TEST(GroundWorkerStopsWithJobsLeft)
+{
+	// Destroyed with 2,000 regions waiting, about two seconds of work for its one thread: it drops them, rather than
+	// finishing them first.
+	const auto start = std::chrono::steady_clock::now();
+	{
+		GroundWorker                   worker(1);
+		std::vector<GroundWorker::Job> jobs;
+		for (int32_t x = 0; x < 2000; ++x)
+		{
+			jobs.push_back({ 1, { x, 0, 0 }, Floor({ x, 0, 0 }, 3.0f) });
+		}
+		worker.Add(std::move(jobs));
+	}
+	CHECK(std::chrono::steady_clock::now() - start < std::chrono::milliseconds(500));
+}
+```
+- [ ] **Step 2: Edit `tests/TestLink.cpp`: the city's messages checked by region**
+
+```cpp
+	if (messages.size() == 16)
+	{
+		CHECK_EQ(messages[0].type, uint32_t(proto::kColTris));
+		CHECK_EQ(HeaderOf(payloads[0]).count, 2u);  // the street's two triangles
+		CHECK_EQ(messages[1].type, uint32_t(proto::kColRegion));
+		CHECK_EQ(HeaderOf(payloads[1]).minX, -128);
+		CHECK_EQ(HeaderOf(payloads[1]).count, 64u);  // the street, in block row 6
+		CHECK_EQ(HeaderOf(payloads[1]).epoch, 1u);
+		CHECK_EQ(HeaderOf(payloads[9]).minY, 8);  // the regions above: empty, and known
+		CHECK_EQ(HeaderOf(payloads[9]).count, 0u);
+	}
+```
+```cpp
+	size_t streets = 0, above = 0;
+	for (size_t i = 0; i + 1 < messages.size(); i += 2)
+	{
+		// The worker's threads may finish the regions in any order, each region's two messages together.
+		CHECK(messages[i].type == proto::kColTris && messages[i + 1].type == proto::kColRegion);
+		const proto::ColRegion tris = HeaderOf(payloads[i]);
+		const proto::ColRegion voxels = HeaderOf(payloads[i + 1]);
+		CHECK(tris.minX == voxels.minX && tris.minY == voxels.minY && tris.minZ == voxels.minZ && voxels.epoch == 1);
+		if (voxels.minY == 0)
+		{
+			streets += tris.count == 2 && voxels.count == 64;  // the street's two triangles, in block row 6
+		}
+		else
+		{
+			above += voxels.minY == 8 && tris.count == 0 && voxels.count == 0;  // the regions above: empty, and known
+		}
+	}
+	CHECK_EQ(streets, size_t(4));
+	CHECK_EQ(above, size_t(4));
+```
+```cpp
+TEST(LinkKeepsTheCitysMessagesInOrderUntilTheRingHasRoom)
+```
+```cpp
+TEST(LinkKeepsTheCitysMessagesUntilTheRingHasRoom)
+```
+```cpp
+	// Minecraft reads again: the next update writes them all, in their order.
+```
+```cpp
+	// Minecraft reads again: the next update writes them all, each region's triangles then its voxels, whichever of the
+	// worker's threads finished first.
+```
+```cpp
+	for (size_t i = 0; i < 8 && messages.size() == 16; ++i)
+	{
+		CHECK(messages[2 * i].type == proto::kColTris && messages[2 * i + 1].type == proto::kColRegion);
+		CHECK(HeaderOf(payloads[2 * i]).minX == regions[i].x * 8 && HeaderOf(payloads[2 * i]).minY == regions[i].y * 8 &&
+		      HeaderOf(payloads[2 * i]).minZ == regions[i].z * 8);
+	}
+```
+```cpp
+	std::array<bool, 8>            seen{};
+	for (size_t i = 0; i + 1 < messages.size(); i += 2)
+	{
+		CHECK(messages[i].type == proto::kColTris && messages[i + 1].type == proto::kColRegion);
+		const proto::ColRegion tris = HeaderOf(payloads[i]);
+		const proto::ColRegion voxels = HeaderOf(payloads[i + 1]);
+		CHECK(tris.minX == voxels.minX && tris.minY == voxels.minY && tris.minZ == voxels.minZ);
+		for (size_t r = 0; r < regions.size(); ++r)
+		{
+			seen[r] = seen[r] || (tris.minX == regions[r].x * 8 && tris.minY == regions[r].y * 8 && tris.minZ == regions[r].z * 8);
+		}
+	}
+	CHECK(std::all_of(seen.begin(), seen.end(), [](bool aSeen) { return aSeen; }));
+```
+
+- [ ] **Step 3: Build; it must fail**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C" | sort -u | head -3
+```
+Expected: `error C2039: 'Cycles': is not a member of 'cpmc::link::GroundWorker'`.
+
+- [ ] **Step 4: Write `src/link/GroundWorker.h`**
+
+```cpp
+#pragma once
+
+#include "link/Ground.h"
+
+#include <atomic>
+#include <condition_variable>
+#include <cstdint>
+#include <deque>
+#include <mutex>
+#include <optional>
+#include <thread>
+#include <vector>
+
+// The ground's worker (spike 5's "The worker"): threads voxelize each region they're given, with SkyCraft's
+// triangle-box test, and make its messages, the triangles (kColTris) then the voxels (kColRegion), as SkyCraft's worker
+// sends them. Voxelizing takes up to a few milliseconds a region, too long for the game's main thread, which only reads
+// the triangles and writes the finished messages into the ring.
+//
+// A fast drop into dense ground once queued 1,500 regions for a single thread, and Minecraft's player fell through the
+// ground (Part 2's follow-up). So several threads, below normal priority so the game's own threads come first, start the
+// job nearest the focus (Minecraft's player) first. A region's newer job replaces one that hasn't started, and doesn't
+// start while an older one of its region is under way, so the older one's messages can't come after it.
+namespace cpmc::link
+{
+class GroundWorker
+{
+public:
+	struct Job
+	{
+		uint32_t                epoch = 0;
+		RegionPos               region;
+		std::vector<McTriangle> triangles;  // filed under the region (FileBatch)
+	};
+
+	struct Message
+	{
+		uint32_t             epoch = 0;
+		uint32_t             type = 0;  // kColTris or kColRegion
+		std::vector<uint8_t> payload;
+	};
+
+	static unsigned DefaultThreads();  // a quarter of the processors, from 1 to 4
+
+	explicit GroundWorker(unsigned aThreads = DefaultThreads());
+	~GroundWorker();  // drops the jobs not started, and waits for those under way
+	GroundWorker(const GroundWorker&) = delete;
+	GroundWorker& operator=(const GroundWorker&) = delete;
+
+	// Jobs, added together. Each replaces a job of its region that hasn't started: its triangles are newer.
+	void Add(std::vector<Job> aJobs);
+	// Where the regions are wanted first: the job nearest it, as SkyCraft orders regions (height counting double), starts
+	// next. Until it's set, jobs start in the order they came.
+	void Focus(const RegionPos& aRegion);
+	// The messages finished since the last call: each region's two together, in the order the regions finished. Nothing
+	// while a thread holds the jobs for a moment: the main thread never waits, and they come at the next call.
+	std::vector<Message> Take();
+
+	unsigned Threads() const { return unsigned(threads_.size()); }
+	size_t   Waiting() const { return inHand_.load(); }  // jobs added whose messages haven't been taken yet
+	size_t   Busy() const { return busy_.load(); }       // jobs under way now
+	uint64_t Regions() const { return regions_.load(); }      // regions voxelized, since the start
+	uint64_t Triangles() const { return triangles_.load(); }  // their triangles
+	uint64_t Blocks() const { return blocks_.load(); }        // voxel blocks made
+	uint64_t Failed() const { return failed_.load(); }        // regions left out, for want of memory
+	uint64_t Replaced() const { return replaced_.load(); }    // jobs replaced by a newer one of their region
+	double   Ms() const { return ms_.load(); }                // time spent voxelizing and making messages, all threads
+	// Meanwhile, the threads' own CPU cycles (QueryThreadCycleTime), and the processor clock's (rdtsc): Cycles over Ticks
+	// is the share of that time they were running, so whether other threads kept them waiting.
+	uint64_t Cycles() const { return cycles_.load(); }
+	uint64_t Ticks() const { return ticks_.load(); }
+
+private:
+	void Run();
+	// The job to start next: the nearest the focus whose region has no job under way; the end if none can start.
+	std::deque<Job>::iterator Next();
+
+	mutable std::mutex       mutex_;
+	std::condition_variable  wake_;
+	std::deque<Job>          jobs_;
+	std::vector<RegionPos>   underWay_;  // the regions of the jobs under way
+	std::vector<Message>     done_;
+	size_t                   finished_ = 0;  // jobs finished since the last Take: their messages are in done_, or they failed
+	std::optional<RegionPos> focus_;
+	bool                     stop_ = false;
+	std::atomic<size_t>      inHand_{ 0 };
+	std::atomic<size_t>      busy_{ 0 };
+	std::atomic<uint64_t>    regions_{ 0 };
+	std::atomic<uint64_t>    triangles_{ 0 };
+	std::atomic<uint64_t>    blocks_{ 0 };
+	std::atomic<uint64_t>    failed_{ 0 };
+	std::atomic<uint64_t>    replaced_{ 0 };
+	std::atomic<double>      ms_{ 0.0 };
+	std::atomic<uint64_t>    cycles_{ 0 };
+	std::atomic<uint64_t>    ticks_{ 0 };
+	std::vector<std::thread> threads_;  // last: they start once the rest is made
+};
+}
+```
+- [ ] **Step 5: Write `src/link/GroundWorker.cpp`**
+
+```cpp
+#include "link/GroundWorker.h"
+
+#include <Windows.h>
+#include <intrin.h>
+
+#include <algorithm>
+#include <chrono>
+#include <exception>
+#include <utility>
+
+namespace cpmc::link
+{
+namespace
+{
+// SkyCraft's distance between regions, for its order: height counts double.
+int64_t Distance(const RegionPos& aRegion, const RegionPos& aFocus)
+{
+	const int64_t dx = int64_t(aRegion.x) - aFocus.x, dy = int64_t(aRegion.y) - aFocus.y, dz = int64_t(aRegion.z) - aFocus.z;
+	return dx * dx + dz * dz + 2 * dy * dy;
+}
+
+uint64_t ThreadCycles()
+{
+	ULONG64 cycles = 0;
+	QueryThreadCycleTime(GetCurrentThread(), &cycles);
+	return cycles;
+}
+}
+
+unsigned GroundWorker::DefaultThreads()
+{
+	return std::clamp(std::thread::hardware_concurrency() / 4, 1u, 4u);
+}
+
+GroundWorker::GroundWorker(unsigned aThreads)
+{
+	for (unsigned i = 0; i < std::max(aThreads, 1u); ++i)
+	{
+		threads_.emplace_back([this] { Run(); });
+	}
+}
+
+GroundWorker::~GroundWorker()
+{
+	{
+		std::lock_guard lock(mutex_);
+		stop_ = true;
+	}
+	wake_.notify_all();
+	for (std::thread& thread : threads_)
+	{
+		thread.join();
+	}
+}
+
+void GroundWorker::Add(std::vector<Job> aJobs)
+{
+	{
+		std::lock_guard lock(mutex_);
+		for (Job& job : aJobs)
+		{
+			const auto older = std::find_if(jobs_.begin(), jobs_.end(), [&](const Job& aJob) { return aJob.region == job.region; });
+			if (older != jobs_.end())
+			{
+				*older = std::move(job);  // in its place: the older one would only be undone by this
+				++replaced_;
+				continue;
+			}
+			jobs_.push_back(std::move(job));
+			++inHand_;
+		}
+	}
+	wake_.notify_all();
+}
+
+void GroundWorker::Focus(const RegionPos& aRegion)
+{
+	std::lock_guard lock(mutex_);
+	focus_ = aRegion;
+}
+
+std::vector<GroundWorker::Message> GroundWorker::Take()
+{
+	std::unique_lock lock(mutex_, std::try_to_lock);
+	if (!lock.owns_lock())
+	{
+		return {};  // a thread has the jobs for a moment: they come at the next call
+	}
+	inHand_ -= finished_;
+	finished_ = 0;
+	return std::exchange(done_, {});
+}
+
+std::deque<GroundWorker::Job>::iterator GroundWorker::Next()
+{
+	auto    best = jobs_.end();
+	int64_t nearest = 0;
+	for (auto job = jobs_.begin(); job != jobs_.end(); ++job)
+	{
+		if (std::find(underWay_.begin(), underWay_.end(), job->region) != underWay_.end())
+		{
+			continue;  // its region's older job first
+		}
+		if (!focus_)
+		{
+			return job;  // in the order they came
+		}
+		const int64_t distance = Distance(job->region, *focus_);
+		if (best == jobs_.end() || distance < nearest)
+		{
+			best = job;
+			nearest = distance;
+		}
+	}
+	return best;
+}
+
+void GroundWorker::Run()
+{
+	SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_BELOW_NORMAL);  // the game's own threads come first
+	std::unique_lock lock(mutex_);
+	while (true)
+	{
+		auto next = jobs_.end();
+		wake_.wait(lock, [&] { return stop_ || (next = Next()) != jobs_.end(); });
+		if (stop_)
+		{
+			return;
+		}
+		const Job job = std::move(*next);
+		jobs_.erase(next);
+		underWay_.push_back(job.region);
+		++busy_;
+		lock.unlock();
+		const auto     start = std::chrono::steady_clock::now();
+		const uint64_t cyclesBefore = ThreadCycles();
+		const uint64_t ticksBefore = __rdtsc();
+		std::vector<Message> messages;
+		size_t               blocks = 0;
+		try
+		{
+			const RegionPos&                   at = job.region;
+			const std::vector<proto::ColBlock> voxels = VoxelizeRegion(at.x, at.y, at.z, job.triangles);
+			blocks = voxels.size();
+			messages.push_back({ job.epoch, proto::kColTris, TrisPayload(at.x, at.y, at.z, job.epoch, job.triangles) });
+			messages.push_back({ job.epoch, proto::kColRegion, RegionPayload(at.x, at.y, at.z, job.epoch, voxels) });
+		}
+		catch (const std::exception&)
+		{
+			messages.clear();  // out of memory, say: the region is left out, rather than the game ended
+		}
+		const uint64_t cycles = ThreadCycles() - cyclesBefore;
+		const uint64_t ticks = __rdtsc() - ticksBefore;
+		const double   ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+		lock.lock();
+		underWay_.erase(std::find(underWay_.begin(), underWay_.end(), job.region));
+		--busy_;
+		++finished_;
+		ms_ += ms;
+		cycles_ += cycles;
+		ticks_ += ticks;
+		if (messages.empty())
+		{
+			++failed_;
+		}
+		else
+		{
+			for (Message& message : messages)
+			{
+				done_.push_back(std::move(message));
+			}
+			++regions_;
+			triangles_ += job.triangles.size();
+			blocks_ += blocks;
+		}
+		wake_.notify_all();  // the region is free: a newer job of it may start
+	}
+}
+}
+```
+- [ ] **Step 6: Edit `src/link/Link.cpp`: a batch's regions given together**
+
+```cpp
+		const std::array<RegionPos, 8>         regions = RegionsOf(*batch);
+```
+```cpp
+		const std::array<RegionPos, 8>         regions = RegionsOf(*batch);
+		std::vector<GroundWorker::Job>         jobs;
+```
+```cpp
+			worker_->Add({ status_.collisionEpoch, regions[i], std::move(filed[i]) });
+		}
+```
+```cpp
+			jobs.push_back({ status_.collisionEpoch, regions[i], std::move(filed[i]) });
+		}
+		worker_->Add(std::move(jobs));
+```
+
+- [ ] **Step 7: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `370 test(s), 0 failure(s)`.
+
+- [ ] **Step 8: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "collision-and-movement: the ground's worker runs several threads, the nearest region first" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 40: The worker starts at the city's centre, and the status says why a region takes long
+
+The link gives the worker its focus: the city's centre, Minecraft's player's region while it drives and V's otherwise,
+whenever that changes. `Link` takes the worker's thread count (tests give 1, so the order a batch's regions finish in is
+known), and reports the worker's threads, triangles, cycles and ticks, and the jobs replaced. The ground line then says,
+for the last second, how long a region took and of how many triangles, and what share of that time the worker's threads
+ran; and `mclink` prints the same.
+
+**Files:**
+- Modify: `src/link/Link.h`, `src/link/Link.cpp`, `src/Status.h`, `src/Status.cpp`, `src/Plugin.cpp`,
+  `tools/mclink/Main.cpp`, `tests/TestLink.cpp`, `tests/TestStatus.cpp`
+
+- [ ] **Step 1: Edit `tests/TestLink.cpp`: the failing test**
+
+```cpp
+TEST(LinkKeepsTheCitysMessagesUntilTheRingHasRoom)
+```
+```cpp
+TEST(LinkGivesTheWorkerTheCitysCentreFirst)
+{
+	// V's region, -15 0 250, is the second of its batch's eight, as the batch lists them. With the city centred there, the
+	// worker's one thread starts with it, then the regions next to it.
+	FakeMinecraft                     minecraft;
+	Link                              link(minecraft.base, 0, 1);
+	Sink                              sink;
+	Street                            street;
+	std::vector<std::vector<uint8_t>> payloads;
+	minecraft.Beat(77, 1000);
+	link.Update(At(1.0), City(), sink);
+	minecraft.Collision(payloads);  // the clear
+	payloads.clear();
+	link.ReadGround(2.5, street, 0.0);
+	CHECK(Finish(link, At(2.5), City(), sink));
+	const auto messages = minecraft.Collision(payloads);
+	CHECK_EQ(messages.size(), size_t(16));
+	if (messages.size() == 16)
+	{
+		CHECK(HeaderOf(payloads[0]).minX == -120 && HeaderOf(payloads[0]).minY == 0 && HeaderOf(payloads[0]).minZ == 2000);
+		CHECK_EQ(HeaderOf(payloads[14]).minY, 8);  // the farthest, a region up and across: last
+		CHECK_EQ(HeaderOf(payloads[14]).minX, -128);
+		CHECK_EQ(HeaderOf(payloads[14]).minZ, 2008);
+	}
+	CHECK_EQ(link.State().workerThreads, 1u);
+	CHECK_EQ(link.State().workerTriangles, 8ull);  // the street's two, in each of the four regions it crosses
+	CHECK(link.State().workerCycles > 0 && link.State().workerTicks > 0);
+	CHECK_EQ(link.State().workerReplaced, 0ull);
+}
+
+TEST(LinkKeepsTheCitysMessagesUntilTheRingHasRoom)
+```
+
+- [ ] **Step 2: Edit `tests/TestStatus.cpp`: the failing test**
+
+```cpp
+	link.workerMsPerRegion = 0.68;
+```
+```cpp
+	link.workerMsPerRegion = 0.68;
+	link.workerTrianglesPerRegion = 120.4;
+	link.workerRunning = 0.93;
+	link.workerThreads = 4;
+	link.workerReplaced = 12;
+```
+```cpp
+	          "at worst; 2.0 batches, 1300 triangles and 450 voxel blocks a second; the worker 0.68 ms a region, 0 regions waiting; the "
+	          "ring 0.12 MB a second, 0 messages waiting for room, 0 too big; Minecraft held its player 0.07 s when build mode last "
+```
+```cpp
+	          "at worst; 2.0 batches, 1300 triangles and 450 voxel blocks a second; the worker 0.68 ms a region of 120 triangles, its "
+	          "threads running 93% of that time; 4 threads, 0 regions waiting, 12 replaced by newer ones since the start; the ring 0.12 "
+	          "MB a second, 0 messages waiting for room, 0 too big; Minecraft held its player 0.07 s when build mode last "
+```
+
+- [ ] **Step 3: Build; it must fail**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C" | sort -u | head -3
+```
+Expected: `error C2661: 'cpmc::link::Link::Link': no overloaded function takes 3 arguments`.
+
+- [ ] **Step 4: Edit `src/link/Link.h`**
+
+```cpp
+	// aBase: the mapping's memory, laid out as skycraft_protocol.h has it. aFirstTeleportSeq: tests give their own.
+	explicit Link(uint8_t* aBase, uint32_t aFirstTeleportSeq = FirstTeleportSeq());
+```
+```cpp
+	// aBase: the mapping's memory, laid out as skycraft_protocol.h has it. aFirstTeleportSeq and aGroundThreads, the
+	// ground worker's threads: tests give their own.
+	explicit Link(uint8_t* aBase, uint32_t aFirstTeleportSeq = FirstTeleportSeq(), unsigned aGroundThreads = GroundWorker::DefaultThreads());
+```
+```cpp
+		size_t                   workerJobs = 0;        // regions given to the worker whose messages aren't taken yet
+		uint64_t                 workerRegions = 0;     // regions it voxelized, since the start
+		uint64_t                 workerBlocks = 0;      // voxel blocks it made
+		double                   workerMs = 0.0;        // its time
+```
+```cpp
+		size_t                   workerJobs = 0;        // regions given to the worker whose messages aren't taken yet
+		unsigned                 workerThreads = 0;     // its threads, once it's made
+		uint64_t                 workerRegions = 0;     // regions it voxelized, since the start
+		uint64_t                 workerTriangles = 0;   // their triangles
+		uint64_t                 workerBlocks = 0;      // voxel blocks it made
+		uint64_t                 workerReplaced = 0;    // regions it was given again before it started them
+		double                   workerMs = 0.0;        // its time, all threads together
+		uint64_t                 workerCycles = 0;      // its threads' CPU cycles meanwhile, and the processor clock's:
+		uint64_t                 workerTicks = 0;       // the share of that time they were running
+```
+```cpp
+	GroundAreas                       areas_;
+	std::unique_ptr<GroundWorker>     worker_;  // made when the city is first read
+```
+```cpp
+	GroundAreas                       areas_;
+	unsigned                          groundThreads_;
+	std::unique_ptr<GroundWorker>     worker_;  // made when the city is first read
+	std::optional<RegionPos>          focus_;   // the worker's, as last given it: the city's centre
+```
+
+- [ ] **Step 5: Edit `src/link/Link.cpp`**
+
+```cpp
+Link::Link(uint8_t* aBase, uint32_t aFirstTeleportSeq)
+    : base_(aBase), overlay_(aBase + proto::kOffOverlayCtl, aBase + proto::kOffOverlaySlotHdr, aBase + proto::kOffOverlayPixels,
+                             proto::kOverlaySlotBytes)
+```
+```cpp
+Link::Link(uint8_t* aBase, uint32_t aFirstTeleportSeq, unsigned aGroundThreads)
+    : base_(aBase), overlay_(aBase + proto::kOffOverlayCtl, aBase + proto::kOffOverlaySlotHdr, aBase + proto::kOffOverlayPixels,
+                             proto::kOverlaySlotBytes)
+    , groundThreads_(aGroundThreads)
+```
+```cpp
+	status_.workerJobs = worker_ ? worker_->Waiting() : 0;
+	status_.workerRegions = worker_ ? worker_->Regions() : 0;
+	status_.workerBlocks = worker_ ? worker_->Blocks() : 0;
+	status_.workerMs = worker_ ? worker_->Ms() : 0.0;
+```
+```cpp
+	status_.workerJobs = worker_ ? worker_->Waiting() : 0;
+	status_.workerThreads = worker_ ? worker_->Threads() : 0;
+	status_.workerRegions = worker_ ? worker_->Regions() : 0;
+	status_.workerTriangles = worker_ ? worker_->Triangles() : 0;
+	status_.workerBlocks = worker_ ? worker_->Blocks() : 0;
+	status_.workerReplaced = worker_ ? worker_->Replaced() : 0;
+	status_.workerMs = worker_ ? worker_->Ms() : 0.0;
+	status_.workerCycles = worker_ ? worker_->Cycles() : 0;
+	status_.workerTicks = worker_ ? worker_->Ticks() : 0;
+```
+```cpp
+		worker_ = std::make_unique<GroundWorker>();
+```
+```cpp
+		worker_ = std::make_unique<GroundWorker>(groundThreads_);
+	}
+	if (focus_ != areas_.CentreRegion())
+	{
+		// The worker starts the regions nearest the city's centre first: Minecraft's player while it drives, V otherwise.
+		focus_ = areas_.CentreRegion();
+		worker_->Focus(*focus_);
+```
+
+- [ ] **Step 6: Edit `src/Status.h`**
+
+```cpp
+	double                         workerMsPerRegion = -1.0;  // below 0: no region voxelized in the last second
+	size_t                         workerJobs = 0;            // regions waiting for it
+```
+```cpp
+	double                         workerMsPerRegion = -1.0;  // below 0: no region voxelized in the last second
+	double                         workerTrianglesPerRegion = 0.0;  // of those regions
+	double                         workerRunning = 0.0;       // the share of that time its threads were running
+	unsigned                       workerThreads = 0;         // none: it hasn't started
+	size_t                         workerJobs = 0;            // regions waiting for it
+	uint64_t                       workerReplaced = 0;        // regions given again before it started them, since the start
+```
+
+- [ ] **Step 7: Edit `src/Status.cpp`**
+
+```cpp
+std::string FormatGround(const LinkReport& aLink)
+```
+```cpp
+// The ground's worker: how long a region took in the last second, of how many triangles, and how much of that time its
+// threads ran, which says whether the game's threads kept them waiting.
+std::string Worker(const LinkReport& aLink)
+{
+	if (aLink.workerThreads == 0)
+	{
+		return "the worker not started yet";
+	}
+	const std::string work = aLink.workerMsPerRegion < 0.0
+	                             ? std::string("idle")
+	                             : std::format("{:.2f} ms a region of {:.0f} triangles, its threads running {:.0f}% of that time",
+	                                           aLink.workerMsPerRegion, aLink.workerTrianglesPerRegion, aLink.workerRunning * 100.0);
+	return std::format("the worker {}; {} threads, {} regions waiting, {} replaced by newer ones since the start", work,
+	                   aLink.workerThreads, aLink.workerJobs, aLink.workerReplaced);
+}
+
+std::string FormatGround(const LinkReport& aLink)
+```
+```cpp
+	                   "a second; the worker {}, {} regions waiting; the ring {:.2f} MB a second, {} messages waiting for room, {} too big",
+	                   aLink.cityReadMsAverage, aLink.cityReadMsWorst, aLink.cityBatches, aLink.cityTriangles, aLink.workerBlocks,
+	                   aLink.workerMsPerRegion < 0.0 ? std::string("idle") : std::format("{:.2f} ms a region", aLink.workerMsPerRegion),
+	                   aLink.workerJobs, aLink.collisionMb, aLink.collisionWaiting, aLink.collisionDropped);
+```
+```cpp
+	                   "a second; {}; the ring {:.2f} MB a second, {} messages waiting for room, {} too big",
+	                   aLink.cityReadMsAverage, aLink.cityReadMsWorst, aLink.cityBatches, aLink.cityTriangles, aLink.workerBlocks,
+	                   Worker(aLink), aLink.collisionMb, aLink.collisionWaiting, aLink.collisionDropped);
+```
+
+- [ ] **Step 8: Edit `src/Plugin.cpp`**
+
+```cpp
+	uint64_t workerRegionsAtStart = 0;
+	uint64_t workerBlocksAtStart = 0;
+	double   workerMsAtStart = 0.0;
+```
+```cpp
+	uint64_t workerRegionsAtStart = 0;
+	uint64_t workerTrianglesAtStart = 0;
+	uint64_t workerBlocksAtStart = 0;
+	double   workerMsAtStart = 0.0;
+	uint64_t workerCyclesAtStart = 0;
+	uint64_t workerTicksAtStart = 0;
+```
+```cpp
+		const uint64_t regions = state.workerRegions - g_second.workerRegionsAtStart;
+		report.workerMsPerRegion = regions ? (state.workerMs - g_second.workerMsAtStart) / double(regions) : -1.0;
+		report.workerJobs = state.workerJobs;
+```
+```cpp
+		const uint64_t regions = state.workerRegions - g_second.workerRegionsAtStart;
+		const uint64_t ticks = state.workerTicks - g_second.workerTicksAtStart;
+		report.workerMsPerRegion = regions ? (state.workerMs - g_second.workerMsAtStart) / double(regions) : -1.0;
+		report.workerTrianglesPerRegion = regions ? double(state.workerTriangles - g_second.workerTrianglesAtStart) / double(regions) : 0.0;
+		report.workerRunning = ticks ? double(state.workerCycles - g_second.workerCyclesAtStart) / double(ticks) : 0.0;
+		report.workerThreads = state.workerThreads;
+		report.workerJobs = state.workerJobs;
+		report.workerReplaced = state.workerReplaced;
+```
+```cpp
+		g_second.workerRegionsAtStart = state.workerRegions;
+		g_second.workerBlocksAtStart = state.workerBlocks;
+		g_second.workerMsAtStart = state.workerMs;
+```
+```cpp
+		g_second.workerRegionsAtStart = state.workerRegions;
+		g_second.workerTrianglesAtStart = state.workerTriangles;
+		g_second.workerBlocksAtStart = state.workerBlocks;
+		g_second.workerMsAtStart = state.workerMs;
+		g_second.workerCyclesAtStart = state.workerCycles;
+		g_second.workerTicksAtStart = state.workerTicks;
+```
+
+- [ ] **Step 9: Edit `tools/mclink/Main.cpp`**
+
+```cpp
+	Say("ground: the {}, epoch {}; {}; {} batches read ({} unread), {} regions sent ({} triangles); the worker: {} regions, {} voxel "
+	    "blocks, {:.1f} ms, {} waiting; ring: {:.2f} MB, {} messages waiting, {} dropped",
+```
+```cpp
+	Say("ground: the {}, epoch {}; {}; {} batches read ({} unread), {} regions sent ({} triangles); the worker: {} threads, {} regions "
+	    "({} triangles), {} voxel blocks, {:.1f} ms, its threads running {:.0f}% of it, {} waiting, {} replaced; ring: {:.2f} MB, {} "
+	    "messages waiting, {} dropped",
+```
+```cpp
+	    s.cityBatches, s.cityUnread, s.cityRegions, s.cityTriangles, s.workerRegions, s.workerBlocks, s.workerMs, s.workerJobs,
+```
+```cpp
+	    s.cityBatches, s.cityUnread, s.cityRegions, s.cityTriangles, s.workerThreads, s.workerRegions, s.workerTriangles, s.workerBlocks,
+	    s.workerMs, s.workerTicks ? 100.0 * double(s.workerCycles) / double(s.workerTicks) : 0.0, s.workerJobs, s.workerReplaced,
+```
+
+- [ ] **Step 10: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `371 test(s), 0 failure(s)`.
+
+- [ ] **Step 11: Run mclink without Minecraft**
+
+```bash
+cd /d/Cyberpunk-Minecraft/spikes/block-render && printf 'status\nquit\n' > build/selfcheck.txt \
+  && ./build/RelWithDebInfo/mclink.exe build/selfcheck.txt | head -2; echo "exit: ${PIPESTATUS[0]}"
+```
+Expected: `the mapping: created (process …); waiting for Minecraft`, then `Minecraft: absent, …`, and `exit: 0`. The game
+and Minecraft must both be closed: either would hold the mapping, and Minecraft would link.
+
+- [ ] **Step 12: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "collision-and-movement: the worker starts at the city's centre, and the status says why a region takes long" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 41: The scene watch counts scene 0's queries too
+
+Step 3's scene watch found no other thread adding, removing, stepping or fetching scene 0 while OnUpdate ran, so the
+exporter's reads there race nothing. Part 3 writes to the scene in OnUpdate, so the opposite matters too: PhysX doesn't
+lock a scene's queries against changes, and a raycast on another thread while a body is added could read the scene's
+query structures as they change. The watch now hooks the three scene queries, `raycast`, `sweep` and `overlap` (slots
+94 to 96, found in the game's DLL for Task 45's addendum), and its summary counts them as a kind, `query`, and says how
+many calls other threads than OnUpdate's made while it ran. BlockRender's own queries in OnUpdate, the exporter's
+overlaps, show as the main thread's. PhysX's batched queries (`PxBatchQuery`) don't go through the scene's vtable, so
+the watch can't see them.
+
+**Files:**
+- Modify: `src/physx/SceneWatch.h`, `src/physx/SceneWatch.cpp`, `src/physx/SceneHooks.h`, `src/physx/SceneHooks.cpp`,
+  `tests/TestSceneWatch.cpp`, `tests/TestAudit.cpp`
+
+- [ ] **Step 1: Edit `tests/TestSceneWatch.cpp`: the failing tests**
+
+```cpp
+	          "lock 1; no shifts");
+```
+```cpp
+	          "lock 1; other threads made 1 call while OnUpdate ran; no shifts");
+}
+
+TEST(SceneWatchCountsQueries)
+{
+	// Part 3 adds and removes actors in OnUpdate, so no other thread may query scene 0 then either. The main thread's
+	// queries in OnUpdate are BlockRender's own: the exporter's overlaps, say.
+	SceneRecorder recorder;
+	recorder.Start();
+	recorder.Note(SceneCall::Overlap, 100, true);
+	recorder.Note(SceneCall::Raycast, 100, true);
+	recorder.Note(SceneCall::Raycast, 200, false);
+	CHECK_STR(WatchSummary(recorder.Threads(), 100, recorder.Shifts(), recorder.ShiftCount()),
+	          "thread 100, the main thread: query 2 (2 in OnUpdate); thread 200: query 1; no other thread called while OnUpdate ran; no "
+	          "shifts");
+	recorder.Note(SceneCall::Sweep, 200, true);
+	CHECK_STR(WatchSummary(recorder.Threads(), 100, recorder.Shifts(), recorder.ShiftCount()),
+	          "thread 100, the main thread: query 2 (2 in OnUpdate); thread 200: query 2 (1 in OnUpdate); other threads made 1 call "
+	          "while OnUpdate ran; no shifts");
+```
+```cpp
+	CHECK(WatchSummary(threads, 1, {}, 0).find("; the other threads: step 9; no shifts") != std::string::npos);
+```
+```cpp
+	CHECK(WatchSummary(threads, 1, {}, 0).find("; the other threads: step 9; no other thread called while OnUpdate ran; no shifts") !=
+	      std::string::npos);
+```
+
+- [ ] **Step 2: Edit `tests/TestAudit.cpp`: the queries' slots**
+
+```cpp
+	PxU32                      pairCount = 0;
+```
+```cpp
+	PxU32                      pairCount = 0;
+	const PxBoxGeometry        box(1.0f, 1.0f, 1.0f);
+	const PxTransform          pose(PxIdentity);
+	PxRaycastBuffer            ray;
+	PxSweepBuffer              sweep;
+	PxOverlapBuffer            overlaps;
+```
+```cpp
+	expect(SceneCall::FetchResultsFinish, SlotOf<PxScene>([](PxScene& a) { a.fetchResultsFinish(); }));
+```
+```cpp
+	expect(SceneCall::FetchResultsFinish, SlotOf<PxScene>([](PxScene& a) { a.fetchResultsFinish(); }));
+	expect(SceneCall::Raycast, SlotOf<PxScene>([&](PxScene& a) { (void)a.raycast(PxVec3(0.0f), PxVec3(0.0f, 0.0f, -1.0f), 1.0f, ray); }));
+	expect(SceneCall::Sweep, SlotOf<PxScene>([&](PxScene& a) { (void)a.sweep(box, pose, PxVec3(1.0f, 0.0f, 0.0f), 1.0f, sweep); }));
+	expect(SceneCall::Overlap, SlotOf<PxScene>([&](PxScene& a) { (void)a.overlap(box, pose, overlaps); }));
+```
+
+- [ ] **Step 3: Build; it must fail**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C" | sort -u | head -3
+```
+Expected: `error C2065: 'Raycast': undeclared identifier`.
+
+- [ ] **Step 4: Edit `src/physx/SceneWatch.h`**
+
+```cpp
+// fetch the simulation, take the write lock and shift the origin, and whether while OnUpdate runs. That decides where
+// the exporter can read the scene. This is the record the hooks keep, and its summary; SceneHooks.h installs the hooks.
+```
+```cpp
+// fetch the simulation, take the write lock and shift the origin, and whether while OnUpdate runs. That decided where
+// the exporter can read the scene. Part 3 adds actors to the scene in OnUpdate, so the watch also counts the scene's
+// queries (raycasts, sweeps and overlaps), which no other thread may make meanwhile. This is the record the hooks keep,
+// and its summary; SceneHooks.h installs the hooks.
+```
+```cpp
+	FetchResultsFinish,
+```
+```cpp
+	FetchResultsFinish,
+	Raycast,
+	Sweep,
+	Overlap,
+```
+```cpp
+constexpr size_t kSceneCalls = 16;
+```
+```cpp
+constexpr size_t kSceneCalls = 19;
+```
+```cpp
+// The status's line for a watch: each thread's calls by kind (add, remove, step, fetch, lock and shift), and of each
+// kind, how many came while OnUpdate ran and how many of those without the write lock; then the shifts.
+```
+```cpp
+// The status's line for a watch: each thread's calls by kind (add, remove, step, fetch, query, lock and shift), and of
+// each kind, how many came while OnUpdate ran, and of those that write, how many without the write lock; then how many
+// calls other threads than aMainThread, OnUpdate's own, made while it ran; then the shifts.
+```
+
+- [ ] **Step 5: Edit `src/physx/SceneWatch.cpp`**
+
+```cpp
+	{ "fetchResultsFinish", 64, 0x53d30 },
+```
+```cpp
+	{ "fetchResultsFinish", 64, 0x53d30 },
+	{ "raycast", 94, 0x60890 },
+	{ "sweep", 95, 0x60960 },
+	{ "overlap", 96, 0x60b70 },
+```
+```cpp
+// The summary's kinds of call. unlockWrite only mirrors lockWrite, so it isn't counted.
+```
+```cpp
+// The summary's kinds of call, and whether they write to the scene. unlockWrite only mirrors lockWrite, so it isn't
+// counted.
+```
+```cpp
+	std::initializer_list<SceneCall> calls;
+```
+```cpp
+	std::initializer_list<SceneCall> calls;
+	bool                             writes = true;
+```
+```cpp
+	{ "fetch", { SceneCall::FetchResults, SceneCall::FetchResultsStart, SceneCall::FetchResultsFinish } },
+```
+```cpp
+	{ "fetch", { SceneCall::FetchResults, SceneCall::FetchResultsStart, SceneCall::FetchResultsFinish } },
+	{ "query", { SceneCall::Raycast, SceneCall::Sweep, SceneCall::Overlap }, false },
+```
+```cpp
+	std::string out;
+```
+```cpp
+	std::string out;
+	uint64_t    othersInUpdate = 0;  // calls other threads made while OnUpdate ran
+```
+```cpp
+					kinds += std::format(" ({} in OnUpdate, {} of them without the write lock)", inUpdate, unlocked);
+				}
+			}
+```
+```cpp
+					kinds += kind.writes ? std::format(" ({} in OnUpdate, {} of them without the write lock)", inUpdate, unlocked)
+					                     : std::format(" ({} in OnUpdate)", inUpdate);
+				}
+			}
+			othersInUpdate += thread.id != aMainThread ? inUpdate : 0;
+```
+```cpp
+	}
+	if (aShiftCount == 0 || aShifts.empty())
+```
+```cpp
+	}
+	else
+	{
+		out += othersInUpdate == 0 ? "; no other thread called while OnUpdate ran"
+		                           : std::format("; other threads made {} call{} while OnUpdate ran", othersInUpdate,
+		                                         othersInUpdate == 1 ? "" : "s");
+	}
+	if (aShiftCount == 0 || aShifts.empty())
+```
+
+- [ ] **Step 6: Edit `src/physx/SceneHooks.h`**
+
+```cpp
+// Step 3's scene watch, in the game (spike 5's "The scene watch"): hooks on the 16 audited slots of scene 0's vtable.
+```
+```cpp
+// Step 3's scene watch, in the game (spike 5's "The scene watch"): hooks on 19 audited slots of scene 0's vtable.
+```
+
+- [ ] **Step 7: Edit `src/physx/SceneHooks.cpp`**
+
+```cpp
+void LockWrite(PxScene* aThis, const char* aFile, PxU32 aLine)
+```
+```cpp
+// The queries are const members, which take their object first all the same.
+bool Raycast(PxScene* aThis, const PxVec3& aOrigin, const PxVec3& aDirection, const PxReal aDistance, PxRaycastCallback& aHits,
+             PxHitFlags aFlags, const PxQueryFilterData& aFilter, PxQueryFilterCallback* aFilterCall, const PxQueryCache* aCache)
+{
+	Record(aThis, SceneCall::Raycast);
+	return Original<bool (*)(PxScene*, const PxVec3&, const PxVec3&, const PxReal, PxRaycastCallback&, PxHitFlags, const PxQueryFilterData&,
+	                         PxQueryFilterCallback*, const PxQueryCache*)>(SceneCall::Raycast)(aThis, aOrigin, aDirection, aDistance, aHits,
+	                                                                                           aFlags, aFilter, aFilterCall, aCache);
+}
+
+bool Sweep(PxScene* aThis, const PxGeometry& aGeometry, const PxTransform& aPose, const PxVec3& aDirection, const PxReal aDistance,
+           PxSweepCallback& aHits, PxHitFlags aFlags, const PxQueryFilterData& aFilter, PxQueryFilterCallback* aFilterCall,
+           const PxQueryCache* aCache, const PxReal aInflation)
+{
+	Record(aThis, SceneCall::Sweep);
+	return Original<bool (*)(PxScene*, const PxGeometry&, const PxTransform&, const PxVec3&, const PxReal, PxSweepCallback&, PxHitFlags,
+	                         const PxQueryFilterData&, PxQueryFilterCallback*, const PxQueryCache*, const PxReal)>(SceneCall::Sweep)(
+	    aThis, aGeometry, aPose, aDirection, aDistance, aHits, aFlags, aFilter, aFilterCall, aCache, aInflation);
+}
+
+bool Overlap(PxScene* aThis, const PxGeometry& aGeometry, const PxTransform& aPose, PxOverlapCallback& aHits,
+             const PxQueryFilterData& aFilter, PxQueryFilterCallback* aFilterCall)
+{
+	Record(aThis, SceneCall::Overlap);
+	return Original<bool (*)(PxScene*, const PxGeometry&, const PxTransform&, PxOverlapCallback&, const PxQueryFilterData&,
+	                         PxQueryFilterCallback*)>(SceneCall::Overlap)(aThis, aGeometry, aPose, aHits, aFilter, aFilterCall);
+}
+
+void LockWrite(PxScene* aThis, const char* aFile, PxU32 aLine)
+```
+```cpp
+	reinterpret_cast<void*>(&FetchResultsFinish),
+```
+```cpp
+	reinterpret_cast<void*>(&FetchResultsFinish),
+	reinterpret_cast<void*>(&Raycast),
+	reinterpret_cast<void*>(&Sweep),
+	reinterpret_cast<void*>(&Overlap),
+```
+
+- [ ] **Step 8: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `372 test(s), 0 failure(s)`.
+
+- [ ] **Step 9: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "collision-and-movement: the scene watch counts scene 0's queries too" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 42: The link keeps Minecraft's solid blocks by section
+
+The spec's "Solids". After each section's mesh, SkyCraft's `WorldExporter` sends `kRenSolids`: the section, a count,
+and unless the count is 0, 512 bytes of bits, bit x + 16z + 256y set for each block with any collision shape (glass and
+slabs count; torches don't). `link/Solids` checks each message, as every render message is checked: coordinates within
+spike 4's ranges, a count up to 4,096, the bits there when the count isn't 0, and the count equal to the bits set,
+since SkyCraft counts one per bit. It keeps each section's latest bits, with a version that goes up with each change, so
+a body built from older bits knows it's out of date. A count of 0 forgets the section, and Minecraft's clear-all
+forgets every one, as SkyCraft's own game side does (`NpcBlocks.cpp`). The link keeps them whether drawing is on or not.
+`mclink` prints the solids, and those in the 3 × 3 × 3 sections around the stand-in V, where V's bodies would go; its
+new script, `solids.txt`, places and breaks blocks for Task 43.
+
+**Files:**
+- Create: `src/link/Solids.h`, `src/link/Solids.cpp`, `tests/TestSolids.cpp`, `tools/mclink/solids.txt`
+- Modify: `src/link/Link.h`, `src/link/Link.cpp`, `tools/mclink/Main.cpp`, `tests/TestLink.cpp`, `CMakeLists.txt`
+
+- [ ] **Step 1: Write the failing test, `tests/TestSolids.cpp`**
+
+```cpp
+#include "Harness.h"
+
+#include "link/Solids.h"
+
+#include <cstring>
+#include <initializer_list>
+#include <vector>
+
+using namespace cpmc;
+using namespace cpmc::link;
+
+namespace
+{
+// A kRenSolids payload, as SkyCraft's WorldExporter writes it: the section and the count, then the bits unless the count
+// is 0. aBlocks are block positions within the section.
+std::vector<uint8_t> SolidsPayload(int32_t aX, int32_t aY, int32_t aZ, std::initializer_list<BlockPos> aBlocks)
+{
+	SolidBits bits{};
+	for (const BlockPos& block : aBlocks)
+	{
+		const int bit = block.x + 16 * block.z + 256 * block.y;
+		bits[size_t(bit >> 6)] |= uint64_t(1) << (bit & 63);
+	}
+	const uint32_t       count = uint32_t(aBlocks.size());
+	std::vector<uint8_t> payload(16 + (count ? 512 : 0));
+	const int32_t        header[3] = { aX, aY, aZ };
+	std::memcpy(payload.data(), header, 12);
+	std::memcpy(payload.data() + 12, &count, 4);
+	if (count)
+	{
+		std::memcpy(payload.data() + 16, bits.data(), 512);
+	}
+	return payload;
+}
+
+void SetCount(std::vector<uint8_t>& aPayload, uint32_t aCount)
+{
+	std::memcpy(aPayload.data() + 12, &aCount, 4);
+}
+}
+
+TEST(SolidsParseSkyCraftsMessage)
+{
+	std::string                        error;
+	const std::optional<SolidsMessage> solids = ParseSolids(SolidsPayload(-8, 0, 125, { { 0, 0, 0 }, { 15, 0, 0 }, { 0, 15, 15 } }), error);
+	CHECK(solids.has_value());
+	if (solids)
+	{
+		CHECK((solids->section == SectionPos{ -8, 0, 125 }));
+		CHECK_EQ(solids->count, 3u);
+		CHECK_EQ(solids->bits[0], (uint64_t(1) << 0) | (uint64_t(1) << 15));  // bits 0 and 15
+		CHECK_EQ(solids->bits[63], uint64_t(1) << 48);                        // bit 4,080: 15z + 15 * 256y
+	}
+	const std::optional<SolidsMessage> none = ParseSolids(SolidsPayload(3, -4, 7, {}), error);  // the section has none left
+	CHECK((none.has_value() && none->count == 0 && none->section == SectionPos{ 3, -4, 7 }));
+}
+
+TEST(SolidsRejectWhatIsntSkyCraftsMessage)
+{
+	std::string error;
+	CHECK(!ParseSolids(std::vector<uint8_t>(8), error).has_value());
+	CHECK_STR(error, "a solids message of 8 bytes has no room for its header");
+	std::vector<uint8_t> payload = SolidsPayload(1, 2, 3, { { 1, 1, 1 } });
+	payload.resize(16);
+	CHECK(!ParseSolids(payload, error).has_value());
+	CHECK_STR(error, "solids for section 1 2 3 claim 1 blocks, with no room for their bits");
+	payload = SolidsPayload(1, 2, 3, { { 1, 1, 1 } });
+	SetCount(payload, 5000);
+	CHECK(!ParseSolids(payload, error).has_value());
+	CHECK_STR(error, "solids for section 1 2 3 claim 5000 blocks, more than a section holds");
+	SetCount(payload, 2);
+	CHECK(!ParseSolids(payload, error).has_value());
+	CHECK_STR(error, "solids for section 1 2 3 claim 2 blocks, and their bits hold 1");
+	CHECK(!ParseSolids(SolidsPayload(1, 300, 3, { { 1, 1, 1 } }), error).has_value());
+	CHECK_STR(error, "solids for section 1 300 3 are out of range");
+	CHECK(!ParseSolids(SolidsPayload(-3'000'000, 0, 3, { { 1, 1, 1 } }), error).has_value());
+}
+
+TEST(SolidsKeepEachSectionsLatest)
+{
+	Solids      solids;
+	std::string error;
+	solids.Set(*ParseSolids(SolidsPayload(0, 0, 0, { { 0, 0, 0 }, { 1, 0, 0 } }), error));
+	solids.Set(*ParseSolids(SolidsPayload(1, 0, 0, { { 5, 5, 5 } }), error));
+	CHECK_EQ(solids.Sections(), size_t(2));
+	CHECK_EQ(solids.Blocks(), 3ull);
+	const Solids::Section* first = solids.Find({ 0, 0, 0 });
+	CHECK(first != nullptr && first->bits[0] == 3);
+	const uint64_t version = first ? first->version : 0;
+	// A block placed: the section's bits are replaced, and its version goes up, so its body is rebuilt.
+	solids.Set(*ParseSolids(SolidsPayload(0, 0, 0, { { 0, 0, 0 }, { 1, 0, 0 }, { 2, 0, 0 } }), error));
+	first = solids.Find({ 0, 0, 0 });
+	CHECK(first != nullptr && first->bits[0] == 7 && first->version > version);
+	CHECK_EQ(solids.Blocks(), 4ull);
+	// Its last block broken: the section goes.
+	solids.Set(*ParseSolids(SolidsPayload(0, 0, 0, {}), error));
+	CHECK(solids.Find({ 0, 0, 0 }) == nullptr);
+	CHECK_EQ(solids.Sections(), size_t(1));
+	CHECK_EQ(solids.Blocks(), 1ull);
+	CHECK(solids.Find({ 2, 0, 0 }) == nullptr);  // never had any
+	// Minecraft's clear-all: everything goes.
+	solids.Clear();
+	CHECK_EQ(solids.Sections(), size_t(0));
+	CHECK_EQ(solids.Blocks(), 0ull);
+}
+```
+- [ ] **Step 2: Edit `tests/TestLink.cpp`: the failing test**
+
+```cpp
+	std::memcpy(payload.data() + 12, &aClaimed, 4);
+```
+```cpp
+	std::memcpy(payload.data() + 12, &aClaimed, 4);
+	return payload;
+}
+
+// A kRenSolids payload for section aX 0 0, with its first aBlocks blocks solid, as SkyCraft sends it.
+std::vector<uint8_t> SolidsPayload(int32_t aX, uint32_t aBlocks)
+{
+	std::vector<uint8_t> payload(16 + (aBlocks ? 512 : 0));
+	std::memcpy(payload.data(), &aX, 4);
+	std::memcpy(payload.data() + 12, &aBlocks, 4);
+	for (uint32_t bit = 0; bit < aBlocks; ++bit)
+	{
+		payload[16 + bit / 8] |= uint8_t(1u << (bit % 8));
+	}
+```
+```cpp
+	CHECK_EQ(link.State().resyncs, 0ull);
+```
+```cpp
+	CHECK_EQ(link.State().resyncs, 0ull);
+}
+
+TEST(LinkKeepsMinecraftsSolids)
+{
+	// Solids are kept by section as Minecraft sends them, checked like the other render messages. A section with none
+	// left goes, and so does everything at a clear-all.
+	FakeMinecraft minecraft;
+	Link          link(minecraft.base, 0);
+	Sink          sink;
+	minecraft.Send(proto::kRenSolids, SolidsPayload(1, 3));
+	minecraft.Send(proto::kRenSolids, SolidsPayload(2, 5));
+	std::vector<uint8_t> bad = SolidsPayload(3, 4);
+	bad.resize(16);  // claims 4 blocks, without their bits
+	minecraft.Send(proto::kRenSolids, bad);
+	link.Update(At(1.0), kSettings, sink);
+	CHECK_EQ(link.SolidSections().Sections(), size_t(2));
+	CHECK_EQ(link.State().solidSections, size_t(2));
+	CHECK_EQ(link.State().solidBlocks, 8ull);
+	CHECK_EQ(link.State().messages[proto::kRenSolids], 3ull);
+	CHECK_EQ(link.State().rejected, 1ull);
+	CHECK(link.State().lastRejected.find("no room for their bits") != std::string::npos);
+	const Solids::Section* first = link.SolidSections().Find({ 1, 0, 0 });
+	CHECK(first != nullptr && first->bits[0] == 7);
+	minecraft.Send(proto::kRenSolids, SolidsPayload(1, 0));  // section 1 0 0 has none left
+	link.Update(At(1.1), kSettings, sink);
+	CHECK(link.SolidSections().Find({ 1, 0, 0 }) == nullptr);
+	CHECK_EQ(link.State().solidBlocks, 5ull);
+	minecraft.Send(proto::kRenClearAll, {});
+	link.Update(At(1.2), kSettings, sink);
+	CHECK_EQ(link.State().solidSections, size_t(0));
+	CHECK_EQ(link.State().solidBlocks, 0ull);
+	CHECK_EQ(sink.clears, 1);
+```
+
+- [ ] **Step 3: Edit `CMakeLists.txt` to add the test**
+
+```cmake
+	tests/TestGroundWorker.cpp
+	tests/TestAudit.cpp
+```
+```cmake
+	tests/TestGroundWorker.cpp
+	tests/TestSolids.cpp
+	tests/TestAudit.cpp
+```
+
+- [ ] **Step 4: Build; it must fail**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C" | sort -u | head -3
+```
+Expected: `error C2039: 'SolidSections': is not a member of 'cpmc::link::Link'`, and further down,
+`error C1083: Cannot open include file: 'link/Solids.h'`.
+
+- [ ] **Step 5: Write `src/link/Solids.h`**
+
+```cpp
+#pragma once
+
+#include "world/BlockWorld.h"
+
+#include <array>
+#include <cstdint>
+#include <map>
+#include <optional>
+#include <span>
+#include <string>
+
+// Minecraft's solid blocks (spike 5's "Part 3", "Solids"): after each section's mesh, SkyCraft sends kRenSolids, which of
+// the section's blocks have any collision shape, as a 4,096-bit set (bit x + 16z + 256y). The link keeps them by section,
+// for V's bodies, whether drawing is on or not, as it does sections. Shared memory is written by another process, so each
+// message is checked before it's kept. Pure.
+namespace cpmc::link
+{
+using SolidBits = std::array<uint64_t, 64>;  // bit x + 16z + 256y: the section's block (x, y, z) is solid
+
+struct SolidsMessage
+{
+	SectionPos section;
+	uint32_t   count = 0;  // solid blocks; 0: the section has none left
+	SolidBits  bits{};
+};
+
+// A kRenSolids payload: {i32 sx, sy, sz; u32 count}, then 512 bytes of bits unless the count is 0. Nothing, with aError
+// saying why, if the coordinates are out of spike 4's ranges, the count is over 4,096 or isn't the number of bits set, or
+// the bits are missing.
+std::optional<SolidsMessage> ParseSolids(std::span<const uint8_t> aPayload, std::string& aError);
+
+class Solids
+{
+public:
+	struct Section
+	{
+		SolidBits bits{};
+		uint32_t  count = 0;
+		uint64_t  version = 0;  // new with each change: a body built from an older one is out of date
+	};
+
+	// A section's solids, replacing what it had: a count of 0 forgets the section.
+	void Set(const SolidsMessage& aMessage);
+	// Minecraft's clear-all: every section goes.
+	void Clear();
+
+	const Section* Find(const SectionPos& aSection) const;  // null: no solid blocks there
+	size_t         Sections() const { return sections_.size(); }
+	uint64_t       Blocks() const { return blocks_; }  // the sections' solid blocks together
+
+private:
+	std::map<SectionPos, Section> sections_;
+	uint64_t                      blocks_ = 0;
+	uint64_t                      version_ = 0;
+};
+}
+```
+- [ ] **Step 6: Write `src/link/Solids.cpp`**
+
+```cpp
+#include "link/Solids.h"
+
+#include "link/Messages.h"
+
+#include <skycraft_protocol.h>
+
+#include <bit>
+#include <cstdlib>
+#include <cstring>
+#include <format>
+
+namespace cpmc::link
+{
+namespace proto = skycraft::proto;
+static_assert(sizeof(proto::RenSolids) == 16 && sizeof(SolidBits) == 512);
+
+std::optional<SolidsMessage> ParseSolids(std::span<const uint8_t> aPayload, std::string& aError)
+{
+	proto::RenSolids header;
+	if (aPayload.size() < sizeof header)
+	{
+		aError = std::format("a solids message of {} bytes has no room for its header", aPayload.size());
+		return std::nullopt;
+	}
+	std::memcpy(&header, aPayload.data(), sizeof header);
+	if (std::abs(int64_t(header.sx)) > kMaxSectionXZ || std::abs(int64_t(header.sz)) > kMaxSectionXZ ||
+	    std::abs(int64_t(header.sy)) > kMaxSectionY)
+	{
+		aError = std::format("solids for section {} {} {} are out of range", header.sx, header.sy, header.sz);
+		return std::nullopt;
+	}
+	SolidsMessage solids{ { header.sx, header.sy, header.sz }, header.count };
+	if (header.count == 0)
+	{
+		return solids;
+	}
+	if (header.count > 4096)
+	{
+		aError = std::format("solids for section {} {} {} claim {} blocks, more than a section holds", header.sx, header.sy, header.sz,
+		                     header.count);
+		return std::nullopt;
+	}
+	if (aPayload.size() - sizeof header < sizeof solids.bits)
+	{
+		aError = std::format("solids for section {} {} {} claim {} blocks, with no room for their bits", header.sx, header.sy,
+		                     header.sz, header.count);
+		return std::nullopt;
+	}
+	std::memcpy(solids.bits.data(), aPayload.data() + sizeof header, sizeof solids.bits);
+	uint32_t set = 0;
+	for (const uint64_t word : solids.bits)
+	{
+		set += uint32_t(std::popcount(word));
+	}
+	if (set != header.count)
+	{
+		aError = std::format("solids for section {} {} {} claim {} blocks, and their bits hold {}", header.sx, header.sy, header.sz,
+		                     header.count, set);
+		return std::nullopt;
+	}
+	return solids;
+}
+
+void Solids::Set(const SolidsMessage& aMessage)
+{
+	if (const auto old = sections_.find(aMessage.section); old != sections_.end())
+	{
+		blocks_ -= old->second.count;
+		sections_.erase(old);
+	}
+	if (aMessage.count == 0)
+	{
+		return;
+	}
+	sections_[aMessage.section] = { aMessage.bits, aMessage.count, ++version_ };
+	blocks_ += aMessage.count;
+}
+
+void Solids::Clear()
+{
+	sections_.clear();
+	blocks_ = 0;
+}
+
+const Solids::Section* Solids::Find(const SectionPos& aSection) const
+{
+	const auto found = sections_.find(aSection);
+	return found == sections_.end() ? nullptr : &found->second;
+}
+}
+```
+- [ ] **Step 7: Edit `src/link/Link.h`**
+
+```cpp
+#include "link/Rings.h"
+```
+```cpp
+#include "link/Rings.h"
+#include "link/Solids.h"
+```
+```cpp
+// adds build mode's drive (its spec's "Part 1"): one teleport, then Minecraft drives and the link says where V goes. And
+// Night City's ground (its "Part 2"): the city's collision instead of the floor, read around the centre and sent as it
+// changes. It works on the mapping's memory, so the tests give it plain memory with a fake Minecraft.
+```
+```cpp
+// adds build mode's drive (its spec's "Part 1"): one teleport, then Minecraft drives and the link says where V goes;
+// Night City's ground (its "Part 2"): the city's collision instead of the floor, read around the centre and sent as it
+// changes; and Minecraft's solid blocks by section (its "Part 3"), for V's bodies. It works on the mapping's memory, so
+// the tests give it plain memory with a fake Minecraft.
+```
+```cpp
+		uint64_t                     translucentDropped = 0;
+```
+```cpp
+		uint64_t                     translucentDropped = 0;
+		size_t                       solidSections = 0;  // Minecraft's sections with solid blocks, kept (spike 5's "Part 3")
+		uint64_t                     solidBlocks = 0;    // and their solid blocks
+```
+```cpp
+	const Status& State() const { return status_; }
+```
+```cpp
+	const Status& State() const { return status_; }
+	const Solids& SolidSections() const { return solids_; }  // Minecraft's solid blocks, by section
+```
+```cpp
+	Status                status_;
+```
+```cpp
+	Status                status_;
+	Solids                solids_;
+```
+
+- [ ] **Step 8: Edit `src/link/Link.cpp`**
+
+```cpp
+	status_.drainedBytes += drained.bytes;
+```
+```cpp
+	status_.drainedBytes += drained.bytes;
+	status_.solidSections = solids_.Sections();
+	status_.solidBlocks = solids_.Blocks();
+```
+```cpp
+		status_.atlasSeen = false;  // Minecraft sends its atlas next
+		aSink.ClearAll();
+		return true;
+	default:
+		return false;  // atlas patches, lights, solids, digging, textures, avatar, scene, ragdoll: stepped over
+```
+```cpp
+		status_.atlasSeen = false;  // Minecraft sends its atlas next
+		solids_.Clear();
+		aSink.ClearAll();
+		return true;
+	case proto::kRenSolids:
+		if (const auto solids = ParseSolids(aMessage.payload, error))
+		{
+			solids_.Set(*solids);
+		}
+		else
+		{
+			reject();
+		}
+		return true;
+	default:
+		return false;  // atlas patches, lights, digging, textures, avatar, scene, ragdoll: stepped over
+```
+
+- [ ] **Step 9: Edit `CMakeLists.txt` to add the source**
+
+```cmake
+	src/link/GroundWorker.cpp
+	src/physx/GameAbi.cpp
+```
+```cmake
+	src/link/GroundWorker.cpp
+	src/link/Solids.cpp
+	src/physx/GameAbi.cpp
+```
+
+- [ ] **Step 10: Edit `tools/mclink/Main.cpp`**
+
+```cpp
+// It reports what Minecraft sends, and refuses to start while another game side uses the mapping.
+```
+```cpp
+// It reports what Minecraft sends, its solid blocks among it, and refuses to start while another game side uses the
+// mapping.
+```
+```cpp
+void PrintStatus(const Link::Status& aStatus, const Report& aReport)
+{
+	const auto& s = aStatus;
+```
+```cpp
+// Minecraft's solid blocks: all of them, and in the 3 x 3 x 3 sections around the stand-in V's, where V's bodies would go.
+void PrintSolids(const Solids& aSolids, const Vec3d& aFeet)
+{
+	const SectionPos at = SectionOf({ int32_t(std::floor(aFeet.x)), int32_t(std::floor(aFeet.y)), int32_t(std::floor(aFeet.z)) });
+	size_t           sections = 0;
+	uint64_t         blocks = 0;
+	for (int32_t dy = -1; dy <= 1; ++dy)
+	{
+		for (int32_t dz = -1; dz <= 1; ++dz)
+		{
+			for (int32_t dx = -1; dx <= 1; ++dx)
+			{
+				if (const Solids::Section* section = aSolids.Find({ at.x + dx, at.y + dy, at.z + dz }))
+				{
+					++sections;
+					blocks += section->count;
+				}
+			}
+		}
+	}
+	Say("solids: {} sections with {} solid blocks; around the stand-in V's section {} {} {}: {} sections with {} blocks", aSolids.Sections(),
+	    aSolids.Blocks(), at.x, at.y, at.z, sections, blocks);
+}
+
+void PrintStatus(const Link& aLink, const Report& aReport, const Vec3d& aFeet)
+{
+	const auto& s = aLink.State();
+```
+```cpp
+	    double(s.collisionBytes) / 1048576.0, s.collisionWaiting, s.collisionDropped);
+```
+```cpp
+	    double(s.collisionBytes) / 1048576.0, s.collisionWaiting, s.collisionDropped);
+	PrintSolids(aLink.SolidSections(), aFeet);
+```
+```cpp
+			case Action::Kind::Status: PrintStatus(state, report); break;
+```
+```cpp
+			case Action::Kind::Status: PrintStatus(link, report, feet); break;
+```
+```cpp
+	PrintStatus(link.State(), report);
+```
+```cpp
+	PrintStatus(link, report, feet);
+```
+
+- [ ] **Step 11: Write `tools/mclink/solids.txt`**
+
+```text
+# Spike 5's Part 3, offline: Minecraft's solid blocks, as SkyCraft sends them after each section's mesh (kRenSolids),
+# kept by the link's own code, against the real Minecraft (docs/superpowers/specs/2026-10-03-collision-and-movement-
+# design.md, "Solids"). Start Minecraft first: this waits for its world. The blocks go in section 17 0 125, east of
+# spike 3's corner and clear of the blocks built there and of city.txt's dumps; the stand-in V stands in it.
+status
+wait-world 180
+at 280.5 6.14 2007.5
+link on
+type /gamemode creative
+wait 3
+status
+# A 3 x 2 x 4 box of stone, from block 280 7 2004: 24 solid blocks.
+type /fill 280 7 2004 282 8 2007 minecraft:stone
+wait 2
+status
+# Glass and a slab count too, having collision shapes; a torch, with none, doesn't.
+type /setblock 284 7 2004 minecraft:glass
+type /setblock 285 7 2004 minecraft:oak_slab
+type /setblock 286 7 2004 minecraft:torch
+wait 2
+status
+# All broken again: the section has no solid blocks left, and goes.
+type /fill 280 7 2004 286 8 2007 minecraft:air
+wait 2
+status
+quit
+```
+- [ ] **Step 12: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `376 test(s), 0 failure(s)`.
+
+- [ ] **Step 13: Run mclink without Minecraft**
+
+```bash
+cd /d/Cyberpunk-Minecraft/spikes/block-render && printf 'status\nquit\n' > build/selfcheck.txt \
+  && ./build/RelWithDebInfo/mclink.exe build/selfcheck.txt | head -2; echo "exit: ${PIPESTATUS[0]}"
+```
+Expected: `the mapping: created (process …); waiting for Minecraft`, then `Minecraft: absent, …`, and `exit: 0`. The game
+and Minecraft must both be closed: either would hold the mapping, and Minecraft would link.
+
+- [ ] **Step 14: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "collision-and-movement: the link keeps Minecraft's solid blocks by section" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 43: In Minecraft: the worker and the solids, offline
+
+With the user, without the game: the new worker against SkyCraft's unchanged mod, through Task 28's `city.txt` again,
+and Minecraft's solid blocks through `solids.txt`. The city's checks are Task 28's, whose numbers came from spot B's and
+the ramp's own triangles. `solids.txt` stands the stand-in V in section 17 0 125, east of spike 3's corner and clear of
+the blocks built there, and places, then breaks, blocks in it with Minecraft's commands. If a check fails, stop and find
+the cause with superpowers:systematic-debugging before going on. Fixes become new tasks.
+
+**Files:**
+- Modify: `docs/spikes/2026-10-03-collision-and-movement-results.md`
+
+- [ ] **Step 1: Check that the game isn't running**
+
+```bash
+tasklist | grep -i -c "cyberpunk2077.exe"
+```
+Expected: `0`. If it's `1`, ask the user to quit the game: it would hold the mapping.
+
+- [ ] **Step 2: Ask the user to start Minecraft**
+
+The user starts the `CyberCraft` instance from the Modrinth App, and says when its title screen shows. Then:
+```bash
+grep -E "SkyCraft:" "/c/Users/BLOXY/AppData/Roaming/ModrinthApp/profiles/CyberCraft/logs/latest.log" | tail -3
+```
+Expected: `SkyCraft: can't open Skyrim's shared memory yet (Windows error 2: …)`: waiting for a game side.
+
+- [ ] **Step 3: Run step 3's offline script with the new worker**
+
+```bash
+cd /d/Cyberpunk-Minecraft/spikes/block-render && mkdir -p build/part3 && cd build/part3 \
+  && ../RelWithDebInfo/mclink.exe ../../tools/mclink/city.txt | tee city.log; echo "exit: ${PIPESTATUS[0]}"
+```
+Give it 6 minutes, as Task 28. Expected, as Task 28 found (`docs/spikes/2026-10-03-collision-and-movement-results.md`,
+"Step 3, offline"):
+- `the city around region 10 0 250 is all in the ring: 1152 regions` a few seconds after the link, then Minecraft lets
+  its player go within a second;
+- the kerb's drop of about 0.2 about 2 blocks west, the barrier stopping the walk about 4 blocks east, and `explosion at
+  81.6 6.3 2007.8, radius 4.0`, or within a quarter block of it;
+- the ramp: `the city around region 22 0 250 is all in the ring: 1152 regions`, the feet rising about 0.33 over 17
+  blocks north, and x staying at about 180.6 going east;
+- no `build mode ends:` line, and `exit: 0`.
+
+New with this worker, in the status's `ground:` lines:
+- `the worker: N threads`, N a quarter of the processors, from 1 to 4;
+- `its threads running …% of it` near 100: Minecraft takes little of the processor, so the threads aren't kept waiting;
+- about 24,000 voxel blocks from about 108,000 triangles for spot B's area, as Task 28's; and `0 replaced`, since the
+  script reads each batch once while it stands still.
+
+Note how soon after the dump `is all in the ring` came, against Task 28's 2.5 s with one thread.
+
+- [ ] **Step 4: Run the solids' script**
+
+```bash
+cd /d/Cyberpunk-Minecraft/spikes/block-render/build/part3 \
+  && ../RelWithDebInfo/mclink.exe ../../tools/mclink/solids.txt | tee solids.log | grep -E "solids:|render ring: [0-9]+ resyncs"; \
+  echo "exit: ${PIPESTATUS[0]}"
+```
+Expected, in the `solids:` lines, the 3 × 3 × 3 sections around the stand-in V's section 17 0 125:
+- before any block is placed: `0 sections with 0 blocks`;
+- after the stone box: `1 sections with 24 blocks`;
+- after the glass, the slab and the torch: `1 sections with 26 blocks`;
+- after they're all broken: `0 sections with 0 blocks`;
+- `0 rejected` in every `render ring:` line, and `exit: 0`.
+
+The total in each `solids:` line is every section Minecraft has sent with solid blocks, its world's own ground among
+them: note it.
+
+- [ ] **Step 5: Ask the user to stop Minecraft**
+
+Its window is hidden while it's linked, so the user stops it from the Modrinth App.
+
+- [ ] **Step 6: Record it in `docs/spikes/2026-10-03-collision-and-movement-results.md`**
+
+A "Part 3, offline: the worker and the solids" section: the versions; the city's checks with their numbers against Task
+28's; the worker's threads, running share and time for spot B's area, and how soon the area was all in the ring; and
+the solids' counts at each stage, and the totals.
+
+- [ ] **Step 7: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add docs/spikes/2026-10-03-collision-and-movement-results.md \
+  && git commit -q -m "collision-and-movement: Part 3 offline, the worker and the solids" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 44: BlockRender 0.14.0 remembers the turn, and keeps Minecraft's solid blocks
+
+The first of Part 3's two deploys: the follow-ups, the query watch, and Minecraft's solid blocks kept, with no bodies
+yet. The status gains a `solids=` line, the solid blocks the link keeps and their sections, between the ground's line and
+the render ring's. Version 0.14.0.
+
+**Files:**
+- Modify: `src/Status.h`, `src/Status.cpp`, `src/Plugin.cpp`, `tests/TestStatus.cpp`, `CMakeLists.txt`
+
+- [ ] **Step 1: Edit `tests/TestStatus.cpp`: the failing test**
+
+```cpp
+TEST(StatusWritesTheSceneWatch)
+```
+```cpp
+TEST(StatusWritesMinecraftsSolids)
+{
+	cpmc::StatusReport report;
+	cpmc::LinkReport   link;
+	link.solidSections = 625;
+	link.solidBlocks = 640000;
+	report.link = link;
+	const std::string status = cpmc::FormatStatus(report);
+	CHECK(Has(status, "solids=Minecraft's solid blocks: 640000 in 625 sections"));
+	CHECK(status.find("ground=") < status.find("solids=") && status.find("solids=") < status.find("ring="));
+}
+
+TEST(StatusWritesTheSceneWatch)
+```
+
+- [ ] **Step 2: Build; it must fail**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C" | sort -u | head -3
+```
+Expected: `error C2039: 'solidSections': is not a member of 'cpmc::LinkReport'`.
+
+- [ ] **Step 3: Edit `src/Status.h`**
+
+```cpp
+	std::string                    physxWhy;                  // why the exporter couldn't read, while it can't
+```
+```cpp
+	std::string                    physxWhy;                  // why the exporter couldn't read, while it can't
+	// Minecraft's solid blocks (spike 5's "Part 3")
+	size_t   solidSections = 0;
+	uint64_t solidBlocks = 0;
+```
+```cpp
+// drive, positions, ring, atlas, hud, latency, burst and processes); then one structure line per structure:
+```
+```cpp
+// drive, positions, ground, solids, ring, atlas, hud, latency, burst and processes); then one structure line per structure:
+```
+
+- [ ] **Step 4: Edit `src/Status.cpp`**
+
+```cpp
+	out += FormatGround(aLink);
+```
+```cpp
+	out += FormatGround(aLink);
+	out += std::format("solids=Minecraft's solid blocks: {} in {} sections\n", aLink.solidBlocks, aLink.solidSections);
+```
+
+- [ ] **Step 5: Edit `src/Plugin.cpp`**
+
+```cpp
+// build mode: the movement keys are Minecraft's too, and V is teleported to its player's eye every frame; and it reads
+// Night City's shape for Minecraft from the game's PhysX.
+```
+```cpp
+// build mode: the movement keys are Minecraft's too, and V is teleported to its player's eye every frame; it reads Night
+// City's shape for Minecraft from the game's PhysX; and it keeps Minecraft's solid blocks, for V to stand on.
+```
+```cpp
+constexpr const char* kVersion = "0.13.0";
+```
+```cpp
+constexpr const char* kVersion = "0.14.0";
+```
+```cpp
+		report.lastHold = state.lastHold;
+```
+```cpp
+		report.lastHold = state.lastHold;
+		report.solidSections = state.solidSections;
+		report.solidBlocks = state.solidBlocks;
+```
+```cpp
+	aInfo->version = RED4EXT_V1_SEMVER(0, 13, 0);
+```
+```cpp
+	aInfo->version = RED4EXT_V1_SEMVER(0, 14, 0);
+```
+
+- [ ] **Step 6: Edit `CMakeLists.txt`: version 0.14.0**
+
+```cmake
+project(BlockRender VERSION 0.13.0 LANGUAGES C CXX)
+```
+```cmake
+project(BlockRender VERSION 0.14.0 LANGUAGES C CXX)
+```
+
+- [ ] **Step 7: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `377 test(s), 0 failure(s)`.
+
+- [ ] **Step 8: Check that BlockRender imports nothing from PhysX**
+
+```bash
+DUMPBIN="$(ls "/c/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/"*/bin/Hostx64/x64/dumpbin.exe | head -1)"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && MSYS_NO_PATHCONV=1 "$DUMPBIN" -imports -nologo build\\RelWithDebInfo\\BlockRender.dll \
+  | grep -ci "physx"
+```
+Expected: `0`.
+
+- [ ] **Step 9: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "collision-and-movement: BlockRender 0.14.0 remembers the turn, and keeps Minecraft's solid blocks" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 45: The PhysX audit's addendum: the bodies' and the queries' slots
+
+The spec's "The audit", before step 4: each PhysX call Part 3 adds, found in the game's `PhysX3_x64.dll` (the audited
+build) by its strings and its code, offline, with Python and Capstone, as spike 1's audit and Task 32's addendum were
+done. Besides the calls the spec lists, `PxShape::setLocalPose` places each box on its body, and the scene's three
+queries are the scene watch's (Task 41). Our side is a test: `BodyCallsUseTheGamesSlots` measures the slot each of the
+bodies' calls goes through, as `TestAudit` measures the others. It passes as soon as it's added, since our headers
+already have the game's layout; it's there to keep it so.
+
+**Files:**
+- Modify: `tests/TestAudit.cpp`, `docs/spikes/2026-10-01-physx-abi-audit.md`
+
+- [ ] **Step 1: Edit `tests/TestAudit.cpp`: the bodies' slots**
+
+```cpp
+TEST(ActorCallsUseTheGamesSlots)
+```
+```cpp
+TEST(BodyCallsUseTheGamesSlots)
+{
+	// Part 3's bodies (physx/Bodies.cpp) are made, shaped, posed and released through these slots, as the audit's second
+	// addendum found them in the game's PhysX3_x64.dll. Each PxShape slot is one past NVIDIA's header's (see PxShape.h).
+	Fake                dummy;  // a shape: never touched
+	PxShape&            shape = reinterpret_cast<PxShape&>(dummy);
+	PxMaterial*         material = nullptr;
+	const PxBoxGeometry box(0.5f, 0.5f, 0.5f);
+	const PxTransform   pose(PxIdentity);
+	const PxFilterData  filter;
+	Expect("PxPhysics::createRigidStatic", SlotOf<PxPhysics>([&](PxPhysics& a) { (void)a.createRigidStatic(pose); }), 21);
+	Expect("PxPhysics::createShape",
+	       SlotOf<PxPhysics>([&](PxPhysics& a) { (void)a.createShape(box, &material, 1, true, PxShapeFlag::eSCENE_QUERY_SHAPE); }), 27);
+	Expect("PxActor::release", SlotOf<PxActor>([](PxActor& a) { a.release(); }), 0);
+	Expect("PxActor::getScene", SlotOf<PxActor>([](PxActor& a) { (void)a.getScene(); }), 6);
+	Expect("PxRigidActor::setGlobalPose", SlotOf<PxRigidActor>([&](PxRigidActor& a) { a.setGlobalPose(pose); }), 21);
+	Expect("PxRigidActor::attachShape", SlotOf<PxRigidActor>([&](PxRigidActor& a) { a.attachShape(shape); }), 23);
+	Expect("PxShape::release", SlotOf<PxShape>([](PxShape& a) { a.release(); }), 0);
+	Expect("PxShape::setLocalPose", SlotOf<PxShape>([&](PxShape& a) { a.setLocalPose(pose); }), 18);
+	Expect("PxShape::setSimulationFilterData", SlotOf<PxShape>([&](PxShape& a) { a.setSimulationFilterData(filter); }), 20);
+	Expect("PxShape::setQueryFilterData", SlotOf<PxShape>([&](PxShape& a) { a.setQueryFilterData(filter); }), 22);
+	Expect("PxShape::getMaterials", SlotOf<PxShape>([&](PxShape& a) { (void)a.getMaterials(&material, 1); }), 26);
+}
+
+TEST(ActorCallsUseTheGamesSlots)
+```
+
+- [ ] **Step 2: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `378 test(s), 0 failure(s)`.
+
+- [ ] **Step 3: Edit `docs/spikes/2026-10-01-physx-abi-audit.md`: the addendum, at its end**
+
+```markdown
+`PxBase::release` for actors and shapes.
+```
+```markdown
+`PxBase::release` for actors and shapes.
+
+## Addendum: spike 5's Part 3, the bodies and the query watch
+
+Date: 2026-10-04. The same DLLs and the same method, starting from the vtables in the table above, and read with Python
+and Capstone. Part 3 makes static actors for Minecraft's blocks (`spikes/block-render/src/physx/Bodies.cpp`), and its
+scene watch also hooks the scene's three queries (`SceneHooks.cpp`). Our side is `TestAudit`'s `BodyCallsUseTheGamesSlots`
+and `SceneWatchHooksTheGamesSlots`.
+
+| Table | Slot | Call | Function's RVA | How it was told |
+|---|---|---|---|---|
+| `NpPhysics` | 21 | `createRigidStatic(const PxTransform&)` | 0x48090 | calls PhysX's factory (0x32850), whose constructor (0x505d0) writes `NpRigidStatic`'s vtable; slot 22, `createRigidDynamic`, does the same with `NpRigidDynamic`'s |
+| `NpPhysics` | 27 | `createShape(const PxGeometry&, PxMaterial* const*, PxU16, bool, PxShapeFlags)` | 0x48270 | calls the factory's 0x32a40, whose constructor (0x65fb0) writes `NpShape`'s vtable |
+| `NpRigidStatic` | 0 | `release()` | 0x501b0 | calls the rigid actor's release (0x51130): "PxRigidActor::release: Actor is part of a pruning structure …" |
+| `NpRigidStatic` | 6 | `getScene()` | 0x50f00 | jumps to 0x22200, which `NpRigidDynamic`'s slot 6 shares: the actor's scene while it's being added or is in one, else null |
+| `NpRigidStatic` | 21 | `setGlobalPose(const PxTransform&, bool)` | 0x50300 | "PxRigidStatic::setGlobalPose: Actor is part of a pruning structure …" |
+| `NpRigidStatic` | 23 | `attachShape(PxShape&)` | 0x50b90 | "PxRigidActor::attachShape: Actor is part of a pruning structure …"; slot 24 has `detachShape`'s strings |
+| `NpShape` | 0 | `release()` | 0x661e0 | takes one from the reference count at +0x20, which slot 6, the game's extra getter, reads, and calls the count's own handler when it reaches 0 |
+| `NpShape` | 18 | `setLocalPose(const PxTransform&)` | 0x66700 | "PxShape::setLocalPose: Shape is a part of pruning structure …" |
+| `NpShape` | 20 | `setSimulationFilterData(const PxFilterData&)` | 0x66960 | writes 16 bytes at +0x60, which slot 21 (`getSimulationFilterData`, audited) reads, or buffers them while the scene simulates |
+| `NpShape` | 22 | `setQueryFilterData(const PxFilterData&)` | 0x66ac0 | writes 16 bytes at +0x50, which slot 23 (`getQueryFilterData`, audited) reads |
+| `NpShape` | 26 | `getMaterials(PxMaterial**, PxU32, PxU32)` | 0x66d60 | jumps to 0x67d30, which writes the pointer PhysX's material table holds for each of the shape's material indices; slot 24, `setMaterials`, calls it too, and slot 27 is `getMaterialFromInternalFaceIndex` ("PxShape::getMaterialFromInternalFaceIndex received 0xFFFFffff …") |
+| `NpScene` | 94 | `raycast(…)` | 0x60890 | takes its distance in XMM3 and its hit flags by address; the probe's raycast |
+| `NpScene` | 95 | `sweep(…)` | 0x60960 | " Precise sweep doesn't support MTD …" |
+| `NpScene` | 96 | `overlap(…)` | 0x60b70 | takes no float; the probe's and the exporter's overlap |
+
+What that settles:
+- **Every slot is where NVIDIA's header puts it,** `PxShape`'s one later, as our compiler lays them out with the repo's
+  `PxShape.h`.
+- **A shape keeps its materials:** the factory's `createShape` takes a reference on each material it's given (the loop at
+  0x32c20 adds one at the material's +0x20, from the same table `getMaterials` reads). So a shape BlockRender keeps holds
+  on to the material it copied, even after the game lets go of the shape it copied it from.
+- **An actor's release takes it out of its scene,** as NVIDIA's `NpRigidActorTemplate::release` does. BlockRender still
+  takes a body out first, with `removeActor` (slot 13, audited for the watch), then releases it.
+- **The hit flags go by address:** `PxHitFlags` has a copy constructor of its own, so MSVC passes it as a pointer to a
+  copy, in the game as in our hooks, which declare it the same way.
+```
+
+- [ ] **Step 4: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render docs/spikes/2026-10-01-physx-abi-audit.md \
+  && git commit -q -m "collision-and-movement: the PhysX audit's addendum, the bodies' and the queries' slots" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 46: In the game: the follow-ups, the query watch and the solids
+
+The first half of step 4 in the game, with the user, on BlockRender 0.14.0, which makes no bodies yet:
+- **Part 2's follow-ups:** the turn, remembered across a game start; and a fast drop onto the ground, with the worker's
+  figures saying why a region takes as long as it does.
+- **The query watch:** walking, driving and shooting with the watch on. Bodies are added and removed in OnUpdate, so no
+  other thread may call scene 0 meanwhile, queries included. That settles where Tasks 47 to 52 add them.
+- **The solids:** the status's `solids=` line as blocks are placed and broken.
+
+Task 33's commands for requests, the log and the status come back here. FreeFly (F7) stays off. Note what you see as you
+go: Step 10 records it. If a check fails, stop and find the cause with superpowers:systematic-debugging before going on.
+Fixes become new tasks.
+
+**Files:**
+- Modify: `docs/spikes/2026-10-03-collision-and-movement-results.md`
+
+- [ ] **Step 1: Deploy (the game must not be running)**
+
+```bash
+tasklist | grep -i -c "cyberpunk2077.exe"
+```
+Expected: `0`. If it's `1`, ask the user to quit the game first, because a running game locks the DLL.
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default -DCP2077_DIR=E:/Cyberpunk2077 > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C|error MSB"; \
+  "$CMAKE" --preset default -DCP2077_DIR= > /dev/null; \
+  cmp build/RelWithDebInfo/BlockRender.dll /e/Cyberpunk2077/red4ext/plugins/BlockRender/BlockRender.dll && echo installed
+```
+Expected: `installed`. The second configure clears `CP2077_DIR` again.
+
+- [ ] **Step 2: In the game: load, link, and the turn measured**
+
+Ask the user to start the `CyberCraft` instance, then the game, load the free-roam save at spike 3's corner, and click
+the overlay's Link button. Expected, in the log: `BlockRender 0.14.0 loaded`, `the turn: nothing remembered, so build
+mode turns once V has turned 5 times`, and `link: Minecraft is there (process …)`.
+
+Ask the user to turn V left and right a few times, pausing between turns. Expected: the drive line's `turn on, -0.0…
+degrees a count from … turns`, and in the log `the turn: -0.0… degrees a count, measured, and saved in turn.txt for the
+next session`. Then:
+```bash
+cat /e/Cyberpunk2077/red4ext/plugins/BlockRender/turn.txt
+```
+Expected: the file's two comment lines, then `ratio = -0.0…`, the drive line's ratio.
+
+- [ ] **Step 3: In the game: the turn after a game start**
+
+Ask the user to quit the game, leaving Minecraft running, start the game again, load the same save, click Link, and
+press F8 at once, before turning V; then to turn the mouse in build mode. Expected: in the log, `the turn: -0.0…
+degrees a count, remembered from the last session, until this one has measured its own`; in the drive line, `turn on,
+-0.0… degrees a count, remembered from the last session (0 of 5 turns measured)`; and V turning left and right with
+the mouse at once.
+
+- [ ] **Step 4: In the game: the drop**
+
+Record the ground line twice a second for three minutes, in the background (the Bash tool's `run_in_background`):
+```bash
+cd /d/Cyberpunk-Minecraft/spikes/block-render && mkdir -p build/part3 \
+  && uv run --no-project python tools/status_watch.py 180 0.5 "ground|positions|frame" > build/part3/drop.txt
+```
+Ask the user, in build mode, to fly (Space twice), rise about 150 blocks (the overlay's `V:` z), sprint-fly a few
+hundred metres over the city, then stop flying (Space twice) above grass or a street, and drop. Expected: the player
+lands on the ground, not through it. Then again over a street, if time allows. From the recording, during each drop:
+- `regions waiting` climbs and falls back to 0 within a few seconds;
+- `the worker … ms a region of … triangles, its threads running …% of that time; N threads`. Near 100%, a region costs
+  what its triangles cost, against Task 43's figures for spot B; well below, the game's threads kept the worker's
+  threads waiting. That answers Part 2's question of why a region cost 5 to 20 times more in the game.
+
+- [ ] **Step 5: In the game: the query watch**
+
+Ask the user to go on foot to an open street. Then send `scenewatch on`. Expected: `request: scenewatch on: 19 of scene
+0's calls hooked; from a second on, the status sums them by thread`. If it says a slot doesn't hold the audited
+function, another mod has hooked it: stop, and record which.
+
+Ask the user to walk for half a minute, get into a car and drive for half a minute, get out, draw a gun and fire a few
+shots at a wall, and stand still for ten seconds. Then send `scenewatch off`. Expected: `request: scenewatch off: …`,
+and the log's `scene watch, … s: …` line, which the status keeps. Read from it:
+- which threads make queries, and how many;
+- the main thread's queries in OnUpdate: BlockRender's own, the exporter's overlaps;
+- `no other thread called while OnUpdate ran`, or `other threads made N calls while OnUpdate ran`.
+
+- [ ] **Step 6: Decide where the bodies are added**
+
+The bodies are added, removed and posed in OnUpdate (Tasks 50 and 51). That's safe if no other thread called scene 0
+while OnUpdate ran: neither the writes Task 33 watched, nor the queries, which a change to the scene could break.
+- **If so,** go on with Task 47.
+- **If not,** stop after Step 11: the bodies have to be added where the watch shows the scene is quiet, and Tasks 47 to
+  52 are planned again first, as a change to this plan.
+
+PhysX's batched queries (`PxBatchQuery`) don't go through the scene's vtable, so the watch can't see them; step 4's box
+is the check of what's left.
+
+- [ ] **Step 7: In the game: the solids**
+
+Ask the user, in build mode, to place a few blocks one at a time, a second apart, then break them, and leave build
+mode. Expected: the status's `solids=Minecraft's solid blocks: … in … sections` up by one within a second of each block
+placed, and down by one with each broken; the ring line's `0 rejected`.
+
+- [ ] **Step 8: Ask the user to quit the game and stop Minecraft**
+
+- [ ] **Step 9: Check the game's crash reports**
+
+```bash
+ls -t "$LOCALAPPDATA/REDEngine/ReportQueue" 2>/dev/null | head -3
+```
+Expected: nothing newer than this session's start. A newer folder means the game faulted: read it before going on.
+
+- [ ] **Step 10: Record it in `docs/spikes/2026-10-03-collision-and-movement-results.md`**
+
+A "Part 3, in the game: the follow-ups and the query watch" section: the turn across a game start; each drop, whether
+the player landed, and the worker's figures during it, with what they say about why a region costs what it does; the
+watch's summary, thread by thread, with the queries in OnUpdate; the decision, and why; and the solids' counts.
+
+- [ ] **Step 11: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add docs/spikes/2026-10-03-collision-and-movement-results.md \
+  && git commit -q -m "collision-and-movement: Part 3's follow-ups and the query watch in the game" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 47: A section's solid blocks merged into few boxes
+
+The spec's "Bodies", its shape: a body's blocks merged into as few boxes as the greedy way finds, along x, then z, then
+y, so a 16 × 16 layer is one box and a full section one. From each solid block not yet in a box, in order of y, z and x,
+`MergeBoxes` goes as far along x as the blocks go, then takes as many such rows along z, then as many such layers up,
+and marks them taken. Every solid block ends up in exactly one box, and no box holds a block that isn't solid, which
+the tests check on a checkerboard (2,048 boxes, each one block) and on random sections from sparse to dense.
+
+**Files:**
+- Create: `src/physx/BoxMerge.h`, `src/physx/BoxMerge.cpp`, `tests/TestBoxMerge.cpp`
+- Modify: `CMakeLists.txt`
+
+- [ ] **Step 1: Write the failing test, `tests/TestBoxMerge.cpp`**
+
+```cpp
+#include "Harness.h"
+
+#include "physx/BoxMerge.h"
+
+#include <array>
+
+using namespace cpmc;
+using namespace cpmc::px;
+
+namespace
+{
+void Set(link::SolidBits& aBits, int aX, int aY, int aZ)
+{
+	const int bit = aX + 16 * aZ + 256 * aY;
+	aBits[size_t(bit >> 6)] |= uint64_t(1) << (bit & 63);
+}
+
+bool Solid(const link::SolidBits& aBits, int aX, int aY, int aZ)
+{
+	const int bit = aX + 16 * aZ + 256 * aY;
+	return (aBits[size_t(bit >> 6)] >> (bit & 63)) & 1;
+}
+
+// Whether aBoxes cover exactly aBits' solid blocks, each once.
+bool CoverExactly(const std::vector<BlockBox>& aBoxes, const link::SolidBits& aBits)
+{
+	std::array<int, 4096> covered{};
+	for (const BlockBox& box : aBoxes)
+	{
+		if (box.x0 >= box.x1 || box.y0 >= box.y1 || box.z0 >= box.z1 || box.x1 > 16 || box.y1 > 16 || box.z1 > 16)
+		{
+			return false;
+		}
+		for (int y = box.y0; y < box.y1; ++y)
+		{
+			for (int z = box.z0; z < box.z1; ++z)
+			{
+				for (int x = box.x0; x < box.x1; ++x)
+				{
+					++covered[size_t(x + 16 * z + 256 * y)];
+				}
+			}
+		}
+	}
+	for (int y = 0; y < 16; ++y)
+	{
+		for (int z = 0; z < 16; ++z)
+		{
+			for (int x = 0; x < 16; ++x)
+			{
+				if (covered[size_t(x + 16 * z + 256 * y)] != (Solid(aBits, x, y, z) ? 1 : 0))
+				{
+					return false;
+				}
+			}
+		}
+	}
+	return true;
+}
+}
+
+TEST(BoxMergeMakesWholeLayersAndSectionsOneBox)
+{
+	link::SolidBits bits{};
+	CHECK(MergeBoxes(bits).empty());
+	for (int z = 0; z < 16; ++z)
+	{
+		for (int x = 0; x < 16; ++x)
+		{
+			Set(bits, x, 3, z);
+		}
+	}
+	std::vector<BlockBox> boxes = MergeBoxes(bits);
+	CHECK_EQ(boxes.size(), size_t(1));  // a 16 x 16 layer
+	CHECK(boxes.size() == 1 && boxes[0].x0 == 0 && boxes[0].x1 == 16 && boxes[0].y0 == 3 && boxes[0].y1 == 4 && boxes[0].z0 == 0 &&
+	      boxes[0].z1 == 16);
+	bits.fill(~uint64_t(0));
+	boxes = MergeBoxes(bits);
+	CHECK(boxes.size() == 1 && boxes[0].y0 == 0 && boxes[0].y1 == 16);  // the whole section
+}
+
+TEST(BoxMergeGoesAlongXThenZThenY)
+{
+	// A wall 4 blocks along x, 3 high, and a tower 2 x 2 x 5 beside it: two boxes.
+	link::SolidBits bits{};
+	for (int y = 0; y < 3; ++y)
+	{
+		for (int x = 0; x < 4; ++x)
+		{
+			Set(bits, x, y, 0);
+		}
+	}
+	for (int y = 0; y < 5; ++y)
+	{
+		for (int z = 3; z < 5; ++z)
+		{
+			for (int x = 7; x < 9; ++x)
+			{
+				Set(bits, x, y, z);
+			}
+		}
+	}
+	const std::vector<BlockBox> boxes = MergeBoxes(bits);
+	CHECK_EQ(boxes.size(), size_t(2));
+	CHECK(CoverExactly(boxes, bits));
+	// An L along x then z: the first row goes as far along x as it can, so the L is two boxes.
+	link::SolidBits l{};
+	for (int x = 0; x < 4; ++x)
+	{
+		Set(l, x, 0, 0);
+	}
+	Set(l, 0, 0, 1);
+	Set(l, 0, 0, 2);
+	const std::vector<BlockBox> lBoxes = MergeBoxes(l);
+	CHECK_EQ(lBoxes.size(), size_t(2));
+	CHECK(lBoxes.size() == 2 && lBoxes[0].x1 == 4 && lBoxes[0].z1 == 1 && lBoxes[1].z0 == 1 && lBoxes[1].z1 == 3);
+}
+
+TEST(BoxMergeCoversAnyBlocksExactly)
+{
+	// A checkerboard, where no two solid blocks touch: a box each.
+	link::SolidBits checker{};
+	for (int y = 0; y < 16; ++y)
+	{
+		for (int z = 0; z < 16; ++z)
+		{
+			for (int x = 0; x < 16; ++x)
+			{
+				if ((x + y + z) % 2 == 0)
+				{
+					Set(checker, x, y, z);
+				}
+			}
+		}
+	}
+	const std::vector<BlockBox> boxes = MergeBoxes(checker);
+	CHECK_EQ(boxes.size(), size_t(2048));
+	CHECK(CoverExactly(boxes, checker));
+	// Random blocks, from sparse to dense.
+	uint64_t seed = 12345;
+	for (int round = 0; round < 40; ++round)
+	{
+		link::SolidBits bits{};
+		for (uint64_t& word : bits)
+		{
+			for (int i = 0; i < 64; ++i)
+			{
+				seed = seed * 6364136223846793005ull + 1442695040888963407ull;
+				if (int((seed >> 33) % 40) < round)
+				{
+					word |= uint64_t(1) << i;
+				}
+			}
+		}
+		CHECK(CoverExactly(MergeBoxes(bits), bits));
+	}
+}
+```
+- [ ] **Step 2: Edit `CMakeLists.txt` to add the test**
+
+```cmake
+	tests/TestExport.cpp
+	tests/TestDrive.cpp
+```
+```cmake
+	tests/TestExport.cpp
+	tests/TestBoxMerge.cpp
+	tests/TestDrive.cpp
+```
+
+- [ ] **Step 3: Build; it must fail**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C" | sort -u | head -3
+```
+Expected: `error C1083: Cannot open include file: 'physx/BoxMerge.h'`.
+
+- [ ] **Step 4: Write `src/physx/BoxMerge.h`**
+
+```cpp
+#pragma once
+
+#include "link/Solids.h"
+
+#include <cstdint>
+#include <vector>
+
+// A section's solid blocks as few boxes, for its body (spike 5's "Bodies"): greedy along x, then z, then y, so a 16 x 16
+// layer is one box and a whole section one. Every solid block is in exactly one box, and no box holds a block that isn't
+// solid. Pure.
+namespace cpmc::px
+{
+// Blocks within a section: from (x0, y0, z0) up to, but not including, (x1, y1, z1).
+struct BlockBox
+{
+	uint8_t x0 = 0, y0 = 0, z0 = 0;
+	uint8_t x1 = 0, y1 = 0, z1 = 0;
+};
+
+std::vector<BlockBox> MergeBoxes(const link::SolidBits& aBits);
+}
+```
+- [ ] **Step 5: Write `src/physx/BoxMerge.cpp`**
+
+```cpp
+#include "physx/BoxMerge.h"
+
+namespace cpmc::px
+{
+namespace
+{
+// The solid blocks not in a box yet.
+class Left
+{
+public:
+	explicit Left(const link::SolidBits& aBits) : bits_(aBits) {}
+
+	bool Has(int aX, int aY, int aZ) const { return (bits_[size_t(Bit(aX, aY, aZ) >> 6)] >> (Bit(aX, aY, aZ) & 63)) & 1; }
+	void Take(int aX, int aY, int aZ) { bits_[size_t(Bit(aX, aY, aZ) >> 6)] &= ~(uint64_t(1) << (Bit(aX, aY, aZ) & 63)); }
+
+	// Whether blocks aX0 to aX1, not included, of row (aY, aZ) are all left.
+	bool Row(int aX0, int aX1, int aY, int aZ) const
+	{
+		for (int x = aX0; x < aX1; ++x)
+		{
+			if (!Has(x, aY, aZ))
+			{
+				return false;
+			}
+		}
+		return true;
+	}
+
+	// And of rows aZ0 to aZ1 of layer aY.
+	bool Layer(int aX0, int aX1, int aZ0, int aZ1, int aY) const
+	{
+		for (int z = aZ0; z < aZ1; ++z)
+		{
+			if (!Row(aX0, aX1, aY, z))
+			{
+				return false;
+			}
+		}
+		return true;
+	}
+
+private:
+	static int Bit(int aX, int aY, int aZ) { return aX + 16 * aZ + 256 * aY; }
+
+	link::SolidBits bits_;
+};
+}
+
+std::vector<BlockBox> MergeBoxes(const link::SolidBits& aBits)
+{
+	Left                  left(aBits);
+	std::vector<BlockBox> boxes;
+	for (int y = 0; y < 16; ++y)
+	{
+		for (int z = 0; z < 16; ++z)
+		{
+			for (int x = 0; x < 16; ++x)
+			{
+				if (!left.Has(x, y, z))
+				{
+					continue;
+				}
+				// As far along x as the blocks go, then as many such rows along z, then as many such layers up.
+				int x1 = x + 1;
+				while (x1 < 16 && left.Has(x1, y, z))
+				{
+					++x1;
+				}
+				int z1 = z + 1;
+				while (z1 < 16 && left.Row(x, x1, y, z1))
+				{
+					++z1;
+				}
+				int y1 = y + 1;
+				while (y1 < 16 && left.Layer(x, x1, z, z1, y1))
+				{
+					++y1;
+				}
+				for (int by = y; by < y1; ++by)
+				{
+					for (int bz = z; bz < z1; ++bz)
+					{
+						for (int bx = x; bx < x1; ++bx)
+						{
+							left.Take(bx, by, bz);
+						}
+					}
+				}
+				boxes.push_back({ uint8_t(x), uint8_t(y), uint8_t(z), uint8_t(x1), uint8_t(y1), uint8_t(z1) });
+			}
+		}
+	}
+	return boxes;
+}
+}
+```
+- [ ] **Step 6: Edit `CMakeLists.txt` to add the source**
+
+```cmake
+	src/physx/Export.cpp
+	src/link/Drive.cpp
+```
+```cmake
+	src/physx/Export.cpp
+	src/physx/BoxMerge.cpp
+	src/link/Drive.cpp
+```
+
+- [ ] **Step 7: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `381 test(s), 0 failure(s)`.
+
+- [ ] **Step 8: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "collision-and-movement: a section's solid blocks merged into few boxes" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 48: Which sections get bodies around V, and when they change
+
+The spec's "Bodies", where and when, as pure bookkeeping, `BodyPlan`:
+- **Where:** a body for each section with solid blocks within one section of V's (the 3 × 3 × 3 around it), made once
+  the section comes that near, and removed once it's more than two away, so walking along a boundary doesn't churn
+  bodies.
+- **When it changes:** a body whose section's solids changed (their version moved on) is removed and made again in the
+  same frame; one whose solids went is removed. A body PhysX failed to make isn't tried again until its section's
+  solids change, the spec's error handling.
+- **Off:** while bodies are off (`set blocks 0`, or drawing off), every body is removed and none is made.
+- **What it changes:** `Changes` only says what to remove, then what to make; `physx/Bodies` does it and says what it
+  did (`Made`, `Failed`, `Removed`), so a frame where PhysX can't be reached leaves the plan as it was.
+
+And where a body stands: `SectionAt` (the section holding a point in Minecraft's axes), `SectionCentre` (a section's
+centre in the world's axes, where its body's actor goes), `LocalBoxOf` (a box of its blocks in the world's axes, from
+that centre: Minecraft's x is the world's x, its y the world's z, and its z the world's -y), and `PosedAt` (whether an
+actor stands where it should, given PhysX's origin, within a centimetre), for checking bodies after the origin moves.
+
+**Files:**
+- Create: `src/physx/BodyPlan.h`, `src/physx/BodyPlan.cpp`, `tests/TestBodyPlan.cpp`
+- Modify: `CMakeLists.txt`
+
+- [ ] **Step 1: Write the failing test, `tests/TestBodyPlan.cpp`**
+
+```cpp
+#include "Harness.h"
+
+#include "physx/BodyPlan.h"
+
+#include <cmath>
+#include <format>
+#include <initializer_list>
+#include <limits>
+#include <string>
+
+using namespace cpmc;
+using namespace cpmc::px;
+
+namespace
+{
+// Sets aSection's solids: aBlocks solid blocks, from its first.
+void SetSolids(link::Solids& aSolids, const SectionPos& aSection, uint32_t aBlocks = 1)
+{
+	link::SolidsMessage message{ aSection, aBlocks, {} };
+	for (uint32_t bit = 0; bit < aBlocks; ++bit)
+	{
+		message.bits[bit >> 6] |= uint64_t(1) << (bit & 63);
+	}
+	aSolids.Set(message);
+}
+
+link::Solids With(std::initializer_list<SectionPos> aSections)
+{
+	link::Solids solids;
+	for (const SectionPos& section : aSections)
+	{
+		SetSolids(solids, section);
+	}
+	return solids;
+}
+
+// "make 0 0 0, remove 1 0 0": the changes, in order.
+std::string Describe(const std::vector<BodyPlan::Change>& aChanges)
+{
+	std::string out;
+	for (const BodyPlan::Change& change : aChanges)
+	{
+		out += std::format("{}{} {} {} {}", out.empty() ? "" : ", ", change.make ? "make" : "remove", change.section.x, change.section.y,
+		                   change.section.z);
+	}
+	return out;
+}
+
+// What Bodies does when every change works: the plan's next state.
+std::string Apply(BodyPlan& aPlan, const SectionPos& aV, const link::Solids& aSolids, bool aOn = true)
+{
+	const std::vector<BodyPlan::Change> changes = aPlan.Changes(aV, aOn, aSolids);
+	for (const BodyPlan::Change& change : changes)
+	{
+		change.make ? aPlan.Made(change.section, change.version) : aPlan.Removed(change.section);
+	}
+	return Describe(changes);
+}
+
+bool Near(const Vec3d& aA, const Vec3d& aB)
+{
+	return std::abs(aA.x - aB.x) < 1e-9 && std::abs(aA.y - aB.y) < 1e-9 && std::abs(aA.z - aB.z) < 1e-9;
+}
+}
+
+TEST(BodyPlanMakesTheSectionsAroundV)
+{
+	// Solids in five sections, V in section 0 0 0: bodies for the three within one section of it, not for those two away.
+	const link::Solids solids = With({ { 0, 0, 0 }, { 1, 0, 0 }, { 2, 0, 0 }, { 0, -1, 1 }, { 0, 2, 0 } });
+	BodyPlan           plan;
+	const auto         changes = plan.Changes({ 0, 0, 0 }, true, solids);
+	CHECK_STR(Describe(changes), "make 0 -1 1, make 0 0 0, make 1 0 0");
+	CHECK(changes.size() == 3 && changes[1].version == solids.Find({ 0, 0, 0 })->version);
+	CHECK_STR(Describe(plan.Changes({ 0, 0, 0 }, true, solids)), "make 0 -1 1, make 0 0 0, make 1 0 0");  // nothing done yet
+	CHECK_STR(Apply(plan, { 0, 0, 0 }, solids), "make 0 -1 1, make 0 0 0, make 1 0 0");
+	CHECK_STR(Describe(plan.Changes({ 0, 0, 0 }, true, solids)), "");  // all made
+}
+
+TEST(BodyPlanKeepsBodiesUntilTheyAreTwoSectionsAway)
+{
+	// Walking along a boundary doesn't churn bodies: one is made within a section of V's, and removed only past two.
+	const link::Solids solids = With({ { 0, 0, 0 }, { 1, 0, 0 }, { 2, 0, 0 }, { 0, -1, 1 } });
+	BodyPlan           plan;
+	CHECK_STR(Apply(plan, { 0, 0, 0 }, solids), "make 0 -1 1, make 0 0 0, make 1 0 0");
+	CHECK_STR(Apply(plan, { 1, 0, 0 }, solids), "make 2 0 0");
+	CHECK_STR(Apply(plan, { 2, 0, 0 }, solids), "");  // 0 0 0 is two away: kept
+	CHECK_STR(Apply(plan, { 3, 0, 0 }, solids), "remove 0 -1 1, remove 0 0 0");
+	CHECK_STR(Apply(plan, { 2, 0, 0 }, solids), "");  // 0 0 0 is two away again: not made
+	CHECK_STR(Apply(plan, { 0, 0, 0 }, solids), "make 0 -1 1, make 0 0 0");
+}
+
+TEST(BodyPlanRebuildsABodyWhenItsSolidsChange)
+{
+	link::Solids solids = With({ { 0, 0, 0 } });
+	BodyPlan     plan;
+	CHECK_STR(Apply(plan, { 0, 0, 0 }, solids), "make 0 0 0");
+	SetSolids(solids, { 0, 0, 0 }, 2);  // a block placed
+	const auto changes = plan.Changes({ 0, 0, 0 }, true, solids);
+	CHECK_STR(Describe(changes), "remove 0 0 0, make 0 0 0");
+	CHECK(changes.size() == 2 && changes[1].version == solids.Find({ 0, 0, 0 })->version);
+	CHECK_STR(Apply(plan, { 0, 0, 0 }, solids), "remove 0 0 0, make 0 0 0");
+	SetSolids(solids, { 0, 0, 0 }, 0);  // every block broken
+	CHECK_STR(Apply(plan, { 0, 0, 0 }, solids), "remove 0 0 0");
+	CHECK_STR(Apply(plan, { 0, 0, 0 }, solids), "");
+}
+
+TEST(BodyPlanRemovesEveryBodyWhileBodiesAreOff)
+{
+	// Bodies stand only while blocks and drawing are both on: off, every body goes, and none is made.
+	const link::Solids solids = With({ { 0, 0, 0 }, { 1, 0, 0 } });
+	BodyPlan           plan;
+	CHECK_STR(Apply(plan, { 0, 0, 0 }, solids), "make 0 0 0, make 1 0 0");
+	CHECK_STR(Apply(plan, { 0, 0, 0 }, solids, false), "remove 0 0 0, remove 1 0 0");
+	CHECK_STR(Apply(plan, { 0, 0, 0 }, solids, false), "");
+	CHECK_STR(Apply(plan, { 0, 0, 0 }, solids), "make 0 0 0, make 1 0 0");  // on again
+}
+
+TEST(BodyPlanTriesAFailedBodyAgainOnlyWhenItsSolidsChange)
+{
+	link::Solids solids = With({ { 0, 0, 0 } });
+	BodyPlan     plan;
+	const auto   changes = plan.Changes({ 0, 0, 0 }, true, solids);
+	CHECK(changes.size() == 1);
+	plan.Failed({ 0, 0, 0 }, changes.empty() ? 0 : changes[0].version);
+	CHECK_STR(Describe(plan.Changes({ 0, 0, 0 }, true, solids)), "");  // not every frame
+	SetSolids(solids, { 0, 0, 0 }, 3);
+	CHECK_STR(Describe(plan.Changes({ 0, 0, 0 }, true, solids)), "remove 0 0 0, make 0 0 0");  // the removal finds no body: harmless
+}
+
+TEST(BodyPlanStartsOverWhenCleared)
+{
+	const link::Solids solids = With({ { 0, 0, 0 }, { 1, 1, 1 } });
+	BodyPlan           plan;
+	CHECK_STR(Apply(plan, { 0, 0, 0 }, solids), "make 0 0 0, make 1 1 1");
+	plan.Removed({ 1, 1, 1 });  // forgotten: its actor was lost in a load, say
+	CHECK_STR(Describe(plan.Changes({ 0, 0, 0 }, true, solids)), "make 1 1 1");
+	plan.Clear();
+	CHECK_STR(Describe(plan.Changes({ 0, 0, 0 }, true, solids)), "make 0 0 0, make 1 1 1");
+}
+
+TEST(BodyPlanPutsBoxesInTheWorld)
+{
+	const auto section = SectionAt({ -0.5, 15.99, 16.0 });
+	CHECK((section.has_value() && *section == SectionPos{ -1, 0, 1 }));
+	CHECK(!SectionAt({ std::numeric_limits<double>::quiet_NaN(), 0.0, 0.0 }).has_value());
+	CHECK(!SectionAt({ 2.0e6, 0.0, 0.0 }).has_value());
+	// Section 1 0 -2 holds Minecraft blocks 16 to 31, 0 to 15 and -32 to -17: its centre, in the world, is 24 24 8.
+	const Vec3d centre = SectionCentre({ 1, 0, -2 });
+	CHECK(Near(centre, { 24.0, 24.0, 8.0 }));
+	// Its block 15 0 0, Minecraft block 31 0 -32, is centred at world 31.5 31.5 0.5.
+	const LocalBox block = LocalBoxOf({ 15, 0, 0, 16, 1, 1 });
+	CHECK(Near({ centre.x + block.centre.x, centre.y + block.centre.y, centre.z + block.centre.z }, { 31.5, 31.5, 0.5 }));
+	CHECK(Near(block.half, { 0.5, 0.5, 0.5 }));
+	// A layer at height 3 of the section, from Minecraft's x 0 to 16 and z 0 to 4: wide along the world's x, 4 m along
+	// its y, which is Minecraft's -z, and 1 m tall.
+	const LocalBox layer = LocalBoxOf({ 0, 3, 0, 16, 4, 4 });
+	CHECK(Near(layer.centre, { 0.0, 6.0, -4.5 }));
+	CHECK(Near(layer.half, { 8.0, 2.0, 0.5 }));
+}
+
+TEST(BodyPlanTellsWhetherABodyMovedWithTheOrigin)
+{
+	// PhysX = world - origin: an actor at PhysX 10 20 30 stands at world 10 1044 30 with the origin 0 1024 0.
+	CHECK(PosedAt({ 10.0, 20.0, 30.0 }, { 10.0, 1044.0, 30.0 }, { 0.0, 1024.0, 0.0 }));
+	CHECK(PosedAt({ 10.0, 20.005, 30.0 }, { 10.0, 1044.0, 30.0 }, { 0.0, 1024.0, 0.0 }));
+	CHECK(!PosedAt({ 10.0, 20.02, 30.0 }, { 10.0, 1044.0, 30.0 }, { 0.0, 1024.0, 0.0 }));
+	CHECK(!PosedAt({ 10.0, 20.0, 30.0 }, { 10.0, 1044.0, 30.0 }, { 0.0, 0.0, 0.0 }));  // not moved when the origin was
+}
+```
+- [ ] **Step 2: Edit `CMakeLists.txt` to add the test**
+
+```cmake
+	tests/TestBoxMerge.cpp
+	tests/TestDrive.cpp
+```
+```cmake
+	tests/TestBoxMerge.cpp
+	tests/TestBodyPlan.cpp
+	tests/TestDrive.cpp
+```
+
+- [ ] **Step 3: Build; it must fail**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C" | sort -u | head -3
+```
+Expected: `error C1083: Cannot open include file: 'physx/BodyPlan.h'`.
+
+- [ ] **Step 4: Write `src/physx/BodyPlan.h`**
+
+```cpp
+#pragma once
+
+#include "Coords.h"
+#include "link/Solids.h"
+#include "physx/BoxMerge.h"
+
+#include <cstdint>
+#include <map>
+#include <optional>
+#include <vector>
+
+// Where V's bodies go, and when they change (spike 5's "Bodies"): a body for each section with solid blocks among the
+// 3 x 3 x 3 around V's, made when the section comes within one of V's and removed once it's more than two away, so
+// walking along a boundary doesn't churn bodies, and rebuilt when the section's solids change; and none while bodies are
+// off. And where a body's boxes stand in the world. Pure: physx/Bodies makes the actors, and says what it did.
+namespace cpmc::px
+{
+// The section holding a point in Minecraft's axes. Nothing for a point that isn't finite, or is over a million blocks out.
+std::optional<SectionPos> SectionAt(const Vec3d& aMc);
+
+// A section's centre, in the world's axes (metres: x east, y north, z up): where its body stands.
+Vec3d SectionCentre(const SectionPos& aSection);
+
+// A box of a section's blocks in the world's axes: its centre, from the section's, and its half extents.
+struct LocalBox
+{
+	Vec3d centre;
+	Vec3d half;
+};
+
+LocalBox LocalBoxOf(const BlockBox& aBox);
+
+// Whether an actor PhysX has at aPhysx, in PhysX's frame, stands at aWorld, given PhysX's origin: within a centimetre.
+bool PosedAt(const Vec3d& aPhysx, const Vec3d& aWorld, const Vec3d& aOrigin);
+
+class BodyPlan
+{
+public:
+	struct Change
+	{
+		bool       make = false;  // false: the section's body is removed
+		SectionPos section;
+		uint64_t   version = 0;  // a making's: the version of the section's solids it's made from
+	};
+
+	// With V in section aV and bodies on (aOn): the bodies to remove, more than two sections away or with their solids
+	// gone or changed; then those to make, within one section of V's, with solid blocks and no body, a changed one again.
+	// With bodies off, every body is removed. Changes nothing itself: Bodies says what it did.
+	std::vector<Change> Changes(const SectionPos& aV, bool aOn, const link::Solids& aSolids) const;
+
+	void Made(const SectionPos& aSection, uint64_t aVersion);
+	void Failed(const SectionPos& aSection, uint64_t aVersion);  // not tried again until the section's solids change
+	void Removed(const SectionPos& aSection);                    // or forgotten, its actor lost
+	void Clear();                                                // every body removed or forgotten
+
+private:
+	struct Entry
+	{
+		uint64_t version = 0;
+		bool     made = false;  // false: it failed
+	};
+
+	std::map<SectionPos, Entry> entries_;
+};
+}
+```
+- [ ] **Step 5: Write `src/physx/BodyPlan.cpp`**
+
+```cpp
+#include "physx/BodyPlan.h"
+
+#include <algorithm>
+#include <cmath>
+#include <cstdlib>
+#include <iterator>
+
+namespace cpmc::px
+{
+namespace
+{
+constexpr double kFarthest = 1.0e6;  // blocks: a coordinate farther out is garbage
+
+// How many sections apart two are, along the axis they're farthest apart on.
+int32_t Apart(const SectionPos& aA, const SectionPos& aB)
+{
+	return std::max({ std::abs(aA.x - aB.x), std::abs(aA.y - aB.y), std::abs(aA.z - aB.z) });
+}
+}
+
+std::optional<SectionPos> SectionAt(const Vec3d& aMc)
+{
+	const double at[3] = { aMc.x, aMc.y, aMc.z };
+	if (!std::all_of(std::begin(at), std::end(at), [](double aValue) { return std::isfinite(aValue) && std::fabs(aValue) <= kFarthest; }))
+	{
+		return std::nullopt;
+	}
+	return SectionPos{ int32_t(std::floor(aMc.x / 16.0)), int32_t(std::floor(aMc.y / 16.0)), int32_t(std::floor(aMc.z / 16.0)) };
+}
+
+Vec3d SectionCentre(const SectionPos& aSection)
+{
+	return WorldFromMc({ aSection.x * 16.0 + 8.0, aSection.y * 16.0 + 8.0, aSection.z * 16.0 + 8.0 });
+}
+
+LocalBox LocalBoxOf(const BlockBox& aBox)
+{
+	// Minecraft's x is the world's x, its y the world's z, and its z the world's -y.
+	const Vec3d centre{ (aBox.x0 + aBox.x1) / 2.0 - 8.0, (aBox.y0 + aBox.y1) / 2.0 - 8.0, (aBox.z0 + aBox.z1) / 2.0 - 8.0 };
+	return { WorldFromMc(centre), { (aBox.x1 - aBox.x0) / 2.0, (aBox.z1 - aBox.z0) / 2.0, (aBox.y1 - aBox.y0) / 2.0 } };
+}
+
+bool PosedAt(const Vec3d& aPhysx, const Vec3d& aWorld, const Vec3d& aOrigin)
+{
+	return std::hypot(aPhysx.x + aOrigin.x - aWorld.x, aPhysx.y + aOrigin.y - aWorld.y, aPhysx.z + aOrigin.z - aWorld.z) < 0.01;
+}
+
+std::vector<BodyPlan::Change> BodyPlan::Changes(const SectionPos& aV, bool aOn, const link::Solids& aSolids) const
+{
+	std::vector<Change> changes;
+	for (const auto& [section, entry] : entries_)
+	{
+		const link::Solids::Section* solids = aSolids.Find(section);
+		if (!aOn || !solids || Apart(section, aV) > 2)
+		{
+			changes.push_back({ false, section });
+		}
+		else if (solids->version != entry.version)
+		{
+			changes.push_back({ false, section });
+			changes.push_back({ true, section, solids->version });
+		}
+	}
+	if (!aOn)
+	{
+		return changes;
+	}
+	for (int32_t dx = -1; dx <= 1; ++dx)
+	{
+		for (int32_t dy = -1; dy <= 1; ++dy)
+		{
+			for (int32_t dz = -1; dz <= 1; ++dz)
+			{
+				const SectionPos section{ aV.x + dx, aV.y + dy, aV.z + dz };
+				if (const link::Solids::Section* solids = aSolids.Find(section); solids && !entries_.contains(section))
+				{
+					changes.push_back({ true, section, solids->version });
+				}
+			}
+		}
+	}
+	return changes;
+}
+
+void BodyPlan::Made(const SectionPos& aSection, uint64_t aVersion)
+{
+	entries_[aSection] = { aVersion, true };
+}
+
+void BodyPlan::Failed(const SectionPos& aSection, uint64_t aVersion)
+{
+	entries_[aSection] = { aVersion, false };
+}
+
+void BodyPlan::Removed(const SectionPos& aSection)
+{
+	entries_.erase(aSection);
+}
+
+void BodyPlan::Clear()
+{
+	entries_.clear();
+}
+}
+```
+- [ ] **Step 6: Edit `CMakeLists.txt` to add the source**
+
+```cmake
+	src/physx/BoxMerge.cpp
+	src/link/Drive.cpp
+```
+```cmake
+	src/physx/BoxMerge.cpp
+	src/physx/BodyPlan.cpp
+	src/link/Drive.cpp
+```
+
+- [ ] **Step 7: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `389 test(s), 0 failure(s)`.
+
+- [ ] **Step 8: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "collision-and-movement: which sections get bodies around V, and when they change" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 49: The exporter leaves out BlockRender's own bodies
+
+The spec's "Kept out of the export": the bodies are static scene-query shapes made of the city's own filters, so the
+exporter would send them to Minecraft as Night City's shape, and Minecraft would get its own blocks back as triangles
+and voxels. `PhysxGround` keeps BlockRender's own actors (`OwnActors`, sorted pointers, which the bodies set), and
+`KeptShape` leaves out a shape of one of them, as it leaves out triggers and planes. `shapes` marks them too.
+
+**Files:**
+- Modify: `src/physx/Export.h`, `src/physx/Export.cpp`, `tests/TestExport.cpp`
+
+- [ ] **Step 1: Edit `tests/TestExport.cpp`: the failing test**
+
+```cpp
+	CHECK(KeptShape(AuditedClass::RigidStatic, both, PxGeometryType::eTRIANGLEMESH));
+	CHECK(KeptShape(AuditedClass::RigidStatic, queryOnly, PxGeometryType::eBOX));
+	CHECK(!KeptShape(AuditedClass::RigidStatic, simulationOnly, PxGeometryType::eBOX));  // V's controller doesn't sweep against it
+	CHECK(!KeptShape(AuditedClass::RigidStatic, trigger, PxGeometryType::eBOX));
+	CHECK(!KeptShape(AuditedClass::RigidStatic, both, PxGeometryType::ePLANE));
+	CHECK(!KeptShape(AuditedClass::RigidDynamic, both, PxGeometryType::eCONVEXMESH));  // cars, litter, controllers
+```
+```cpp
+	CHECK(KeptShape(AuditedClass::RigidStatic, both, PxGeometryType::eTRIANGLEMESH, false));
+	CHECK(KeptShape(AuditedClass::RigidStatic, queryOnly, PxGeometryType::eBOX, false));
+	CHECK(!KeptShape(AuditedClass::RigidStatic, simulationOnly, PxGeometryType::eBOX, false));  // V's controller doesn't sweep against it
+	CHECK(!KeptShape(AuditedClass::RigidStatic, trigger, PxGeometryType::eBOX, false));
+	CHECK(!KeptShape(AuditedClass::RigidStatic, both, PxGeometryType::ePLANE, false));
+	CHECK(!KeptShape(AuditedClass::RigidDynamic, both, PxGeometryType::eCONVEXMESH, false));  // cars, litter, controllers
+}
+
+TEST(ExportLeavesOutBlockRendersOwnBodies)
+{
+	// Part 3's bodies are static scene-query shapes like the city's, made of what V stands on: the exporter leaves them
+	// out, so Minecraft never gets its own blocks back as Night City's shape.
+	const PxShapeFlags both = PxShapeFlag::eSIMULATION_SHAPE | PxShapeFlag::eSCENE_QUERY_SHAPE;
+	CHECK(!KeptShape(AuditedClass::RigidStatic, both, PxGeometryType::eBOX, true));
+	int       a = 0, b = 0, c = 0;
+	OwnActors own;
+	CHECK(!own.Has(&a));
+	own.Set({ &c, &a });
+	CHECK(own.Has(&a) && own.Has(&c) && !own.Has(&b));
+	CHECK_EQ(own.Size(), size_t(2));
+	own.Set({});
+	CHECK(!own.Has(&a));
+```
+
+- [ ] **Step 2: Build; it must fail**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C" | sort -u | head -3
+```
+Expected: `error C2660: 'cpmc::px::KeptShape': function does not take 4 arguments`.
+
+- [ ] **Step 3: Edit `src/physx/Export.h`**
+
+```cpp
+// Whether the exporter keeps a shape: a static actor's scene-query shape, and not a trigger or a plane. A shape that's
+// only a simulation shape doesn't stop V's controller, and dynamic and kinematic actors are cars, litter, bodies and
+// controllers.
+bool KeptShape(AuditedClass aActor, physx::PxShapeFlags aFlags, physx::PxGeometryType::Enum aGeometry);
+```
+```cpp
+// Whether the exporter keeps a shape: a static actor's scene-query shape, and not a trigger or a plane, nor one of
+// BlockRender's own bodies (aOurs), so Minecraft never gets its own blocks back as the city's shape. A shape that's only a
+// simulation shape doesn't stop V's controller, and dynamic and kinematic actors are cars, litter, bodies and controllers.
+bool KeptShape(AuditedClass aActor, physx::PxShapeFlags aFlags, physx::PxGeometryType::Enum aGeometry, bool aOurs);
+
+// BlockRender's own actors, part 3's bodies, which the exporter leaves out.
+class OwnActors
+{
+public:
+	void   Set(std::vector<const void*> aActors);  // all of them, as they are now
+	bool   Has(const void* aActor) const;
+	size_t Size() const { return sorted_.size(); }
+
+private:
+	std::vector<const void*> sorted_;
+};
+```
+```cpp
+	const Report& State() const { return report_; }
+```
+```cpp
+	const Report& State() const { return report_; }
+	OwnActors&    Own() { return own_; }  // BlockRender's own, left out of what's read
+```
+```cpp
+	const physx::PxActor*    controller_ = nullptr;
+```
+```cpp
+	const physx::PxActor*    controller_ = nullptr;
+	OwnActors                own_;
+```
+
+- [ ] **Step 4: Edit `src/physx/Export.cpp`**
+
+```cpp
+bool KeptShape(AuditedClass aActor, PxShapeFlags aFlags, PxGeometryType::Enum aGeometry)
+{
+	return aActor == AuditedClass::RigidStatic && aFlags.isSet(PxShapeFlag::eSCENE_QUERY_SHAPE) && !aFlags.isSet(PxShapeFlag::eTRIGGER_SHAPE) &&
+	       aGeometry != PxGeometryType::ePLANE;
+```
+```cpp
+bool KeptShape(AuditedClass aActor, PxShapeFlags aFlags, PxGeometryType::Enum aGeometry, bool aOurs)
+{
+	return aActor == AuditedClass::RigidStatic && aFlags.isSet(PxShapeFlag::eSCENE_QUERY_SHAPE) && !aFlags.isSet(PxShapeFlag::eTRIGGER_SHAPE) &&
+	       aGeometry != PxGeometryType::ePLANE && !aOurs;
+}
+
+void OwnActors::Set(std::vector<const void*> aActors)
+{
+	std::sort(aActors.begin(), aActors.end());
+	sorted_ = std::move(aActors);
+}
+
+bool OwnActors::Has(const void* aActor) const
+{
+	return std::binary_search(sorted_.begin(), sorted_.end(), aActor);
+```
+```cpp
+		if (!KeptShape(actor.cls, hit.shape->getFlags(), geometry))
+```
+```cpp
+		if (!KeptShape(actor.cls, hit.shape->getFlags(), geometry, own_.Has(hit.actor)))
+```
+```cpp
+		const PxGeometryType::Enum geometry = hit.shape->getGeometryType();
+		const char*                kind = actor.cls == AuditedClass::RigidStatic ? "static"
+```
+```cpp
+		const PxGeometryType::Enum geometry = hit.shape->getGeometryType();
+		const bool                 ours = own_.Has(hit.actor);
+		const char*                kind = actor.cls == AuditedClass::RigidStatic ? "static"
+```
+```cpp
+		                            "{}{}{}; query filter {}, simulation filter {}{}",
+```
+```cpp
+		                            "{}{}{}; query filter {}, simulation filter {}{}{}",
+```
+```cpp
+		                            KeptShape(actor.cls, flags, geometry) ? "; the exporter keeps it" : ""));
+```
+```cpp
+		                            KeptShape(actor.cls, flags, geometry, ours) ? "; the exporter keeps it" : "",
+		                            ours ? "; BlockRender's own body" : ""));
+```
+
+- [ ] **Step 5: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `390 test(s), 0 failure(s)`.
+
+- [ ] **Step 6: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "collision-and-movement: the exporter leaves out BlockRender's own bodies" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 50: V's bodies, PhysX static actors for Minecraft's blocks
+
+`physx/Bodies`, the spec's "Bodies", "What they're made of", "The origin" and "Loads", in `render_runtime`, since it
+changes the game. No unit test can run it: it calls PhysX on the game's objects, through the slots Task 45's addendum
+audited, so Task 52 checks it in the game, a test box first. What it does:
+- **Each frame** (`Frame`, in OnUpdate after the ground's read): `BodyPlan` says what to remove and make around V's
+  section; nothing is touched unless there's a change, or PhysX's origin has moved since the bodies were posed.
+- **Scene 0 and the origin:** the exporter's own, read once a frame (`PhysxGround::Prepared`), from V's controller;
+  `PxGetPhysics`'s object from the session (`Session::Physics`), which makes the actors.
+- **What the bodies are made of:** copied once, when the first is made, from what V stands on. A ray down from 0.5 m
+  above V's feet, 2 m long, through every static shape (`eNO_BLOCK`), takes the nearest that stops V: a static actor's
+  shape that's both a scene-query and a simulation shape, not a trigger, and not ours. Its query and simulation filter
+  data, its flags and its first material are copied. A shape of ours, never attached, made with that material, keeps it
+  alive: PhysX takes a reference on each material a shape has (the addendum found it in the game's `createShape`).
+  Until there's something to copy, the bodies wait, and the status says why.
+- **Making a body:** `createRigidStatic` at the section's centre, in PhysX's frame (world − origin); then for each of
+  `MergeBoxes`'s boxes, an exclusive `createShape` (a `PxBoxGeometry`, the copied material and flags), posed by
+  `setLocalPose`, given the copied filters, attached, and released, since the actor holds it; then `addActor`. Every
+  object PhysX returns is checked against the audited vtables first; if a shape fails, the actor is released with the
+  shapes it has, and the section waits for its solids to change. `userData` stays empty.
+- **Ours, before each touch:** an actor of ours is removed, posed or checked only if scene 0 is the scene it went into,
+  and lists it among its static actors (listed once a frame, when needed), it passes the audit's checks, its
+  `getScene` is scene 0, and it still has our shapes: as many as we attached, the first a box of our first box's size,
+  with our copied query filter (`getNbShapes`, `getShapes`, `getBoxGeometry` and `getQueryFilterData`, audited in
+  Part 2). PhysX reuses a released actor's memory, so if the game ever released one of ours, an actor of its own could
+  stand at the same address; the shapes tell them apart. Otherwise it's forgotten without being touched: a load may have
+  taken the scene or the actor. If scene 0 isn't the scene they went into, every one is forgotten at once.
+- **Removing a body:** `removeActor`, then `release`, which releases its shapes.
+- **The origin:** the game shifts all of scene 0 when PhysX's origin moves (step 3's watch saw `shiftOrigin`), so a body
+  should stand where it was. When the exporter's last origin differs from the one the bodies were posed by, each is
+  checked with `getGlobalPose`, and posed again with `setGlobalPose` only if it's more than a centimetre out. The status
+  counts both, and is expected to show no posing.
+- **Loads:** while V isn't found, nothing is touched. Once V is found again, each actor is checked as above, and those
+  no longer ours are forgotten, and made again if they're still wanted.
+- **Off:** with `blocks` off or drawing off, every body is removed; the test box stays, as the box request's own.
+- **The test box** (`Box`): one actor, 2 m wide and deep and 1 m tall, 3 m ahead of V along its facing, standing on V's
+  feet's level, made as the bodies are. A box request comes before the frame's `Frame`, so it first does what a frame
+  would: checks the actors after V was lost, and their poses after PhysX's origin moved.
+- **The exporter** is told which actors are ours after every change.
+
+**Files:**
+- Create: `src/physx/Bodies.h`, `src/physx/Bodies.cpp`
+- Modify: `src/physx/Session.h`, `src/physx/Export.h`, `src/physx/Export.cpp`, `CMakeLists.txt`
+
+- [ ] **Step 1: Edit `src/physx/Session.h`**
+
+```cpp
+	bool Audited(std::string& aWhy) { return CheckBuild(aWhy); }
+```
+```cpp
+	bool Audited(std::string& aWhy) { return CheckBuild(aWhy); }
+	// PxGetPhysics's object, checked; null, with aWhy, if PhysX isn't the audited build. Part 3's bodies are made with it.
+	physx::PxPhysics* Physics(std::string& aWhy) { return CheckBuild(aWhy) ? physics_ : nullptr; }
+```
+
+- [ ] **Step 2: Edit `src/physx/Export.h`**
+
+```cpp
+	struct Report
+```
+```cpp
+	// Scene 0 and PhysX's origin this frame, as the reads have them, for part 3's bodies: read once a frame, whoever asks
+	// first. Null if they can't be had, with State().why saying why.
+	physx::PxScene* Prepared(Vec3d& aOrigin);
+
+	struct Report
+```
+
+- [ ] **Step 3: Edit `src/physx/Export.cpp`**
+
+```cpp
+	scene_ = scene;
+	return true;
+}
+```
+```cpp
+	scene_ = scene;
+	return true;
+}
+
+PxScene* PhysxGround::Prepared(Vec3d& aOrigin)
+{
+	if (!Prepare())
+	{
+		return nullptr;
+	}
+	aOrigin = *report_.origin;
+	return scene_;
+}
+```
+
+- [ ] **Step 4: Write `src/physx/Bodies.h`**
+
+```cpp
+#pragma once
+
+#include "Coords.h"
+#include "link/Solids.h"
+#include "physx/BodyPlan.h"
+#include "physx/Export.h"
+#include "physx/PxHeaders.h"
+#include "physx/Session.h"
+
+#include <cstdint>
+#include <map>
+#include <optional>
+#include <string>
+#include <vector>
+
+// V against Minecraft's blocks (spike 5's "Part 3"): a PhysX static actor for each section with solid blocks around V,
+// its blocks merged into boxes, as BodyPlan says, each box a shape made of whatever V stood on; and step 4's test box.
+// They're added and removed in OnUpdate, on the main thread, when step 3's scene watch found no other thread calling
+// scene 0. Every PhysX object is checked against the audit before it's used, ours among them, and an actor of ours is
+// touched only while scene 0 is the scene it went into and still lists it, with our shapes: a load may take either away,
+// and PhysX may give a released actor's memory to one of the game's. Nothing is touched while V isn't found, or at
+// unload. Main thread only.
+namespace cpmc::px
+{
+class Bodies
+{
+public:
+	Bodies(Session& aSession, PhysxGround& aGround) : session_(aSession), ground_(aGround) {}
+
+	// Once a frame, after the ground's Frame: V's feet (world axes; nothing while V isn't found, as in a load), whether
+	// bodies are on (set blocks 1, and drawing on, so blocks nobody can see never stop V), and Minecraft's solid blocks.
+	void Frame(const std::optional<Vec3d>& aFeet, bool aOn, const link::Solids& aSolids);
+
+	// box on|off (step 4's opening check): a box 2 m wide and deep and 1 m tall, 3 m ahead of V along aForward, standing
+	// on V's feet's level, made as the bodies are. The ground's Frame must have had V's feet this frame. Says what
+	// happened, for the request's report.
+	std::string Box(bool aOn, const Vec3d& aFeet, const Vec3f& aForward);
+
+	struct Report
+	{
+		size_t               sections = 0;       // with bodies
+		size_t               boxes = 0;          // their shapes
+		uint64_t             made = 0;           // bodies, the box among them, since the start
+		uint64_t             removed = 0;
+		uint64_t             failed = 0;         // that PhysX didn't make
+		uint64_t             lost = 0;           // forgotten without being touched: scene 0 changed, or stopped listing them
+		double               slowestMs = 0.0;    // the slowest making, since the start
+		std::string          madeOf;             // what they're made of, once copied from what V stood on
+		uint64_t             originChanges = 0;  // seen while actors of ours stood
+		uint64_t             reposed = 0;        // actors posed again after one, which the game hadn't moved with its scene
+		std::optional<Vec3d> box;                // the test box's centre, world axes, while it stands
+		std::string          why;                // why bodies wait, while they do
+	};
+
+	const Report& State() const { return report_; }
+
+private:
+	struct Body
+	{
+		physx::PxRigidStatic* actor = nullptr;
+		Vec3d                 world;  // where it stands, world axes
+		size_t                boxes = 0;
+		Vec3d                 firstHalf;  // its first box's half extents: with the count, how it's told from another actor
+	};
+
+	// What V stood on, copied once for every body: its filters, flags and first material, which a shape of ours, never
+	// attached, keeps alive.
+	struct Copy
+	{
+		physx::PxFilterData query;
+		physx::PxFilterData simulation;
+		physx::PxShapeFlags flags;
+		physx::PxMaterial*  material = nullptr;
+		physx::PxShape*     keeper = nullptr;
+	};
+
+	bool                  Prepare();  // scene 0, PhysX's origin and PxPhysics, this frame: false, with report_.why, if not
+	bool                  CopyGround(const Vec3d& aFeet);
+	physx::PxRigidStatic* MakeActor(const Vec3d& aWorld, const std::vector<LocalBox>& aBoxes);
+	bool                  Ours(const Body& aBody);  // still in scene 0, as it went in, and still the actor we made
+	void                  RemoveActor(const Body& aBody);
+	void                  Forget();  // every actor of ours, without touching it: its scene is gone
+	void                  Check();   // after V was lost: the actors that aren't ours in scene 0 now are forgotten
+	void                  Repose();  // after PhysX's origin moved
+	void                  Publish();  // which actors are ours, for the exporter, and the report's counts
+
+	Session&                   session_;
+	PhysxGround&               ground_;
+	BodyPlan                   plan_;
+	std::map<SectionPos, Body> bodies_;
+	std::optional<Body>        box_;
+	std::optional<Copy>        copy_;
+	physx::PxScene*            addedTo_ = nullptr;  // the scene our actors went into
+	std::optional<Vec3d>       posedBy_;            // PhysX's origin our actors were last posed by, or checked against
+	bool                       lost_ = false;       // V was lost while actors of ours stood: check them first
+	// This frame's, once prepared
+	physx::PxScene*                         scene_ = nullptr;
+	physx::PxPhysics*                       physics_ = nullptr;
+	Vec3d                                   origin_;
+	std::optional<std::vector<const void*>> statics_;  // scene 0's static actors, sorted, once listed
+	Report                                  report_;
+};
+}
+```
+- [ ] **Step 5: Write `src/physx/Bodies.cpp`**
+
+```cpp
+#include "physx/Bodies.h"
+
+#include "physx/GameAbi.h"
+
+#include <algorithm>
+#include <chrono>
+#include <cmath>
+#include <format>
+
+using namespace physx;
+
+namespace cpmc::px
+{
+namespace
+{
+constexpr size_t kActorBytes = 24;         // the vtable pointer, the type ID and base flags, and userData
+constexpr PxU32  kMostActors = 1'000'000;  // a scene listing more is garbage
+constexpr PxU32  kRayHits = 16;            // the most hits the ray down looks at
+constexpr double kRayAbove = 0.5;          // metres above V's feet the ray down starts
+constexpr float  kRayLength = 2.0f;        // and how far it goes
+
+// A point in PhysX's frame: world - origin.
+PxTransform At(const Vec3d& aWorld, const Vec3d& aOrigin)
+{
+	return PxTransform(PxVec3(float(aWorld.x - aOrigin.x), float(aWorld.y - aOrigin.y), float(aWorld.z - aOrigin.z)));
+}
+
+bool Is(const ObjectCheck& aCheck, AuditedClass aClass)
+{
+	return aCheck.verdict == ObjectVerdict::Ok && aCheck.cls == aClass;
+}
+
+bool SameOrigin(const Vec3d& aA, const Vec3d& aB)
+{
+	return aA.x == aB.x && aA.y == aB.y && aA.z == aB.z;  // whole numbers of the 1,024 m grid
+}
+}
+
+void Bodies::Frame(const std::optional<Vec3d>& aFeet, bool aOn, const link::Solids& aSolids)
+{
+	scene_ = nullptr;
+	statics_.reset();
+	if (!aFeet)
+	{
+		lost_ = lost_ || box_ || !bodies_.empty();  // nothing is touched while V isn't found, as in a load
+		return;
+	}
+	if (lost_)
+	{
+		if (!Prepare())
+		{
+			return;  // tried again next frame
+		}
+		Check();
+		lost_ = false;
+	}
+	std::vector<BodyPlan::Change> changes;
+	if (const std::optional<SectionPos> v = SectionAt(McFromWorld(*aFeet)))
+	{
+		changes = plan_.Changes(*v, aOn, aSolids);  // with bodies off, every one is removed
+	}
+	// PhysX's origin, as the exporter last read it: if it has moved, the actors' poses are checked.
+	const std::optional<Vec3d>& seen = ground_.State().origin;
+	const bool                  moved = posedBy_ && seen && !SameOrigin(*seen, *posedBy_);
+	if (changes.empty() && !moved)
+	{
+		report_.why.clear();  // nothing waits
+		return;
+	}
+	if (!Prepare())
+	{
+		return;  // the plan still has the changes: tried again next frame
+	}
+	report_.why.clear();
+	if (posedBy_ && !SameOrigin(origin_, *posedBy_))
+	{
+		Repose();
+	}
+	for (const BodyPlan::Change& change : changes)
+	{
+		if (!change.make)
+		{
+			if (const auto body = bodies_.find(change.section); body != bodies_.end())
+			{
+				RemoveActor(body->second);
+				bodies_.erase(body);
+			}
+			plan_.Removed(change.section);
+			continue;
+		}
+		const link::Solids::Section* solids = aSolids.Find(change.section);
+		if (!solids)
+		{
+			continue;
+		}
+		if (!copy_ && !CopyGround(*aFeet))
+		{
+			break;  // the bodies wait for V to stand on the city: the plan still has them
+		}
+		std::vector<LocalBox> boxes;
+		for (const BlockBox& box : MergeBoxes(solids->bits))
+		{
+			boxes.push_back(LocalBoxOf(box));
+		}
+		const Vec3d                 world = SectionCentre(change.section);
+		const auto                  start = std::chrono::steady_clock::now();
+		PxRigidStatic* const        actor = MakeActor(world, boxes);
+		report_.slowestMs = std::max(report_.slowestMs, std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count());
+		if (!actor)
+		{
+			plan_.Failed(change.section, change.version);  // tried again when the section's solids next change
+			continue;
+		}
+		bodies_[change.section] = { actor, world, boxes.size(), boxes.front().half };
+		plan_.Made(change.section, change.version);
+	}
+	posedBy_ = box_ || !bodies_.empty() ? std::optional<Vec3d>(origin_) : std::nullopt;
+	Publish();
+}
+
+std::string Bodies::Box(bool aOn, const Vec3d& aFeet, const Vec3f& aForward)
+{
+	scene_ = nullptr;  // a request comes before this frame's Frame
+	statics_.reset();
+	if (!aOn && !box_)
+	{
+		return "box off: there's no box";
+	}
+	if (aOn && box_)
+	{
+		return "box on: the box is there already";
+	}
+	if (!Prepare())
+	{
+		return std::format("box {}: {}", aOn ? "on" : "off", report_.why);
+	}
+	if (lost_)
+	{
+		Check();
+		lost_ = false;
+	}
+	if (posedBy_ && !SameOrigin(origin_, *posedBy_))
+	{
+		Repose();  // before the bodies count as posed by this origin
+	}
+	if (!aOn)
+	{
+		if (box_)
+		{
+			RemoveActor(*box_);
+			box_.reset();
+		}
+		posedBy_ = bodies_.empty() ? std::nullopt : std::optional<Vec3d>(origin_);
+		Publish();
+		return "box off: the box is gone";
+	}
+	if (!copy_ && !CopyGround(aFeet))
+	{
+		return "box on: " + report_.why;
+	}
+	// 3 m ahead of V, along the ground: V's facing, or north if V faces straight up or down.
+	const double                length = std::hypot(aForward.x, aForward.y);
+	const Vec3d                 ahead = length > 0.1 ? Vec3d{ aForward.x / length, aForward.y / length, 0.0 } : Vec3d{ 0.0, 1.0, 0.0 };
+	const Vec3d                 centre{ aFeet.x + 3.0 * ahead.x, aFeet.y + 3.0 * ahead.y, aFeet.z + 0.5 };
+	const std::vector<LocalBox> boxes = { { { 0.0, 0.0, 0.0 }, { 1.0, 1.0, 0.5 } } };
+	PxRigidStatic* const        actor = MakeActor(centre, boxes);
+	if (!actor)
+	{
+		return "box on: PhysX made no actor";
+	}
+	box_ = Body{ actor, centre, 1, boxes.front().half };
+	posedBy_ = origin_;
+	Publish();
+	return std::format("box on: 2 x 2 x 1 m, centred at world {:.2f} {:.2f} {:.2f}, made of {}", centre.x, centre.y, centre.z,
+	                   report_.madeOf);
+}
+
+bool Bodies::Prepare()
+{
+	if (scene_)
+	{
+		return true;
+	}
+	Vec3d          origin;
+	PxScene* const scene = ground_.Prepared(origin);
+	if (!scene)
+	{
+		report_.why = ground_.State().why;
+		return false;
+	}
+	PxPhysics* const physics = session_.Physics(report_.why);
+	if (!physics)
+	{
+		return false;
+	}
+	if (addedTo_ && scene != addedTo_)
+	{
+		Forget();  // the scene our actors went into isn't scene 0 now: a load took it
+	}
+	scene_ = scene;
+	physics_ = physics;
+	origin_ = origin;
+	return true;
+}
+
+bool Bodies::CopyGround(const Vec3d& aFeet)
+{
+	// The ray down from just above V's feet, through every static shape: the nearest one that stops V, a scene-query and
+	// simulation shape that isn't a trigger, and isn't ours, is what the bodies are made of.
+	ReadableMemory&    memory = session_.Memory();
+	const ModuleBases& bases = session_.Bases();
+	PxRaycastHit       hits[kRayHits];
+	PxRaycastBuffer    buffer(hits, kRayHits);
+	scene_->lockRead();
+	scene_->raycast(At({ aFeet.x, aFeet.y, aFeet.z + kRayAbove }, origin_).p, PxVec3(0.0f, 0.0f, -1.0f), kRayLength, buffer,
+	                PxHitFlag::eDEFAULT, PxQueryFilterData(PxQueryFlag::eSTATIC | PxQueryFlag::eNO_BLOCK));
+	const PxRaycastHit* ground = nullptr;
+	for (PxU32 i = 0; i < std::min(buffer.nbTouches, kRayHits); ++i)
+	{
+		const PxRaycastHit& hit = hits[i];
+		if (!Is(CheckObject(memory, bases, hit.actor, kActorBytes), AuditedClass::RigidStatic) ||
+		    !Is(CheckObject(memory, bases, hit.shape), AuditedClass::Shape) || ground_.Own().Has(hit.actor))
+		{
+			continue;
+		}
+		const PxShapeFlags flags = hit.shape->getFlags();
+		if (flags.isSet(PxShapeFlag::eSCENE_QUERY_SHAPE) && flags.isSet(PxShapeFlag::eSIMULATION_SHAPE) &&
+		    !flags.isSet(PxShapeFlag::eTRIGGER_SHAPE) && (!ground || hit.distance < ground->distance))
+		{
+			ground = &hit;
+		}
+	}
+	Copy        copy;
+	std::string kind;
+	if (ground)
+	{
+		copy.query = ground->shape->getQueryFilterData();
+		copy.simulation = ground->shape->getSimulationFilterData();
+		copy.flags = ground->shape->getFlags();
+		kind = GeometryName(ground->shape->getGeometryType());
+		if (ground->shape->getMaterials(&copy.material, 1) != 1 || !memory.Range(copy.material, 16))
+		{
+			copy.material = nullptr;
+		}
+	}
+	scene_->unlockRead();
+	if (!copy.material)
+	{
+		report_.why = ground ? "the ground under V has no material to copy" : "they wait for V to stand on the city, to be made of what it's made of";
+		return false;
+	}
+	// A shape of ours, never attached, keeps the material alive: PhysX takes a reference on each material a shape has.
+	copy.keeper = physics_->createShape(PxBoxGeometry(0.5f, 0.5f, 0.5f), &copy.material, 1, true, copy.flags);
+	if (!Is(CheckObject(memory, bases, copy.keeper), AuditedClass::Shape))
+	{
+		report_.why = "PhysX made no shape of the ground's material";
+		return false;
+	}
+	copy_ = copy;
+	report_.madeOf = std::format("a static {}'s: query filter {}, simulation filter {}, flags 0x{:x}", kind, FilterKey(copy.query),
+	                             FilterKey(copy.simulation), uint32_t(PxU8(copy.flags)));
+	return true;
+}
+
+PxRigidStatic* Bodies::MakeActor(const Vec3d& aWorld, const std::vector<LocalBox>& aBoxes)
+{
+	ReadableMemory&      memory = session_.Memory();
+	const ModuleBases&   bases = session_.Bases();
+	PxRigidStatic* const actor = physics_->createRigidStatic(At(aWorld, origin_));
+	if (!Is(CheckObject(memory, bases, actor, kActorBytes), AuditedClass::RigidStatic))
+	{
+		++report_.failed;  // what isn't the audited actor is left alone
+		return nullptr;
+	}
+	for (const LocalBox& box : aBoxes)
+	{
+		PxShape* const shape = physics_->createShape(PxBoxGeometry(float(box.half.x), float(box.half.y), float(box.half.z)), &copy_->material,
+		                                             1, true, copy_->flags);
+		if (!Is(CheckObject(memory, bases, shape), AuditedClass::Shape))
+		{
+			actor->release();  // with the shapes attached so far
+			++report_.failed;
+			return nullptr;
+		}
+		shape->setLocalPose(PxTransform(PxVec3(float(box.centre.x), float(box.centre.y), float(box.centre.z))));
+		shape->setQueryFilterData(copy_->query);
+		shape->setSimulationFilterData(copy_->simulation);
+		actor->attachShape(*shape);
+		shape->release();  // the actor holds it now
+	}
+	scene_->addActor(*actor);
+	addedTo_ = scene_;
+	if (statics_)
+	{
+		statics_->insert(std::upper_bound(statics_->begin(), statics_->end(), static_cast<const void*>(actor)), actor);
+	}
+	++report_.made;
+	return actor;
+}
+
+bool Bodies::Ours(const Body& aBody)
+{
+	if (!statics_)
+	{
+		// Scene 0's static actors, listed once a frame when needed: one of ours that isn't among them was taken away.
+		scene_->lockRead();
+		std::vector<PxActor*> actors(std::min(scene_->getNbActors(PxActorTypeFlag::eRIGID_STATIC), kMostActors));
+		actors.resize(scene_->getActors(PxActorTypeFlag::eRIGID_STATIC, actors.data(), PxU32(actors.size())));
+		scene_->unlockRead();
+		statics_.emplace(actors.begin(), actors.end());
+		std::sort(statics_->begin(), statics_->end());
+	}
+	ReadableMemory&            memory = session_.Memory();
+	const ModuleBases&         bases = session_.Bases();
+	const PxRigidStatic* const actor = aBody.actor;
+	if (!std::binary_search(statics_->begin(), statics_->end(), static_cast<const void*>(actor)) ||
+	    !Is(CheckObject(memory, bases, actor, kActorBytes), AuditedClass::RigidStatic) || actor->getScene() != scene_ ||
+	    actor->getNbShapes() != aBody.boxes || !copy_)
+	{
+		return false;
+	}
+	// PhysX reuses a released actor's memory, so an actor of the game's may stand where ours stood: ours still has our
+	// first box, filtered as we filtered it.
+	PxShape*      shape = nullptr;
+	PxBoxGeometry box;
+	return actor->getShapes(&shape, 1) == 1 && Is(CheckObject(memory, bases, shape), AuditedClass::Shape) && shape->getBoxGeometry(box) &&
+	       std::abs(box.halfExtents.x - float(aBody.firstHalf.x)) < 1e-3f && std::abs(box.halfExtents.y - float(aBody.firstHalf.y)) < 1e-3f &&
+	       std::abs(box.halfExtents.z - float(aBody.firstHalf.z)) < 1e-3f && shape->getQueryFilterData() == copy_->query;
+}
+
+void Bodies::RemoveActor(const Body& aBody)
+{
+	if (!Ours(aBody))
+	{
+		++report_.lost;  // scene 0 no longer lists it, or it isn't ours now: forgotten, not touched
+		return;
+	}
+	scene_->removeActor(*aBody.actor);
+	aBody.actor->release();
+	statics_->erase(std::lower_bound(statics_->begin(), statics_->end(), static_cast<const void*>(aBody.actor)));
+	++report_.removed;
+}
+
+void Bodies::Forget()
+{
+	report_.lost += bodies_.size() + (box_ ? 1 : 0);
+	bodies_.clear();
+	box_.reset();
+	plan_.Clear();
+	addedTo_ = nullptr;
+	posedBy_.reset();
+	Publish();
+}
+
+void Bodies::Check()
+{
+	for (auto body = bodies_.begin(); body != bodies_.end();)
+	{
+		if (Ours(body->second))
+		{
+			++body;
+			continue;
+		}
+		++report_.lost;
+		plan_.Removed(body->first);  // made again, if it's still wanted
+		body = bodies_.erase(body);
+	}
+	if (box_ && !Ours(*box_))
+	{
+		++report_.lost;
+		box_.reset();
+	}
+	Publish();
+}
+
+void Bodies::Repose()
+{
+	// The game shifts all of scene 0 when PhysX's origin moves (step 3's scene watch), ours with it: each actor should
+	// already stand where it was. One that doesn't is posed again.
+	++report_.originChanges;
+	const auto check = [&](const Body& aBody) {
+		if (!Ours(aBody))
+		{
+			return false;
+		}
+		const PxTransform pose = aBody.actor->getGlobalPose();
+		if (!PosedAt({ pose.p.x, pose.p.y, pose.p.z }, aBody.world, origin_))
+		{
+			aBody.actor->setGlobalPose(At(aBody.world, origin_));
+			++report_.reposed;
+		}
+		return true;
+	};
+	for (auto body = bodies_.begin(); body != bodies_.end();)
+	{
+		if (check(body->second))
+		{
+			++body;
+			continue;
+		}
+		++report_.lost;
+		plan_.Removed(body->first);
+		body = bodies_.erase(body);
+	}
+	if (box_ && !check(*box_))
+	{
+		++report_.lost;
+		box_.reset();
+	}
+	posedBy_ = origin_;
+}
+
+void Bodies::Publish()
+{
+	std::vector<const void*> actors;
+	report_.boxes = 0;
+	for (const auto& [section, body] : bodies_)
+	{
+		actors.push_back(body.actor);
+		report_.boxes += body.boxes;
+	}
+	if (box_)
+	{
+		actors.push_back(box_->actor);
+	}
+	report_.sections = bodies_.size();
+	report_.box = box_ ? std::optional<Vec3d>(box_->world) : std::nullopt;
+	ground_.Own().Set(std::move(actors));
+}
+}
+```
+- [ ] **Step 6: Edit `CMakeLists.txt` to add the source**
+
+```cmake
+	src/physx/SceneHooks.cpp
+)
+```
+```cmake
+	src/physx/SceneHooks.cpp
+	src/physx/Bodies.cpp
+)
+```
+
+- [ ] **Step 7: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `390 test(s), 0 failure(s)`.
+
+- [ ] **Step 8: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "collision-and-movement: V's bodies, PhysX static actors for Minecraft's blocks" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 51: BlockRender 0.15.0 gives Minecraft's blocks around V bodies, and a test box
+
+The bodies in the game:
+- **`set blocks 0|1`:** bodies for Minecraft's blocks around V, off by default until step 4 passes. They're made only
+  while drawing is on, so blocks nobody can see never stop V, and they stay while unlinked or with Minecraft gone, as
+  the drawn blocks do.
+- **`box on|off`:** step 4's test box, through the same code, before any block.
+- **Each frame,** after the ground's read, `Bodies::Frame` with V's feet. The ground's `Frame` now gets V's feet even
+  without V's camera, as in a car, so the bodies follow V there; the city is still read only with the camera.
+- **The status:** a `bodies=` line after `solids=`: on or off; how many sections and boxes; what was made, removed,
+  failed and lost since the start, and the slowest making; what they're made of; origin changes and posings; the test
+  box; and why they wait, while they do. It shows all of it with the bodies off too, since the box stands either way.
+  The box is also a `structure=testbox` line, so the overlay shows V's distance to it, since nobody can see it.
+- **The overlay:** a bodies line, with a Blocks button (`set blocks`) and a Box button (`box on|off`).
+- Version 0.15.0.
+
+**Files:**
+- Modify: `src/Requests.h`, `src/Requests.cpp`, `src/Status.h`, `src/Status.cpp`, `src/Plugin.cpp`,
+  `tools/blockrender_hud/init.lua`, `tests/TestRequests.cpp`, `tests/TestStatus.cpp`, `CMakeLists.txt`
+
+- [ ] **Step 1: Edit `tests/TestRequests.cpp`: the failing test**
+
+```cpp
+TEST(RequestsForTheGround)
+```
+```cpp
+TEST(RequestsForTheBodies)
+{
+	std::string error;
+	const auto  on = cpmc::ParseRequest("box on", error);
+	CHECK(on && on->kind == cpmc::Request::Kind::Box && on->what == "on");
+	const auto off = cpmc::ParseRequest("box off", error);
+	CHECK(off && off->kind == cpmc::Request::Kind::Box && off->what == "off");
+	CHECK(!cpmc::ParseRequest("box", error));
+	CHECK_STR(error, "box takes on or off");
+	const auto blocks = cpmc::ParseRequest("set blocks 1", error);
+	CHECK(blocks && blocks->kind == cpmc::Request::Kind::Set && blocks->what == "blocks" && blocks->number == 1.0);
+}
+
+TEST(RequestsForTheGround)
+```
+
+- [ ] **Step 2: Edit `tests/TestStatus.cpp`: the failing test**
+
+```cpp
+TEST(StatusWritesTheSceneWatch)
+```
+```cpp
+TEST(StatusWritesTheBodies)
+{
+	cpmc::StatusReport report;
+	cpmc::LinkReport   link;
+	report.link = link;
+	std::string status = cpmc::FormatStatus(report);
+	CHECK(Has(status, "bodies=off: 0 sections with bodies, 0 boxes; 0 made, 0 removed, 0 failed and 0 lost since the start, the slowest "
+	                  "making 0.00 ms; made of what V stands on, once copied; 0 origin changes, 0 bodies posed again; the test box off"));
+	CHECK(status.find("solids=") < status.find("bodies=") && status.find("bodies=") < status.find("ring="));
+	link.bodiesOn = true;
+	link.bodiesWhy = "they wait for V to stand on the city, to be made of what it's made of";
+	report.link = link;
+	CHECK(cpmc::FormatStatus(report).find("bodies=on: 0 sections with bodies, ") != std::string::npos);
+	CHECK(cpmc::FormatStatus(report).find("; the test box off; waiting: they wait for V to stand on the city, to be made of what it's "
+	                                      "made of\n") != std::string::npos);
+	link.bodiesWhy.clear();
+	link.bodySections = 3;
+	link.bodyBoxes = 7;
+	link.bodiesMade = 5;
+	link.bodiesRemoved = 2;
+	link.bodiesFailed = 1;
+	link.bodiesLost = 0;
+	link.bodySlowestMs = 0.416;
+	link.bodiesMadeOf = "a static triangleMesh's: query filter 0:0:449c004:0, simulation filter 5c004:0:13ce:0, flags 0x7";
+	link.originChanges = 1;
+	link.bodiesReposed = 0;
+	link.box = cpmc::Vec3d{ -116.5, -2002.25, 6.64 };
+	report.link = link;
+	CHECK(Has(cpmc::FormatStatus(report),
+	          "bodies=on: 3 sections with bodies, 7 boxes; 5 made, 2 removed, 1 failed and 0 lost since the start, the slowest "
+	          "making 0.42 ms; made of a static triangleMesh's: query filter 0:0:449c004:0, simulation filter 5c004:0:13ce:0, flags "
+	          "0x7; 1 origin change, 0 bodies posed again; the test box at world -116.50 -2002.25 6.64"));
+}
+
+TEST(StatusWritesTheSceneWatch)
+```
+
+- [ ] **Step 3: Build; it must fail**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C" | sort -u | head -3
+```
+Expected: `error C2065: 'Box': undeclared identifier`.
+
+- [ ] **Step 4: Edit `src/Requests.h`**
+
+```cpp
+//   shapes                     (spike 5: the game's shapes within 2 m of V, into the log)
+```
+```cpp
+//   shapes                     (spike 5: the game's shapes within 2 m of V, into the log)
+//   box on|off                 (spike 5's step 4: a test box 3 m ahead of V, made as the bodies for blocks are)
+```
+```cpp
+		Shapes,
+```
+```cpp
+		Shapes,
+		Box,
+```
+
+- [ ] **Step 5: Edit `src/Requests.cpp`**
+
+```cpp
+	if (command == "link" || command == "build" || command == "scenewatch")
+```
+```cpp
+	if (command == "link" || command == "build" || command == "scenewatch" || command == "box")
+```
+```cpp
+		const Request::Kind kind = command == "link"    ? Request::Kind::Link
+		                           : command == "build" ? Request::Kind::Build
+		                                                : Request::Kind::SceneWatch;
+```
+```cpp
+		const Request::Kind kind = command == "link"         ? Request::Kind::Link
+		                           : command == "build"      ? Request::Kind::Build
+		                           : command == "scenewatch" ? Request::Kind::SceneWatch
+		                                                     : Request::Kind::Box;
+```
+
+- [ ] **Step 6: Edit `src/Status.h`**
+
+```cpp
+	// Minecraft's solid blocks (spike 5's "Part 3")
+	size_t   solidSections = 0;
+	uint64_t solidBlocks = 0;
+```
+```cpp
+	// Minecraft's solid blocks, and V's bodies for them (spike 5's "Part 3"): the counts are since the start
+	size_t               solidSections = 0;
+	uint64_t             solidBlocks = 0;
+	bool                 bodiesOn = false;  // set blocks 1, with drawing on
+	std::string          bodiesWhy;         // why they wait, while they do
+	size_t               bodySections = 0;
+	size_t               bodyBoxes = 0;
+	uint64_t             bodiesMade = 0;
+	uint64_t             bodiesRemoved = 0;
+	uint64_t             bodiesFailed = 0;
+	uint64_t             bodiesLost = 0;
+	double               bodySlowestMs = 0.0;
+	std::string          bodiesMadeOf;      // empty: not copied yet
+	uint64_t             originChanges = 0;
+	uint64_t             bodiesReposed = 0;
+	std::optional<Vec3d> box;               // the test box's centre, world axes, while it stands
+```
+```cpp
+// drive, positions, ground, solids, ring, atlas, hud, latency, burst and processes); then one structure line per structure:
+```
+```cpp
+// drive, positions, ground, solids, bodies, ring, atlas, hud, latency, burst and processes); then one structure line per
+// structure:
+```
+
+- [ ] **Step 7: Edit `src/Status.cpp`**
+
+```cpp
+std::string FormatLink(const LinkReport& aLink)
+```
+```cpp
+// V's bodies for Minecraft's blocks, and step 4's test box, which stands whether the bodies are on or off.
+std::string FormatBodies(const LinkReport& aLink)
+{
+	return std::format("bodies={}: {} sections with bodies, {} boxes; {} made, {} removed, {} failed and {} lost since the start, the "
+	                   "slowest making {:.2f} ms; made of {}; {} origin change{}, {} bodies posed again; {}{}\n",
+	                   aLink.bodiesOn ? "on" : "off", aLink.bodySections, aLink.bodyBoxes, aLink.bodiesMade, aLink.bodiesRemoved,
+	                   aLink.bodiesFailed, aLink.bodiesLost, aLink.bodySlowestMs,
+	                   aLink.bodiesMadeOf.empty() ? "what V stands on, once copied" : OneLine(aLink.bodiesMadeOf), aLink.originChanges,
+	                   aLink.originChanges == 1 ? "" : "s", aLink.bodiesReposed,
+	                   aLink.box ? "the test box at world " + Position(*aLink.box) : std::string("the test box off"),
+	                   aLink.bodiesWhy.empty() ? "" : "; waiting: " + OneLine(aLink.bodiesWhy));
+}
+
+std::string FormatLink(const LinkReport& aLink)
+```
+```cpp
+	out += std::format("solids=Minecraft's solid blocks: {} in {} sections\n", aLink.solidBlocks, aLink.solidSections);
+```
+```cpp
+	out += std::format("solids=Minecraft's solid blocks: {} in {} sections\n", aLink.solidBlocks, aLink.solidSections);
+	out += FormatBodies(aLink);
+```
+
+- [ ] **Step 8: Edit `src/Plugin.cpp`**
+
+```cpp
+// City's shape for Minecraft from the game's PhysX; and it keeps Minecraft's solid blocks, for V to stand on.
+```
+```cpp
+// City's shape for Minecraft from the game's PhysX; and it makes Minecraft's solid blocks around V into PhysX bodies,
+// for V to stand on.
+```
+```cpp
+#include "log/FrameLogData.h"
+```
+```cpp
+#include "log/FrameLogData.h"
+#include "physx/Bodies.h"
+```
+```cpp
+constexpr const char* kVersion = "0.14.0";
+```
+```cpp
+constexpr const char* kVersion = "0.15.0";
+```
+```cpp
+DWORD                 g_mainThread = 0;   // OnUpdate's
+```
+```cpp
+DWORD                 g_mainThread = 0;   // OnUpdate's
+
+// Spike 5's V against blocks (its spec's "Part 3"). Main thread only.
+cpmc::px::Bodies g_bodies{ g_physx, g_ground };  // PhysX bodies for Minecraft's blocks around V, and step 4's test box
+bool             g_blocks = false;               // set blocks 1: the bodies, while drawing is on
+```
+```cpp
+	std::optional<cpmc::link::GamePose> pose;
+	if (const std::optional<cpmc::PlayerPose> player = cpmc::LocatePlayer(); player && player->camera)
+```
+```cpp
+	const std::optional<cpmc::PlayerPose> player = cpmc::LocatePlayer();
+	std::optional<cpmc::link::GamePose>   pose;
+	if (player && player->camera)
+```
+```cpp
+	// Night City's shape, given V's feet from before this frame's teleport: V's controller is within a frame's move of
+	// them, whether the teleport has moved it yet or not.
+	g_ground.Frame(pose ? std::optional<cpmc::Vec3d>(pose->feet) : std::nullopt);
+```
+```cpp
+	// Night City's shape, and V's bodies, given V's feet from before this frame's teleport, in a car too: V's controller is
+	// within a frame's move of them, whether the teleport has moved it yet or not. The city is read only with V's camera.
+	const std::optional<cpmc::Vec3d> feet = player ? std::optional<cpmc::Vec3d>(player->feet) : std::nullopt;
+	g_ground.Frame(feet);
+```
+```cpp
+	}
+	g_second.cityReadMsSum += state.cityReadMs;
+```
+```cpp
+	}
+	g_bodies.Frame(feet, g_blocks && g_renderer->ModeName() != "off", g_link->SolidSections());
+	g_second.cityReadMsSum += state.cityReadMs;
+```
+```cpp
+	}
+	if (aRequest.what.starts_with("hooks."))
+```
+```cpp
+	}
+	if (aRequest.what == "blocks")
+	{
+		if (aRequest.number != 0.0 && aRequest.number != 1.0)
+		{
+			return Report("set blocks: 0 leaves Minecraft's blocks without bodies, and 1 gives those around V bodies V stands on");
+		}
+		g_blocks = aRequest.number == 1.0;
+		return Report(!g_blocks                            ? "set blocks 0: the bodies go"
+		              : g_renderer->ModeName() == "off" ? "set blocks 1: the bodies come once drawing is on"
+		                                                  : "set blocks 1: Minecraft's blocks around V get bodies");
+	}
+	if (aRequest.what.starts_with("hooks."))
+```
+```cpp
+// The command in aFolder's blockrender.request, if there is one: in the plugin's folder, where the agent writes it, or
+```
+```cpp
+// box on|off (spike 5's step 4): a test box 3 m ahead of V, made as the bodies for blocks are, before any block is.
+void BoxRequest(bool aOn)
+{
+	const std::optional<cpmc::PlayerPose> player = cpmc::LocatePlayer();
+	if (!player)
+	{
+		return Report(std::format("box {}: there's no player", aOn ? "on" : "off"));
+	}
+	g_ground.Frame(player->feet);  // scene 0 and PhysX's origin this frame, from V's controller
+	Report(g_bodies.Box(aOn, player->feet, player->forward));
+}
+
+// The command in aFolder's blockrender.request, if there is one: in the plugin's folder, where the agent writes it, or
+```
+```cpp
+	case cpmc::Request::Kind::Shapes: Shapes(); break;
+```
+```cpp
+	case cpmc::Request::Kind::Shapes: Shapes(); break;
+	case cpmc::Request::Kind::Box: BoxRequest(request->what == "on"); break;
+```
+```cpp
+	report.physxWhy = physx.why;
+```
+```cpp
+	report.physxWhy = physx.why;
+	const cpmc::px::Bodies::Report& bodies = g_bodies.State();
+	report.bodiesOn = g_blocks && g_renderer->ModeName() != "off";
+	report.bodiesWhy = bodies.why;
+	report.bodySections = bodies.sections;
+	report.bodyBoxes = bodies.boxes;
+	report.bodiesMade = bodies.made;
+	report.bodiesRemoved = bodies.removed;
+	report.bodiesFailed = bodies.failed;
+	report.bodiesLost = bodies.lost;
+	report.bodySlowestMs = bodies.slowestMs;
+	report.bodiesMadeOf = bodies.madeOf;
+	report.originChanges = bodies.originChanges;
+	report.bodiesReposed = bodies.reposed;
+	report.box = bodies.box;
+```
+```cpp
+	report.structures = g_structures;
+```
+```cpp
+	report.structures = g_structures;
+	if (const std::optional<cpmc::Vec3d> box = g_bodies.State().box)
+	{
+		// Step 4's test box can't be seen: as a structure, the overlay shows how far V is from it.
+		report.structures.push_back({ "testbox", { box->x - 1.0, box->y - 1.0, box->z - 0.5 }, { box->x + 1.0, box->y + 1.0, box->z + 0.5 } });
+	}
+```
+```cpp
+	aInfo->version = RED4EXT_V1_SEMVER(0, 14, 0);
+```
+```cpp
+	aInfo->version = RED4EXT_V1_SEMVER(0, 15, 0);
+```
+
+- [ ] **Step 9: Edit `tools/blockrender_hud/init.lua`**
+
+```lua
+-- and one the ground Minecraft gets, with buttons to switch it and to log the shapes around V.
+```
+```lua
+-- and one the ground Minecraft gets, with buttons to switch it and to log the shapes around V; and one V's bodies for
+-- Minecraft's blocks, with buttons to turn them on and off, and step 4's test box.
+```
+```lua
+local groundName = nil   -- "floor" or "city"
+```
+```lua
+local groundName = nil   -- "floor" or "city"
+local bodies = nil       -- the bodies line: on or off, and how many, or why they wait; and the test box
+local blocksOn = nil     -- whether bodies are on: "on" or "off"
+local boxOn = false      -- whether the test box stands
+```
+```lua
+    groundName = nil
+```
+```lua
+    groundName = nil
+    bodies = nil
+    blocksOn = nil
+    boxOn = false
+```
+```lua
+            ground = setting .. (known and (", " .. known) or "") .. (fallback and (", fell back: " .. fallback) or "")
+```
+```lua
+            ground = setting .. (known and (", " .. known) or "") .. (fallback and (", fell back: " .. fallback) or "")
+        end
+        local state = line:match("^bodies=(%a+)")
+        if state ~= nil then
+            blocksOn = state
+            boxOn = line:match("the test box at world") ~= nil
+            local counts = line:match("^bodies=%a+: (%d+ sections with bodies, %d+ boxes)")
+            local waiting = line:match("; waiting: (.*)$")
+            bodies = state .. (counts and (", " .. counts) or "") .. (waiting and (", waiting: " .. waiting) or "")
+                .. (boxOn and ", the test box standing" or "")
+```
+```lua
+        end
+        ImGui.Separator()
+```
+```lua
+        end
+        if bodies ~= nil then
+            ImGui.Text("Bodies: " .. bodies)
+            -- "###blocks" and "###box" keep the buttons' IDs the same while their labels change.
+            ImGui.SameLine()
+            if ImGui.Button("Blocks: " .. blocksOn .. "###blocks") then
+                request("set blocks " .. (blocksOn == "on" and 0 or 1))
+            end
+            ImGui.SameLine()
+            if ImGui.Button((boxOn and "Box: on" or "Box: off") .. "###box") then
+                request("box " .. (boxOn and "off" or "on"))
+            end
+        end
+        ImGui.Separator()
+```
+
+- [ ] **Step 10: Edit `CMakeLists.txt`: version 0.15.0**
+
+```cmake
+project(BlockRender VERSION 0.14.0 LANGUAGES C CXX)
+```
+```cmake
+project(BlockRender VERSION 0.15.0 LANGUAGES C CXX)
+```
+
+- [ ] **Step 11: Check the overlay's syntax**
+
+```bash
+cd /d/Cyberpunk-Minecraft/spikes/block-render && luac -p tools/blockrender_hud/init.lua && echo ok
+```
+Expected: `ok`.
+
+- [ ] **Step 12: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `392 test(s), 0 failure(s)`.
+
+- [ ] **Step 13: Check that BlockRender imports nothing from PhysX**
+
+```bash
+DUMPBIN="$(ls "/c/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/"*/bin/Hostx64/x64/dumpbin.exe | head -1)"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && MSYS_NO_PATHCONV=1 "$DUMPBIN" -imports -nologo build\\RelWithDebInfo\\BlockRender.dll \
+  | grep -ci "physx"
+```
+Expected: `0`.
+
+- [ ] **Step 14: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "collision-and-movement: BlockRender 0.15.0 gives Minecraft's blocks around V bodies, and a test box" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 52: In the game: step 4, V against blocks
+
+The spec's "Step 4", with the user, on BlockRender 0.15.0. The test box first, one interaction at a time, with a save
+made just before: if the game's own code expects a game object behind whatever it touches, a body's empty `userData`
+could fault it, and the game freezes (risk 6). Then `set blocks 1`, and Minecraft's own blocks. Nobody can see the box:
+BlockRender's overlay shows `nearest structure: testbox, … m away`, from V's feet, and spike 1's overlay V's distance to
+the origin lines. Task 33's commands for requests, the log and the status come back here. FreeFly (F7) stays off. Note
+what you see as you go: Step 18 records it. If the game freezes, read the logs and the newest `ReportQueue` folder, and
+force-close it only when the user asks. If a check fails, stop and find the cause with superpowers:systematic-debugging
+before going on. Fixes become new tasks.
+
+**Files:**
+- Modify: `docs/spikes/2026-10-03-collision-and-movement-results.md`
+
+- [ ] **Step 1: Deploy (the game must not be running)**
+
+```bash
+tasklist | grep -i -c "cyberpunk2077.exe"
+```
+Expected: `0`. If it's `1`, ask the user to quit the game first, because a running game locks the DLL.
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default -DCP2077_DIR=E:/Cyberpunk2077 > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C|error MSB"; \
+  "$CMAKE" --preset default -DCP2077_DIR= > /dev/null; \
+  cmp build/RelWithDebInfo/BlockRender.dll /e/Cyberpunk2077/red4ext/plugins/BlockRender/BlockRender.dll && echo installed
+```
+Expected: `installed`. The second configure clears `CP2077_DIR` again.
+
+- [ ] **Step 2: In the game: load, link, and a save**
+
+Ask the user to start the `CyberCraft` instance, then the game, load the free-roam save at spike 3's corner, click Link,
+and make a new save there. Expected: in the log, `BlockRender 0.15.0 loaded` and `the turn: … remembered from the last
+session …`; in the status, `bodies=off: 0 sections with bodies, 0 boxes; …; the test box off`.
+
+- [ ] **Step 3: In the game: the box, walked into**
+
+Ask the user to stand on an open street, facing along it with nothing within 5 m ahead, and click the overlay's Box
+button. Expected: `request: box on: 2 x 2 x 1 m, centred at world …, made of a static …'s: query filter …, simulation
+filter …, flags 0x…`; the bodies line's `1 made` and `the test box at world …`; and the overlay's `nearest structure:
+testbox`, about 2 m away (a little less if V faced across the world's axes, as the box is square to them). Note the
+copied filters: a street's were `0:0:449c004:0` and `5c004:0:13ce:0` in step 3.
+
+Ask the user to walk slowly into it. Expected: V stops at about 0.3 m, the radius of V's controller; nothing faults.
+
+- [ ] **Step 4: In the game: on the box**
+
+Ask the user to jump onto the box, and stand on it. Expected: V stands on it, the overlay's `V:` z about 1 m above the
+street's, and the distance 0.
+
+- [ ] **Step 5: In the game: the box shot**
+
+Ask the user to step back a few metres, draw a gun, and fire a few shots at where the box is, a metre up. Record whether
+the shots stop at it (impacts in the air) or go through, and that nothing faults.
+
+- [ ] **Step 6: In the game: the box driven into**
+
+Ask the user to get into a car and drive slowly into the box, guided by the overlay's distance. Record what the car does,
+and that nothing faults.
+
+- [ ] **Step 7: In the game: across an origin line**
+
+Ask the user to go on foot to about 10 m from an origin line (spike 1's overlay: the distance to the nearest), face it,
+click Box twice (off, then on: the box goes about 3 m ahead, short of the line), and note the bodies line's origin
+changes. Then to walk around the box and on across the line a few metres, come back across it, and walk into the box
+from beyond. Expected: the origin changes up by 2, one each way, and still `0 bodies posed again`: the game moved the box
+with its scene each time, as step 3's watch suggested; and V stopping at the box again.
+
+- [ ] **Step 8: In the game: a load with the box there**
+
+With the box standing, ask the user to load the save made in Step 2. Expected: nothing faults. Record what the status
+says once V is found again: the box still standing (scene 0 kept, and still listing it), or `1 lost` and `the test box
+off`. Then ask the user to click Box until the line says `the test box off`.
+
+- [ ] **Step 9: In the game: blocks on**
+
+Ask the user to make a new save, then click the overlay's Blocks button. Expected: `request: set blocks 1: Minecraft's
+blocks around V get bodies`, and the bodies line `bodies=on: …`. Blocks within a section of V's get bodies at once:
+spike 3's corner still has step 3's blocks.
+
+- [ ] **Step 10: In the game: a wall and a tower, and leaving build mode on top**
+
+Ask the user, in build mode, to build a wall 5 blocks long and 3 high and a tower 1 by 1 and 5 high beside it, then to
+stand on top of the tower and press F8. Expected: the bodies line's sections, boxes and `made` going up as the blocks
+are placed, a few milliseconds at most for the slowest making; and V standing on the tower once build mode ends, not
+falling through it.
+
+- [ ] **Step 11: In the game: leaving build mode sneaking**
+
+Ask the user to press F8 again, hold Left Ctrl to sneak on top of the tower, and press F8 while still sneaking. V's
+controller then starts about a third of a metre inside the top block (risk 9). Record what it does: pushed up onto the
+block, falling through it, or stuck.
+
+- [ ] **Step 12: In the game: walking and jumping into blocks**
+
+Outside build mode, ask the user to walk into the wall, then to build, in build mode, a step one block high and leave
+build mode, and jump onto it. Expected: the wall stops V, and V stands on the step.
+
+- [ ] **Step 13: In the game: blocks placed and broken by V**
+
+Outside build mode, with V standing still on open ground, send `mc /setblock ~2 ~ ~ minecraft:stone`: a block 2 blocks
+east of Minecraft's player, which follows V. Ask the user to walk east (heading 90 on the overlay) into it: it stops V.
+Send `mc /setblock ~2 ~ ~ minecraft:air`, and ask the user to walk east again: V goes through where it was. Then send
+`mc /setblock ~ ~ ~ minecraft:stone`, a block where V stands. Record what V's controller does (risk 9), then send
+`mc /setblock ~ ~ ~ minecraft:air`.
+
+- [ ] **Step 14: In the game: TNT under V**
+
+Ask the user, in build mode, to build a platform 3 by 3 blocks and one high, away from the other builds, stand in its
+middle, and leave build mode. Then send `mc /summon minecraft:tnt ~1 ~ ~`: TNT on the platform beside V. Expected: about 4 s later, `explosion at
+Minecraft …` in the log, the platform's blocks gone, their bodies with them, and V dropping to the ground below.
+
+- [ ] **Step 15: In the game: NPCs, a car and bullets against blocks**
+
+Ask the user to build a wall of blocks across a pavement where people walk, and watch: an NPC walking into it; a car
+driven into it; shots fired at it. Record what each does: stops at it, goes through, or anything odd. NPCs don't route
+around blocks (a non-goal).
+
+- [ ] **Step 16: In the game: the cost**
+
+Ask the user to stand by a build for 10 s with the blocks on, then click Blocks to turn them off, wait 10 s, and click it
+again. Read the status's `frame=` line each time, and the bodies line's sections, boxes and slowest making.
+
+- [ ] **Step 17: Ask the user to quit the game and stop Minecraft, then check the crash reports**
+
+```bash
+ls -t "$LOCALAPPDATA/REDEngine/ReportQueue" 2>/dev/null | head -3
+```
+Expected: nothing newer than this session's start.
+
+- [ ] **Step 18: Record step 4 in `docs/spikes/2026-10-03-collision-and-movement-results.md`**
+
+A "Step 4, in the game: V against blocks" section: each check above with its outcome and numbers; what the bodies were
+made of; the origin changes and posings; the load; what V's controller did inside a block; what NPCs, cars and bullets
+did; the cost; and what it means: whether Part 3's question is answered, and what's left.
+
+- [ ] **Step 19: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add docs/spikes/2026-10-03-collision-and-movement-results.md \
+  && git commit -q -m "collision-and-movement: step 4's results in the game" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 53: Close Part 3, and spike 5
+
+- [ ] **Step 1: Add "How Part 3 went" to this plan**
+
+At the end: what ran as written, what changed, and what Part 3's checks found.
+
+- [ ] **Step 2: Answer spike 5's question in the results**
+
+At the top of `docs/spikes/2026-10-03-collision-and-movement-results.md`, beside Part 1's answer: Parts 2 and 3's, and
+the spike's as a whole, against the spec's question; what's left, and whether `set blocks 1` should become the default.
+
+- [ ] **Step 3: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add docs \
+  && git commit -q -m "collision-and-movement plan: Part 3 closed, and spike 5" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+- [ ] **Step 4: Ask the user whether to finish the branch**
+
+With superpowers:finishing-a-development-branch, before Entities, which starts with its own brainstorm
+(`docs/superpowers/handoffs/2026-10-04-spike-5-part-3.md`, "After spike 5: Entities"). Every spike so far was merged into
+`main` by a local fast-forward; ask again.
+
+## Found while planning Part 3
+
+The spec's "Changes while planning" records those that touch the design.
+- **Part 2's follow-ups come first** (Tasks 38 to 40), as the user asked:
+  - the turn ratio is kept in `turn.txt`, and used until the session has its own;
+  - the worker runs a quarter of the processors' threads, 1 to 4, below normal priority, and starts the region nearest
+    Minecraft's player first; a region's newer job replaces one not started, and waits for one under way. Part 2's
+    recording shows why the drop outran it: its regions held 240 to 280 triangles against spot B's 94, and the ground
+    under the player waited behind the regions read before it. Whether the game's threads also slowed the worker is
+    what its threads' running share, new in the status, settles in Task 46.
+- **The query watch** (Task 41): Part 2's watch settled that the game writes nothing to scene 0 while OnUpdate runs, so
+  BlockRender's reads there are safe. Part 3 writes there too, and a query on another thread could read the scene's query
+  structures while a body changes them, so the watch now counts the scene's queries as well, and Task 46 checks them
+  before any body exists.
+- **Solids' checks:** a message's count must equal the bits set, as SkyCraft counts them, besides the spec's checks.
+- **The plan and the bodies:** `BodyPlan` says what to change, and `Bodies` says what it did, so a frame where PhysX can't
+  be reached changes nothing; a body whose solids changed is removed and made again in the same frame.
+- **Ours, before each touch:** an actor of ours is touched only while scene 0 is the scene it went into and lists it,
+  it passes the audit's checks, its scene is scene 0, and it still has our shapes (their count, the first box's size
+  and our query filter), since PhysX reuses a released actor's memory; otherwise it's forgotten, untouched.
+- **Loads:** the spec removed the bodies when V was lost. Step 3's watch never saw a load, so nothing is touched while V
+  isn't found; once V is found again, each actor is checked, and those no longer ours are forgotten and made again.
+- **What they're made of:** the ray down takes the nearest static shape that's a scene-query and a simulation shape,
+  not a trigger and not ours; and a shape of ours keeps the copied material alive, since PhysX's `createShape` takes a
+  reference on its materials (Task 45's addendum).
+- **`PxShape::setLocalPose`** joins the audit: each box is posed on its body's actor, at its section's centre.
+- **In a car,** the bodies follow V: the ground's `Frame` gets V's feet without V's camera, though the city is still read
+  only with it.
+- **The status** counts since the start (made, removed, failed, lost) and the slowest making, rather than a second's,
+  and shows them with the bodies off, since the test box stands either way; the box is a structure, so the overlay
+  shows V's distance to it.
+- **The origin:** a change is noticed from the exporter's last origin, and each body checked then, expecting none to need
+  posing: the game shifts all of scene 0.
+- **Versions:** 0.14.0 for the follow-ups, the query watch and the solids (Task 46's deploy), and 0.15.0 for the bodies
+  (Task 52's).
