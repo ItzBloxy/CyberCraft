@@ -19,6 +19,11 @@ would disagree about where the ground is.
 It targets SkyCraft 0.1.2's classes by name, so `fabric.mod.json` asks for exactly that version: Fabric won't start with
 another SkyCraft until this mod is checked against it.
 
+SkyCraft's own "Skyrim destruction" button, at the top left of Minecraft's pause menu (`destruction=` in
+`config/skycraft.properties`), turns its digging off too, with two differences: blasts then lose SkyCraft's explosion
+resistance, so the city's ground no longer shields blocks behind it; and holes already dug stay. The mod works whichever
+way the button is set.
+
 ## Build
 
 ```bash

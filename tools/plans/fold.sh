@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Folds fixup commits into the Part 2 tasks they belong to: rebuilds the verified clone's history from the tag before the
+# Folds fixup commits into the Part 3 tasks they belong to: rebuilds the verified clone's history from the tag before the
 # first task named, cherry-picking each task's commit and then its fixups, then the commits on top that aren't fixups,
 # checks the result is the same tree as before, and only then moves the branch and the tags. A task with no code (one
 # with the user) has its tag on the same commit as the task before, and keeps it so.
-# Usage: fold6.sh <first task> <last task> <task tag>=<fixup commit> ...   (on the branch whose head has the fixups)
+# Usage: fold.sh <first task> <last task> <task tag>=<fixup commit> ...   (on the branch whose head has the fixups)
 set -euo pipefail
-cd "$(dirname "$0")/verify2"
+cd "$(dirname "$0")/verify3"
 first="$1"; last="$2"; shift 2
 declare -A fix
 for pair in "$@"; do

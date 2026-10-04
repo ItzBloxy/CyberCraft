@@ -764,8 +764,7 @@ the two runs after the fix, 571 block changes in one of them.
 - **What's left:**
   - **the GPU crash's cause,** if it comes back, from DRED's report;
   - **SkyCraft's blocks from blasts:** the user finds blocks in the air above a blast odd, and would rather not have
-    them. SkyCraft has no setting for it (`skycraft.properties` holds only `join=`), so it means a small Fabric mixin of
-    our own, or a change to SkyCraft;
+    them. This said SkyCraft had no setting for it, which was wrong: its pause menu has one ("After spike 5", below);
   - **NPCs and moving props:** NPCs' navigation walks them through blocks, and kinematic props aren't sent; both wait
     for the Entities brainstorm.
 
@@ -797,3 +796,9 @@ Date: 2026-10-04, at the user's word, on branch `followups/spike-5`.
     third part dropped the dug cells: the three places' sections came empty.
 - **Not yet seen in the game:** both changes were checked in Minecraft and `mclink`; the next game session shows
   `bodies=on` from the start, without the Blocks button.
+- **SkyCraft's own switch, found afterwards:** SkyCraft 0.1.2 has a "Skyrim destruction: On/Off" button at the top left
+  of Minecraft's pause menu (`DestructionToggle`), saved as `destruction=` in `config/skycraft.properties`, a line it
+  writes only once the button is used. The search that missed it read a partial unpacking of SkyCraft's jar, without
+  its client classes. Off, it stops what `NoBlastBlocks` and `NoDigging` stop, but also drops SkyCraft's explosion
+  resistance, so blasts no longer treat the city's ground as cover; and holes already dug stay, as its tooltip says,
+  which the mod's third part clears.

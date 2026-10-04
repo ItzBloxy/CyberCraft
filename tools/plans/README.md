@@ -51,3 +51,15 @@ Their paths point at that session's scratchpad (`verify2/`, `snap6/`, `replay6/`
   first one named, and moves the tags only if the rebuilt tree is the same.
 - **`replay_tasks.sh`** replays task ranges in a fresh clone of the real repo and compares each task's commit with the
   clone's tag for it; **`replay_from.sh`** replays again from a task whose commit already matched, after a fold.
+
+**Spike 5's Part 3 versions** replaced `run_plan.py`, `gen_plan.py`, `mutate.py`, `fold.sh`, `replay_tasks.sh` and
+`b.sh`, and added three scripts. Their paths point at that session's scratchpad (`verify3/`, `skel7/`, `replay7/`), and
+`replay_tasks.sh` names Part 3's task ranges: adapt before reuse.
+- **`run_plan.py`** in `execute` mode ran Part 3 in the real repo, task range by task range, ticking each task's boxes up
+  to its commit, and stopping at deploys and the game's steps.
+- **`assemble.py`** puts a part generated from skeletons into the plan file, after the parts already there.
+- **`physx-audit/slots.py`** disassembles the functions at chosen slots of the game's PhysX vtables (`physics`,
+  `scene`, `static`, `dynamic`, `shape`, `aggregate`, or an RVA), listing each one's strings, calls and vtables, to
+  match it to PhysX 3.4's source; **`physx-audit/tree.py`** follows a function's calls a few levels down. They made the
+  audit's Part 3 addendum. They need capstone, `uv run --no-project --with capstone python slots.py static 21`, a
+  download the first time.

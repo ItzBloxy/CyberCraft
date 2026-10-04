@@ -31,7 +31,7 @@ import planlib  # noqa: E402
 HERE = Path(__file__).parent
 CMAKE = r"C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe"
 SDK = "D:/Cyberpunk-Minecraft/extern/RED4ext.SDK"
-VERIFIED = HERE / "verify2"
+VERIFIED = HERE / "verify3"
 
 mode = sys.argv[1]
 plan_path = Path(sys.argv[2]).resolve()
@@ -40,7 +40,7 @@ first = int(sys.argv[4]) if len(sys.argv) > 4 else 1
 last = int(sys.argv[5]) if len(sys.argv) > 5 else 10
 first_step = int(sys.argv[6]) if len(sys.argv) > 6 else 1
 project = repo / "spikes" / "block-render"
-log = open(HERE / f"{mode}6.log", "a", encoding="utf-8")
+log = open(HERE / f"{mode}7.log", "a", encoding="utf-8")
 
 
 def say(text):
