@@ -57,6 +57,7 @@ add_library(render_core STATIC
 	src/link/Ticks.cpp
 	src/link/Voxels.cpp
 	src/link/Ground.cpp
+	src/link/GroundWorker.cpp
 	src/link/Drive.cpp
 	src/link/Turn.cpp
 	src/log/DriveLog.cpp
@@ -165,6 +166,7 @@ add_executable(render_tests
 	tests/TestTicks.cpp
 	tests/TestVoxels.cpp
 	tests/TestGround.cpp
+	tests/TestGroundWorker.cpp
 	tests/TestDrive.cpp
 	tests/TestTurn.cpp
 	tests/TestDriveLog.cpp
