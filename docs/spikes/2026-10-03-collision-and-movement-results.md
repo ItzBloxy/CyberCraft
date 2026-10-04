@@ -399,13 +399,15 @@ What step 3 found:
 - **The guard rail:** V and Minecraft's player walked through a guard rail beside a path. `shapes` there:
   - **What it is:** a chain of kinematic actors, each a 2.9 m section of capsules and boxes, standing 1.1 m on the path
     (world z 6.05 to 7.14), simulation and scene-query shapes;
-  - **Its filters:** the capsules have query filter `0:0:4480008:0` and simulation filter `8:0:13cc:80000000`, the boxes
-    `0:0:1c000:0` and `5c000:0:40000:80000000`;
-  - **Why it's out:** the exporter keeps only static actors, so it's left out by design, though V's controller collides
-    with it in the game. It is most likely breakable, kinematic until something hits it;
-  - **Telling props from characters:** V's controller's capsule has query filter `0:0:400001:0` and an NPC-style
-    hitbox capsule `0:0:2000:0`, so filters could tell props from characters (risk 4). Spike 1's census of scene 0,
-    taken at spot B, counted 85 shapes with the rail's query filter.
+  - **Its filters:** most of its shapes have query filter `0:0:4480008:0` and simulation filter `8:0:13cc:80000000`;
+    one box in each section has `0:0:1c000:0` and `5c000:0:40000:80000000`;
+  - **Why it's out:** the exporter keeps only static actors, so it's left out by design, though in the game it's a
+    solid simulation and scene-query shape. Whether V's own controller stops at it wasn't checked. It is most likely
+    breakable, kinematic until something hits it;
+  - **Telling props from characters:** V's controller, the radius 0.32 capsule, has query filter `0:0:2000:0` and
+    simulation filter `1:0:41ce:0`, as spike 1 found. A second kinematic capsule on V, radius 1, has `0:0:400001:0` and
+    no simulation filter. Both differ from the rail's, so filters could tell props from characters (risk 4). Spike 1's
+    census of scene 0, taken at spot B, counted 85 shapes with the rail's query filter.
 - **The scene watch while the exporter read:** 354 s of walking, 16 threads, 3,058 adds, 3,067 removes and 24,814 steps
   and fetches; none came while `OnUpdate` ran, and no thread took the write lock. `OnUpdate` stays quiet with the
   exporter reading in it.
