@@ -5,6 +5,7 @@
 
 #include <Windows.h>
 
+#include <algorithm>
 #include <cstring>
 
 using namespace cpmc;
@@ -229,6 +230,59 @@ std::vector<uint8_t> SectionPayload(int32_t aX, uint32_t aVertices, uint32_t aCl
 }
 
 const LinkSettings kSettings;
+
+// Night City as a ground source: a street at Minecraft height 6.14 everywhere, two triangles over each box read.
+struct Street : GroundSource
+{
+	bool Read(const McBox& aBox, std::vector<McTriangle>& aOut) override
+	{
+		boxes.push_back(aBox);
+		if (!readable)
+		{
+			return false;
+		}
+		const float x0 = float(aBox.low.x), x1 = float(aBox.high.x), z0 = float(aBox.low.z), z1 = float(aBox.high.z);
+		if (aBox.low.y <= 6.14 && aBox.high.y >= 6.14)
+		{
+			aOut.push_back({ { x0, 6.14f, z0, x1, 6.14f, z0, x1, 6.14f, z1 } });
+			aOut.push_back({ { x0, 6.14f, z0, x1, 6.14f, z1, x0, 6.14f, z1 } });
+		}
+		return true;
+	}
+
+	std::vector<McBox> boxes;  // read, in order
+	bool               readable = true;
+};
+
+LinkSettings City()
+{
+	LinkSettings settings;
+	settings.ground = Ground::City;
+	return settings;
+}
+
+// Updates the link with aFrame until everything the ground's worker was given is taken: written into the collision
+// ring, as far as it has room. False if that takes over 5 s.
+bool Finish(Link& aLink, const Link::Frame& aFrame, const LinkSettings& aSettings, Sink& aSink)
+{
+	for (int i = 0; i < 5000; ++i)
+	{
+		aLink.Update(aFrame, aSettings, aSink);
+		if (aLink.State().workerJobs == 0)
+		{
+			return true;
+		}
+		Sleep(1);
+	}
+	return false;
+}
+
+proto::ColRegion HeaderOf(const std::vector<uint8_t>& aPayload)
+{
+	proto::ColRegion header{};
+	std::memcpy(&header, aPayload.data(), sizeof header);
+	return header;
+}
 }
 
 TEST(LinkWritesTheHeartbeatAndSkyState)
@@ -372,14 +426,14 @@ TEST(LinkSendsTheFloorOnceMinecraftIsThere)
 	minecraft.Beat(77, 2200);
 	link.Update(At(2.2, Corner(20.0)), kSettings, sink);  // 20 m along: a new floor
 	CHECK_EQ(minecraft.Collision(payloads).size(), size_t(1 + 49 * 4));
-	CHECK_EQ(link.State().floorEpoch, 2u);
+	CHECK_EQ(link.State().collisionEpoch, 2u);
 	minecraft.Beat(77, 2300);
 	link.Update(At(2.3, Corner(20.0, 1.5)), kSettings, sink);  // 1.5 m up
-	CHECK_EQ(link.State().floorEpoch, 3u);
+	CHECK_EQ(link.State().collisionEpoch, 3u);
 	link.RequestFloor();
 	minecraft.Beat(77, 2400);
 	link.Update(At(2.4, Corner(20.0, 1.5)), kSettings, sink);
-	CHECK_EQ(link.State().floorEpoch, 4u);
+	CHECK_EQ(link.State().collisionEpoch, 4u);
 	CHECK_NEAR(link.State().floorCentre.y, 7.64, 1e-9);
 }
 
@@ -618,14 +672,14 @@ TEST(LinkEntersBuildModeWithOneTeleportToVsFeet)
 	minecraft.State(proto::kMcInWorld);
 	link.Update(At(1.0), kSettings, sink);
 	CHECK_EQ(minecraft.Sky().teleportSeq, 1u);  // outside build mode: Minecraft's eye at V's camera
-	CHECK_EQ(link.State().floorEpoch, 1u);
+	CHECK_EQ(link.State().collisionEpoch, 1u);
 	minecraft.Collision(payloads);
 	link.Update(InBuild(1.1), kSettings, sink);
 	// One teleport, to V's feet, and a fresh floor there.
 	CHECK_EQ(minecraft.Sky().teleportSeq, 2u);
 	CHECK_NEAR(minecraft.Sky().posY, 6.14, 1e-9);
 	CHECK_EQ(minecraft.Sky().flags, uint32_t(proto::kSkyInGame));
-	CHECK_EQ(link.State().floorEpoch, 2u);
+	CHECK_EQ(link.State().collisionEpoch, 2u);
 	CHECK_EQ(minecraft.Collision(payloads).size(), size_t(1 + 49 * 4));
 	CHECK(link.State().drive == DriveState::Waiting);
 	CHECK(sink.Logged("build mode: Minecraft's player goes to V's feet"));
@@ -656,6 +710,8 @@ TEST(LinkPlacesVUnderMinecraftsEyeOnceItLetsGo)
 	link.Update(InBuild(1.2), kSettings, sink);
 	CHECK(link.State().drive == DriveState::Driving);
 	CHECK(sink.Logged("Minecraft let its player go"));
+	CHECK(link.State().lastHold.has_value());
+	CHECK_NEAR(link.State().lastHold.value_or(0.0), 0.1, 1e-9);  // held from 1.1 to 1.2
 	CHECK(link.State().placeV.has_value());
 	CHECK_NEAR(link.State().placeV->x, -119.0, 1e-9);
 	CHECK_NEAR(link.State().placeV->y, -2007.5, 1e-9);
@@ -692,7 +748,7 @@ TEST(LinkKeepsItsFloorWhileMinecraftDrives)
 	const auto messages = minecraft.Collision(payloads);
 	CHECK_EQ(messages.size(), size_t(49 * 4));
 	CHECK_EQ(messages[0].type, uint32_t(proto::kColTris));
-	CHECK_EQ(link.State().floorEpoch, 2u);
+	CHECK_EQ(link.State().collisionEpoch, 2u);
 	CHECK_NEAR(link.State().floorCentre.x, -99.5, 1e-9);
 	CHECK_NEAR(link.State().floorCentre.y, 6.14, 1e-9);
 	CHECK(sink.Logged("floor 2 grows"));
@@ -800,4 +856,251 @@ TEST(LinkMeasuresVsEyeHeightOnlyWhileVCanBePlaced)
 	CHECK_NEAR(link.State().eyeHeight, 1.60, 1e-9);
 	link.Update(At(1.4, pose), kSettings, sink);
 	CHECK_NEAR(link.State().eyeHeight, 1.70, 1e-9);
+}
+
+TEST(LinkSendsTheCityOnceMinecraftIsThereAndItsCollisionHasSettled)
+{
+	FakeMinecraft                     minecraft;
+	Link                              link(minecraft.base, 0);
+	Sink                              sink;
+	Street                            street;
+	std::vector<std::vector<uint8_t>> payloads;
+	// Without Minecraft nothing is read or sent: nobody would read the ring.
+	link.Update(At(1.0), City(), sink);
+	link.ReadGround(1.0, street, 1.5);
+	CHECK(street.boxes.empty());
+	CHECK(minecraft.Collision(payloads).empty());
+	// Minecraft comes: the city starts over with a clear, and waits 1.5 s for the city's collision to stream in.
+	minecraft.Beat(77, 2000);
+	link.Update(At(2.0), City(), sink);
+	auto messages = minecraft.Collision(payloads);
+	CHECK(messages.size() == 1 && messages[0].type == proto::kColClear);
+	CHECK(payloads[0] == std::vector<uint8_t>({ 1, 0, 0, 0 }));
+	CHECK_EQ(minecraft.Sky().collisionEpoch, 1u);
+	CHECK(sink.Logged("the city starts over, as collision epoch 1"));
+	link.ReadGround(3.4, street, 1.5);
+	CHECK(street.boxes.empty());
+	// Then the batch holding V's region comes first. A budget of 0 reads one batch.
+	link.ReadGround(3.5, street, 0.0);
+	CHECK_EQ(street.boxes.size(), size_t(1));
+	CHECK_NEAR(street.boxes[0].low.x, -128.25, 1e-9);  // batch -8 0 125, which holds region -15 0 250
+	CHECK_NEAR(street.boxes[0].low.y, -0.25, 1e-9);
+	CHECK_NEAR(street.boxes[0].low.z, 1999.75, 1e-9);
+	CHECK(Finish(link, At(3.5), City(), sink));
+	CHECK_EQ(link.State().collisionWaiting, size_t(0));
+	payloads.clear();
+	messages = minecraft.Collision(payloads);
+	CHECK_EQ(messages.size(), size_t(16));  // its eight regions, each its triangles, then its voxels
+	if (messages.size() == 16)
+	{
+		CHECK_EQ(messages[0].type, uint32_t(proto::kColTris));
+		CHECK_EQ(HeaderOf(payloads[0]).count, 2u);  // the street's two triangles
+		CHECK_EQ(messages[1].type, uint32_t(proto::kColRegion));
+		CHECK_EQ(HeaderOf(payloads[1]).minX, -128);
+		CHECK_EQ(HeaderOf(payloads[1]).count, 64u);  // the street, in block row 6
+		CHECK_EQ(HeaderOf(payloads[1]).epoch, 1u);
+		CHECK_EQ(HeaderOf(payloads[9]).minY, 8);  // the regions above: empty, and known
+		CHECK_EQ(HeaderOf(payloads[9]).count, 0u);
+	}
+	CHECK_EQ(link.State().cityBatches, 1ull);
+	CHECK_EQ(link.State().cityRegions, 8ull);
+	CHECK_EQ(link.State().cityTriangles, 8ull);
+	CHECK_EQ(link.State().workerRegions, 8ull);
+	CHECK_EQ(link.State().workerBlocks, 256ull);
+	CHECK_EQ(link.State().cityKnown, size_t(8));
+	CHECK_EQ(link.State().cityWaiting, size_t(143));
+	CHECK(link.State().cityCentre.has_value() && link.State().cityCentre->x == -15 && link.State().cityCentre->z == 250);
+	// Unlinked, nothing more is read, though the batches next to V are due again.
+	link.Update(At(4.6, Corner(), false), City(), sink);
+	link.ReadGround(4.6, street, 1.5);
+	CHECK_EQ(street.boxes.size(), size_t(1));
+	// Linked again, and past the settle, but Minecraft has gone: nothing is read for nobody.
+	link.Update(At(4.7), City(), sink);
+	link.Update(At(6.3), City(), sink);  // its heartbeat is 4.3 s old
+	CHECK(!link.State().minecraft);
+	link.ReadGround(6.3, street, 1.5);
+	CHECK_EQ(street.boxes.size(), size_t(1));
+}
+
+TEST(LinkCentresTheCityOnMinecraftsPlayerWhileItDrives)
+{
+	FakeMinecraft                     minecraft;
+	Link                              link(minecraft.base, 0);
+	Sink                              sink;
+	std::vector<std::vector<uint8_t>> payloads;
+	minecraft.Beat(77, 1000);
+	minecraft.State(proto::kMcInWorld);
+	link.Update(At(1.0), City(), sink);
+	CHECK(link.State().cityCentre.has_value() && link.State().cityCentre->x == -15);  // V's region
+	link.Update(InBuild(1.1), City(), sink);
+	// Minecraft has let its player go, 40 blocks east of V: the city's area goes around it.
+	minecraft.Ticked(2, { -79.5, 6.14, 2007.5 }, 1.15);
+	link.Update(InBuild(1.2), City(), sink);
+	CHECK(link.State().drive == DriveState::Driving);
+	CHECK(link.State().cityCentre.has_value() && link.State().cityCentre->x == -10);
+	// No floor, in build mode or out of it: the city's clear is all there is.
+	const auto messages = minecraft.Collision(payloads);
+	CHECK(messages.size() == 1 && messages[0].type == proto::kColClear);
+}
+
+TEST(LinkKeepsTheCitysMessagesInOrderUntilTheRingHasRoom)
+{
+	FakeMinecraft                     minecraft;
+	Link                              link(minecraft.base, 0);
+	Sink                              sink;
+	Street                            street;
+	std::vector<std::vector<uint8_t>> payloads;
+	minecraft.Beat(77, 1000);
+	link.Update(At(1.0), City(), sink);
+	// Minecraft stops reading, and the ring fills up.
+	uint8_t* const ring = minecraft.base + proto::kOffCollisionRing;
+	for (size_t size = size_t(1) << 20; size >= 1; size /= 2)
+	{
+		while (WriteByteRing(ring, proto::kColRingDataBytes, 99, std::vector<uint8_t>(size)))
+		{
+		}
+	}
+	link.ReadGround(2.5, street, 0.0);
+	CHECK(Finish(link, At(2.5), City(), sink));
+	CHECK_EQ(link.State().collisionWaiting, size_t(16));
+	// Minecraft reads again: the next update writes them all, in their order.
+	minecraft.Collision(payloads);
+	payloads.clear();
+	link.Update(At(2.6), City(), sink);
+	CHECK_EQ(link.State().collisionWaiting, size_t(0));
+	const auto messages = minecraft.Collision(payloads);
+	CHECK_EQ(messages.size(), size_t(16));
+	const std::array<RegionPos, 8> regions = RegionsOf({ -8, 0, 125 });
+	for (size_t i = 0; i < 8 && messages.size() == 16; ++i)
+	{
+		CHECK(messages[2 * i].type == proto::kColTris && messages[2 * i + 1].type == proto::kColRegion);
+		CHECK(HeaderOf(payloads[2 * i]).minX == regions[i].x * 8 && HeaderOf(payloads[2 * i]).minY == regions[i].y * 8 &&
+		      HeaderOf(payloads[2 * i]).minZ == regions[i].z * 8);
+	}
+}
+
+TEST(LinkStartsTheCityOverWhenMinecraftComesBack)
+{
+	FakeMinecraft                     minecraft;
+	Link                              link(minecraft.base, 0);
+	Sink                              sink;
+	Street                            street;
+	std::vector<std::vector<uint8_t>> payloads;
+	minecraft.Beat(77, 1000);
+	link.Update(At(1.0), City(), sink);
+	link.ReadGround(2.5, street, 0.0);  // eight regions for the worker, of epoch 1
+	// A new Minecraft before they're written: a new clear, and the last epoch's regions are dropped.
+	minecraft.Beat(78, 2600);
+	CHECK(Finish(link, At(2.6), City(), sink));
+	auto messages = minecraft.Collision(payloads);
+	CHECK_EQ(messages.size(), size_t(2));
+	CHECK(payloads.size() == 2 && payloads[1] == std::vector<uint8_t>({ 2, 0, 0, 0 }));
+	// The city is read again from the start, once the new Minecraft's 1.5 s have gone.
+	link.ReadGround(4.0, street, 0.0);
+	CHECK_EQ(street.boxes.size(), size_t(1));
+	link.ReadGround(4.1, street, 0.0);
+	CHECK_EQ(street.boxes.size(), size_t(2));
+	CHECK_NEAR(street.boxes[1].low.x, street.boxes[0].low.x, 1e-9);
+	CHECK(Finish(link, At(4.1), City(), sink));
+	payloads.clear();
+	messages = minecraft.Collision(payloads);
+	CHECK_EQ(messages.size(), size_t(16));
+	CHECK(std::all_of(payloads.begin(), payloads.end(), [](const std::vector<uint8_t>& aPayload) { return HeaderOf(aPayload).epoch == 2; }));
+}
+
+TEST(LinkSwitchesBetweenTheFloorAndTheCity)
+{
+	FakeMinecraft                     minecraft;
+	Link                              link(minecraft.base, 0);
+	Sink                              sink;
+	Street                            street;
+	std::vector<std::vector<uint8_t>> payloads;
+	minecraft.Beat(77, 1000);
+	link.Update(At(1.0), kSettings, sink);  // the floor, epoch 1
+	CHECK_EQ(minecraft.Collision(payloads).size(), size_t(1 + 49 * 4));
+	// The city: a clear with a new epoch, and no floor. Its collision is there already, so it's read at once.
+	link.Update(At(3.0), City(), sink);
+	payloads.clear();
+	auto messages = minecraft.Collision(payloads);
+	CHECK(messages.size() == 1 && messages[0].type == proto::kColClear);
+	CHECK(payloads.size() == 1 && payloads[0] == std::vector<uint8_t>({ 2, 0, 0, 0 }));
+	CHECK(sink.Logged("the ground is the city now"));
+	link.ReadGround(3.0, street, 0.0);
+	CHECK_EQ(street.boxes.size(), size_t(1));
+	CHECK(Finish(link, At(3.0), City(), sink));
+	CHECK_EQ(minecraft.Collision(payloads).size(), size_t(16));
+	// Back to the floor: its own clear, with a new epoch, then the floor.
+	link.Update(At(3.1), kSettings, sink);
+	payloads.clear();
+	messages = minecraft.Collision(payloads);
+	CHECK_EQ(messages.size(), size_t(1 + 49 * 4));
+	CHECK(payloads.size() == 1 + 49 * 4 && payloads[0] == std::vector<uint8_t>({ 3, 0, 0, 0 }));
+	CHECK(sink.Logged("the ground is the floor now"));
+	link.ReadGround(3.1, street, 0.0);
+	CHECK_EQ(street.boxes.size(), size_t(1));
+}
+
+TEST(LinkReadsTheCityAgainWhenVIsFoundAgain)
+{
+	FakeMinecraft                     minecraft;
+	Link                              link(minecraft.base, 0);
+	Sink                              sink;
+	Street                            street;
+	std::vector<std::vector<uint8_t>> payloads;
+	minecraft.Beat(77, 1000);
+	link.Update(At(1.0), City(), sink);
+	link.ReadGround(2.5, street, 0.0);
+	// A source that can't read leaves the batch for the next frame.
+	street.readable = false;
+	link.ReadGround(2.6, street, 0.0);
+	CHECK_EQ(link.State().cityUnread, 1ull);
+	street.readable = true;
+	link.ReadGround(2.7, street, 0.0);
+	CHECK_EQ(street.boxes.size(), size_t(3));
+	CHECK_NEAR(street.boxes[2].low.x, street.boxes[1].low.x, 1e-9);
+	CHECK_NEAR(street.boxes[2].low.y, street.boxes[1].low.y, 1e-9);
+	CHECK_NEAR(street.boxes[2].low.z, street.boxes[1].low.z, 1e-9);
+	// V is lost, in a load say: nothing is read without a centre.
+	link.Update(At(3.0, std::nullopt), City(), sink);
+	link.ReadGround(3.0, street, 0.0);
+	CHECK_EQ(street.boxes.size(), size_t(3));
+	// V found again: everything is read again once 1.5 s have gone, and without a clear.
+	minecraft.Beat(77, 4000);
+	link.Update(At(4.0), City(), sink);
+	link.ReadGround(5.4, street, 0.0);
+	CHECK_EQ(street.boxes.size(), size_t(3));
+	link.ReadGround(5.5, street, 0.0);
+	CHECK_EQ(street.boxes.size(), size_t(4));
+	CHECK_NEAR(street.boxes[3].low.x, street.boxes[0].low.x, 1e-9);
+	CHECK(Finish(link, At(5.5), City(), sink));
+	minecraft.Collision(payloads);
+	CHECK_EQ(std::count_if(payloads.begin(), payloads.end(), [](const std::vector<uint8_t>& aPayload) { return aPayload.size() == 4; }), 1);
+	CHECK_EQ(link.State().collisionEpoch, 1u);
+}
+
+TEST(LinkDropsAMessageTooBigForTheRing)
+{
+	// One region with 420,000 triangles: its triangles message, 16.8 MB, is over half the ring, so it would never fit.
+	// It's dropped, rather than holding up everything after it.
+	struct Dense : GroundSource
+	{
+		bool Read(const McBox& aBox, std::vector<McTriangle>& aOut) override
+		{
+			const float x = float(aBox.low.x) + 4.25f, z = float(aBox.low.z) + 4.25f;  // in the batch's first region
+			aOut.assign(420'000, McTriangle{ { x, 6.14f, z, x + 0.1f, 6.14f, z, x, 6.14f, z + 0.1f } });
+			return true;
+		}
+	};
+	FakeMinecraft                     minecraft;
+	Link                              link(minecraft.base, 0);
+	Sink                              sink;
+	Dense                             dense;
+	std::vector<std::vector<uint8_t>> payloads;
+	minecraft.Beat(77, 1000);
+	link.Update(At(1.0), City(), sink);
+	link.ReadGround(2.5, dense, 0.0);
+	CHECK(Finish(link, At(2.5), City(), sink));
+	CHECK_EQ(link.State().collisionDropped, 1ull);
+	CHECK_EQ(link.State().collisionWaiting, size_t(0));
+	CHECK_EQ(minecraft.Collision(payloads).size(), size_t(1 + 15));  // the clear, and the rest of the batch
 }

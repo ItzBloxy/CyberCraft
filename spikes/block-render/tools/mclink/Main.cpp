@@ -163,7 +163,7 @@ void PrintStatus(const Link::Status& aStatus, const Report& aReport)
 	    s.screenOpen ? ", a screen open" : "", s.minecraftFeet.x, s.minecraftFeet.y, s.minecraftFeet.z, s.minecraftEye.y,
 	    s.minecraftEye.y - s.minecraftFeet.y, s.minecraftFrames);
 	Say("game side: {}, {} teleports (sequence {}) to {:.3f} {:.3f} {:.3f}, look {:.1f} {:.1f}, floor {} {}", s.inGame ? "in game" : "not in game",
-	    s.teleports, s.teleportSeq, s.target.x, s.target.y, s.target.z, s.look.yaw, s.look.pitch, s.floorEpoch,
+	    s.teleports, s.teleportSeq, s.target.x, s.target.y, s.target.z, s.look.yaw, s.look.pitch, s.collisionEpoch,
 	    s.floorSent ? std::format("at height {:.2f}", s.floorCentre.y) : "not sent");
 	std::string types;
 	for (size_t type = 0; type < Link::kTypes; ++type)

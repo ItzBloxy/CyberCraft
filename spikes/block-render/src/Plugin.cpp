@@ -820,7 +820,7 @@ cpmc::LinkReport LinkLines(const cpmc::Renderer::Stats& aStats, double aNow)
 		report.minecraftEye = state.minecraftEye;
 		report.teleports = state.teleports - g_second.teleportsAtStart;
 		report.target = state.target;
-		report.floorEpoch = state.floorEpoch;
+		report.floorEpoch = state.collisionEpoch;
 		report.floorSent = state.floorSent;
 		report.floorCentre = state.floorCentre;
 		report.inputsDropped = state.inputsDropped;

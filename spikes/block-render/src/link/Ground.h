@@ -67,6 +67,16 @@ std::array<std::vector<McTriangle>, 8> FileBatch(const BatchPos& aBatch, std::sp
 // A hash of a region's triangles that doesn't depend on their order: a read can list the same shapes in another order.
 uint64_t TrianglesHash(std::span<const McTriangle> aTriangles);
 
+// Where the triangles come from: PhysX in the game, a saved dump in mclink.
+class GroundSource
+{
+public:
+	virtual ~GroundSource() = default;
+	// The triangles (Minecraft axes) of whatever touches aBox; more may come, which filing drops. False if nothing can
+	// be read now: the batch waits.
+	virtual bool Read(const McBox& aBox, std::vector<McTriangle>& aOut) = 0;
+};
+
 // Which batches to read, around a centre that moves (the spec's "The area", "Refreshing" and "Settling"): SkyCraft's
 // area, its order (nearest first, height counting double), its refresh of the regions next to the centre, and its
 // forgetting of regions far away, so they're read again on return.

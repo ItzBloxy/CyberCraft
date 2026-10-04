@@ -30,6 +30,11 @@ const char* RenderTypeName(size_t aType)
 	return names[aType < Link::kTypes ? aType : Link::kTypes - 1];
 }
 
+const char* GroundName(Ground aGround)
+{
+	return aGround == Ground::City ? "city" : "floor";
+}
+
 uint32_t FirstTeleportSeq()
 {
 	return uint32_t(std::chrono::steady_clock::now().time_since_epoch().count()) | 1u;
@@ -70,6 +75,8 @@ void Link::Update(const Frame& aFrame, const LinkSettings& aSettings, LinkSink& 
 		}
 		status_.floorSent = false;
 		teleportDue_ = true;
+		cityClear_ = true;  // the city starts over, with a clear, once its collision has had time to stream in
+		areas_.Reset(aFrame.now + GroundAreas::kSettle);
 		aSink.Log(std::format("Minecraft is there (process {})", pid));
 	}
 	if (!there && wasThere_)
@@ -97,12 +104,33 @@ void Link::Update(const Frame& aFrame, const LinkSettings& aSettings, LinkSink& 
 	}
 	status_.renderDelayMs = ticks_.DelayMs();
 
-	// In game while linked with V there. Linking teleports Minecraft's player and sends a fresh floor.
+	// The ground (spike 5's "Part 2"). Switching clears the last one, with a new epoch: the city's own clear, or the
+	// floor's, sent fresh.
+	if (aSettings.ground != status_.ground)
+	{
+		status_.ground = aSettings.ground;
+		status_.floorSent = false;
+		cityClear_ = aSettings.ground == Ground::City;
+		areas_.Reset(aFrame.now);
+		outbox_.clear();
+		aSink.Log(std::format("the ground is the {} now", GroundName(aSettings.ground)));
+	}
+	const bool city = status_.ground == Ground::City;
+	if (aFrame.linked && !wasLinked_)
+	{
+		cityClear_ = true;  // the link starts: the city starts over
+		areas_.Reset(aFrame.now + GroundAreas::kSettle);
+	}
+	wasLinked_ = aFrame.linked;
+
+	// In game while linked with V there. Linking teleports Minecraft's player and sends a fresh floor. V found again,
+	// after a load say, has the city read again once its collision has streamed in.
 	const bool inGame = aFrame.linked && aFrame.pose.has_value();
 	if (inGame && !wasInGame_)
 	{
 		teleportDue_ = true;
 		status_.floorSent = false;
+		areas_.Reset(aFrame.now + GroundAreas::kSettle);
 	}
 	wasInGame_ = inGame;
 	status_.inGame = inGame;
@@ -136,7 +164,7 @@ void Link::Update(const Frame& aFrame, const LinkSettings& aSettings, LinkSink& 
 		teleportDue_ = false;
 		drive_.Enter(aFrame.pose->feet, aFrame.now);
 		lastEye_.reset();
-		if (there)
+		if (there && !city)
 		{
 			SendFloor(status_.target, true, aSink);
 		}
@@ -159,6 +187,7 @@ void Link::Update(const Frame& aFrame, const LinkSettings& aSettings, LinkSink& 
 		status_.endBuild = driveStep.end;
 		if (drive_.State() == DriveState::Driving && before == DriveState::Waiting)
 		{
+			status_.lastHold = aFrame.now - since;
 			aSink.Log(std::format("Minecraft let its player go after {:.2f} s: V follows it", aFrame.now - since));
 		}
 		else if (drive_.State() == DriveState::Waiting && before == DriveState::Driving)
@@ -181,12 +210,12 @@ void Link::Update(const Frame& aFrame, const LinkSettings& aSettings, LinkSink& 
 		// whose clear would take the ground from under it. Until Minecraft has its player at V, it's around V.
 		const bool  driving = drive_.State() == DriveState::Driving && mc;
 		const Vec3d centre = driving ? Vec3d{ mc->x, mc->y, mc->z } : McFromWorld(aFrame.pose->feet);
-		if (there && (!status_.floorSent || floorRequested_))
+		if (there && !city && (!status_.floorSent || floorRequested_))
 		{
 			SendFloor(McFromWorld(aFrame.pose->feet), true, aSink);
 			floorRequested_ = false;
 		}
-		else if (there && std::hypot(centre.x - status_.floorCentre.x, centre.z - status_.floorCentre.z) > 16.0)
+		else if (there && !city && std::hypot(centre.x - status_.floorCentre.x, centre.z - status_.floorCentre.z) > 16.0)
 		{
 			SendFloor({ centre.x, status_.floorCentre.y, centre.z }, false, aSink);
 		}
@@ -204,8 +233,9 @@ void Link::Update(const Frame& aFrame, const LinkSettings& aSettings, LinkSink& 
 			teleportDue_ = false;
 		}
 		const Vec3d feet = McFromWorld(aFrame.pose->feet);
-		if (there && (!status_.floorSent || floorRequested_ || std::hypot(feet.x - status_.floorCentre.x, feet.z - status_.floorCentre.z) > 16.0 ||
-		              std::abs(feet.y - status_.floorCentre.y) > 1.0))
+		if (there && !city &&
+		    (!status_.floorSent || floorRequested_ || std::hypot(feet.x - status_.floorCentre.x, feet.z - status_.floorCentre.z) > 16.0 ||
+		     std::abs(feet.y - status_.floorCentre.y) > 1.0))
 		{
 			SendFloor(feet, true, aSink);
 			floorRequested_ = false;
@@ -216,13 +246,41 @@ void Link::Update(const Frame& aFrame, const LinkSettings& aSettings, LinkSink& 
 	status_.driveSkipped = drive_.Skipped();
 	status_.eyeHeight = eyeHeight_.Value();
 
+	// The city: its area goes around Minecraft's player while it drives, and V otherwise. Its messages go into the
+	// collision ring only while Minecraft is there to read them.
+	centred_ = false;
+	if (city)
+	{
+		const bool                 driving = drive_.State() == DriveState::Driving && mc;
+		const std::optional<Vec3d> centre = driving       ? std::optional<Vec3d>(Vec3d{ mc->x, mc->y, mc->z })
+		                                    : aFrame.pose ? std::optional<Vec3d>(McFromWorld(aFrame.pose->feet))
+		                                                  : std::nullopt;
+		if (const std::optional<RegionPos> region = centre ? RegionAt(*centre) : std::nullopt)
+		{
+			areas_.Centre(*region);
+			centred_ = aFrame.linked;
+		}
+		if (there)
+		{
+			WriteCity(aSink);
+		}
+	}
+	status_.cityCentre = areas_.CentreRegion();
+	status_.cityKnown = areas_.Known();
+	status_.cityWaiting = areas_.Waiting();
+	status_.workerJobs = worker_ ? worker_->Waiting() : 0;
+	status_.workerRegions = worker_ ? worker_->Regions() : 0;
+	status_.workerBlocks = worker_ ? worker_->Blocks() : 0;
+	status_.workerMs = worker_ ? worker_->Ms() : 0.0;
+	status_.collisionWaiting = outbox_.size();
+
 	// The position: the last teleport's target, or in build mode V's feet, every frame, so that a teleport Minecraft
 	// makes by itself (a new player object, or the in-game flag coming back) puts its player where V is.
 	const Vec3d     position = build ? McFromWorld(aFrame.pose->feet) : status_.target;
 	proto::SkyState state{};
 	state.flags = (inGame ? uint32_t(proto::kSkyInGame) : 0u) | (aFrame.buildMode ? 0u : uint32_t(proto::kSkyMenuOpen));
 	state.worldId = 1;
-	state.collisionEpoch = status_.floorEpoch;
+	state.collisionEpoch = status_.collisionEpoch;
 	state.posX = position.x;
 	state.posY = position.y;
 	state.posZ = position.z;
@@ -348,7 +406,7 @@ void Link::SendFloor(const Vec3d& aCentre, bool aNewEpoch, LinkSink& aSink)
 {
 	// A new epoch's clear message drops the last floor, and anything half-sent. Without one, the regions sent replace
 	// those already there, and the rest stay.
-	const uint32_t epoch = aNewEpoch ? status_.floorEpoch + 1 : status_.floorEpoch;
+	const uint32_t epoch = aNewEpoch ? status_.collisionEpoch + 1 : status_.collisionEpoch;
 	uint8_t* const ring = base_ + proto::kOffCollisionRing;
 	bool           sent = !aNewEpoch || WriteByteRing(ring, proto::kColRingDataBytes, proto::kColClear, FloorClear(epoch));
 	const FloorVoxeler voxeler(aCentre.y);
@@ -361,7 +419,7 @@ void Link::SendFloor(const Vec3d& aCentre, bool aNewEpoch, LinkSink& aSink)
 			sent = sent && WriteByteRing(ring, proto::kColRingDataBytes, proto::kColRegion, voxels);
 		}
 	}
-	status_.floorEpoch = epoch;
+	status_.collisionEpoch = epoch;
 	status_.floorSent = sent;
 	if (sent)
 	{
@@ -372,6 +430,88 @@ void Link::SendFloor(const Vec3d& aCentre, bool aNewEpoch, LinkSink& aSink)
 	else
 	{
 		aSink.Log("the floor didn't fit in the collision ring; trying again next frame");
+	}
+}
+
+void Link::ReadGround(double aNow, GroundSource& aSource, double aBudgetMs)
+{
+	status_.cityReadMs = 0.0;
+	if (status_.ground != Ground::City || !status_.minecraft || !centred_ || cityClear_)
+	{
+		return;  // nobody would read it, or there's no centre, or the regions would be of the epoch the clear ends
+	}
+	if (!worker_)
+	{
+		worker_ = std::make_unique<GroundWorker>();
+	}
+	const auto              start = std::chrono::steady_clock::now();
+	std::vector<McTriangle> triangles;
+	while (const std::optional<BatchPos> batch = areas_.Next(aNow))
+	{
+		triangles.clear();
+		if (!aSource.Read(BatchBox(*batch), triangles))
+		{
+			++status_.cityUnread;
+			break;  // the batch waits for the next frame
+		}
+		std::array<std::vector<McTriangle>, 8> filed = FileBatch(*batch, triangles);
+		const std::array<RegionPos, 8>         regions = RegionsOf(*batch);
+		for (const size_t i : areas_.Read(*batch, aNow, filed))
+		{
+			++status_.cityRegions;
+			status_.cityTriangles += filed[i].size();
+			worker_->Add({ status_.collisionEpoch, regions[i], std::move(filed[i]) });
+		}
+		++status_.cityBatches;
+		if (std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count() >= aBudgetMs)
+		{
+			break;
+		}
+	}
+	status_.cityReadMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+	status_.cityKnown = areas_.Known();
+	status_.cityWaiting = areas_.Waiting();
+	status_.workerJobs = worker_->Waiting();
+}
+
+void Link::WriteCity(LinkSink& aSink)
+{
+	if (cityClear_)
+	{
+		// Anything still waiting is of the last epoch, which the clear ends.
+		outbox_.clear();
+		++status_.collisionEpoch;
+		outbox_.push_back({ status_.collisionEpoch, proto::kColClear, FloorClear(status_.collisionEpoch) });
+		cityClear_ = false;
+		aSink.Log(std::format("the city starts over, as collision epoch {}", status_.collisionEpoch));
+	}
+	if (worker_)
+	{
+		for (GroundWorker::Message& message : worker_->Take())
+		{
+			if (message.epoch == status_.collisionEpoch)
+			{
+				outbox_.push_back(std::move(message));
+			}
+		}
+	}
+	uint8_t* const ring = base_ + proto::kOffCollisionRing;
+	while (!outbox_.empty())
+	{
+		const GroundWorker::Message& next = outbox_.front();
+		if (next.payload.size() + 8 > proto::kColRingDataBytes / 2)
+		{
+			++status_.collisionDropped;  // it would never fit
+		}
+		else if (!WriteByteRing(ring, proto::kColRingDataBytes, next.type, next.payload))
+		{
+			break;  // no room until Minecraft reads: the rest wait for the next frame, in order
+		}
+		else
+		{
+			status_.collisionBytes += next.payload.size();
+		}
+		outbox_.pop_front();
 	}
 }
 

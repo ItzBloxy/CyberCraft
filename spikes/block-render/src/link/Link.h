@@ -3,6 +3,8 @@
 #include "Coords.h"
 #include "link/Commands.h"
 #include "link/Drive.h"
+#include "link/Ground.h"
+#include "link/GroundWorker.h"
 #include "link/Look.h"
 #include "link/Messages.h"
 #include "link/Overlay.h"
@@ -11,6 +13,8 @@
 
 #include <array>
 #include <atomic>
+#include <deque>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <string>
@@ -18,10 +22,20 @@
 
 // The game side of SkyCraft's protocol, once a frame (the minecraft-link spec's "The link" and "Blocks"): the heartbeat
 // and SkyState, teleports and the floor, typed commands, Minecraft's events, the render ring, and HUD images. Spike 5
-// adds build mode's drive (its spec's "Part 1"): one teleport, then Minecraft drives and the link says where V goes.
-// It works on the mapping's memory, so the tests give it plain memory with a fake Minecraft.
+// adds build mode's drive (its spec's "Part 1"): one teleport, then Minecraft drives and the link says where V goes. And
+// Night City's ground (its "Part 2"): the city's collision instead of the floor, read around the centre and sent as it
+// changes. It works on the mapping's memory, so the tests give it plain memory with a fake Minecraft.
 namespace cpmc::link
 {
+// What Minecraft gets as the game's shape (set ground).
+enum class Ground
+{
+	Floor,  // spike 4's flat floor at V's feet
+	City,   // Night City's collision, from a GroundSource
+};
+
+const char* GroundName(Ground aGround);  // "floor" or "city"
+
 // V's pose in the game's world axes (metres: x east, y north, z up), as PlayerLocator finds it.
 struct GamePose
 {
@@ -38,6 +52,7 @@ struct LinkSettings
 	bool     keepTranslucent = false;   // draw translucent triangles as cut-outs instead of dropping them
 	uint32_t viewportWidth = 0;         // the HUD image's size to ask for; 0 leaves Minecraft's window alone
 	uint32_t viewportHeight = 0;
+	Ground   ground = Ground::Floor;    // switching sends a clear with a new epoch, then the other ground
 };
 
 // Where the link hands on what Minecraft sends: the renderer in the game, a report in mclink. Called inside Update,
@@ -83,6 +98,13 @@ public:
 
 	void Update(const Frame& aFrame, const LinkSettings& aSettings, LinkSink& aSink);
 
+	// Night City's ground, once a frame after Update (spike 5's "The exporter"): reads batches from aSource, nearest
+	// first, until aBudgetMs has gone (a batch is always read whole), and hands the regions whose triangles changed to
+	// the worker; the next updates write its messages into the collision ring, in order. It reads only with the ground
+	// the city's, linked, Minecraft there, and the last update's centre known: Minecraft's player while it drives, and
+	// V otherwise.
+	void ReadGround(double aNow, GroundSource& aSource, double aBudgetMs);
+
 	// Push may be called from any thread. Everything else, from the thread that calls Update.
 	bool Type(std::string_view aCommandOrName, std::string& aError);  // queues a command, or a named set
 	bool Push(const proto::InputEvent& aEvent);                        // the input ring; false if dropped
@@ -107,9 +129,26 @@ public:
 		uint64_t teleports = 0;
 		Vec3d    target;  // the last teleport's, Minecraft axes
 		McLook   look;
-		uint32_t floorEpoch = 0;
-		bool     floorSent = false;
-		Vec3d    floorCentre;  // Minecraft axes; y is the floor's height
+		// The ground: the floor, or the city's (spike 5's "Part 2")
+		Ground                   ground = Ground::Floor;  // what Minecraft gets now
+		uint32_t                 collisionEpoch = 0;      // the collision ring's: the floor's or the city's last clear
+		bool                     floorSent = false;
+		Vec3d                    floorCentre;           // Minecraft axes; y is the floor's height
+		std::optional<RegionPos> cityCentre;            // the region the city's area is around
+		size_t                   cityKnown = 0;         // regions read since the city last started over
+		size_t                   cityWaiting = 0;       // the area's batches not read yet
+		uint64_t                 cityBatches = 0;       // batches read, since the start
+		uint64_t                 cityUnread = 0;        // batches the source couldn't read
+		uint64_t                 cityRegions = 0;       // regions sent to the worker: new, or changed
+		uint64_t                 cityTriangles = 0;     // their triangles
+		double                   cityReadMs = 0.0;      // the last ReadGround's
+		size_t                   workerJobs = 0;        // regions given to the worker whose messages aren't taken yet
+		uint64_t                 workerRegions = 0;     // regions it voxelized, since the start
+		uint64_t                 workerBlocks = 0;      // voxel blocks it made
+		double                   workerMs = 0.0;        // its time
+		size_t                   collisionWaiting = 0;  // the city's messages waiting for room in the collision ring
+		uint64_t                 collisionBytes = 0;    // the city's, written into it since the start
+		uint64_t                 collisionDropped = 0;  // messages too big for it
 		// The render ring, since the start
 		std::array<uint64_t, kTypes> messages{};
 		std::array<uint64_t, kTypes> bytes{};
@@ -142,6 +181,7 @@ public:
 		std::optional<double> eyeDistance;          // V's camera from where the last frame put Minecraft's eye, metres
 		std::optional<Vec3d>  placeV;               // this frame: where V's feet go (world axes); nothing: V is left be
 		std::string           endBuild;             // this frame: why build mode must end; empty: it goes on
+		std::optional<double> lastHold;             // seconds Minecraft held its player when build mode last started
 	};
 
 	const Status& State() const { return status_; }
@@ -150,6 +190,9 @@ private:
 	// A floor around aCentre (Minecraft axes; its y is the height). A new epoch clears the last one first; without one,
 	// the floor grows, which never takes the ground from under Minecraft's player.
 	void SendFloor(const Vec3d& aCentre, bool aNewEpoch, LinkSink& aSink);
+	// The city's messages into the collision ring, in order, as many as fit: a clear first if one is due, then the
+	// worker's, those of an older epoch dropped. The rest wait for the next frame.
+	void WriteCity(LinkSink& aSink);
 	bool Take(const RingMessage& aMessage, const LinkSettings& aSettings, LinkSink& aSink);
 
 	uint8_t*              base_;
@@ -172,5 +215,12 @@ private:
 	EyeHeight             eyeHeight_;
 	bool                  wasBuild_ = false;
 	std::optional<Vec3d>  lastEye_;  // where the last frame put Minecraft's eye, world axes
+	// The city's ground (spike 5's "Part 2")
+	bool                              wasLinked_ = false;
+	bool                              cityClear_ = false;  // a clear is due before the city's next regions
+	bool                              centred_ = false;    // the last update knew the city's centre, linked
+	GroundAreas                       areas_;
+	std::unique_ptr<GroundWorker>     worker_;  // made when the city is first read
+	std::deque<GroundWorker::Message> outbox_;  // the city's messages, waiting for room in the collision ring
 };
 }
