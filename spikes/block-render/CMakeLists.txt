@@ -9,16 +9,20 @@ set(REPO_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../..")
 set(RED4EXT_SDK_DIR "${REPO_ROOT}/extern/RED4ext.SDK" CACHE PATH "RED4ext.SDK checkout")
 set(STREAMLINE_DIR "${REPO_ROOT}/extern/streamline-2.7.2" CACHE PATH "Streamline 2.7.2 headers")
 set(SKYCRAFT_DIR "${REPO_ROOT}/extern/skycraft" CACHE PATH "SkyCraft's protocol header")
+set(PHYSX_DIR "${REPO_ROOT}/extern/physx-3.4.2" CACHE PATH "PhysX 3.4.2 headers (PhysX_3.4/Include, PxShared/include)")
 set(CP2077_DIR "" CACHE PATH "Cyberpunk 2077 folder; when set, each build copies the plugin into red4ext/plugins/BlockRender")
 
-# Shared settings. Streamline's and SkyCraft's headers are SYSTEM, which keeps their warnings out of ours.
+# Shared settings. Streamline's, SkyCraft's and PhysX's headers are SYSTEM, which keeps their warnings out of ours.
+# PX_PHYSX_STATIC_LIB empties PhysX's import macro: PhysX is called only through its virtual tables and inline header
+# code (spike 1's rule), so nothing is imported from its DLLs.
 add_library(render_settings INTERFACE)
 target_compile_options(render_settings INTERFACE
 	$<$<COMPILE_LANGUAGE:CXX>:/W4 /permissive- /utf-8 /EHsc /Zc:__cplusplus>
 	$<$<COMPILE_LANGUAGE:C>:/W4 /utf-8>)
-target_compile_definitions(render_settings INTERFACE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_compile_definitions(render_settings INTERFACE WIN32_LEAN_AND_MEAN NOMINMAX PX_PHYSX_STATIC_LIB)
 target_include_directories(render_settings INTERFACE src)
-target_include_directories(render_settings SYSTEM INTERFACE "${STREAMLINE_DIR}/include" "${SKYCRAFT_DIR}")
+target_include_directories(render_settings SYSTEM INTERFACE "${STREAMLINE_DIR}/include" "${SKYCRAFT_DIR}"
+	"${PHYSX_DIR}/PhysX_3.4/Include" "${PHYSX_DIR}/PxShared/include")
 
 # Everything that doesn't need RED4ext or the running game.
 add_library(render_core STATIC
@@ -58,6 +62,9 @@ add_library(render_core STATIC
 	src/link/Voxels.cpp
 	src/link/Ground.cpp
 	src/link/GroundWorker.cpp
+	src/physx/GameAbi.cpp
+	src/physx/ShapeTriangles.cpp
+	src/physx/OriginWatch.cpp
 	src/link/Drive.cpp
 	src/link/Turn.cpp
 	src/log/DriveLog.cpp
@@ -168,6 +175,12 @@ add_executable(render_tests
 	tests/TestVoxels.cpp
 	tests/TestGround.cpp
 	tests/TestGroundWorker.cpp
+	tests/TestAudit.cpp
+	tests/TestGameAbi.cpp
+	tests/TestPrimitives.cpp
+	tests/TestMeshes.cpp
+	tests/TestHeightfield.cpp
+	tests/TestOriginWatch.cpp
 	tests/TestDrive.cpp
 	tests/TestTurn.cpp
 	tests/TestDriveLog.cpp
