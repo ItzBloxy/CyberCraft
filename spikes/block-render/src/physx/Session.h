@@ -18,6 +18,8 @@ public:
 	physx::PxScene* Scene0(std::string& aWhy);
 	// Whether PhysX is the audited build, with aWhy if it isn't: if not, nothing of it is ever read.
 	bool Audited(std::string& aWhy) { return CheckBuild(aWhy); }
+	// PxGetPhysics's object, checked; null, with aWhy, if PhysX isn't the audited build. Part 3's bodies are made with it.
+	physx::PxPhysics* Physics(std::string& aWhy) { return CheckBuild(aWhy) ? physics_ : nullptr; }
 
 	const ModuleBases& Bases() const { return bases_; }  // where the audited DLLs are, once Scene0 has found them
 	ReadableMemory&    Memory() { return memory_; }

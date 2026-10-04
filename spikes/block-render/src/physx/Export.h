@@ -60,6 +60,10 @@ public:
 	// there are none.
 	std::vector<std::string> Describe(const Vec3d& aWorld, double aRadius);
 
+	// Scene 0 and PhysX's origin this frame, as the reads have them, for part 3's bodies: read once a frame, whoever asks
+	// first. Null if they can't be had, with State().why saying why.
+	physx::PxScene* Prepared(Vec3d& aOrigin);
+
 	struct Report
 	{
 		std::optional<Vec3d> origin;  // PhysX's, the last frame it was read

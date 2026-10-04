@@ -143,6 +143,16 @@ bool PhysxGround::Prepare()
 	return true;
 }
 
+PxScene* PhysxGround::Prepared(Vec3d& aOrigin)
+{
+	if (!Prepare())
+	{
+		return nullptr;
+	}
+	aOrigin = *report_.origin;
+	return scene_;
+}
+
 std::optional<Vec3d> PhysxGround::Origin(PxScene& aScene, const Vec3d& aFeet)
 {
 	ReadableMemory&    memory = session_.Memory();
