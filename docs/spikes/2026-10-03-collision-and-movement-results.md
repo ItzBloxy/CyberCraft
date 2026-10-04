@@ -64,12 +64,10 @@ with V following smoothly and no click refused. Outside it, Minecraft's blocks s
 on a build after leaving build mode. NPCs are the exception: their navigation wins over collision.
 
 What's left:
-- **`set blocks 1` by default:** recommended, since builds are solid only with it and it costs nothing measurable. The
-  spec kept it off until step 4 passed; the change waits for the user's word.
+- **`set blocks 1` by default:** done after the spike, at the user's word (below).
 - **The GPU crash's cause,** from DRED's report if it comes back.
-- **SkyCraft's blocks from blasts:** a blast that digs into the city's ground leaves blocks in the air above it, which
-  the user would rather not have; SkyCraft has no setting for it, so it needs a Fabric mixin of our own or a change to
-  SkyCraft.
+- **SkyCraft's blocks from blasts:** done after the spike: a Fabric mod of ours keeps SkyCraft from digging into the
+  city's ground at all (below).
 - **NPCs and moving props:** for the Entities brainstorm, after spike 5.
 
 ## Step 1: the drive with `mclink`, without Cyberpunk
@@ -770,3 +768,32 @@ the two runs after the fix, 571 block changes in one of them.
     our own, or a change to SkyCraft;
   - **NPCs and moving props:** NPCs' navigation walks them through blocks, and kinematic props aren't sent; both wait
     for the Entities brainstorm.
+
+## After spike 5: bodies by default, and SkyCraft's digging off
+
+Date: 2026-10-04, at the user's word, on branch `followups/spike-5`.
+
+- **Bodies by default:** BlockRender 0.16.0 (`d5ed7e0`) starts with `set blocks 1`, 396 unit tests, deployed.
+- **CyberCraft Tweaks** (`minecraft/cybercraft-tweaks`, 1.2.0 at `3edb7b6`), a Fabric mod beside SkyCraft in the
+  `CyberCraft` instance: Night City's ground can't be dug in the game, so Minecraft's copy of it isn't either. It's
+  built with the JDK alone, against the jars the Modrinth App already keeps, and asks for SkyCraft 0.1.2 exactly, as it
+  targets SkyCraft's classes by name.
+  - **`NoBlastBlocks`** skips `SkyDigBlast.materialize` and `finish`: a blast no longer turns the ground into blocks or
+    lines its hole with more. SkyCraft's resistance stays, so the city still shields blocks behind it, and the game
+    still hears of every explosion.
+  - **`NoDigging`** skips `SkyDig.open` and `reveal`: no digging with a tool, and nothing revealed behind a dug cell's
+    exposed walls.
+  - **`CyberCraftTweaks`** drops SkyCraft's `skycraft:dug` attachment from each chunk as the server loads it, so what
+    was dug before is undug; SkyCraft syncs the attachment, so clients follow.
+- **Tested offline with `mclink`,** each part against a run without it:
+  - **Blasts:** `tools/mclink/blast.txt` sets TNT off on spot B's road at a fresh spot, 477.5 6.1 2007.5: with the mod,
+    0 solid blocks around it before and after. Without it, the same TNT 100 blocks east left 37 blocks at y 8.5 to 10
+    within 30 ms.
+  - **Reveals:** clearing those 37 with `/fill` without `NoDigging` made SkyCraft reveal 60 new ones behind them; with
+    it, clearing the 60 left none, 11 s later with the stand-in V beside them.
+  - **What earlier blasts left:** spot B's 41 blocks and the corner's 38 were cleared with `/fill`; the corner's section
+    held only those, and the user's builds beside it were untouched. Their dug cells' walls, which SkyCraft draws and
+    sends with the sections' meshes (4,464 to 10,200 vertices a section, no solid blocks), were gone once the mod's
+    third part dropped the dug cells: the three places' sections came empty.
+- **Not yet seen in the game:** both changes were checked in Minecraft and `mclink`; the next game session shows
+  `bodies=on` from the start, without the Blocks button.
