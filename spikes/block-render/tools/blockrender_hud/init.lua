@@ -1,23 +1,25 @@
 -- BlockRender HUD: what BlockRender (spikes 3 and 4 of D:\Cyberpunk-Minecraft) is doing, from the status.txt it writes
 -- into this folder once a second, plus V's position, heading and Minecraft block, and the nearest structure, and the
--- frame time as CET sees it, which works without BlockRender too and goes into frames.txt here as well. Its buttons
--- switch BlockRender's drawing mode, link it to Minecraft, type commands into Minecraft, and cycle when Minecraft's
--- HUD shows, through blockrender.request in this folder. A line under them shows build mode, which F8 toggles, and
--- Minecraft's hotbar slot; and since spike 5, one shows build mode's drive, with buttons for its turn and its drive log,
--- and one the ground Minecraft gets, with buttons to switch it and to log the shapes around V; and one V's bodies for
--- Minecraft's blocks, with buttons to turn them on and off, and step 4's test box.
+-- frame time as CET sees it, which works without BlockRender too and goes into frames.txt here as well. It asks
+-- BlockRender for things through blockrender.request in this folder.
+-- Kept small: one row of buttons (link, Minecraft's blocks as bodies, step 4's test box, the turn), and a line each for
+-- the last request's reply, build mode (F8) and its drive, the bodies, and V. Two folded sections hold the rest: "More
+-- controls" (the drawing mode, Minecraft's HUD, commands typed into Minecraft, the drive log, the ground and its
+-- shapes) and "Full status" (every status line, and the frame time).
 -- Delete this folder to remove it.
 local status = nil       -- status.txt's lines, except the structures
 local structures = {}    -- { name, min = { x, y, z }, max = { x, y, z } }, in world coordinates
 local hudSetting = nil   -- the hud line's setting: "never", "in build mode" or "always"
 local build = nil        -- the build line's first two parts: on, or off and why; and the slot
 local drive = nil        -- the drive line's state, V's camera from Minecraft's eye, and V's health
+local driveState = nil   -- the drive line's state alone
 local turn = nil         -- the drive line's turn setting: "on" or "off"
 local ground = nil       -- the ground line's setting, "floor" or "city", and how much of the city is known
 local groundName = nil   -- "floor" or "city"
 local bodies = nil       -- the bodies line: on or off, and how many, or why they wait; and the test box
 local blocksOn = nil     -- whether bodies are on: "on" or "off"
 local boxOn = false      -- whether the test box stands
+local reply = nil        -- the request line: what BlockRender made of the last request, cut short
 local player = nil       -- the lines about V
 local sinceRead = 1.0
 local frames = { sum = 0.0, count = 0, worst = 0.0 }  -- this second's frame times, from onUpdate
@@ -48,6 +50,14 @@ local function request(command)
     end
 end
 
+-- A line cut to aLength characters, with "..." where it was cut.
+local function shortened(line, aLength)
+    if #line <= aLength then
+        return line
+    end
+    return line:sub(1, aLength - 3) .. "..."
+end
+
 -- A status line as the window shows it: a long line splits at each "; ", with the later parts indented.
 local function displayLines(line)
     local out = {}
@@ -69,13 +79,19 @@ local function readStatus()
     hudSetting = nil
     build = nil
     drive = nil
+    driveState = nil
     turn = nil
     ground = nil
     groundName = nil
     bodies = nil
     blocksOn = nil
     boxOn = false
+    reply = nil
     for line in file:lines() do
+        local said = line:match("^request=(.*)$")
+        if said ~= nil and said ~= "" then
+            reply = shortened(said, 90)
+        end
         local name, a, b, c, d, e, f = line:match("^structure=(%S+) (%S+) (%S+) (%S+) (%S+) (%S+) (%S+)$")
         hudSetting = line:match("^hud=([^,]+),") or hudSetting
         local mode, slot = line:match("^build=([^;]*); ([^;]*);")
@@ -88,6 +104,7 @@ local function readStatus()
             local health = line:match("V's health ([^;]*)")
             drive = state .. (eye and (", V's camera " .. eye .. " from Minecraft's eye") or "")
                 .. (health and (", V's health " .. health) or "")
+            driveState = state
             turn = line:match("; turn (%a+),")
         end
         local setting = line:match("^ground=(%a+)")
@@ -159,8 +176,7 @@ registerForEvent("onUpdate", function(delta)
     local f = v:GetWorldForward()
     local heading = math.deg(atan2(f.x, f.y)) % 360  -- 0 = north (+y), 90 = east (+x)
     -- Minecraft's axes: x is world x, y is world z (up), z is world -y (south).
-    local text = string.format(
-        "V: x %.2f  y %.2f  z %.2f, heading %d (0 north, 90 east)\nMinecraft block at V's feet: %d %d %d",
+    local text = string.format("V: x %.2f  y %.2f  z %.2f, heading %d (0 north, 90 east)\nMinecraft block %d %d %d",
         p.x, p.y, p.z, math.floor(heading + 0.5), math.floor(p.x), math.floor(p.z), math.floor(-p.y))
     local nearest, nearestName = nil, nil
     for _, box in ipairs(structures) do
@@ -170,7 +186,7 @@ registerForEvent("onUpdate", function(delta)
         end
     end
     if nearest ~= nil then
-        text = text .. string.format("\nnearest structure: %s, %.2f m away", nearestName, nearest)
+        text = text .. string.format("; nearest structure: %s, %.2f m away", nearestName, nearest)
     end
     player = text
 end)
@@ -181,15 +197,7 @@ registerForEvent("onDraw", function()
         if ImGui.SetWindowFontScale then
             ImGui.SetWindowFontScale(fontScale)
         end
-        ImGui.Text("Draw:")
-        for _, mode in ipairs(modes) do
-            ImGui.SameLine()
-            if ImGui.Button(mode.label) then
-                request("mode " .. mode.name)
-            end
-        end
-        ImGui.Text("Minecraft:")
-        ImGui.SameLine()
+        -- The buttons the in-game steps use. "###id" keeps a button's ID the same while its label changes.
         if ImGui.Button("Link") then
             request("link on")
         end
@@ -197,53 +205,7 @@ registerForEvent("onDraw", function()
         if ImGui.Button("Unlink") then
             request("link off")
         end
-        local nextHud = hudNext[hudSetting]
-        if nextHud ~= nil then
-            -- "###hud" keeps the button's ID the same while its label changes.
-            ImGui.SameLine()
-            if ImGui.Button("HUD: " .. hudSetting .. "###hud") then
-                request("set hud " .. nextHud)
-            end
-        end
-        ImGui.Text("Type:")
-        for _, set in ipairs(sets) do
-            ImGui.SameLine()
-            if ImGui.Button(set) then
-                request("mc " .. set)
-            end
-        end
-        if build ~= nil then
-            ImGui.Text("Build mode (F8): " .. build)
-        end
-        if drive ~= nil then
-            ImGui.Text("Drive: " .. drive)
-            if turn ~= nil then
-                -- "###turn" keeps the button's ID the same while its label changes.
-                ImGui.SameLine()
-                if ImGui.Button("Turn: " .. turn .. "###turn") then
-                    request("set turn " .. (turn == "on" and 0 or 1))
-                end
-            end
-            ImGui.SameLine()
-            if ImGui.Button("Drive log 10 s") then
-                request("drivelog 10")
-            end
-        end
-        if ground ~= nil then
-            ImGui.Text("Ground: " .. ground)
-            -- "###ground" keeps the button's ID the same while its label changes.
-            ImGui.SameLine()
-            if ImGui.Button((groundName == "city" and "Use the floor" or "Use the city") .. "###ground") then
-                request("set ground " .. (groundName == "city" and "floor" or "city"))
-            end
-            ImGui.SameLine()
-            if ImGui.Button("Shapes") then
-                request("shapes")
-            end
-        end
-        if bodies ~= nil then
-            ImGui.Text("Bodies: " .. bodies)
-            -- "###blocks" and "###box" keep the buttons' IDs the same while their labels change.
+        if blocksOn ~= nil then
             ImGui.SameLine()
             if ImGui.Button("Blocks: " .. blocksOn .. "###blocks") then
                 request("set blocks " .. (blocksOn == "on" and 0 or 1))
@@ -253,22 +215,81 @@ registerForEvent("onDraw", function()
                 request("box " .. (boxOn and "off" or "on"))
             end
         end
-        ImGui.Separator()
+        if turn ~= nil then
+            ImGui.SameLine()
+            if ImGui.Button("Turn: " .. turn .. "###turn") then
+                request("set turn " .. (turn == "on" and 0 or 1))
+            end
+        end
         if status == nil then
             ImGui.Text("no status.txt yet: is BlockRender loaded?")
-        else
-            for _, line in ipairs(status) do
-                for _, part in ipairs(displayLines(line)) do
-                    ImGui.Text(part)
+        end
+        if reply ~= nil then
+            ImGui.Text("Last request: " .. reply)
+        end
+        if build ~= nil then
+            ImGui.Text("Build mode (F8): " .. build .. (driveState and ("; drive " .. driveState) or ""))
+        end
+        if bodies ~= nil then
+            ImGui.Text("Bodies: " .. bodies)
+        end
+        if player ~= nil then
+            ImGui.Text(player)
+        end
+
+        if ImGui.CollapsingHeader("More controls") then
+            ImGui.Text("Draw:")
+            for _, mode in ipairs(modes) do
+                ImGui.SameLine()
+                if ImGui.Button(mode.label) then
+                    request("mode " .. mode.name)
+                end
+            end
+            local nextHud = hudNext[hudSetting]
+            if nextHud ~= nil then
+                ImGui.SameLine()
+                if ImGui.Button("HUD: " .. hudSetting .. "###hud") then
+                    request("set hud " .. nextHud)
+                end
+            end
+            ImGui.Text("Type:")
+            for _, set in ipairs(sets) do
+                ImGui.SameLine()
+                if ImGui.Button(set) then
+                    request("mc " .. set)
+                end
+            end
+            if drive ~= nil then
+                ImGui.Text("Drive: " .. drive)
+                ImGui.SameLine()
+                if ImGui.Button("Drive log 10 s") then
+                    request("drivelog 10")
+                end
+            end
+            if ground ~= nil then
+                ImGui.Text("Ground: " .. ground)
+                ImGui.SameLine()
+                if ImGui.Button((groundName == "city" and "Use the floor" or "Use the city") .. "###ground") then
+                    request("set ground " .. (groundName == "city" and "floor" or "city"))
+                end
+                ImGui.SameLine()
+                if ImGui.Button("Shapes") then
+                    request("shapes")
                 end
             end
         end
-        if frameLine ~= nil then
-            ImGui.Text(frameLine)
-        end
-        if player ~= nil then
-            ImGui.Separator()
-            ImGui.Text(player)
+
+        if ImGui.CollapsingHeader("Full status") then
+            if status ~= nil then
+                for _, line in ipairs(status) do
+                    for _, part in ipairs(displayLines(line)) do
+                        ImGui.Text(part)
+                    end
+                end
+            end
+            if frameLine ~= nil then
+                ImGui.Text(frameLine)
+            end
         end
     end
     ImGui.End()
