@@ -52,7 +52,8 @@ const char* HitDropName(HitDrop aDrop)
 	}
 }
 
-std::optional<NpcHit> AcceptHit(const proto::McEvent& aEvent, const ActorIds& aIds, double aNow, double aPunch, HitDrop& aDrop)
+std::optional<NpcHit> AcceptHit(const proto::McEvent& aEvent, const ActorIds& aIds, double aNow, double aPunch, double aPower,
+                                HitDrop& aDrop)
 {
 	const std::optional<uint64_t> entity = aIds.Entity(aEvent.formId, aNow);
 	if (!entity)
@@ -75,7 +76,7 @@ std::optional<NpcHit> AcceptHit(const proto::McEvent& aEvent, const ActorIds& aI
 	hit.formId = aEvent.formId;
 	hit.entity = *entity;
 	hit.damage = std::min(damage, kHitCap);
-	hit.amount = hit.damage * aPunch;
+	hit.amount = aPunch * std::pow(hit.damage, aPower);
 	hit.strong = (aEvent.flags & proto::kHitCritical) != 0 || aEvent.d > float(kStrongKnockback);  // as SkyCraft's push > 0.45f
 	return hit;
 }

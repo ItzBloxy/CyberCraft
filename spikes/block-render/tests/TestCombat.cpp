@@ -36,38 +36,58 @@ TEST(CombatCountsHitsOnListedNpcsWithDamage)
 	ActorIds       ids;
 	const uint32_t id = ids.Id(0xABC, 10.0);
 	HitDrop        drop = HitDrop::Count;
-	// A diamond sword at full cooldown, and V's punch of 102: 714 of the NPC's health.
-	const std::optional<NpcHit> hit = AcceptHit(Hit(id, 7.0f), ids, 10.5, 102.0, drop);
+	// A diamond sword at full cooldown, and V's punch of 102, at the hit power by default: 102 x the square root of 7.
+	const std::optional<NpcHit> hit = AcceptHit(Hit(id, 7.0f), ids, 10.5, 102.0, kHitPower, drop);
 	CHECK(hit.has_value());
 	CHECK(hit && hit->entity == 0xABC && hit->formId == id && !hit->strong);
-	CHECK_NEAR(hit ? hit->amount : 0.0, 714.0, 1e-9);
+	CHECK_NEAR(hit ? hit->amount : 0.0, 102.0 * std::sqrt(7.0), 1e-9);
 	// Strong: a crit, or knockback over 0.45 (a sprint hit); 0.45 itself isn't, compared as SkyCraft compares, in float.
-	CHECK(AcceptHit(Hit(id, 10.5f, 0.4f, true), ids, 10.5, 102.0, drop).value_or(NpcHit{}).strong);
-	CHECK(AcceptHit(Hit(id, 7.0f, 0.5f), ids, 10.5, 102.0, drop).value_or(NpcHit{}).strong);
-	CHECK(!AcceptHit(Hit(id, 7.0f, 0.45f), ids, 10.5, 102.0, drop).value_or(NpcHit{ 0, 0, 0.0, 0.0, true }).strong);
-	// /kill's 3.4e38 is capped at 1,000.
-	const std::optional<NpcHit> kill = AcceptHit(Hit(id, std::numeric_limits<float>::max()), ids, 10.5, 102.0, drop);
+	CHECK(AcceptHit(Hit(id, 10.5f, 0.4f, true), ids, 10.5, 102.0, kHitPower, drop).value_or(NpcHit{}).strong);
+	CHECK(AcceptHit(Hit(id, 7.0f, 0.5f), ids, 10.5, 102.0, kHitPower, drop).value_or(NpcHit{}).strong);
+	CHECK(!AcceptHit(Hit(id, 7.0f, 0.45f), ids, 10.5, 102.0, kHitPower, drop).value_or(NpcHit{ 0, 0, 0.0, 0.0, true }).strong);
+	// /kill's 3.4e38 is capped at 1,000 before the power.
+	const std::optional<NpcHit> kill = AcceptHit(Hit(id, std::numeric_limits<float>::max()), ids, 10.5, 102.0, kHitPower, drop);
 	CHECK_NEAR(kill ? kill->damage : 0.0, 1000.0, 1e-9);
-	CHECK_NEAR(kill ? kill->amount : 0.0, 102000.0, 1e-6);
+	CHECK_NEAR(kill ? kill->amount : 0.0, 102.0 * std::sqrt(1000.0), 1e-9);
 	// A stand-in listed 2 s ago still counts; 2.5 s ago it doesn't, and nor does a number never given.
-	CHECK(AcceptHit(Hit(id, 7.0f), ids, 12.0, 102.0, drop).has_value());
-	CHECK(!AcceptHit(Hit(id, 7.0f), ids, 12.5, 102.0, drop).has_value());
+	CHECK(AcceptHit(Hit(id, 7.0f), ids, 12.0, 102.0, kHitPower, drop).has_value());
+	CHECK(!AcceptHit(Hit(id, 7.0f), ids, 12.5, 102.0, kHitPower, drop).has_value());
 	CHECK(drop == HitDrop::NotListed);
-	CHECK(!AcceptHit(Hit(id + 1, 7.0f), ids, 10.5, 102.0, drop).has_value());
+	CHECK(!AcceptHit(Hit(id + 1, 7.0f), ids, 10.5, 102.0, kHitPower, drop).has_value());
 	CHECK(drop == HitDrop::NotListed);
 	// Knockback only, or damage that isn't finite: skipped.
-	CHECK(!AcceptHit(Hit(id, 0.0f), ids, 10.5, 102.0, drop).has_value());
+	CHECK(!AcceptHit(Hit(id, 0.0f), ids, 10.5, 102.0, kHitPower, drop).has_value());
 	CHECK(drop == HitDrop::NoDamage);
-	CHECK(!AcceptHit(Hit(id, std::numeric_limits<float>::quiet_NaN()), ids, 10.5, 102.0, drop).has_value());
+	CHECK(!AcceptHit(Hit(id, std::numeric_limits<float>::quiet_NaN()), ids, 10.5, 102.0, kHitPower, drop).has_value());
 	CHECK(drop == HitDrop::NoDamage);
-	CHECK(!AcceptHit(Hit(id, std::numeric_limits<float>::infinity()), ids, 10.5, 102.0, drop).has_value());
+	CHECK(!AcceptHit(Hit(id, std::numeric_limits<float>::infinity()), ids, 10.5, 102.0, kHitPower, drop).has_value());
 	CHECK(drop == HitDrop::NoDamage);
 	// V's punch not read: no hit.
-	CHECK(!AcceptHit(Hit(id, 7.0f), ids, 10.5, 0.0, drop).has_value());
+	CHECK(!AcceptHit(Hit(id, 7.0f), ids, 10.5, 0.0, kHitPower, drop).has_value());
 	CHECK(drop == HitDrop::NoPunch);
 	CHECK_STR(HitDropName(HitDrop::NoPunch), "no punch");
 	CHECK_STR(HitResultName(-2), "the NPC is dead");
 	CHECK_STR(HitResultName(7), "result 7");
+}
+
+TEST(CombatStartsHitsAtVsPunchTimesDamageToTheHitPower)
+{
+	ActorIds       ids;
+	const uint32_t id = ids.Id(0xABC, 10.0);
+	HitDrop        drop = HitDrop::Count;
+	const auto     start = [&](float aDamage, double aPower) {
+		return AcceptHit(Hit(id, aDamage), ids, 10.5, 104.87, aPower, drop).value_or(NpcHit{}).amount;
+	};
+	// The square root by default (step 4's fix): a fist stays one of V's punches, a diamond sword is 2.65, an axe 3, and a
+	// swing before its cooldown is full is more than its share of a punch.
+	CHECK_NEAR(kHitPower, 0.5, 1e-12);
+	CHECK_NEAR(start(1.0f, kHitPower), 104.87, 1e-9);
+	CHECK_NEAR(start(7.0f, kHitPower), 104.87 * 2.6457513110645907, 1e-9);
+	CHECK_NEAR(start(9.0f, kHitPower), 314.61, 1e-9);
+	CHECK_NEAR(start(0.25f, kHitPower), 52.435, 1e-9);
+	// 1: each point of Minecraft's damage a whole punch, as step 4 had it; 0: every hit one punch.
+	CHECK_NEAR(start(7.0f, 1.0), 734.09, 1e-9);
+	CHECK_NEAR(start(7.0f, 0.0), 104.87, 1e-9);
 }
 
 TEST(CombatMakesTheGamesHurtsIntoMinecraftsKinds)

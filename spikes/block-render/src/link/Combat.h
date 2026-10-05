@@ -14,6 +14,7 @@
 namespace cpmc::link
 {
 constexpr double kHitCap = 1000.0;         // Minecraft's damage, at most: /kill on a stand-in sends 3.4e38
+constexpr double kHitPower = 0.5;          // set hitpower's default: a hit starts at V's punch x damage^0.5
 constexpr double kStrongKnockback = 0.45;  // SkyCraft staggers above this knockback, or on a crit, comparing floats
 constexpr double kDeathWindow = 2.0;       // seconds after build mode ends that Minecraft's death still kills V
 constexpr int    kHurtTicks = 11;          // Minecraft's ticks between kInHurts: within 10 it takes only the excess
@@ -24,7 +25,7 @@ struct NpcHit
 	uint32_t formId = 0;
 	uint64_t entity = 0;    // the NPC, as listed
 	double   damage = 0.0;  // Minecraft's, capped
-	double   amount = 0.0;  // damage x V's punch: where the game's damage pipeline starts it
+	double   amount = 0.0;  // V's punch x damage^the hit power: where the game's damage pipeline starts it
 	bool     strong = false;
 };
 
@@ -40,9 +41,12 @@ enum class HitDrop
 const char* HitDropName(HitDrop aDrop);
 
 // Whether a kEvHitActor counts: its NPC listed in the last kHitTrail seconds (aIds), its damage finite and over 0, capped
-// at kHitCap, and V's punch, aPunch, over 0. Strong: a crit, or knockback over kStrongKnockback. Nothing, with aDrop
-// saying why, if it doesn't count.
-std::optional<NpcHit> AcceptHit(const proto::McEvent& aEvent, const ActorIds& aIds, double aNow, double aPunch, HitDrop& aDrop);
+// at kHitCap, and V's punch, aPunch, over 0. It starts at aPunch x the damage to the power aPower, the hit power, from 0
+// to 1: kHitPower, the square root, keeps a fist at one punch and makes a diamond sword 2.65 (step 4's fix: at 1, each
+// point of Minecraft's damage a whole punch, a sword one-shot level-47 gangers). Strong: a crit, or knockback over
+// kStrongKnockback. Nothing, with aDrop saying why, if it doesn't count.
+std::optional<NpcHit> AcceptHit(const proto::McEvent& aEvent, const ActorIds& aIds, double aNow, double aPunch, double aPower,
+                                HitDrop& aDrop);
 
 // What the module's Hit says about a hit it was given: 1 queued; 0 V isn't found; -1 the NPC is gone; -2 it's dead; -3
 // there's no attack record to make it with.

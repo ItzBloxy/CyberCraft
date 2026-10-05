@@ -713,7 +713,7 @@ void HitOnNpc(const skycraft::proto::McEvent& aEvent, double aNow, bool aVFound)
 		return Log("{}; not applied: combat is off", hit);
 	}
 	cpmc::link::HitDrop                     drop = cpmc::link::HitDrop::Count;
-	const std::optional<cpmc::link::NpcHit> accepted = cpmc::link::AcceptHit(aEvent, g_actorIds, aNow, g_punch, drop);
+	const std::optional<cpmc::link::NpcHit> accepted = cpmc::link::AcceptHit(aEvent, g_actorIds, aNow, g_punch, cpmc::link::kHitPower, drop);
 	if (!accepted)
 	{
 		return DropHit(hit, cpmc::link::HitDropName(drop));
