@@ -1,15 +1,15 @@
 #include "Puppet.h"
 
+#include "ScriptTypes.h"
+
 #include <RED4ext/RED4ext.hpp>
 #include <RED4ext/Scripting/Natives/Generated/EulerAngles.hpp>
 #include <RED4ext/Scripting/Natives/Generated/Vector4.hpp>
 #include <RED4ext/Scripting/Natives/Generated/ent/EntityID.hpp>
 #include <RED4ext/Scripting/Natives/Generated/game/StatsObjectID.hpp>
 
-#include <algorithm>
 #include <cmath>
 #include <format>
-#include <string_view>
 #include <type_traits>
 #include <vector>
 
@@ -56,63 +56,6 @@ const std::vector<Signature>& Signatures()
 		{ Owner::System, "StatPoolsSystem", "GetStatPoolValue", { { "gameStatsObjectID" }, { "gamedataStatPoolType" }, { "Bool" } }, { "Float" } },
 	};
 	return kSignatures;
-}
-
-bool TypeIs(const RED4ext::rtti::IType* aType, const char* aAccepted)
-{
-	if (!aType)
-	{
-		return false;
-	}
-	const std::string_view accepted(aAccepted);
-	if (!accepted.ends_with('*'))
-	{
-		return aType->GetName() == CName(aAccepted);
-	}
-	const char* name = aType->GetName().ToString();
-	return name && std::string_view(name).starts_with(accepted.substr(0, accepted.size() - 1));
-}
-
-bool Matches(const RED4ext::CBaseFunction& aFunction, const Signature& aSignature)
-{
-	if (aFunction.params.Size() != aSignature.params.size())
-	{
-		return false;
-	}
-	for (uint32_t i = 0; i < aFunction.params.Size(); ++i)
-	{
-		const RED4ext::CProperty* param = aFunction.params[i];
-		const auto&               accepted = aSignature.params[i];
-		if (!param || std::none_of(accepted.begin(), accepted.end(), [&](const char* aName) { return TypeIs(param->type, aName); }))
-		{
-			return false;
-		}
-	}
-	if (aSignature.returns.empty())
-	{
-		return aFunction.returnType == nullptr;
-	}
-	return aFunction.returnType && std::any_of(aSignature.returns.begin(), aSignature.returns.end(), [&](const char* aName) {
-		       return TypeIs(aFunction.returnType->type, aName);
-	       });
-}
-
-std::string TypeName(const RED4ext::rtti::IType* aType)
-{
-	const char* name = aType ? aType->GetName().ToString() : nullptr;
-	return name ? name : "?";
-}
-
-// "(handle:gameObject, Vector4) -> Bool", for the log.
-std::string Describe(const RED4ext::CBaseFunction& aFunction)
-{
-	std::string out = "(";
-	for (uint32_t i = 0; i < aFunction.params.Size(); ++i)
-	{
-		const RED4ext::CProperty* param = aFunction.params[i];
-		out += (i == 0 ? "" : ", ") + TypeName(param ? param->type : nullptr);
-	}
-	return out + ")" + (aFunction.returnType ? " -> " + TypeName(aFunction.returnType->type) : "");
 }
 
 RED4ext::CClass* ClassNamed(const char* aScriptName)
@@ -179,7 +122,7 @@ RED4ext::CBaseFunction* Puppet::Find(Function aFunction, RED4ext::CClass* aClass
 		{
 			return;
 		}
-		if (Matches(*aCandidate, signature))
+		if (Matches(*aCandidate, signature.params, signature.returns))
 		{
 			found_[aFunction] = aCandidate;
 		}

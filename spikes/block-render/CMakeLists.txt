@@ -111,6 +111,8 @@ add_library(BlockRender SHARED
 	src/Plugin.cpp
 	src/PlayerLocator.cpp
 	src/Puppet.cpp
+	src/ScriptTypes.cpp
+	src/GameScript.cpp
 )
 target_link_libraries(BlockRender PRIVATE render_runtime)
 
