@@ -19,12 +19,13 @@ using Strong = RED4ext::Handle<RED4ext::IScriptable>;
 
 constexpr const char* kClassName = "BlockRenderNpcs";
 
-// A function as BlockRender calls it: static or not, and its parameters' and return types, as scripts/BlockRender.reds
-// declares them.
+// A function as BlockRender calls it: its name, a static function's global name, and its parameters' and return types,
+// as scripts/BlockRender.reds declares them. The game keeps a script class's static functions among the global
+// functions, named "Class::Name;" and their parameters' types, not with the class (step 2's opening check).
 struct FunctionTypes
 {
 	const char*                           name;
-	bool                                  isStatic;
+	const char*                           global;  // null for a member function, found in the class
 	std::vector<std::vector<const char*>> params;
 	std::vector<const char*>              returns;
 };
@@ -33,10 +34,10 @@ struct FunctionTypes
 const std::vector<FunctionTypes>& Functions()
 {
 	static const std::vector<FunctionTypes> kFunctionTypes{
-		{ "Version", true, {}, { "Int32" } },
-		{ "Current", true, {}, { "handle:BlockRenderNpcs" } },
-		{ "List", false, { { "Float" } }, { "Int32" } },
-		{ "Compare", false, { { "Float" } }, { "String" } },
+		{ "Version", "BlockRenderNpcs::Version;", {}, { "Int32" } },
+		{ "Current", "BlockRenderNpcs::Current;", {}, { "handle:BlockRenderNpcs" } },
+		{ "List", nullptr, { { "Float" } }, { "Int32" } },
+		{ "Compare", nullptr, { { "Float" } }, { "String" } },
 	};
 	return kFunctionTypes;
 }
@@ -56,7 +57,8 @@ const std::vector<std::pair<const char*, const char*>>& Fields()
 // A static function's call: no instance.
 constexpr void* kNoInstance = nullptr;
 
-// aClass's function aTypes names, with those types; null if there's none, with aOthers listing those it has by that name.
+// The function aTypes names, with those types: a static one among the global functions, a member one in aClass. Null if
+// there's none, with aOthers listing those there are by that name.
 RED4ext::CBaseFunction* FindFunction(RED4ext::CClass& aClass, const FunctionTypes& aTypes, std::string& aOthers)
 {
 	const CName             name(aTypes.name);
@@ -75,12 +77,10 @@ RED4ext::CBaseFunction* FindFunction(RED4ext::CClass& aClass, const FunctionType
 			aOthers += (aOthers.empty() ? "" : "; ") + Describe(*aCandidate);
 		}
 	};
-	if (aTypes.isStatic)
+	if (aTypes.global)
 	{
-		for (RED4ext::CClassStaticFunction* function : aClass.staticFuncs)
-		{
-			consider(function);
-		}
+		auto* const rtti = RED4ext::CRTTISystem::Get();
+		consider(rtti ? rtti->GetFunction(CName(aTypes.global)) : nullptr);
 	}
 	else
 	{
