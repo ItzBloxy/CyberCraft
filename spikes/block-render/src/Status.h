@@ -61,6 +61,10 @@ struct LinkReport
 	bool                  turnRemembered = false;    // turnRatio is the last session's, from turn.txt
 	uint64_t              turnTurns = 0;             // turns measured
 	uint32_t              minecraftFlags = 0;        // McState's
+	// V's meshes in build mode (spike 6's "Part 2")
+	bool    hideV = true;     // set hidev 1: hidden while build mode is on
+	bool    vHidden = false;  // they are now
+	int32_t vMeshes = 0;      // as the module's HideV last said: the meshes it switched off; -1 no Codeware; -2 V isn't found
 	// The ground (spike 5's "Part 2"): figures a second are over the last second
 	std::string                    ground = "floor";          // what Minecraft gets as the game's shape
 	std::string                    groundWhy;                 // why it fell back to the floor, if it did
@@ -121,14 +125,17 @@ struct LinkReport
 	// Combat both ways (spike 6's "Part 2"): the counts are since the start
 	bool                  combatOn = false;  // set combat 1
 	double                punch = 0.0;       // V's punch, as last read
+	std::string           punchItem;         // what it's read from: what V's unarmed slot draws
+	bool                  punchDrawn = false;  // V has it drawn, so hits carry it as their weapon
 	uint64_t              hitsQueued = 0;    // Minecraft's hits made V's, and queued in the game
 	uint64_t              hitsLanded = 0;    // and dealt by its damage pipeline
-	std::string           hitsDropped;       // by reason: "2 not listed, 1 the NPC is dead"; empty: none
-	std::string           lastHit;           // the NPC, Minecraft's damage, the amount, and how it went
+	std::string           hitsDropped;       // by reason, ours or the pipeline's: "2 not listed, 1 dodged"; empty: none
+	std::string           lastHit;           // the NPC, Minecraft's damage, where it started, and how it went
 	uint64_t              hurtsTaken = 0;    // the game's hits on V, taken for Minecraft
 	uint64_t              hurtsSent = 0;     // kInHurts sent
 	uint64_t              hurtsSummed = 0;   // hurts that went in a sum
 	uint64_t              hurtsLeft = 0;     // offered while not taken: left to V
+	uint64_t              hurtsNonLethal = 0;  // offered while taken, but the game won't let them kill V: left to V
 	std::string           lastHurt;          // its amount and share, Minecraft's damage, kind, attack type and attacker
 	bool                  immortal = false;  // our Immortal on V
 	uint64_t              deaths = 0;        // Minecraft's deaths that killed V

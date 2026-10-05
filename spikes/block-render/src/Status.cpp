@@ -98,6 +98,28 @@ std::string FormatDrive(const LinkReport& aLink)
 	return out;
 }
 
+// V's meshes in build mode (spike 6's "Part 2"): hidden while build mode is on, unless set hidev is 0.
+std::string FormatV(const LinkReport& aLink)
+{
+	if (!aLink.hideV)
+	{
+		return "v=shown: set hidev is 0\n";
+	}
+	if (!aLink.vHidden)
+	{
+		return "v=shown, and hidden in build mode\n";
+	}
+	switch (aLink.vMeshes)
+	{
+	case -1:
+		return "v=shown: hiding V's meshes needs Codeware, which isn't installed\n";
+	case -2:
+		return "v=shown: V isn't found\n";
+	default:
+		return std::format("v=hidden: {} meshes switched off\n", aLink.vMeshes);
+	}
+}
+
 // The ground's worker: how long a region took in the last second, of how many triangles, and how much of that time its
 // threads ran, which says whether the game's threads kept them waiting.
 std::string Worker(const LinkReport& aLink)
@@ -187,14 +209,16 @@ std::string FormatCombat(const LinkReport& aLink)
 	{
 		return "combat=off: Minecraft's hits are logged, not applied; V's health is V's\n";
 	}
-	std::string out = std::format("combat=on: V's punch {:.2f}; hits {} queued, {} landed{}", aLink.punch, aLink.hitsQueued, aLink.hitsLanded,
-	                              aLink.hitsDropped.empty() ? "" : ", dropped: " + OneLine(aLink.hitsDropped));
+	std::string out = std::format("combat=on: V's punch {:.2f}{}{}; hits {} queued, {} landed{}", aLink.punch,
+	                              aLink.punchItem.empty() ? "" : " from " + OneLine(aLink.punchItem),
+	                              aLink.punchDrawn ? ", drawn" : ", not drawn: hits skip the NPC's armour, weapon crits, stealth, blocks and skill XP",
+	                              aLink.hitsQueued, aLink.hitsLanded, aLink.hitsDropped.empty() ? "" : ", dropped: " + OneLine(aLink.hitsDropped));
 	if (!aLink.lastHit.empty())
 	{
 		out += "; the last " + OneLine(aLink.lastHit);
 	}
-	out += std::format("; V's hurts: {} taken, {} sent, {} summed, {} left to V", aLink.hurtsTaken, aLink.hurtsSent, aLink.hurtsSummed,
-	                   aLink.hurtsLeft);
+	out += std::format("; V's hurts: {} taken, {} sent, {} summed, {} left to V, {} non-lethal left to V", aLink.hurtsTaken, aLink.hurtsSent,
+	                   aLink.hurtsSummed, aLink.hurtsLeft, aLink.hurtsNonLethal);
 	if (!aLink.lastHurt.empty())
 	{
 		out += "; the last " + OneLine(aLink.lastHurt);
@@ -226,6 +250,7 @@ std::string FormatLink(const LinkReport& aLink)
 	                   aLink.inputHooked ? std::format("GetRawInputData hooked, {} keyboard and mouse events read", aLink.inputsRead)
 	                                     : std::string("GetRawInputData not hooked (see the log)"));
 	out += FormatDrive(aLink);
+	out += FormatV(aLink);
 	const std::string floor = aLink.floorSent ? std::format("floor {} at height {:.2f} around {:.1f} {:.1f}", aLink.floorEpoch,
 	                                                        aLink.floorCentre.y, aLink.floorCentre.x, aLink.floorCentre.z)
 	                                          : "floor not sent";
