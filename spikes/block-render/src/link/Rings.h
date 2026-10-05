@@ -18,6 +18,10 @@ namespace proto = skycraft::proto;
 // The game side's state, at aBase + kOffSkyState. The sequence goes odd while writing, and up by 2 each write.
 void WriteSkyState(uint8_t* aBase, const proto::SkyState& aState);
 
+// SkyCraft's actor table, at aBase + kOffActorTable (spike 6): as SkyCraft's Skyrim side writes it (Link::WriteActors),
+// the sequence goes odd, then the count and the records, at most kMaxActors of them, then even, 2 up from where it was.
+void WriteActorTable(uint8_t* aBase, std::span<const proto::ActorRecord> aRecords);
+
 // Minecraft's state, at aBase + kOffMcState. Nothing if it was mid-write all 64 times we looked.
 std::optional<proto::McState> ReadMcState(const uint8_t* aBase);
 

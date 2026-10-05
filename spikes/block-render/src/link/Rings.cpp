@@ -1,5 +1,6 @@
 #include "link/Rings.h"
 
+#include <algorithm>
 #include <atomic>
 #include <cstring>
 #include <format>
@@ -38,6 +39,22 @@ void WriteSkyState(uint8_t* aBase, const proto::SkyState& aState)
 	seq.store(count + 1, std::memory_order_relaxed);
 	std::atomic_thread_fence(std::memory_order_release);
 	std::memcpy(aBase + proto::kOffSkyState + 4, reinterpret_cast<const uint8_t*>(&aState) + 4, sizeof(proto::SkyState) - 4);
+	seq.store(count + 2, std::memory_order_release);
+}
+
+void WriteActorTable(uint8_t* aBase, std::span<const proto::ActorRecord> aRecords)
+{
+	auto           seq = At<uint32_t>(aBase, proto::kOffActorTable);
+	const uint32_t count = seq.load(std::memory_order_relaxed);
+	seq.store(count + 1, std::memory_order_relaxed);
+	std::atomic_thread_fence(std::memory_order_release);
+	auto* const    table = reinterpret_cast<proto::ActorTable*>(aBase + proto::kOffActorTable);
+	const uint32_t records = uint32_t(std::min<size_t>(aRecords.size(), proto::kMaxActors));
+	table->count = records;
+	if (records != 0)
+	{
+		std::memcpy(table->actors, aRecords.data(), sizeof(proto::ActorRecord) * records);
+	}
 	seq.store(count + 2, std::memory_order_release);
 }
 

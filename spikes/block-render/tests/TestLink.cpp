@@ -101,13 +101,21 @@ struct FakeMinecraft
 		return events;
 	}
 
-	void Explode(float aX, float aY, float aZ, float aRadius)
+	void Event(const proto::McEvent& aEvent)
 	{
-		auto*          ring = base + proto::kOffEventRing;
-		uint64_t&      head = *reinterpret_cast<uint64_t*>(ring);
-		proto::McEvent event{ proto::kEvExplosion, 0, aX, aY, aZ, aRadius, 0, 0 };
-		std::memcpy(ring + 0x80 + (head % proto::kEventRingEntries) * sizeof event, &event, sizeof event);
+		auto*     ring = base + proto::kOffEventRing;
+		uint64_t& head = *reinterpret_cast<uint64_t*>(ring);
+		std::memcpy(ring + 0x80 + (head % proto::kEventRingEntries) * sizeof aEvent, &aEvent, sizeof aEvent);
 		++head;
+	}
+
+	void Explode(float aX, float aY, float aZ, float aRadius) { Event({ proto::kEvExplosion, 0, aX, aY, aZ, aRadius, 0, 0 }); }
+
+	proto::ActorTable Actors()
+	{
+		proto::ActorTable table;
+		std::memcpy(&table, base + proto::kOffActorTable, sizeof table);
+		return table;
 	}
 
 	void PublishHud(uint32_t aWidth, uint32_t aHeight)
@@ -137,6 +145,8 @@ struct Sink : LinkSink
 	void Section(SectionMesh&& aMesh) override { sections.push_back(std::move(aMesh)); }
 	void ClearAll() override { ++clears; }
 	void Explosion(const proto::McEvent& aEvent) override { explosions.push_back(aEvent); }
+	void HitActor(const proto::McEvent& aEvent) override { hits.push_back(aEvent); }
+	void PlayerDied(const proto::McEvent& aEvent) override { deaths.push_back(aEvent); }
 	void Hud(const HudFrame& aFrame) override
 	{
 		huds.push_back({ aFrame.width, aFrame.height });
@@ -163,6 +173,8 @@ struct Sink : LinkSink
 	std::vector<SectionMesh>                   sections;
 	int                                        clears = 0;
 	std::vector<proto::McEvent>                explosions;
+	std::vector<proto::McEvent>                hits;
+	std::vector<proto::McEvent>                deaths;
 	std::vector<std::pair<uint32_t, uint32_t>> huds;
 	const uint8_t*                             hudPixels = nullptr;  // the last HUD image's
 	std::vector<std::string>                   log;
@@ -591,6 +603,56 @@ TEST(LinkPassesOnExplosionsAndHudImages)
 	CHECK_EQ(sink.huds.size(), size_t(1));
 	CHECK_EQ(sink.huds[0].first, 1280u);
 	CHECK_EQ(link.State().hudImages, 1ull);
+}
+
+TEST(LinkPassesOnHitsOnNpcsAndMinecraftsDeath)
+{
+	FakeMinecraft minecraft;
+	Link          link(minecraft.base);
+	Sink          sink;
+	minecraft.Beat(77, 1000);
+	// A critical sprint hit with a diamond sword, as SkyCombat sends a tick's hits; an arrow stuck; then the player dies.
+	minecraft.Event({ proto::kEvHitActor, 3, 10.5f, 0.0f, -1.0f, 0.5f, proto::kHitCritical, proto::kWeaponBlade });
+	minecraft.Event({ proto::kEvArrowStuck, 3, 1.0f, 2.0f, 3.0f, 90.0f, 0, 0 });
+	minecraft.Event({ proto::kEvPlayerDied, 3, 0.0f, 0.0f, 0.0f, 0.0f, 0, 0 });
+	link.Update(At(1.0), kSettings, sink);
+	CHECK_EQ(sink.hits.size(), size_t(1));
+	CHECK_EQ(sink.deaths.size(), size_t(1));
+	if (sink.hits.size() == 1 && sink.deaths.size() == 1)
+	{
+		CHECK_EQ(sink.hits[0].formId, 3u);
+		CHECK_EQ(sink.hits[0].a, 10.5f);
+		CHECK_EQ(sink.hits[0].c, -1.0f);
+		CHECK_EQ(sink.hits[0].d, 0.5f);
+		CHECK_EQ(sink.hits[0].flags, uint32_t(proto::kHitCritical));
+		CHECK_EQ(sink.hits[0].weapon, uint32_t(proto::kWeaponBlade));
+		CHECK_EQ(sink.deaths[0].formId, 3u);
+	}
+	CHECK_EQ(link.State().hitEvents, 1ull);
+	CHECK_EQ(link.State().deathEvents, 1ull);
+	CHECK_EQ(link.State().otherEvents, 1ull);  // the arrow
+}
+
+TEST(LinkWritesTheActorTableAndEmptiesItOnce)
+{
+	FakeMinecraft                   minecraft;
+	Link                            link(minecraft.base);
+	std::vector<proto::ActorRecord> records(2);
+	records[0].formId = 1;
+	records[1].formId = 2;
+	link.WriteActors(records);
+	CHECK_EQ(minecraft.Actors().seq, 2u);
+	CHECK_EQ(minecraft.Actors().count, 2u);
+	CHECK_EQ(minecraft.Actors().actors[1].formId, 2u);
+	CHECK_EQ(link.State().actors, size_t(2));
+	link.ClearActors();
+	CHECK_EQ(minecraft.Actors().seq, 4u);
+	CHECK_EQ(minecraft.Actors().count, 0u);
+	CHECK_EQ(link.State().actors, size_t(0));
+	link.ClearActors();  // once: the table isn't written again
+	CHECK_EQ(minecraft.Actors().seq, 4u);
+	link.WriteActors(records);
+	CHECK_EQ(minecraft.Actors().seq, 6u);
 }
 
 TEST(LinkKeepsAnImagePublishedBeforeItSawMinecraft)

@@ -25,8 +25,9 @@
 // and SkyState, teleports and the floor, typed commands, Minecraft's events, the render ring, and HUD images. Spike 5
 // adds build mode's drive (its spec's "Part 1"): one teleport, then Minecraft drives and the link says where V goes;
 // Night City's ground (its "Part 2"): the city's collision instead of the floor, read around the centre and sent as it
-// changes; and Minecraft's solid blocks by section (its "Part 3"), for V's bodies. It works on the mapping's memory, so
-// the tests give it plain memory with a fake Minecraft.
+// changes; and Minecraft's solid blocks by section (its "Part 3"), for V's bodies. Spike 6 writes Night City's NPCs into
+// SkyCraft's actor table, and passes on Minecraft's hits on them and its player's death. It works on the mapping's
+// memory, so the tests give it plain memory with a fake Minecraft.
 namespace cpmc::link
 {
 // What Minecraft gets as the game's shape (set ground).
@@ -67,6 +68,8 @@ public:
 	virtual void Section(SectionMesh&& aMesh) = 0;
 	virtual void ClearAll() = 0;
 	virtual void Explosion(const proto::McEvent&) {}
+	virtual void HitActor(const proto::McEvent&) {}    // spike 6: Minecraft hit an NPC's stand-in this tick
+	virtual void PlayerDied(const proto::McEvent&) {}  // spike 6: Minecraft's player died, killed by formId, or 0
 	virtual void Hud(const HudFrame&) {}
 	virtual void Log(const std::string&) {}
 };
@@ -112,6 +115,10 @@ public:
 	bool Type(std::string_view aCommandOrName, std::string& aError);  // queues a command, or a named set
 	bool Push(const proto::InputEvent& aEvent);                        // the input ring; false if dropped
 	void RequestFloor();                                               // a fresh floor at the next update
+	// Spike 6: the NPCs' records (Actors.h) into SkyCraft's actor table, every frame they're listed; ClearActors empties
+	// the table when listing stops, once.
+	void WriteActors(std::span<const proto::ActorRecord> aRecords);
+	void ClearActors();
 
 	static constexpr size_t kTypes = 13;  // the render ring's message types, 0 to 11, and 12 for any other
 
@@ -173,6 +180,8 @@ public:
 		uint64_t                     solidBlocks = 0;    // and their solid blocks
 		// Events, input, commands and the HUD
 		uint64_t              explosions = 0;
+		uint64_t              hitEvents = 0;    // spike 6: kEvHitActor
+		uint64_t              deathEvents = 0;  // spike 6: kEvPlayerDied
 		uint64_t              otherEvents = 0;
 		uint64_t              inputsDropped = 0;
 		size_t                commandsWaiting = 0;
@@ -192,6 +201,8 @@ public:
 		std::optional<Vec3d>  placeV;               // this frame: where V's feet go (world axes); nothing: V is left be
 		std::string           endBuild;             // this frame: why build mode must end; empty: it goes on
 		std::optional<double> lastHold;             // seconds Minecraft held its player when build mode last started
+		// The NPCs (spike 6)
+		size_t actors = 0;  // records in SkyCraft's actor table now
 	};
 
 	const Status& State() const { return status_; }
@@ -236,5 +247,6 @@ private:
 	std::unique_ptr<GroundWorker>     worker_;  // made when the city is first read
 	std::optional<RegionPos>          focus_;   // the worker's, as last given it: the city's centre
 	std::deque<GroundWorker::Message> outbox_;  // the city's messages, waiting for room in the collision ring
+	bool                              actorsWritten_ = false;  // the actor table holds records ClearActors would empty
 };
 }

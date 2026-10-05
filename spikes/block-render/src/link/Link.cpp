@@ -3,6 +3,7 @@
 #include "link/Floor.h"
 #include "link/Mapping.h"
 
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <format>
@@ -319,9 +320,19 @@ void Link::Update(const Frame& aFrame, const LinkSettings& aSettings, LinkSink& 
 			++status_.explosions;
 			aSink.Explosion(aEvent);
 		}
+		else if (aEvent.type == proto::kEvHitActor)
+		{
+			++status_.hitEvents;
+			aSink.HitActor(aEvent);
+		}
+		else if (aEvent.type == proto::kEvPlayerDied)
+		{
+			++status_.deathEvents;
+			aSink.PlayerDied(aEvent);
+		}
 		else
 		{
-			++status_.otherEvents;
+			++status_.otherEvents;  // arrows stuck in NPCs, Skyrim's skills
 		}
 	});
 
@@ -561,5 +572,22 @@ bool Link::Push(const proto::InputEvent& aEvent)
 void Link::RequestFloor()
 {
 	floorRequested_ = true;
+}
+
+void Link::WriteActors(std::span<const proto::ActorRecord> aRecords)
+{
+	WriteActorTable(base_, aRecords);
+	status_.actors = std::min<size_t>(aRecords.size(), proto::kMaxActors);
+	actorsWritten_ = true;
+}
+
+void Link::ClearActors()
+{
+	if (actorsWritten_)
+	{
+		WriteActorTable(base_, {});
+		status_.actors = 0;
+		actorsWritten_ = false;
+	}
 }
 }

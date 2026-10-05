@@ -63,6 +63,36 @@ TEST(RingsSkyStateCountsUpByTwo)
 	CHECK_EQ(written.teleportSeq, 7u);
 }
 
+TEST(RingsActorTableCountsUpByTwoAndHoldsAtMost256)
+{
+	Memory memory(proto::kOffActorTable + sizeof(proto::ActorTable) + 64);
+	std::memset(memory.Bytes(), 0xCD, memory.words.size() * 8);
+	std::memset(memory.Bytes() + proto::kOffActorTable, 0, sizeof(proto::ActorTable));
+	std::vector<proto::ActorRecord> records(2);
+	records[0].formId = 1;
+	records[0].x = -119.5f;
+	records[1].formId = 2;
+	records[1].name[0] = 'A';
+	WriteActorTable(memory.Bytes(), records);
+	proto::ActorTable table;
+	std::memcpy(&table, memory.Bytes() + proto::kOffActorTable, sizeof table);
+	CHECK_EQ(table.seq, 2u);
+	CHECK_EQ(table.count, 2u);
+	CHECK(std::memcmp(table.actors, records.data(), 2 * sizeof(proto::ActorRecord)) == 0);
+	WriteActorTable(memory.Bytes(), {});  // empty: SkyCraft reads only the count's records
+	std::memcpy(&table, memory.Bytes() + proto::kOffActorTable, sizeof table);
+	CHECK_EQ(table.seq, 4u);
+	CHECK_EQ(table.count, 0u);
+	records.resize(300);
+	records[299].formId = 300;
+	WriteActorTable(memory.Bytes(), records);
+	std::memcpy(&table, memory.Bytes() + proto::kOffActorTable, sizeof table);
+	CHECK_EQ(table.seq, 6u);
+	CHECK_EQ(table.count, proto::kMaxActors);
+	CHECK_EQ(memory.Bytes()[proto::kOffActorTable + sizeof(proto::ActorTable)], 0xCD);  // nothing past the table
+	CHECK_EQ(memory.Bytes()[proto::kOffActorTable - 1], 0xCD);                          // nor before it
+}
+
 TEST(RingsMcStateReadsWholeStates)
 {
 	Memory         memory(0x1000);
