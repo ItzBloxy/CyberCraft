@@ -15,6 +15,7 @@
 #include "GameScript.h"
 #include "LogQueue.h"
 #include "Measurements.h"
+#include "Natives.h"
 #include "PlayerLocator.h"
 #include "ProcessUsage.h"
 #include "Puppet.h"
@@ -171,6 +172,7 @@ std::vector<uint64_t>                     g_listedEntities;       // the NPC beh
 std::string                               g_npcsWhy;              // why none are listed, while none can be
 uint64_t                                  g_npcHits = 0;          // Minecraft's hits on them, logged
 double                                    g_npcsForgotten = 0.0;  // when NPCs unlisted for a minute were last forgotten
+size_t                                    g_wrapThreads = 0;      // the wraps' threads, as last logged
 
 // This frame's figures, for bursts.
 struct FrameFigures
@@ -592,6 +594,8 @@ void ListNpcs(double aNow, const std::optional<cpmc::Vec3d>& aFeet)
 	}
 	else
 	{
+		g_script.Check();
+		DrainLog();  // the check's line, before the module's first call
 		std::string  why;
 		const double start = cpmc::SteadySeconds();
 		g_npcList = g_script.List(cpmc::link::kActorRange, why);
@@ -645,6 +649,19 @@ void ListNpcs(double aNow, const std::optional<cpmc::Vec3d>& aFeet)
 		g_actorIds.Forget(aNow);
 		g_npcSizes.Forget(g_actorIds);
 	}
+}
+
+// The threads the game has called the module's wraps on (NPCPuppet's OnGameAttached and OnDetach), logged whenever a new
+// one shows: step 2 crashed while the wraps kept the list in the module's own arrays, on several threads at once.
+void LogWrapThreads()
+{
+	const std::vector<cpmc::NpcRegistry::ThreadCalls> threads = cpmc::NpcsReported().Threads();
+	if (threads.size() == g_wrapThreads)
+	{
+		return;
+	}
+	g_wrapThreads = threads.size();
+	Log("npcs: the wraps have run on {} threads: {}", threads.size(), cpmc::DescribeThreads(threads, g_mainThread));
 }
 
 // The NPC behind the table's record aIndex, as the module last listed it; null if there's none.
@@ -972,6 +989,12 @@ void NpcsRequest()
 		}
 	}
 	Log("npcs: {}", g_script.Compare(cpmc::link::kActorRange));
+	const cpmc::NpcRegistry::Counts counts = cpmc::NpcsReported().Count();
+	Log("npcs: the wraps' list holds {}, of which the module found {} by their EntityIDs; {} attached and {} detached since the game "
+	    "started, {} already there, {} not there, {} past the list's {}",
+	    counts.ids, g_npcList->found, counts.attached, counts.detached, counts.repeats, counts.strays, counts.full,
+	    cpmc::NpcRegistry::kMaxIds);
+	Log("npcs: the wraps ran on {}", cpmc::DescribeThreads(cpmc::NpcsReported().Threads(), g_mainThread));
 	Report(std::format("npcs: {} NPCs in the log, and what the game's targeting finds", g_actorRecords.size()));
 }
 
@@ -1488,6 +1511,7 @@ bool OnUpdate(RED4ext::CGameApplication*)
 	DrainLog();
 	if (newSecond)
 	{
+		LogWrapThreads();
 		for (const std::string& line : cpmc::d3d::DebugMessages())
 		{
 			Log("{}", line);
@@ -1509,6 +1533,8 @@ RED4EXT_C_EXPORT bool RED4EXT_CALL Main(RED4ext::v1::PluginHandle aHandle, RED4e
 	{
 		g_handle = aHandle;
 		g_sdk = aSdk;
+		// The module's natives, added once the game has registered its types, before it loads its scripts.
+		const bool natives = cpmc::RegisterNatives(g_log);
 		// Pinned: the hooks point into this DLL, and threads may be inside them when the game unloads plugins.
 		HMODULE self = nullptr;
 		GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_PIN, reinterpret_cast<LPCWSTR>(&PluginFolder),
@@ -1553,8 +1579,9 @@ RED4EXT_C_EXPORT bool RED4EXT_CALL Main(RED4ext::v1::PluginHandle aHandle, RED4e
 		Log("the turn: {}", g_savedTurn ? std::format("{:.4f} degrees a count, remembered from the last session, until this one has "
 		                                              "measured its own", *g_savedTurn)
 		                                : std::string("nothing remembered, so build mode turns once V has turned 5 times"));
-		Log("the redscript module {}: {}", module.string(),
-		    added ? "added to redscript's compile" : present ? "NOT added to redscript's compile" : "missing, so NPCs can't be listed");
+		Log("the redscript module {}: {}; its natives {}", module.string(),
+		    added ? "added to redscript's compile" : present ? "NOT added to redscript's compile" : "missing, so NPCs can't be listed",
+		    natives ? "are added once the game has registered its types" : "CAN'T be added: the game has no type system yet");
 		break;
 	}
 	case RED4ext::v1::EMainReason::Unload:

@@ -84,6 +84,7 @@ add_library(render_core STATIC
 	src/input/BuildMode.cpp
 	src/input/FocusWatch.cpp
 	src/input/Router.cpp
+	src/NpcRegistry.cpp
 )
 target_link_libraries(render_core PUBLIC render_settings d3dcompiler dxguid advapi32)
 
@@ -113,6 +114,7 @@ add_library(BlockRender SHARED
 	src/Puppet.cpp
 	src/ScriptTypes.cpp
 	src/GameScript.cpp
+	src/Natives.cpp
 )
 target_link_libraries(BlockRender PRIVATE render_runtime)
 
@@ -207,6 +209,7 @@ add_executable(render_tests
 	tests/TestDumpObj.cpp
 	tests/TestActors.cpp
 	tests/TestCharacters.cpp
+	tests/TestNpcRegistry.cpp
 	tools/mclink/DumpObj.cpp
 	tools/mclink/McLinkScript.cpp
 )

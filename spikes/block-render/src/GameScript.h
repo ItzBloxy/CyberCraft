@@ -23,13 +23,14 @@ struct CProperty;
 // Current() on every call, since a load makes a new one. Main thread only, while V is found.
 namespace cpmc
 {
-constexpr int32_t kModuleVersion = 1;  // BlockRenderNpcs.Version(), as this BlockRender needs it
+constexpr int32_t kModuleVersion = 2;  // BlockRenderNpcs.Version(), as this BlockRender needs it
 
 // What the module's List gives.
 struct NpcList
 {
 	std::vector<link::NpcSample> npcs;          // within the range asked for, and not dead
-	int32_t                      attached = 0;  // NPCs in the world
+	int32_t                      attached = 0;  // NPCs in the world: on the list the wraps report
+	int32_t                      found = 0;     // of those, found by their EntityIDs
 	float                        punch = 0.0f;  // V's punch, read from punchItem
 	std::string                  punchItem;
 	float                        vHealthMax = 0.0f;
@@ -44,6 +45,10 @@ public:
 	std::optional<NpcList> List(double aRange, std::string& aWhy);
 	// What the game's targeting finds within aRange metres of V, and which of those the list lacks: for the npcs request.
 	std::string Compare(double aRange);
+	// Checks the class, its version, functions and fields, and BlockRender's natives, the first time, and logs what it
+	// found. Empty: all there. List and Compare check first; BlockRender checks before its first List too, and writes the
+	// log, so a fault in the module's first call still leaves the check's line.
+	const std::string& Check();
 
 private:
 	enum Function : size_t
@@ -66,14 +71,12 @@ private:
 		kNames,
 		kFlags,
 		kAttached,
+		kFound,
 		kPunch,
 		kPunchItem,
 		kVHealthMax,
 		kFields,
 	};
-
-	// Checks the class, its version, functions and fields the first time, and logs what it found. Empty: all there.
-	const std::string& Check();
 
 	LogQueue&                                       log_;
 	bool                                            checked_ = false;

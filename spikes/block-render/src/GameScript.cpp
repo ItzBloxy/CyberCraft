@@ -49,10 +49,15 @@ const std::vector<std::pair<const char*, const char*>>& Fields()
 		{ "npcIds", "array:entEntityID" }, { "npcPositions", "array:Vector4" }, { "npcForwards", "array:Vector4" },
 		{ "npcHealth", "array:Float" },    { "npcHealthMax", "array:Float" },   { "npcLevels", "array:Float" },
 		{ "npcNames", "array:String" },    { "npcFlags", "array:Int32" },       { "attached", "Int32" },
-		{ "punch", "Float" },              { "punchItem", "String" },           { "vHealthMax", "Float" },
+		{ "found", "Int32" },              { "punch", "Float" },                { "punchItem", "String" },
+		{ "vHealthMax", "Float" },
 	};
 	return kFieldTypes;
 }
+
+// BlockRender's natives (Natives.cpp), as the module declares them: added when the game registered its types.
+constexpr std::array<const char*, 4> kNatives{ "BlockRenderNpcAttached", "BlockRenderNpcDetached", "BlockRenderNpcCount",
+	                                           "BlockRenderNpcAt" };
 
 // A static function's call: no instance.
 constexpr void* kNoInstance = nullptr;
@@ -166,8 +171,16 @@ const std::string& GameScript::Check()
 		}
 		fields_[i] = field;
 	}
-	log_.Push(missing_.empty() ? std::format("module: found BlockRenderNpcs version {}, its {} functions, and the {} fields List fills",
-	                                         kModuleVersion, size_t(kFunctions), size_t(kFields))
+	for (const char* native : kNatives)
+	{
+		if (missing_.empty() && !rtti->GetFunction(CName(native)))
+		{
+			missing_ = std::format("BlockRender's native {} isn't among the game's functions", native);
+		}
+	}
+	log_.Push(missing_.empty() ? std::format("module: found BlockRenderNpcs version {}, its {} functions, the {} fields List fills, and "
+	                                         "BlockRender's {} natives",
+	                                         kModuleVersion, size_t(kFunctions), size_t(kFields), kNatives.size())
 	                           : "module: " + missing_);
 	return missing_;
 }
@@ -231,6 +244,7 @@ std::optional<NpcList> GameScript::List(double aRange, std::string& aWhy)
 		npc.flags = uint32_t(flags[i]);
 	}
 	list.attached = FieldOf<int32_t>(*fields_[kAttached], instance);
+	list.found = FieldOf<int32_t>(*fields_[kFound], instance);
 	list.punch = FieldOf<float>(*fields_[kPunch], instance);
 	list.punchItem = FieldOf<RED4ext::CString>(*fields_[kPunchItem], instance).c_str();
 	list.vHealthMax = FieldOf<float>(*fields_[kVHealthMax], instance);
