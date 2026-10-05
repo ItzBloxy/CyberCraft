@@ -207,3 +207,49 @@ step 1, the game 2.31. The user ran the game; the agent sent the requests and re
   still to be seen, with V standing still beside one.
 - **V needs Part 2's guard:** the drone took V to 63% while V fought it in build mode.
 - **Whether the vendor can be hurt** shows with Part 2's first applied hit: the module read no god mode on him.
+
+## Step 3: Minecraft's player hurt as BlockRender will hurt it for V, with `mclink`, without the game
+
+Date: 2026-10-05, 19:11. `mclink` at `0e95e91` (the plan's Task 15), running step 3's script, `hurts.txt`, against the
+`CyberCraft` instance: Minecraft 26.3 and SkyCraft 0.1.2, as in step 1. The user started Minecraft and agreed to the
+script's handling of `keep_inventory`; the agent ran the script and read both logs. Plan: Task 16.
+
+### Verdict
+
+**Step 3: pass.** Every hurt reached Minecraft's player as the share sent, through SkyCraft's own `hurtPlayer`, and the
+sums landed whole. Two of the plan's expected numbers were off, both because of the player's world, not the code: the
+player already wore 4 points of armour, which reduced the hurts that had an attacker, and it healed half a point
+between two of them.
+
+### The checks
+
+- **Each hurt's share:** `hurt sent at once: melee 0.2500 of V's health, a = 2500, attacker 0`, and SkyCraft's
+  `Skyrim hit the player for 25.0 (5.0 Minecraft): health 20.0 -> 15.0`; then `other 0.1000 …, a = 1000`, and `10.0
+  (2.0 Minecraft): health 20.0 -> 18.0`. Exactly those shares of Minecraft's 20.
+- **Armour:** in a diamond chestplate and leggings, a quarter, melee, from actor 1 two blocks away: `25.0 (5.0
+  Minecraft): health 20.0 -> 18.266666`, about a third of it taken; then a quarter, other: `20.0 -> 15.0`, all of it.
+  Armour reduces only melee and projectile hurts that have an attacker, as the spec read. The plan expected about 17.5
+  left. Minecraft's formula, damage × (1 − (armour − 4 × damage ÷ (toughness + 8)) ÷ 25), gives 18.267 exactly with 18
+  points and toughness 4: the diamond pieces' 14 and 4, and the 4 points the player already wore.
+- **The burst:** five hurts of 0.05, a tenth of a second apart, from actor 1. The first went at once, at 24.27 s; the
+  other four joined one sum, `hurt sent, summed: projectile 0.2000 …, a = 2000, attacker 1, power attack`, at 24.83 s,
+  11 of Minecraft's ticks later. SkyCraft: `5.0 (1.0 Minecraft): health 20.0 -> 19.14`, then `20.0 (4.0 Minecraft):
+  health 19.64 -> 15.959999`. Both landed whole, less the worn armour's 14% and 8% (the formula's exactly), since the sum
+  came after the 10 ticks in which Minecraft takes only what's more than the last hurt. The half point between them was
+  Minecraft's own healing, from full hunger.
+- **The death:** `/kill` came back as `Minecraft's player died, killed by none of the actors`. The chat said `ItzBloxy
+  was killed while fighting Ganger One`: Minecraft's message names the last attacker, while SkyCraft's event names the
+  stand-in behind the killing damage, which for `/kill` is none. Minecraft's player respawned at once.
+- **The status:** `events: 0 explosions, 0 hits on actors, 1 deaths, 6 others` (the others are SkyCraft's armour skill
+  events, drained and counted), `0 inputs dropped`, and `exit: 0`.
+- **The world's rules:** the chat said `immediate_respawn is already set to true` and `keep_inventory is already set to
+  true`: the user's world had both on. The script's last `keep_inventory false` turned the second off; a short `mclink`
+  run set it back on, as the world had it.
+
+### What it means for step 4
+
+- **The encoding and the sums work against SkyCraft's real mod,** so V's hurts land on Minecraft's player in proportion,
+  and a burst of gunfire isn't lost to Minecraft's invulnerability ticks.
+- **Minecraft's player's own armour counts** against hits from listed NPCs within 24 blocks, as Minecraft's armour does
+  against its mobs. The player in the user's world wears some.
+- **`keep_inventory` is on in the user's world,** so step 4's death drops nothing.

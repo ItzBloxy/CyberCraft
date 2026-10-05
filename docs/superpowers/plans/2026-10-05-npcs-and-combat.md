@@ -4025,7 +4025,7 @@ feet, whatever its filters. `npcs` names that capsule when it isn't the controll
 **Files:**
 - Modify: `src/physx/Characters.h`, `src/physx/Characters.cpp`, `src/Plugin.cpp`, `tests/TestCharacters.cpp`
 
-- [ ] **Step 1: Edit `tests/TestCharacters.cpp`: the vendor's capsules, and the new calls**
+- [x] **Step 1: Edit `tests/TestCharacters.cpp`: the vendor's capsules, and the new calls**
 
 ```cpp
 TEST(CharactersBoxReachesFromTheFeetOrTheCapsulesBottomToItsTop)
@@ -4103,7 +4103,7 @@ TEST(CharactersBoxReachesFromTheFeetOrTheCapsulesBottomToItsTop)
 	                                            "of 100, level 12; hostile, in combat");
 ```
 
-- [ ] **Step 2: Build; it must fail**
+- [x] **Step 2: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -4113,7 +4113,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 Expected: `error C2660: 'cpmc::px::BoxOf': function does not take 3 arguments`, and
 `error C3861: 'TallestCapsule': identifier not found`.
 
-- [ ] **Step 3: Edit `src/physx/Characters.h`**
+- [x] **Step 3: Edit `src/physx/Characters.h`**
 
 ```cpp
 // Its box: twice the radius wide, reaching from the lower of the feet and the capsule's bottom up to its top.
@@ -4155,7 +4155,7 @@ link::NpcBox BoxOf(const CapsuleSeen& aController, const CapsuleSeen& aTallest, 
 	std::unordered_map<uint64_t, CapsuleSeen>  tallest_;
 ```
 
-- [ ] **Step 4: Edit `src/physx/Characters.cpp`**
+- [x] **Step 4: Edit `src/physx/Characters.cpp`**
 
 ```cpp
 	return length > 0.0 ? std::fabs(aCapsule.axis.z) / length : 0.0;
@@ -4282,7 +4282,7 @@ const CapsuleSeen* NpcSizes::Tallest(uint64_t aEntity) const
 		}
 ```
 
-- [ ] **Step 5: Edit `src/Plugin.cpp`: the tallest capsule, where capsules are looked for**
+- [x] **Step 5: Edit `src/Plugin.cpp`: the tallest capsule, where capsules are looked for**
 
 ```cpp
 				g_npcSizes.Found(entity, *capsule, feet);
@@ -4291,7 +4291,7 @@ const CapsuleSeen* NpcSizes::Tallest(uint64_t aEntity) const
 				g_npcSizes.Found(entity, *capsule, cpmc::px::TallestCapsule(seen, *capsule, feet), feet);
 ```
 
-- [ ] **Step 6: Build and run the tests; they must pass**
+- [x] **Step 6: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -4301,7 +4301,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `424 test(s), 0 failure(s)`.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -4340,7 +4340,7 @@ The game's attack types are numbered as in 2.31's `gamedataAttackType` (the deco
 - Create: `src/link/Combat.h`, `src/link/Combat.cpp`, `tests/TestCombat.cpp`
 - Modify: `CMakeLists.txt`
 
-- [ ] **Step 1: Write the failing test, `tests/TestCombat.cpp`**
+- [x] **Step 1: Write the failing test, `tests/TestCombat.cpp`**
 
 ```cpp
 #include "Harness.h"
@@ -4530,7 +4530,7 @@ TEST(CombatPutsVsGodModeOnWithBuildModeAndCombat)
 }
 ```
 
-- [ ] **Step 2: Edit `CMakeLists.txt` to add the test**
+- [x] **Step 2: Edit `CMakeLists.txt` to add the test**
 
 ```cmake
 	tests/TestNpcRegistry.cpp
@@ -4542,7 +4542,7 @@ TEST(CombatPutsVsGodModeOnWithBuildModeAndCombat)
 	tools/mclink/DumpObj.cpp
 ```
 
-- [ ] **Step 3: Build; it must fail**
+- [x] **Step 3: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -4551,7 +4551,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `error C1083: Cannot open include file: 'link/Combat.h'`.
 
-- [ ] **Step 4: Write `src/link/Combat.h`**
+- [x] **Step 4: Write `src/link/Combat.h`**
 
 ```cpp
 #pragma once
@@ -4690,7 +4690,7 @@ private:
 }
 ```
 
-- [ ] **Step 5: Write `src/link/Combat.cpp`**
+- [x] **Step 5: Write `src/link/Combat.cpp`**
 
 ```cpp
 #include "link/Combat.h"
@@ -4934,7 +4934,7 @@ std::optional<bool> GodMode::Frame(bool aCombat, bool aBuildMode, bool aVFound)
 }
 ```
 
-- [ ] **Step 6: Edit `CMakeLists.txt` to add the source**
+- [x] **Step 6: Edit `CMakeLists.txt` to add the source**
 
 ```cmake
 	src/link/Actors.cpp
@@ -4946,7 +4946,7 @@ std::optional<bool> GodMode::Frame(bool aCombat, bool aBuildMode, bool aVFound)
 	src/physx/GameAbi.cpp
 ```
 
-- [ ] **Step 7: Build and run the tests; they must pass**
+- [x] **Step 7: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -4956,7 +4956,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `429 test(s), 0 failure(s)`.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -4984,7 +4984,7 @@ Step 3 sends V's hurts to Minecraft from `mclink`, without the game, as BlockRen
 - Modify: `src/link/Link.h`, `src/link/Link.cpp`, `tests/TestLink.cpp`, `tools/mclink/McLinkScript.h`,
   `tools/mclink/McLinkScript.cpp`, `tools/mclink/Main.cpp`, `tests/TestMcLinkScript.cpp`
 
-- [ ] **Step 1: Edit `tests/TestLink.cpp`: the tick length**
+- [x] **Step 1: Edit `tests/TestLink.cpp`: the tick length**
 
 ```cpp
 	CHECK(link.State().drainMs >= 0.0);
@@ -5004,7 +5004,7 @@ TEST(LinkReportsMinecraftsTickLength)
 	CHECK_NEAR(link.State().minecraftTickMs, 50.0, 1e-9);
 ```
 
-- [ ] **Step 2: Edit `tests/TestMcLinkScript.cpp`: the hurt action, and step 3's script**
+- [x] **Step 2: Edit `tests/TestMcLinkScript.cpp`: the hurt action, and step 3's script**
 
 ```cpp
 	for (const char* name : { "step1.txt", "again.txt", "eye.txt", "drive.txt", "relink.txt", "city.txt", "npcs.txt" })
@@ -5050,7 +5050,7 @@ TEST(ScriptParsesHurts)
 TEST(ScriptParsesMadeUpNpcs)
 ```
 
-- [ ] **Step 3: Build; it must fail**
+- [x] **Step 3: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -5060,7 +5060,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 Expected: `error C2039: 'minecraftTickMs': is not a member of 'cpmc::link::Link::Status'`, and
 `error C2065: 'Hurt': undeclared identifier`.
 
-- [ ] **Step 4: Edit `src/link/Link.h`**
+- [x] **Step 4: Edit `src/link/Link.h`**
 
 ```cpp
 		uint32_t              minecraftFlags = 0;  // McState's: on ground, sneaking, sprinting, flying and the rest
@@ -5070,7 +5070,7 @@ Expected: `error C2039: 'minecraftTickMs': is not a member of 'cpmc::link::Link:
 		float                 minecraftTickMs = 0.0f;  // McState's: Minecraft's milliseconds a tick (spike 6's sums)
 ```
 
-- [ ] **Step 5: Edit `src/link/Link.cpp`**
+- [x] **Step 5: Edit `src/link/Link.cpp`**
 
 ```cpp
 		status_.minecraftFlags = mc->flags;
@@ -5080,7 +5080,7 @@ Expected: `error C2039: 'minecraftTickMs': is not a member of 'cpmc::link::Link:
 		status_.minecraftTickMs = mc->tickMs;
 ```
 
-- [ ] **Step 6: Edit `tools/mclink/McLinkScript.h`**
+- [x] **Step 6: Edit `tools/mclink/McLinkScript.h`**
 
 ```cpp
 //   actor-remove <id>|all          one made-up NPC out of the table, or all of them
@@ -5109,7 +5109,7 @@ Expected: `error C2039: 'minecraftTickMs': is not a member of 'cpmc::link::Link:
 	bool        on = false;  // link, build and hud; a hurt's power attack
 ```
 
-- [ ] **Step 7: Edit `tools/mclink/McLinkScript.cpp`**
+- [x] **Step 7: Edit `tools/mclink/McLinkScript.cpp`**
 
 ```cpp
 #include <charconv>
@@ -5149,7 +5149,7 @@ Expected: `error C2039: 'minecraftTickMs': is not a member of 'cpmc::link::Link:
 		else if (verb == "floor" || verb == "status" || verb == "quit")
 ```
 
-- [ ] **Step 8: Edit `tools/mclink/Main.cpp`: hurts through the sums**
+- [x] **Step 8: Edit `tools/mclink/Main.cpp`: hurts through the sums**
 
 ```cpp
 #include "link/Actors.h"
@@ -5208,7 +5208,7 @@ Expected: `error C2039: 'minecraftTickMs': is not a member of 'cpmc::link::Link:
 			case Action::Kind::Status: PrintStatus(link, report, feet); break;
 ```
 
-- [ ] **Step 9: Write step 3's script, `tools/mclink/hurts.txt`**
+- [x] **Step 9: Write step 3's script, `tools/mclink/hurts.txt`**
 
 ```text
 # Spike 6's step 3: Minecraft's player hurt as the plugin will hurt it for V, through its sums, without the game. At step
@@ -5275,7 +5275,7 @@ status
 quit
 ```
 
-- [ ] **Step 10: Build and run the tests; they must pass**
+- [x] **Step 10: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -5285,7 +5285,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `431 test(s), 0 failure(s)`.
 
-- [ ] **Step 11: Commit**
+- [x] **Step 11: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -5310,21 +5310,21 @@ Step 3 of the spec's "The steps", with the user: Minecraft's player hurt as Bloc
 **Files:**
 - Modify: `docs/spikes/2026-10-05-npcs-and-combat-results.md`
 
-- [ ] **Step 1: Check that the game isn't running**
+- [x] **Step 1: Check that the game isn't running**
 
 ```bash
 tasklist | grep -i -c "cyberpunk2077.exe"
 ```
 Expected: `0`. If it's `1`, ask the user to quit the game: it would hold the mapping.
 
-- [ ] **Step 2: Ask the user about `keep_inventory`, then to start Minecraft**
+- [x] **Step 2: Ask the user about `keep_inventory`, then to start Minecraft**
 
 The script kills Minecraft's player once. Ask the user whether `keep_inventory` may be on for that death and off at the
 end, as `hurts.txt` does, so nothing is dropped; if their world keeps it on already, delete the script's line `type
 /gamerule keep_inventory false` first. Then the user starts the `CyberCraft` instance from the Modrinth App, and says
 when its title screen shows.
 
-- [ ] **Step 3: Run step 3's script**
+- [x] **Step 3: Run step 3's script**
 
 ```bash
 L="/c/Users/BLOXY/AppData/Roaming/ModrinthApp/profiles/CyberCraft/logs/latest.log"; before=$(wc -l < "$L"); \
@@ -5346,17 +5346,17 @@ Give the command 6 minutes. Expected, against the spec's "Step 3":
 - **The status:** `events: 0 explosions, 0 hits on actors, 1 deaths, …` (the others are SkyCraft's armour skill
   events, drained and counted), `0 inputs dropped`, and `exit: 0`.
 
-- [ ] **Step 4: Ask the user to stop Minecraft**
+- [x] **Step 4: Ask the user to stop Minecraft**
 
 Its window is hidden while `mclink` drives it, so the user stops it from the Modrinth App.
 
-- [ ] **Step 5: Write step 3's results in `docs/spikes/2026-10-05-npcs-and-combat-results.md`**
+- [x] **Step 5: Write step 3's results in `docs/spikes/2026-10-05-npcs-and-combat-results.md`**
 
 A "Step 3" section, from `build/step3/hurts.log` and `build/step3/minecraft.log`: the versions; each check above with
 its numbers (each hurt's share, what Minecraft took, the armour's part, the burst's two sends); anything that
 surprised, and what it means for step 4.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add docs/spikes/2026-10-05-npcs-and-combat-results.md \
