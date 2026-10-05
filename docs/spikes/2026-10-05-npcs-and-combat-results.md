@@ -73,7 +73,7 @@ with no resyncs and nothing rejected.
 Date: 2026-10-05. BlockRender 0.17.0 in the game (2.31), linked to the same Minecraft as step 1, on a pavement near
 spike 3's corner. Plan: Task 11. This section is written as the step runs.
 
-### The first run: two faults, fixed
+### The first run: three faults, fixed
 
 - **redscript compiled the module** at the game's start, with the other mods' scripts (ArchiveXL, TweakXL, Codeware,
   mod_settings and those in `r6/scripts`): `…\BlockRender\Scripts\BlockRender.reds` was among the files, then
@@ -84,7 +84,9 @@ spike 3's corner. Plan: Task 11. This section is written as the step runs.
   pointer belonged (`0x3f400000000c0002`), so something had written over freed memory earlier, off this stack. The
   second load of the same save didn't crash. BlockRender's C++ calls nothing new while unlinked; the module's wraps did
   run for each NPC attached. Read from the crash dump with a small script (no debugger is installed) and the game's
-  `cyberpunk2077_addresses.json`. If it happens again, the same load without the module settles whether it's ours.
+  `cyberpunk2077_addresses.json`. The link crash (below) explains it too: the wraps raced on the module's arrays, and a
+  load attaches many NPCs at once; an array grown on one thread while another writes to it leaves writes in freed
+  memory, which is what the allocator met.
 - **The module wasn't found:** `module: BlockRenderNpcs.Version isn't there with the types BlockRender passes`. A
   throwaway CET mod listed the class through Codeware's `Reflection`: its static list is empty, and its static
   functions are global functions, `BlockRenderNpcs::Version;`, `BlockRenderNpcs::Get;GameInstance` and
@@ -102,3 +104,29 @@ spike 3's corner. Plan: Task 11. This section is written as the step runs.
   and a thin one of radius 0.06, `0:0:24000002:0`, a simulation shape; and a kinematic sphere of radius 1.2. V's
   controller's filter, `0:0:2000:0`, shares the `0x2000` bit with the vendor's. The narrowest-first rule would have
   taken the 0.06 m capsule; the rule now takes the one with that bit (`1fa17f4`).
+- **The game crashed when Link first called the module** (the second start, after the two fixes above): an access
+  violation reading address 0 on the main thread, 650 s after the game started, with 74 NPCs attached
+  (`Cyberpunk2077-20261005-152636-13064-29680`). BlockRender's log ended at `link: the city starts over, as collision
+  epoch 2`, the line Link writes. Read from the dump:
+  - **where:** the game's handle release (`+0x2f0548`), which took a strong count from 1 to 0 and then called the
+    object's `CanBeDestructed` (vtable slot `0xD0`) through a null object pointer; called from the handle assignment
+    (`+0x149150`) inside the script VM (`rtti::Function::InternalCall`), under RED4ext's `ExecuteFunction`, from
+    `GameScript::List` (`GameScript.cpp:190`), `ListNpcs` and `OnUpdate`. So the module's `List`, on its first call.
+  - **what:** `List`'s frame held the range, 80, V's position, and a local handle being assigned whose old value had no
+    object but a count block with one strong reference. The VM zeroes a function's locals before it runs (its frame
+    setup clears them, then constructs each), so that value came from the module's list, `known`, read by an earlier
+    pass of the loop. A handle with no object and a live count can't come from the module's code run on one thread.
+  - **why:** the wraps of `NPCPuppet.OnGameAttached` and `OnDetach` pushed onto and erased from `known`, and the game
+    runs those callbacks on several threads at once: a Codeware issue's crash report (psiberx/cp2077-codeware#51) shows
+    `OnGameAttached` and `OnTakeControl` running on other threads, and one script function on five threads at once, and
+    Cyber Engine Tweaks 1.18.1 fixed crashes in very frequently called overrides, `GameObject.OnGameAttached` and
+    `OnDetach` on a reload. A script array has no lock. Neither dump shows another thread inside the script VM when it
+    was written: the race happened earlier, and a dump shows only the moment of the crash.
+  - **the fix (`b68fe3b`):** the wraps pass only `EntityID`s to BlockRender's natives, `BlockRenderNpcAttached` and
+    `BlockRenderNpcDetached`; `NpcRegistry` keeps them in attach order behind a mutex and counts the calls by thread;
+    `List` copies the list on the main thread (`BlockRenderNpcCount`, `BlockRenderNpcAt`), finds each NPC again by its
+    ID, and keeps what it read of each in step with the list. The module is version 2, with a thirteenth field, `found`,
+    and BlockRender writes the module's check to the log before its first call. Unit tests: 423, including eight
+    threads attaching and detaching while another copies the list; without the lock, that test crashes. The merge that
+    keeps the module's reads in step with the list was ported to Python and checked against 2,000 random runs of
+    attaches, detaches and re-attaches. The next run's log says which threads the game calls the wraps on.

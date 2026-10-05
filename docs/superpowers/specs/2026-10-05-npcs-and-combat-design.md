@@ -266,6 +266,14 @@ From the decompiled 2.31 scripts; every function named here was read there.
 
 - **RED4ext lets a plugin add to redscript's compile** a script folder or file: `Sdk::scripts->Add(handle, path)`
   (`extern/RED4ext.SDK/include/RED4ext/Api/v1/Scripts.hpp`).
+- **A plugin adds native global functions** once the game has registered its types: `CRTTISystem`'s
+  `AddPostRegisterCallback`, then `CGlobalFunction::Create` and `RegisterFunction` (the SDK's
+  `examples/native_globals_redscript`). Scripts declare them as `public native func Name(params) -> Type`, as Codeware
+  declares its own (`Codeware.Global.reds`).
+- **Script callbacks run on several threads:** a crash report in a Codeware issue (psiberx/cp2077-codeware#51) has
+  `OnGameAttached` and `OnTakeControl` running on other threads, and one script function on five at once; Cyber Engine
+  Tweaks 1.18.1 fixed crashes in very frequently called overrides, such as `GameObject.OnGameAttached` and `OnDetach` on
+  a reload, around when it put its Lua VM behind a lock. Step 2's first run crashed the same way (the results).
 - **redscript's last log** (`r6/logs/redscript_rCURRENT.log`) lists the files it compiled at the game's start: the mods'
   in `r6/scripts`, and TweakXL's, ArchiveXL's, Codeware's and mod_settings' from their plugin folders; then
   `Compilation complete`, and the `final.redscripts.modded` it wrote.
@@ -323,6 +331,8 @@ spikes/block-render/
   scripts/BlockRender.reds   the redscript module: the NPC list, hits, V's damage, god mode, V's death, explosions
   tools/check_reds.py        the module compiled offline against the game's own scripts
   src/GameScript.*           the module's calls from C++, each found and checked by name and type once
+  src/Natives.*              BlockRender's natives, which the module's wraps and List call
+  src/NpcRegistry.*          the NPCs the wraps report, in attach order, behind a lock (pure)
   src/ScriptTypes.*          the type checks GameScript and Puppet share
   src/link/Actors.*          NPC IDs, the nearest 256, their records, and the actor table (pure)
   src/link/Combat.*          Minecraft's hits, V's hurts, deaths and blasts: amounts, encodings, sums, windows (pure)
@@ -358,9 +368,16 @@ After `UpdateLink`, in `OnUpdate`, while linked and V is found:
 
 ### The module's list
 
-- **Kept by the wraps:** the module wraps `NPCPuppet.OnGameAttached` to add each NPC to its system, and `OnDetach` to
+- **Kept by the wraps:** the module wraps `NPCPuppet.OnGameAttached` to add each NPC to the list, and `OnDetach` to
   take it off. So every NPC the game puts in the world is known without a search each frame: people, drones, mechs,
   robots and animals alike, crowds included.
+- **The list is BlockRender's, behind a lock:** the game calls those callbacks on several threads at once, so the wraps
+  touch nothing of the module's. They pass the NPC's `EntityID` to two of BlockRender's natives, which keep the IDs in
+  the order attached, behind a mutex (`NpcRegistry`): a detach takes its ID out without moving the others, and an ID
+  already there stays where it is. Each call, `List` copies the list through two more natives and keeps what it read of
+  each NPC in step with it, on the main thread, finding each NPC again by its `EntityID` (`FindEntityByID`). The
+  natives count their calls by thread, for the log. (Step 2's first run crashed while the wraps kept the list in the
+  module's own arrays.)
 - **Each frame,** BlockRender asks the module for the NPCs within 80 m of V in a straight line (SkyCraft's 80 blocks, at
   a metre a block) that aren't dead. For each, the module gives:
   - every frame: its `EntityID`, position and forward vector;
@@ -374,7 +391,11 @@ After `UpdateLink`, in `OnUpdate`, while linked and V is found:
   the two in a crowd; if the wraps miss NPCs, the search takes over.
 - **What crosses to C++:** the module fills one object of its own, kept between frames, with parallel arrays of plain
   types (`EntityID`, `Vector4`, `Float`, `Int32`, `String`). BlockRender reads its fields by name through RTTI, each
-  field's type checked once, as `Puppet` checks functions.
+  field's type checked once, as `Puppet` checks functions. The module's static functions are found among the game's
+  global functions, as `BlockRenderNpcs::Version;` and `BlockRenderNpcs::Current;`, where the game keeps a script
+  class's static functions; its member functions and fields are found in its class. The other way, the module calls
+  BlockRender's natives (above): `BlockRenderNpcAttached(id)`, `BlockRenderNpcDetached(id)`, `BlockRenderNpcCount()`
+  and `BlockRenderNpcAt(i)`.
 - **A new system after every load:** a load makes a new game session, and with it a new module system, so BlockRender
   finds the session's system on every call, through the module's static `Current()`, which uses the game's global
   `GetGameInstance()`.
@@ -401,15 +422,18 @@ After `UpdateLink`, in `OnUpdate`, while linked and V is found:
 
 - **Looked for** when an NPC is first listed, and again every 2 s until one is found, at most eight a frame, those never
   looked for first, nearest first: an overlap of a 1 m sphere centred 1 m above its position, keeping kinematic
-  actors' capsules that lean at most 25 degrees from upright and whose axis passes within 0.2 m of its position; of
-  several, the one with the smallest radius, since V has a second kinematic capsule of radius 1 around its controller.
+  actors' capsules that are a character controller's, with the query filter's third word holding the controller bit
+  `0x2000` (V's `0:0:2000:0`; a vendor's `0:0:10002000:0`), that lean at most 25 degrees from upright and whose axis
+  passes within 0.2 m of its position; of several, the narrowest. An NPC has other kinematic capsules around it, one of
+  radius 0.06, so the narrowest of all would be wrong.
   The retries are for an NPC the game gives a capsule only near V, or a little after it appears, since NPCs are first
   listed up to 80 m away. An NPC forgotten with its number is looked for afresh if it comes back.
 - **Its box:** twice the radius wide, from the lower of the NPC's position and the capsule's bottom, up to the capsule's
   top. A controller's capsule doesn't reach the feet: V's, centred 1 m above V's feet with half-height 0.4 and radius
   0.32, spans 0.28 to 1.72 m above them.
-- **Which capsule is an NPC's,** by its filters, is step 2's opening question (spike 5's risk 4): `shapes` beside an
-  NPC lists them. The rule above stands until then, and changes to what that shows.
+- **Which capsule is an NPC's,** by its filters, was step 2's opening question (spike 5's risk 4): `shapes` beside a
+  vendor showed its controller (radius 0.30, 1.45 m tall) with the controller bit, and two other kinematic capsules
+  without it.
 
 ### The table
 
@@ -644,7 +668,9 @@ sends `npcs`.
   - `GameScript` checks every handle before using it, and the module checks every object with `IsDefined`;
   - NPCs' capsules are read through the audited tables, under scene 0's read lock and the checks the exporter's reads
     use.
-- **Main thread:** every call is made in `OnUpdate`, as `Puppet`'s are, and none while V isn't found.
+- **Main thread:** every call is made in `OnUpdate`, as `Puppet`'s are, and none while V isn't found. The natives are
+  the exception: the wraps call them on whichever thread the game runs `NPCPuppet`'s callbacks on, and they only take
+  the registry's lock; the module's state is touched on the main thread alone.
 - **Minecraft is untrusted:** a hit's formId must be one we listed, and its damage finite, over 0 and capped; an
   `EntityID` is found again (`FindEntityByID`) before every use.
 - **V's god mode:** only under our source name, and removed whenever build mode ends, combat goes off, or V is found
@@ -669,7 +695,8 @@ sends `npcs`.
 - **Part 1:** the IDs (from 1, kept, never reused, forgotten after a minute); the nearest 256 within 80 m; a record from
   an NPC (the axes, the yaw, the size and its feet, health, level, flags, and a name cut at the start of a character);
   the table byte for byte, its sequence order, and emptied once when it stops; `kEvHitActor` and `kEvPlayerDied` reaching
-  the sink; a capsule's box (from the NPC's feet, or the capsule's bottom if lower, to its top; the smallest of
+  the sink; the wraps' list (attach order kept through detaches, repeats and strays counted, at most 1,024, a copy for
+  `List`, calls counted by thread, and eight threads at once while another copies it); a capsule's box (from the NPC's feet, or the capsule's bottom if lower, to its top; the smallest of
   several); `mclink`'s new commands parsed.
 - **Part 2:** which hits count (listed, finite, over 0, capped); the amount; strong or quick; the kind and power flag
   from each attack type; the `kInHurt` encoding; the sums, 11 of Minecraft's ticks apart at `tickMs`, with their kind
@@ -861,7 +888,8 @@ already include them.
   `GetGameInstance()`, so BlockRender needs no `GameInstance`, and a load's new system is found on the next call.
 - **The module's shape:** `List(range)` fills twelve fields (eight parallel arrays, the count of NPCs in the world, V's
   punch, the item it's read from, and V's max health), and returns -1 when it doesn't find V; `Compare(range)` returns
-  the comparison as a string for the log; `Version()` must be 1.
+  the comparison as a string for the log; `Version()` must be 1. Since step 2's first run: thirteen fields, with how many
+  NPCs `List` found by their IDs, and version 2.
 - **The yaw** is taken against 0, not the NPC's last yaw, so no per-NPC yaw is kept.
 - **The slow fields** are read per NPC four times a second by the game's sim time, each NPC's first read putting its
   next at a random point of the quarter second.
@@ -877,3 +905,19 @@ already include them.
   `actor-remove all` empties the table.
 - **`Query`'s version** is parsed from `kVersion` at compile time.
 - **The overlay** gains a button that sends `npcs`, beside the NPCs button.
+
+## Changes from step 2's first run
+
+Step 2's first run (the results, and the plan's Task 11) found three faults. Each was fixed before going on, and the
+sections above include the fixes.
+- **The module's static functions are global functions:** the game keeps a script class's static functions among its
+  global functions, named `BlockRenderNpcs::Version;`, not with the class, so `GameScript` looks them up there
+  (`da1be78`).
+- **An NPC's capsule is its controller's, by the query filter's controller bit** `0x2000`, not the narrowest kinematic
+  capsule around it, which beside a vendor was a 0.06 m one (`1fa17f4`).
+- **The list moved into BlockRender, behind a lock:** the game crashed when Link first called `List`, on a handle in the
+  module's list with no object, and once during a load before any link, in the engine's allocator. The wraps, which
+  pushed onto and erased from the module's arrays, run on several threads at once, and a script array has no lock. The
+  wraps now only pass `EntityID`s to BlockRender's natives, `NpcRegistry` keeps them behind a mutex, and `List` copies
+  them on the main thread. The module is version 2, with a thirteenth field, `found`; the natives count their calls by
+  thread, so the next run shows which threads the game uses.

@@ -3801,14 +3801,18 @@ grep -E "BlockRender|Compilation complete|ERROR" /e/Cyberpunk2077/r6/logs/redscr
 ```
 Expected: the module's path, `…\red4ext\plugins\BlockRender\Scripts\BlockRender.reds`, among the files compiled, then
 `Compilation complete`, and no `ERROR` line. In BlockRender's log: `BlockRender 0.17.0 loaded`, and `the redscript
-module E:\Cyberpunk2077\red4ext\plugins\BlockRender\Scripts\BlockRender.reds: added to redscript's compile`.
+module E:\Cyberpunk2077\red4ext\plugins\BlockRender\Scripts\BlockRender.reds: added to redscript's compile`. Since the
+link crash's fix (below), that line ends `its natives are added once the game has registered its types`, and once the
+menu is up the log has `natives: BlockRenderNpcAttached, BlockRenderNpcDetached, BlockRenderNpcCount and
+BlockRenderNpcAt added`, then `npcs: the wraps have run on … threads: …` lines as the game attaches NPCs.
 
 - [ ] **Step 3: In the game: load, link, and the module found**
 
 Ask the user to load the free-roam save, go to a pavement where many people walk, stand still at its edge, make a new
 save there, and click the overlay's Link button. Expected:
-- in the log, `module: found BlockRenderNpcs version 1, its 4 functions, and the 12 fields List fills`, then `link:
-  Minecraft is there (process …)`;
+- in the log, `module: found BlockRenderNpcs version 2, its 4 functions, the 13 fields List fills, and BlockRender's 4
+  natives`, then `link: Minecraft is there (process …)`; and the `npcs: the wraps have run on … threads: …` lines so
+  far, each thread with its attaches and detaches, the main thread marked;
 - in the status, `npcs=on: … listed of … in the world, the nearest … at … m; capsules found for … of … looked for; …
   numbers given; the module … ms average, … ms worst a frame; 0 hits from Minecraft logged`, and the overlay's `NPCs:`
   line;
@@ -3826,7 +3830,10 @@ log:
   to open the inventory, find the fists (or the Gorilla Arms, if V has them) and read their damage number, and compare;
 - a line per listed NPC: its number, name and distance, its box and where it came from, its health, level and flags;
 - `npcs: GetTargetParts finds … NPCs within 80 m; the list lacks …`: 0, or a few that have just come within 80 m. If it
-  lacks many, the wraps miss NPCs (the spec's risk 2): note which, and a new task makes the list from `GetTargetParts`.
+  lacks many, the wraps miss NPCs (the spec's risk 2): note which, and a new task makes the list from `GetTargetParts`;
+- `npcs: the wraps' list holds …, of which the module found … by their EntityIDs; … attached and … detached since the
+  game started, … already there, … not there, 0 past the list's 1024`: found close to the list's size (NPCs not found
+  are ones the game dropped without a detach), and `npcs: the wraps ran on …`, the threads.
 
 - [ ] **Step 5: In the game: the opening check, which capsule is an NPC's**
 
@@ -3910,7 +3917,7 @@ cd /d/Cyberpunk-Minecraft && git add docs/spikes/2026-10-05-npcs-and-combat-resu
        -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
 ```
 
-**Step 2's first run (2026-10-05)** stopped at Step 3, and found two faults, each fixed as its own commit before going
+**Step 2's first run (2026-10-05)** stopped at Step 3, and found three faults, each fixed as its own commit before going
 on, with a redeploy (Step 1 again):
 - **The module wasn't found:** `module: BlockRenderNpcs.Version isn't there with the types BlockRender passes`. A
   throwaway CET mod, using Codeware's `Reflection`, showed the game keeps a script class's static functions among the
@@ -3922,9 +3929,21 @@ on, with a redeploy (Step 1 again):
   controller (radius 0.30, query filter `0:0:10002000:0`), one of radius 0.40 and one of 0.06; narrowest-first took the
   0.06 m one. The rule now takes the capsule with the controller's query filter bit `0x2000`, which V's controller has
   too (`1fa17f4`, with the vendor's capsules as a test).
+- **The game crashed when Link first called `List`** (the second start, after the two fixes): an access violation in
+  the game's handle release, inside `List`, called from `GameScript::List`. Read from the crash dump: a `ref` in the
+  module's own list held no object but a live count, so the module's arrays had been corrupted before the call. The
+  wraps pushed onto and erased from those arrays, and the game runs `NPCPuppet`'s callbacks on several threads at once
+  (a Codeware issue's crash report shows `OnGameAttached` on other threads; Cyber Engine Tweaks fixed crashes in
+  overrides of `OnGameAttached` and `OnDetach`). A script array has no lock. Fixed by moving the list into BlockRender
+  (`b68fe3b`): the wraps pass only `EntityID`s to BlockRender's natives, `NpcRegistry` keeps them behind a mutex and
+  counts the calls by thread, and `List` copies them on the main thread, finding each NPC again by its ID. Module
+  version 2, with a thirteenth field, `found`; the module's check is logged before its first call; 423 tests, and each
+  new one broken once (`NpcRegistry`'s many-threads test crashes without the lock). Steps 2, 3 and 4 above now expect
+  the new lines.
 
 The first load also crashed once, in the engine's allocator during the load, before any link; the second load didn't.
-The results record it.
+The wraps' race fits it too: a load attaches many NPCs at once, and an array grown on one thread while another writes
+to it leaves writes in freed memory. The results record it.
 
 ---
 
