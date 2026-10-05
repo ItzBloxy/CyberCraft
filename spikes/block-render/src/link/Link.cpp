@@ -101,6 +101,7 @@ void Link::Update(const Frame& aFrame, const LinkSettings& aSettings, LinkSink& 
 		status_.minecraftEye = { mc->eyeX, mc->eyeY, mc->eyeZ };
 		status_.minecraftFrames = mc->frameCounter;
 		status_.minecraftFlags = mc->flags;
+		status_.minecraftTickMs = mc->tickMs;
 		status_.teleportAck = mc->teleportAck;
 		sample = ticks_.Frame(*mc, aFrame.qpc, aFrame.qpcPerSecond);  // every frame, so it has settled when it drives
 	}

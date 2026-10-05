@@ -32,6 +32,10 @@
 //                                  to 4294967295; its feet, in Minecraft blocks; its yaw, in Minecraft degrees, and its
 //                                  size, in blocks above 0 (0, 0.6 and 1.8 unless given); then a name to the line's end
 //   actor-remove <id>|all          one made-up NPC out of the table, or all of them
+//   hurt <kind> <share> [<attacker>] [power]
+//                                  V hurt, as the plugin sends it (spike 6's Part 2): melee, projectile, magic or other;
+//                                  its share of V's health, over 0 and up to 1; the made-up NPC that did it, or 0; and
+//                                  power for a power attack. It goes through the plugin's sums: at once, or in a sum
 //   status                         print the link's state
 //   quit                           stop here
 namespace cpmc::mclink
@@ -62,14 +66,16 @@ struct Action
 		WaitGround,
 		Actor,
 		ActorRemove,
+		Hurt,
 		Status,
 		Quit,
 	};
 
 	Kind   kind = Kind::Quit;
 	double numbers[7]{};  // seconds; x, y, z; yaw and pitch; the scancode; the button (1 left, 2 middle, 3 right); an
-	                      // actor's number, x, y, z, yaw, width and height; the actor to remove, or 0 for all
-	bool        on = false;  // link, build and hud
+	                      // actor's number, x, y, z, yaw, width and height; the actor to remove, or 0 for all; a hurt's
+	                      // kind (proto::HurtKind), share and attacker
+	bool        on = false;  // link, build and hud; a hurt's power attack
 	std::string text;        // the command, the file, the ground, or an actor's name
 	int         line = 0;
 };

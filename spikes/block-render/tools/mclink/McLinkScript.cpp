@@ -1,5 +1,7 @@
 #include "McLinkScript.h"
 
+#include <algorithm>
+#include <array>
 #include <charconv>
 #include <cmath>
 #include <format>
@@ -233,6 +235,27 @@ std::optional<std::vector<Action>> ParseScript(std::string_view aText, std::stri
 			{
 				return fail("actor-remove takes a number from 1 to 4294967295, or all");
 			}
+		}
+		else if (verb == "hurt")
+		{
+			action.kind = Action::Kind::Hurt;
+			size_t given = words.size();
+			action.on = given > 3 && words[given - 1] == "power";
+			given -= action.on ? 1 : 0;
+			const std::array<std::string_view, 4> kinds{ "melee", "projectile", "magic", "other" };
+			const auto kind = given >= 2 ? std::find(kinds.begin(), kinds.end(), words[1]) : kinds.end();
+			bool       ok = kind != kinds.end() && (given == 3 || given == 4) && Number(words[2], action.numbers[1]) &&
+			          action.numbers[1] > 0.0 && action.numbers[1] <= 1.0;
+			if (ok && given == 4)
+			{
+				ok = Number(words[3], action.numbers[2]) && (action.numbers[2] == 0.0 || WholeId(action.numbers[2]));
+			}
+			if (!ok)
+			{
+				return fail("hurt takes melee, projectile, magic or other; a share over 0 and up to 1; then an actor's number, or 0; "
+				            "then power");
+			}
+			action.numbers[0] = double(kind - kinds.begin());
 		}
 		else if (verb == "floor" || verb == "status" || verb == "quit")
 		{

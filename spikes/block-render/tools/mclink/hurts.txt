@@ -1,0 +1,62 @@
+# Spike 6's step 3: Minecraft's player hurt as the plugin will hurt it for V, through its sums, without the game. At step
+# 1's spot, in survival, each from full health: a quarter of V's health, melee, from nobody, then a tenth, other; then in
+# diamond armour, a quarter, melee, from a stand-in 2 blocks away (the armour takes some) and a quarter, other (it takes
+# none); out of the armour, a burst of five, summed; and /kill, which comes back as Minecraft's player's death. Start
+# Minecraft first; this waits for its world. immediate_respawn stays on in the world; keep_inventory is on for the death,
+# and off at the end.
+status
+wait-world 180
+at 520.5 6.14 2007.5
+look 180 0
+link on
+wait 3
+type /gamerule immediate_respawn true
+type /gamerule keep_inventory true
+type /gamemode survival
+# Full health, then a quarter of V's health, melee, from nobody: 5 of Minecraft's 20.
+type /effect give @s minecraft:instant_health 1 10
+wait 2
+hurt melee 0.25
+wait 2
+# A tenth, other: 2.
+type /effect give @s minecraft:instant_health 1 10
+wait 2
+hurt other 0.1
+wait 2
+# Diamond armour, and a stand-in 2 blocks north: a quarter, melee, from it, which the armour reduces; then a quarter,
+# other, which passes the armour.
+actor 1 520.5 6.14 2005.5 0 0.6 1.8 Ganger One
+type /item replace entity @s armor.chest with minecraft:diamond_chestplate
+type /item replace entity @s armor.legs with minecraft:diamond_leggings
+type /effect give @s minecraft:instant_health 1 10
+wait 2
+hurt melee 0.25 1
+wait 2
+type /effect give @s minecraft:instant_health 1 10
+wait 2
+hurt other 0.25
+wait 2
+# Out of the armour, a burst of five, 0.05 each, a tenth of a second apart, from the stand-in, the last a power attack:
+# the first at once, the other four in one sum 11 ticks later.
+type /item replace entity @s armor.chest with minecraft:air
+type /item replace entity @s armor.legs with minecraft:air
+type /effect give @s minecraft:instant_health 1 10
+wait 2
+hurt projectile 0.05 1
+wait 0.1
+hurt projectile 0.05 1
+wait 0.1
+hurt projectile 0.05 1
+wait 0.1
+hurt projectile 0.05 1
+wait 0.1
+hurt projectile 0.05 1 power
+wait 2
+# Death: /kill comes back as the event, killed by none of the actors, and Minecraft's player respawns at once.
+type /kill @s
+wait 3
+actor-remove all
+type /gamerule keep_inventory false
+type /gamemode creative
+status
+quit

@@ -14,6 +14,7 @@
 
 #include "Coords.h"
 #include "link/Actors.h"
+#include "link/Combat.h"
 #include "link/Link.h"
 #include "link/Mapping.h"
 #include "log/DdsWriter.h"
@@ -331,6 +332,13 @@ int main(int aArgc, char** aArgv)
 	bool   hud = true;
 	DumpGround dump;
 	std::map<uint32_t, proto::ActorRecord> actors;  // the made-up NPCs, by number
+	HurtSums                               sums;    // V's hurts, as the plugin sums them
+	const auto send = [&](const Hurt& aHurt, const char* aHow) {
+		const proto::InputEvent input = HurtInput(aHurt);
+		const bool              sent = link.Push(input);
+		Say("hurt {}: {} {:.4f} of V's health, a = {}, attacker {}{}{}", aHow, HurtKindName(aHurt.kind), aHurt.share, input.a, aHurt.attacker,
+		    aHurt.power ? ", power attack" : "", sent ? "" : "; DROPPED, the input ring is full");
+	};
 
 	LARGE_INTEGER qpcRate;
 	QueryPerformanceFrequency(&qpcRate);
@@ -381,6 +389,10 @@ int main(int aArgc, char** aArgv)
 			link.WriteActors(records);  // every frame, as the plugin writes the game's NPCs
 		}
 		const auto& state = link.State();
+		if (const std::optional<Hurt> due = sums.Due(now, state.minecraftTickMs))
+		{
+			send(*due, "sent, summed");
+		}
 		if (state.placeV)
 		{
 			feet = McFromWorld(*state.placeV);  // the stand-in V goes where the drive puts it, as the plugin teleports V
@@ -487,6 +499,24 @@ int main(int aArgc, char** aArgv)
 				}
 				Say("{} actors left in the table", actors.size());
 				break;
+			case Action::Kind::Hurt:
+			{
+				Hurt hurt;
+				hurt.kind = proto::HurtKind(action.numbers[0]);
+				hurt.share = action.numbers[1];
+				hurt.attacker = uint32_t(action.numbers[2]);
+				hurt.power = action.on;
+				if (const std::optional<Hurt> now_ = sums.Add(hurt, now, link.State().minecraftTickMs))
+				{
+					send(*now_, "sent at once");
+				}
+				else
+				{
+					Say("hurt joins a sum: {} {:.4f} of V's health, attacker {}{}", HurtKindName(hurt.kind), hurt.share, hurt.attacker,
+					    hurt.power ? ", power attack" : "");
+				}
+				break;
+			}
 			case Action::Kind::Status: PrintStatus(link, report, feet); break;
 			case Action::Kind::Type:
 				if (!link.Type(action.text, error))

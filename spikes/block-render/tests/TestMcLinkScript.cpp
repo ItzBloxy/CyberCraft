@@ -11,7 +11,7 @@ using Kind = Action::Kind;
 TEST(ScriptsInTheRepoParse)
 {
 	// The tests run in spikes/block-render, where the scripts are.
-	for (const char* name : { "step1.txt", "again.txt", "eye.txt", "drive.txt", "relink.txt", "city.txt", "npcs.txt" })
+	for (const char* name : { "step1.txt", "again.txt", "eye.txt", "drive.txt", "relink.txt", "city.txt", "npcs.txt", "hurts.txt" })
 	{
 		std::ifstream     in(std::string("tools/mclink/") + name, std::ios::binary);
 		std::stringstream text;
@@ -132,6 +132,37 @@ TEST(ScriptRejectsBadLines)
 	CHECK(!ParseScript("link maybe", error).has_value());
 	CHECK(!ParseScript("type", error).has_value());
 	CHECK(!ParseScript("status now", error).has_value());
+}
+
+TEST(ScriptParsesHurts)
+{
+	std::string error;
+	const auto  actions = ParseScript("hurt melee 0.25\nhurt projectile 0.05 3 power\nhurt other 1 0\nhurt magic 0.1 power\n", error);
+	CHECK(actions.has_value());
+	CHECK_EQ(actions ? actions->size() : 0, size_t(4));
+	if (actions && actions->size() == 4)
+	{
+		const auto& a = *actions;
+		CHECK(a[0].kind == Kind::Hurt);
+		CHECK_EQ(a[0].numbers[0], 0.0);  // melee
+		CHECK_EQ(a[0].numbers[1], 0.25);
+		CHECK_EQ(a[0].numbers[2], 0.0);  // no attacker
+		CHECK(!a[0].on);
+		CHECK_EQ(a[1].numbers[0], 1.0);  // projectile
+		CHECK_EQ(a[1].numbers[2], 3.0);
+		CHECK(a[1].on);  // a power attack
+		CHECK_EQ(a[2].numbers[0], 3.0);  // other
+		CHECK_EQ(a[2].numbers[1], 1.0);
+		CHECK_EQ(a[3].numbers[0], 2.0);  // magic
+		CHECK(a[3].on);
+	}
+	CHECK(!ParseScript("hurt fire 0.1", error).has_value());
+	CHECK(!ParseScript("hurt melee 0", error).has_value());
+	CHECK(!ParseScript("hurt melee 1.5", error).has_value());
+	CHECK(!ParseScript("hurt melee 0.1 1.5", error).has_value());
+	CHECK(!ParseScript("hurt melee 0.1 3 hard", error).has_value());
+	CHECK(!ParseScript("hurt melee", error).has_value());
+	CHECK(!ParseScript("hurt melee 0.1 3 power extra", error).has_value());
 }
 
 TEST(ScriptParsesMadeUpNpcs)

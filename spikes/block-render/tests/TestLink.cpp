@@ -366,6 +366,17 @@ TEST(LinkReportsMinecraftsEyeAndTheDrainTime)
 	CHECK(link.State().drainMs >= 0.0);
 }
 
+TEST(LinkReportsMinecraftsTickLength)
+{
+	FakeMinecraft minecraft;
+	Link          link(minecraft.base);
+	Sink          sink;
+	minecraft.Beat(77, 1000);
+	minecraft.Ticked(0, { -119.5, 6.14, 2007.5 }, 1.0);
+	link.Update(At(1.0), kSettings, sink);
+	CHECK_NEAR(link.State().minecraftTickMs, 50.0, 1e-9);
+}
+
 TEST(LinkNamesTheRenderTypes)
 {
 	CHECK_STR(RenderTypeName(proto::kRenSection), "section");
