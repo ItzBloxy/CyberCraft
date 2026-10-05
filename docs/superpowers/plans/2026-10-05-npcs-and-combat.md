@@ -42,12 +42,15 @@ real Minecraft before anything goes into the game.
 
 **Spec:** [docs/superpowers/specs/2026-10-05-npcs-and-combat-design.md](../specs/2026-10-05-npcs-and-combat-design.md)
 
-**Part 2** (Tasks 13 to 32) makes Minecraft's hits on NPCs land as V's, and in build mode gives the game's hits on V to
+**Part 2** (Tasks 13 to 37) makes Minecraft's hits on NPCs land as V's, and in build mode gives the game's hits on V to
 Minecraft's player, whose death kills V; it was planned after step 2, and its own section below says how it's built. A
 deep review of it, after Task 22 had run and before step 4, added Tasks 23 to 30, which send Minecraft's hits through
 the game's whole damage pipeline as V's own punches go, made with what V's unarmed slot draws, and draw that weapon and
-hide V in build mode; "The deep review of Part 2", at the end, says why. Step 4 is Task 31.
-**Part 3** is planned after step 4, as the spec says: Task 32 closes Part 2 and plans it.
+hide V in build mode; "The deep review of Part 2", at the end, says why. Step 4 is Task 31. It passed with three fixes
+to make, which Tasks 32 to 35 make and Task 36 checks in the game: hits start at V's punch × the square root of
+Minecraft's damage, V's Immortal is the game's override, and hiding V hides V's effects and the game's crosshair too;
+"Step 4's fixes", at the end, says why.
+**Part 3** is planned after step 4's fixes, as the spec says: Task 37 closes Part 2 and plans it.
 
 ---
 
@@ -91,16 +94,20 @@ hide V in build mode; "The deep review of Part 2", at the end, says why. Step 4 
   endings without their lock). The module compiles against the game's own scripts both without and with Codeware's,
   and two slips fail it, one of them only with Codeware's. The overlay ran under Lua with CET's functions stubbed, with
   V's weapon drawn and V hidden, not drawn with `hidev` 0, and combat off.
+- **Step 4's fixes, verified the same way:** Tasks 32 to 35 were written in the scratch clone on top of Task 30's
+  commit, then replayed in a fresh clone from this plan's text: zero warnings, 440 tests, the files identical to the
+  scratch clone's. Each new or changed test was broken once: 9 mutations, all caught. The module compiles against the
+  game's own scripts both without and with Codeware's, and a slip in its Codeware parts fails only with Codeware's.
 - **Test counts:** 396 at the start. Then 403, 406 and 408 after Tasks 1 to 3, 412 after Task 5, and 414 after Task 8.
   Tasks 6, 7, 9 and 10 add none.
 - **What only Minecraft and the game can test:** the actor table against SkyCraft's real mod in Task 4, and the module
   and the NPCs in the game in Task 11; in Part 2, the hurts against SkyCraft's mod in Task 16, and combat in the game in
-  Task 31. All with the user.
+  Tasks 31 and 36. All with the user.
 - **The user:**
   - **does everything in Minecraft, the Modrinth App and the game:** starting and stopping them, loading, moving,
     keys, clicks and screenshots. Never drive their mouse or keyboard: ask, then wait for them to say they're done;
   - **approves downloads first.** Nothing in Parts 1 and 2 downloads anything.
-- **The game:** builds deploy only with `CP2077_DIR` set, which only the deploy steps set (Tasks 11 and 31), with the
+- **The game:** builds deploy only with `CP2077_DIR` set, which only the deploy steps set (Tasks 11, 31 and 36), with the
   game closed, and clear straight after. `mclink` needs the game closed too, since the game would hold the mapping.
 - **redscript:** a script that doesn't compile at the game's start shows a message box, and that run the mods' scripts
   don't load, the other mods' included. Task 6's offline compile runs the game's own compiler library on the module,
@@ -4003,27 +4010,30 @@ and call BlockRender's natives, and nothing in them touches the module's state.
   pipeline at Minecraft's damage × V's punch, and the pipeline does the rest, as to V's own punches; V punches with
   what its unarmed slot draws; and in build mode V's unarmed weapon is drawn and V is hidden. They replace Task 18's
   `Process` wrap and its exact amount. **Task 31** is step 4, in the game.
-- **Task 32** closes Part 2, and plans Part 3.
+- **Tasks 32 to 35** make step 4's three fixes: hits start at V's punch × Minecraft's damage to the hit power, the
+  square root by default; V's Immortal is the game's override; and hiding V stops V's effects and hides the game's
+  crosshair. **Task 36** checks them in the game, and fights again.
+- **Task 37** closes Part 2, and plans Part 3.
 
 Test counts: 423 at the start of Part 2. Then 424 after Task 13, 429 after Task 14, 431 after Task 15, 434 after Task 17,
-and 435 after Task 20; 437 after Task 23, 438 after Task 24, and 439 after Task 28. Tasks 18, 19, 21, 22, 25 to 27, 29
-and 30 add none.
+and 435 after Task 20; 437 after Task 23, 438 after Task 24, 439 after Task 28, and 440 after Task 32. Tasks 18, 19, 21,
+22, 25 to 27, 29, 30 and 33 to 35 add none.
 
 ## File map (Part 2)
 
 | File | Responsibility |
 |---|---|
 | `src/physx/Characters.*` | An NPC's box reaching the top of its tallest capsule |
-| `src/link/Combat.*` | Which hits count and where they start; what the pipeline did to them, and why it dealt some nothing, in words; V's hurts as `kInHurt`, and their sums; the death window; V's god mode; V's switches for its weapon and meshes |
+| `src/link/Combat.*` | Which hits count and where they start, V's punch × Minecraft's damage to the hit power; what the pipeline did to them, and why it dealt some nothing, in words; V's hurts as `kInHurt`, and their sums; the death window; V's god mode; V's switches for its weapon and meshes |
 | `src/link/Link.*` | McState's tick length in the status |
 | `tools/mclink/*` | The `hurt` action, through the sums, and step 3's script `hurts.txt` |
 | `src/CombatInbox.*` | Hits on V offered, non-lethal ones left to V; our hits landed or dealt nothing; from any thread, behind a lock |
 | `src/Natives.*` | `BlockRenderVHurt`, `BlockRenderHitLanded` and `BlockRenderHitEnded` |
-| `scripts/BlockRender.reds` | Version 4: `Hit`, `SetImmortal`, `KillV`, `Punch`, `Arm` and `HideV`; what V's unarmed slot draws; the wraps of `ProcessPipeline` and `DealDamages` |
+| `scripts/BlockRender.reds` | Version 5: `Hit`, `SetImmortal` (the game's override), `KillV`, `Punch`, `Arm` and `HideV` (V's meshes and effects, and the game's crosshair); what V's unarmed slot draws; the wraps of `ProcessPipeline` and `DealDamages` |
 | `tools/check_reds.py` | The module compiled offline, with and without Codeware's scripts |
-| `src/GameScript.*` | The module's new calls, whether V's unarmed weapon is drawn, and seven natives checked |
-| `src/Requests.*`, `src/Status.*` | `hit` and `punch`; the status's combat line, and the v line |
-| `src/Plugin.cpp`, `CMakeLists.txt` | 0.18.0: `Fight`, `SwitchV`, `SendHurts`, `set combat`, `set hidev`, `hit` and `punch`, and the combat and v lines |
+| `src/GameScript.*` | The module's new calls, whether V's unarmed weapon is drawn, what `HideV` did, and seven natives checked |
+| `src/Requests.*`, `src/Status.*` | `hit` and `punch`; the status's combat line, with the hit power, and the v line, with V's effects and the crosshair |
+| `src/Plugin.cpp`, `CMakeLists.txt` | 0.18.0, then 0.18.1: `Fight`, `SwitchV`, `SendHurts`, `set combat`, `set hidev`, `set hitpower`, `hit` and `punch`, and the combat and v lines |
 | `tools/blockrender_hud/init.lua` | The combat line, the Combat button, V's punch in the log, V's weapon drawn or not, and V hidden or seen |
 | `tests/TestCombat.cpp`, `tests/TestCombatInbox.cpp` | One test file per new unit; the others gain tests |
 
@@ -9465,18 +9475,1121 @@ cd /d/Cyberpunk-Minecraft && git add docs/spikes/2026-10-05-npcs-and-combat-resu
 
 ---
 
-### Task 32: Close Part 2, and plan Part 3
+### Task 32: Hits start at V's punch × Minecraft's damage to the hit power
+
+Step 4 found Minecraft's weapons one-shotting level-47 gangers: each point of Minecraft's damage was a whole blade swing,
+so a diamond sword (7) started at 734 and an axe (9) at 944 (the results' "Step 4"). The user chose the square root (the
+spec's "Changes from step 4"): a hit now starts at V's punch × Minecraft's damage to the power `p`, the hit power, 0.5
+by default (`kHitPower`). A fist (1) stays one punch, a diamond sword is 2.65 punches and an axe 3; `set hitpower`
+(Task 35) changes `p` while the game runs, from 0 (every hit one punch) to 1 (step 4's). The cap of 1,000 comes first.
+Until Task 35 adds the setting, the plugin passes `kHitPower`.
+
+**Files:**
+- Modify: `src/link/Combat.h`, `src/link/Combat.cpp`, `tests/TestCombat.cpp`, `src/Plugin.cpp`
+
+- [ ] **Step 1: Edit `tests/TestCombat.cpp`: where hits start, by the hit power**
+
+```cpp
+	// A diamond sword at full cooldown, and V's punch of 102: 714 of the NPC's health.
+	const std::optional<NpcHit> hit = AcceptHit(Hit(id, 7.0f), ids, 10.5, 102.0, drop);
+	CHECK(hit.has_value());
+	CHECK(hit && hit->entity == 0xABC && hit->formId == id && !hit->strong);
+	CHECK_NEAR(hit ? hit->amount : 0.0, 714.0, 1e-9);
+	// Strong: a crit, or knockback over 0.45 (a sprint hit); 0.45 itself isn't, compared as SkyCraft compares, in float.
+	CHECK(AcceptHit(Hit(id, 10.5f, 0.4f, true), ids, 10.5, 102.0, drop).value_or(NpcHit{}).strong);
+	CHECK(AcceptHit(Hit(id, 7.0f, 0.5f), ids, 10.5, 102.0, drop).value_or(NpcHit{}).strong);
+	CHECK(!AcceptHit(Hit(id, 7.0f, 0.45f), ids, 10.5, 102.0, drop).value_or(NpcHit{ 0, 0, 0.0, 0.0, true }).strong);
+	// /kill's 3.4e38 is capped at 1,000.
+	const std::optional<NpcHit> kill = AcceptHit(Hit(id, std::numeric_limits<float>::max()), ids, 10.5, 102.0, drop);
+	CHECK_NEAR(kill ? kill->damage : 0.0, 1000.0, 1e-9);
+	CHECK_NEAR(kill ? kill->amount : 0.0, 102000.0, 1e-6);
+	// A stand-in listed 2 s ago still counts; 2.5 s ago it doesn't, and nor does a number never given.
+	CHECK(AcceptHit(Hit(id, 7.0f), ids, 12.0, 102.0, drop).has_value());
+	CHECK(!AcceptHit(Hit(id, 7.0f), ids, 12.5, 102.0, drop).has_value());
+	CHECK(drop == HitDrop::NotListed);
+	CHECK(!AcceptHit(Hit(id + 1, 7.0f), ids, 10.5, 102.0, drop).has_value());
+	CHECK(drop == HitDrop::NotListed);
+	// Knockback only, or damage that isn't finite: skipped.
+	CHECK(!AcceptHit(Hit(id, 0.0f), ids, 10.5, 102.0, drop).has_value());
+	CHECK(drop == HitDrop::NoDamage);
+	CHECK(!AcceptHit(Hit(id, std::numeric_limits<float>::quiet_NaN()), ids, 10.5, 102.0, drop).has_value());
+	CHECK(drop == HitDrop::NoDamage);
+	CHECK(!AcceptHit(Hit(id, std::numeric_limits<float>::infinity()), ids, 10.5, 102.0, drop).has_value());
+	CHECK(drop == HitDrop::NoDamage);
+	// V's punch not read: no hit.
+	CHECK(!AcceptHit(Hit(id, 7.0f), ids, 10.5, 0.0, drop).has_value());
+```
+```cpp
+	// A diamond sword at full cooldown, and V's punch of 102, at the hit power by default: 102 x the square root of 7.
+	const std::optional<NpcHit> hit = AcceptHit(Hit(id, 7.0f), ids, 10.5, 102.0, kHitPower, drop);
+	CHECK(hit.has_value());
+	CHECK(hit && hit->entity == 0xABC && hit->formId == id && !hit->strong);
+	CHECK_NEAR(hit ? hit->amount : 0.0, 102.0 * std::sqrt(7.0), 1e-9);
+	// Strong: a crit, or knockback over 0.45 (a sprint hit); 0.45 itself isn't, compared as SkyCraft compares, in float.
+	CHECK(AcceptHit(Hit(id, 10.5f, 0.4f, true), ids, 10.5, 102.0, kHitPower, drop).value_or(NpcHit{}).strong);
+	CHECK(AcceptHit(Hit(id, 7.0f, 0.5f), ids, 10.5, 102.0, kHitPower, drop).value_or(NpcHit{}).strong);
+	CHECK(!AcceptHit(Hit(id, 7.0f, 0.45f), ids, 10.5, 102.0, kHitPower, drop).value_or(NpcHit{ 0, 0, 0.0, 0.0, true }).strong);
+	// /kill's 3.4e38 is capped at 1,000 before the power.
+	const std::optional<NpcHit> kill = AcceptHit(Hit(id, std::numeric_limits<float>::max()), ids, 10.5, 102.0, kHitPower, drop);
+	CHECK_NEAR(kill ? kill->damage : 0.0, 1000.0, 1e-9);
+	CHECK_NEAR(kill ? kill->amount : 0.0, 102.0 * std::sqrt(1000.0), 1e-9);
+	// A stand-in listed 2 s ago still counts; 2.5 s ago it doesn't, and nor does a number never given.
+	CHECK(AcceptHit(Hit(id, 7.0f), ids, 12.0, 102.0, kHitPower, drop).has_value());
+	CHECK(!AcceptHit(Hit(id, 7.0f), ids, 12.5, 102.0, kHitPower, drop).has_value());
+	CHECK(drop == HitDrop::NotListed);
+	CHECK(!AcceptHit(Hit(id + 1, 7.0f), ids, 10.5, 102.0, kHitPower, drop).has_value());
+	CHECK(drop == HitDrop::NotListed);
+	// Knockback only, or damage that isn't finite: skipped.
+	CHECK(!AcceptHit(Hit(id, 0.0f), ids, 10.5, 102.0, kHitPower, drop).has_value());
+	CHECK(drop == HitDrop::NoDamage);
+	CHECK(!AcceptHit(Hit(id, std::numeric_limits<float>::quiet_NaN()), ids, 10.5, 102.0, kHitPower, drop).has_value());
+	CHECK(drop == HitDrop::NoDamage);
+	CHECK(!AcceptHit(Hit(id, std::numeric_limits<float>::infinity()), ids, 10.5, 102.0, kHitPower, drop).has_value());
+	CHECK(drop == HitDrop::NoDamage);
+	// V's punch not read: no hit.
+	CHECK(!AcceptHit(Hit(id, 7.0f), ids, 10.5, 0.0, kHitPower, drop).has_value());
+```
+```cpp
+	CHECK_STR(HitResultName(7), "result 7");
+```
+```cpp
+	CHECK_STR(HitResultName(7), "result 7");
+}
+
+TEST(CombatStartsHitsAtVsPunchTimesDamageToTheHitPower)
+{
+	ActorIds       ids;
+	const uint32_t id = ids.Id(0xABC, 10.0);
+	HitDrop        drop = HitDrop::Count;
+	const auto     start = [&](float aDamage, double aPower) {
+		return AcceptHit(Hit(id, aDamage), ids, 10.5, 104.87, aPower, drop).value_or(NpcHit{}).amount;
+	};
+	// The square root by default (step 4's fix): a fist stays one of V's punches, a diamond sword is 2.65, an axe 3, and a
+	// swing before its cooldown is full is more than its share of a punch.
+	CHECK_NEAR(kHitPower, 0.5, 1e-12);
+	CHECK_NEAR(start(1.0f, kHitPower), 104.87, 1e-9);
+	CHECK_NEAR(start(7.0f, kHitPower), 104.87 * 2.6457513110645907, 1e-9);
+	CHECK_NEAR(start(9.0f, kHitPower), 314.61, 1e-9);
+	CHECK_NEAR(start(0.25f, kHitPower), 52.435, 1e-9);
+	// 1: each point of Minecraft's damage a whole punch, as step 4 had it; 0: every hit one punch.
+	CHECK_NEAR(start(7.0f, 1.0), 734.09, 1e-9);
+	CHECK_NEAR(start(7.0f, 0.0), 104.87, 1e-9);
+```
+- [ ] **Step 2: Build; it must fail**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C" | sort -u | head -3
+```
+Expected: `error C2065: 'kHitPower': undeclared identifier`.
+
+- [ ] **Step 3: Edit `src/link/Combat.h`**
+
+```cpp
+constexpr double kHitCap = 1000.0;         // Minecraft's damage, at most: /kill on a stand-in sends 3.4e38
+```
+```cpp
+constexpr double kHitCap = 1000.0;         // Minecraft's damage, at most: /kill on a stand-in sends 3.4e38
+constexpr double kHitPower = 0.5;          // set hitpower's default: a hit starts at V's punch x damage^0.5
+```
+```cpp
+	double   amount = 0.0;  // damage x V's punch: where the game's damage pipeline starts it
+```
+```cpp
+	double   amount = 0.0;  // V's punch x damage^the hit power: where the game's damage pipeline starts it
+```
+```cpp
+// at kHitCap, and V's punch, aPunch, over 0. Strong: a crit, or knockback over kStrongKnockback. Nothing, with aDrop
+// saying why, if it doesn't count.
+std::optional<NpcHit> AcceptHit(const proto::McEvent& aEvent, const ActorIds& aIds, double aNow, double aPunch, HitDrop& aDrop);
+```
+```cpp
+// at kHitCap, and V's punch, aPunch, over 0. It starts at aPunch x the damage to the power aPower, the hit power, from 0
+// to 1: kHitPower, the square root, keeps a fist at one punch and makes a diamond sword 2.65 (step 4's fix: at 1, each
+// point of Minecraft's damage a whole punch, a sword one-shot level-47 gangers). Strong: a crit, or knockback over
+// kStrongKnockback. Nothing, with aDrop saying why, if it doesn't count.
+std::optional<NpcHit> AcceptHit(const proto::McEvent& aEvent, const ActorIds& aIds, double aNow, double aPunch, double aPower,
+                                HitDrop& aDrop);
+```
+- [ ] **Step 4: Edit `src/link/Combat.cpp`**
+
+```cpp
+std::optional<NpcHit> AcceptHit(const proto::McEvent& aEvent, const ActorIds& aIds, double aNow, double aPunch, HitDrop& aDrop)
+```
+```cpp
+std::optional<NpcHit> AcceptHit(const proto::McEvent& aEvent, const ActorIds& aIds, double aNow, double aPunch, double aPower,
+                                HitDrop& aDrop)
+```
+```cpp
+	hit.amount = hit.damage * aPunch;
+```
+```cpp
+	hit.amount = aPunch * std::pow(hit.damage, aPower);
+```
+- [ ] **Step 5: Edit `src/Plugin.cpp`: the hit power by default, until Task 35 makes it a setting**
+
+```cpp
+	const std::optional<cpmc::link::NpcHit> accepted = cpmc::link::AcceptHit(aEvent, g_actorIds, aNow, g_punch, drop);
+```
+```cpp
+	const std::optional<cpmc::link::NpcHit> accepted = cpmc::link::AcceptHit(aEvent, g_actorIds, aNow, g_punch, cpmc::link::kHitPower, drop);
+```
+- [ ] **Step 6: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `440 test(s), 0 failure(s)`.
+
+- [ ] **Step 7: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "npcs-and-combat: hits start at V's punch x Minecraft's damage to the hit power, the square root by default" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 33: The module makes V Immortal through the game's override, and hiding V stops V's effects and hides the game's crosshair
+
+The module's side of step 4's fixes, in `scripts/BlockRender.reds`, version 5:
+- **V's Immortal is the game's override.** On V, an Immortal added as a god mode did nothing: V carries `Mortal` from
+  three sources, which outrank it, and the damage pipeline asks `HasGodMode` (step 4, through CET's console). So
+  `SetImmortal` enables and disables the override, `EnableOverride(V, Immortal, n"BlockRender")` and
+  `DisableOverride(V, n"BlockRender")`, as Second Heart does (`SecondHeartStatListener`), and returns whether the game
+  then says V is Immortal. Off also removes an Immortal that version 4 added; `KillV` disables the override too.
+- **Hiding V stops V's effects.** Switching an effect spawner off leaves the effects it started running (step 4: the
+  Thermal blades' heat), so before it switches a spawner off, `HideV` stops each of its effects by name
+  (`entKillEffectEvent`, all loops), as `GameObject.StopReplicatedEffectEvent` does. Codeware gives the names
+  (`entEffectSpawnerComponent.effectDescs`). Those that start by themselves (`isAutoSpawn`) are remembered with what
+  they're on, and started again when V is shown (`entSpawnEffectEvent`), on objects still there.
+- **Hiding V hides the game's crosshair**, as the game hides it for the scanner: the HUD's crosshair container
+  (`gameuiCrosshairContainerController`), found among the HUD layer's game controllers through Codeware, has its root
+  widget switched off; again at each quarter-second call, in case the game shows it; showing V shows it again, if
+  `HideV` hid it.
+- **Two new fields** tell BlockRender what `HideV` did besides its meshes: `vEffects`, the effects stopped since V was
+  hidden (or started again), and `vCrosshair` (1 hidden or shown again; -1 not found; 0 not touched).
+
+As before, the parts that need Codeware compile only where it's installed: Step 3 checks that a slip in them fails only
+with Codeware's scripts.
+
+**Files:**
+- Modify: `scripts/BlockRender.reds`
+
+- [ ] **Step 1: Edit `scripts/BlockRender.reds`**
+
+```swift
+// For build mode, Arm draws V's unarmed weapon, so that hits carry it, and HideV hides V's meshes, through Codeware where
+// it's installed.
+```
+```swift
+// For build mode, Arm draws V's unarmed weapon, so that hits carry it, and HideV hides V's meshes, stops V's effects and
+// hides the game's crosshair, through Codeware where it's installed.
+```
+```swift
+  private let hidden: array<wref<IComponent>>;
+```
+```swift
+  private let hidden: array<wref<IComponent>>;
+  // HideV's too: the effects it stopped that start by themselves, and what each is on, to start again; and whether it
+  // hid the game's crosshair.
+  private let restartOn: array<wref<Entity>>;
+  private let restartNames: array<CName>;
+  private let crosshairHidden: Bool;
+```
+```swift
+  public let vHealthMax: Float;
+
+  // The module's version, which BlockRender checks: 2 since the list moved into BlockRender, 3 with combat, 4 since hits
+  // go through the whole damage pipeline, with what V's unarmed slot draws.
+  public final static func Version() -> Int32 {
+    return 4;
+```
+```swift
+  public let vHealthMax: Float;
+  // What HideV last did, besides the meshes it gives, for BlockRender to read after it. Hiding: the effects it has
+  // stopped since V was hidden, and the crosshair (1 hidden, -1 not found among the HUD layer's game controllers).
+  // Showing: the effects it started again, and the crosshair (1 shown again, 0 it hadn't hidden it).
+  public let vEffects: Int32;
+  public let vCrosshair: Int32;
+
+  // The module's version, which BlockRender checks: 2 since the list moved into BlockRender, 3 with combat, 4 since hits
+  // go through the whole damage pipeline, with what V's unarmed slot draws, 5 since V's Immortal is the game's override,
+  // and HideV stops V's effects and hides the game's crosshair.
+  public final static func Version() -> Int32 {
+    return 5;
+```
+```swift
+  // V's god mode for build mode: Immortal on V, added or removed under BlockRender's own source name only. Whether the
+  // game says it changed.
+```
+```swift
+  // V's god mode for build mode: Immortal forced on V by the game's override, enabled or disabled under BlockRender's own
+  // source name only, as Second Heart forces it. An Immortal added as a god mode does nothing on V, whose Mortal god
+  // modes outrank it (step 4). Off also removes an Immortal that module version 4 added. Whether the game then says V is
+  // Immortal.
+```
+```swift
+    };
+    let gods: ref<GodModeSystem> = GameInstance.GetGodModeSystem(game);
+    if on {
+      return gods.AddGodMode(player.GetEntityID(), gameGodModeType.Immortal, n"BlockRender");
+    };
+    return gods.RemoveGodMode(player.GetEntityID(), gameGodModeType.Immortal, n"BlockRender");
+```
+```swift
+    };
+    let id: EntityID = player.GetEntityID();
+    let gods: ref<GodModeSystem> = GameInstance.GetGodModeSystem(game);
+    if on {
+      gods.EnableOverride(id, gameGodModeType.Immortal, n"BlockRender");
+    } else {
+      gods.DisableOverride(id, n"BlockRender");
+      gods.RemoveGodMode(id, gameGodModeType.Immortal, n"BlockRender");
+    };
+    return gods.HasGodMode(id, gameGodModeType.Immortal);
+```
+```swift
+    let gods: ref<GodModeSystem> = GameInstance.GetGodModeSystem(game);
+    gods.RemoveGodMode(id, gameGodModeType.Immortal, n"BlockRender");
+```
+```swift
+    let gods: ref<GodModeSystem> = GameInstance.GetGodModeSystem(game);
+    gods.DisableOverride(id, n"BlockRender");
+    gods.RemoveGodMode(id, gameGodModeType.Immortal, n"BlockRender");
+```
+```swift
+  // V's meshes for build mode: V's own, and those of everything V wears and holds, hidden (on), each switched off if it
+  // was on, and remembered, so that showing V again (off) switches on exactly those and leaves off what the game had off.
+  // Called again while on, it hides what has appeared since on V and in V's hands, such as the weapon Arm drew, without
+  // looking through V's whole inventory again. The meshes hidden, or shown again; -1 without Codeware, which lists an
+  // entity's components; -2 if V isn't found.
+```
+```swift
+  // V for build mode: V's meshes, and those of everything V wears and holds, hidden (on), each switched off if it was on,
+  // and remembered, so that showing V again (off) switches on exactly those and leaves off what the game had off. An
+  // effect spawner's effects are stopped by name before it goes off, since switching it off leaves them running (step 4:
+  // the Thermal blades' heat), and those that start by themselves are started again when V is shown. And the game's
+  // crosshair, hidden with V and shown again if HideV hid it. Called again while on, it hides what has appeared since on
+  // V and in V's hands, such as the weapon Arm drew, without looking through V's whole inventory again, and the crosshair
+  // again if the game showed it. The meshes hidden, or shown again; -1 without Codeware, which lists an entity's
+  // components; -2 if V isn't found. vEffects and vCrosshair say the rest.
+```
+```swift
+      };
+      ArrayClear(this.hidden);
+      this.hiding = false;
+```
+```swift
+      };
+      this.vEffects = 0;
+      i = 0;
+      while i < ArraySize(this.restartOn) {
+        let entity: ref<Entity> = this.restartOn[i];
+        if IsDefined(entity) {
+          let start: ref<entSpawnEffectEvent> = new entSpawnEffectEvent();
+          start.effectName = this.restartNames[i];
+          entity.QueueEvent(start);
+          this.vEffects += 1;
+        };
+        i += 1;
+      };
+      this.vCrosshair = this.crosshairHidden ? BlockRenderShowCrosshair(true) : 0;
+      ArrayClear(this.hidden);
+      ArrayClear(this.restartOn);
+      ArrayClear(this.restartNames);
+      this.hiding = false;
+      this.crosshairHidden = false;
+```
+```swift
+    let off: array<wref<IComponent>> = BlockRenderSwitchOffMeshes(player, !this.hiding);
+```
+```swift
+    if !this.hiding {
+      this.vEffects = 0;
+    };
+    let off: array<wref<IComponent>>;
+    let startOn: array<wref<Entity>>;
+    let startNames: array<CName>;
+    this.vEffects += BlockRenderSwitchOffMeshes(player, !this.hiding, off, startOn, startNames);
+```
+```swift
+    };
+    return ArraySize(this.hidden);
+```
+```swift
+    };
+    i = 0;
+    while i < ArraySize(startOn) {
+      ArrayPush(this.restartOn, startOn[i]);
+      ArrayPush(this.restartNames, startNames[i]);
+      i += 1;
+    };
+    let crosshair: Int32 = BlockRenderShowCrosshair(false);
+    if crosshair == 1 {
+      this.crosshairHidden = true;
+    };
+    this.vCrosshair = crosshair < 0 ? -1 : 1;
+    return ArraySize(this.hidden);
+```
+```swift
+// V's meshes, and those of the items V wears and holds: each visual component that's on, switched off; those it switched
+// off. With everything, every item V wears and holds, found among V's whole inventory; otherwise only what's in V's
+// hands and arm slot, which is all that changes in build mode. Main thread, from HideV.
+@if(ModuleExists("Codeware"))
+public func BlockRenderSwitchOffMeshes(player: ref<GameObject>, everything: Bool) -> array<wref<IComponent>> {
+  let off: array<wref<IComponent>>;
+  BlockRenderSwitchOffEntity(player, off);
+  let transactions: ref<TransactionSystem> = GameInstance.GetTransactionSystem(player.GetGame());
+  if !everything {
+    BlockRenderSwitchOffEntity(transactions.GetItemInSlot(player, t"AttachmentSlots.WeaponRight"), off);
+    BlockRenderSwitchOffEntity(transactions.GetItemInSlot(player, t"AttachmentSlots.WeaponLeft"), off);
+    BlockRenderSwitchOffEntity(transactions.GetItemInSlot(player, t"AttachmentSlots.RightArm"), off);
+    return off;
+```
+```swift
+// V's meshes, and those of the items V wears and holds: each visual component that's on, switched off, into off; an
+// effect spawner's effects stopped by name first, those that start by themselves into restartOn and restartNames. With
+// everything, every item V wears and holds, found among V's whole inventory; otherwise only what's in V's hands and arm
+// slot, which is all that changes in build mode. The effects stopped. Main thread, from HideV.
+@if(ModuleExists("Codeware"))
+public func BlockRenderSwitchOffMeshes(player: ref<GameObject>, everything: Bool, out off: array<wref<IComponent>>,
+  out restartOn: array<wref<Entity>>, out restartNames: array<CName>) -> Int32 {
+  let stopped: Int32 = BlockRenderSwitchOffEntity(player, off, restartOn, restartNames);
+  let transactions: ref<TransactionSystem> = GameInstance.GetTransactionSystem(player.GetGame());
+  if !everything {
+    stopped += BlockRenderSwitchOffEntity(transactions.GetItemInSlot(player, t"AttachmentSlots.WeaponRight"), off, restartOn, restartNames);
+    stopped += BlockRenderSwitchOffEntity(transactions.GetItemInSlot(player, t"AttachmentSlots.WeaponLeft"), off, restartOn, restartNames);
+    stopped += BlockRenderSwitchOffEntity(transactions.GetItemInSlot(player, t"AttachmentSlots.RightArm"), off, restartOn, restartNames);
+    return stopped;
+```
+```swift
+        BlockRenderSwitchOffEntity(item, off);
+```
+```swift
+        stopped += BlockRenderSwitchOffEntity(item, off, restartOn, restartNames);
+```
+```swift
+  return off;
+}
+
+@if(ModuleExists("Codeware"))
+public func BlockRenderSwitchOffEntity(entity: ref<Entity>, out off: array<wref<IComponent>>) -> Void {
+  if !IsDefined(entity) {
+    return;
+  };
+```
+```swift
+  return stopped;
+}
+
+// One entity's visual components that are on: each switched off, into off. An effect spawner's effects are stopped
+// first, each by name with all its loops (switching the spawner off leaves them running), and those that start by
+// themselves go into restartOn and restartNames. The effects stopped.
+@if(ModuleExists("Codeware"))
+public func BlockRenderSwitchOffEntity(entity: ref<Entity>, out off: array<wref<IComponent>>,
+  out restartOn: array<wref<Entity>>, out restartNames: array<CName>) -> Int32 {
+  if !IsDefined(entity) {
+    return 0;
+  };
+  let stopped: Int32 = 0;
+```
+```swift
+    if IsDefined(component as IVisualComponent) && component.IsEnabled() {
+```
+```swift
+    if IsDefined(component as IVisualComponent) && component.IsEnabled() {
+      let spawner: ref<entEffectSpawnerComponent> = component as entEffectSpawnerComponent;
+      if IsDefined(spawner) {
+        let k: Int32 = 0;
+        while k < ArraySize(spawner.effectDescs) {
+          let effect: ref<entEffectDesc> = spawner.effectDescs[k];
+          if IsDefined(effect) && IsNameValid(effect.effectName) {
+            let stop: ref<entKillEffectEvent> = new entKillEffectEvent();
+            stop.effectName = effect.effectName;
+            stop.breakAllLoops = true;
+            entity.QueueEvent(stop);
+            stopped += 1;
+            if effect.isAutoSpawn {
+              ArrayPush(restartOn, entity);
+              ArrayPush(restartNames, effect.effectName);
+            };
+          };
+          k += 1;
+        };
+      };
+```
+```swift
+  };
+}
+
+@if(!ModuleExists("Codeware"))
+public func BlockRenderSwitchOffMeshes(player: ref<GameObject>, everything: Bool) -> array<wref<IComponent>> {
+  let off: array<wref<IComponent>>;
+  return off;
+```
+```swift
+  };
+  return stopped;
+}
+
+// The game's crosshair, hidden with V (show false) or shown again (true), as the game hides it for the scanner: the
+// HUD's crosshair container, its root widget switched off or on. 1: switched; 0: it already was as asked; -1: the
+// container isn't among the HUD layer's game controllers. Main thread, from HideV.
+@if(ModuleExists("Codeware"))
+public func BlockRenderShowCrosshair(show: Bool) -> Int32 {
+  let ink: ref<inkSystem> = GameInstance.GetInkSystem();
+  if !IsDefined(ink) {
+    return -1;
+  };
+  let layer: ref<inkLayerWrapper> = ink.GetLayer(n"inkHUDLayer");
+  if !IsDefined(layer) {
+    return -1;
+  };
+  let controllers: array<wref<inkIGameController>> = layer.GetGameControllers();
+  let i: Int32 = 0;
+  while i < ArraySize(controllers) {
+    let crosshair: ref<gameuiCrosshairContainerController> = controllers[i] as gameuiCrosshairContainerController;
+    if IsDefined(crosshair) {
+      let root: ref<inkWidget> = crosshair.GetRootWidget();
+      if !IsDefined(root) {
+        return -1;
+      };
+      if Equals(root.IsVisible(), show) {
+        return 0;
+      };
+      root.SetVisible(show);
+      return 1;
+    };
+    i += 1;
+  };
+  return -1;
+}
+
+@if(!ModuleExists("Codeware"))
+public func BlockRenderSwitchOffMeshes(player: ref<GameObject>, everything: Bool, out off: array<wref<IComponent>>,
+  out restartOn: array<wref<Entity>>, out restartNames: array<CName>) -> Int32 {
+  return 0;
+}
+
+@if(!ModuleExists("Codeware"))
+public func BlockRenderShowCrosshair(show: Bool) -> Int32 {
+  return -1;
+```
+- [ ] **Step 2: Compile the module against the game's scripts, without and with Codeware**
+
+```bash
+cd /d/Cyberpunk-Minecraft/spikes/block-render && uv run --no-project python tools/check_reds.py E:/Cyberpunk2077 scripts | tail -1; \
+  echo "without Codeware: exit ${PIPESTATUS[0]}"; \
+  uv run --no-project python tools/check_reds.py E:/Cyberpunk2077 scripts E:/Cyberpunk2077/red4ext/plugins/Codeware/Scripts | tail -1; \
+  echo "with Codeware: exit ${PIPESTATUS[0]}"
+```
+Expected: `compiled`, `without Codeware: exit 0` and `with Codeware: exit 0`.
+
+- [ ] **Step 3: Check that the compile catches a slip in the parts for Codeware, only with Codeware**
+
+```bash
+cd /d/Cyberpunk-Minecraft/spikes/block-render && mkdir -p build/reds-slip \
+  && sed 's/= layer.GetGameControllers();/= layer.GetGameControllerz();/' scripts/BlockRender.reds > build/reds-slip/BlockRender.reds \
+  && uv run --no-project python tools/check_reds.py E:/Cyberpunk2077 build/reds-slip | grep -E "^compiled|^failed|UNRESOLVED"; \
+  echo "without Codeware: exit ${PIPESTATUS[0]}"; \
+  uv run --no-project python tools/check_reds.py E:/Cyberpunk2077 build/reds-slip E:/Cyberpunk2077/red4ext/plugins/Codeware/Scripts \
+    | grep -E "^compiled|^failed|UNRESOLVED"; echo "with Codeware: exit ${PIPESTATUS[0]}"
+```
+Expected: `compiled` and `without Codeware: exit 0`; then redscript's `[UNRESOLVED_METHOD]` at the slip's line, `failed`
+and `with Codeware: exit 1`.
+
+- [ ] **Step 4: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "npcs-and-combat: the module makes V Immortal through the game's override, and hiding V stops V's effects and hides the game's crosshair" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 34: The status shows the hit power, and the effects stopped and the crosshair while V is hidden
+
+- **The combat line** gains its own part for the hit power, `; hit power 0.50;`, after V's punch and before the hits.
+  The overlay's reading of the line doesn't change: it finds `; hits` and `drawn` as before.
+- **The v line,** while V is hidden, counts the effects stopped and says whether the crosshair is hidden:
+  `v=hidden: 112 meshes switched off, 3 effects stopped, the crosshair hidden`, or `…, the crosshair not found`.
+
+**Files:**
+- Modify: `src/Status.h`, `src/Status.cpp`, `tests/TestStatus.cpp`
+
+- [ ] **Step 1: Edit `tests/TestStatus.cpp`: the hit power, and the v line's effects and crosshair**
+
+```cpp
+	                                      "blocks and skill XP; hits 0 queued, 0 landed; V's hurts: 0 taken, 0 sent, 0 summed, 0 left to V, "
+	                                      "0 non-lethal left to V; Immortal off; 0 deaths; Minecraft's player alive"));
+```
+```cpp
+	                                      "blocks and skill XP; hit power 0.50; hits 0 queued, 0 landed; V's hurts: 0 taken, 0 sent, 0 "
+	                                      "summed, 0 left to V, 0 non-lethal left to V; Immortal off; 0 deaths; Minecraft's player alive"));
+	link.hitPower = 1.0;
+```
+```cpp
+	CHECK(Has(cpmc::FormatStatus(report), "combat=on: V's punch 105.00 from Items.mantis_blade, drawn; hits 5 queued, 3 landed, dropped: 1 "
+	                                      "dodged, 1 not listed; the last NPC 35 (NC Resident): 7.00 of Minecraft's damage, started at "
+```
+```cpp
+	CHECK(Has(cpmc::FormatStatus(report), "combat=on: V's punch 105.00 from Items.mantis_blade, drawn; hit power 1.00; hits 5 queued, 3 "
+	                                      "landed, dropped: 1 dodged, 1 not listed; the last NPC 35 (NC Resident): 7.00 of Minecraft's "
+	                                      "damage, started at "
+```
+```cpp
+	CHECK(Has(cpmc::FormatStatus(report), "v=hidden: 23 meshes switched off"));
+```
+```cpp
+	CHECK(Has(cpmc::FormatStatus(report), "v=hidden: 23 meshes switched off, 0 effects stopped"));
+	link.vEffects = 3;
+	link.vCrosshair = 1;
+	report.link = link;
+	CHECK(Has(cpmc::FormatStatus(report), "v=hidden: 23 meshes switched off, 3 effects stopped, the crosshair hidden"));
+	link.vCrosshair = -1;
+	report.link = link;
+	CHECK(Has(cpmc::FormatStatus(report), "v=hidden: 23 meshes switched off, 3 effects stopped, the crosshair not found"));
+```
+- [ ] **Step 2: Build; it must fail**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C" | sort -u | head -3
+```
+Expected: `error C2039: 'hitPower': is not a member of 'cpmc::LinkReport'`.
+
+- [ ] **Step 3: Edit `src/Status.h`**
+
+```cpp
+	int32_t vMeshes = 0;      // as the module's HideV last said: the meshes it switched off; -1 no Codeware; -2 V isn't found
+```
+```cpp
+	int32_t vMeshes = 0;      // as the module's HideV last said: the meshes it switched off; -1 no Codeware; -2 V isn't found
+	int32_t vEffects = 0;     // and the effects it has stopped since V was hidden
+	int32_t vCrosshair = 0;   // and the game's crosshair: 1 hidden; -1 not found among the HUD layer's game controllers
+```
+```cpp
+	bool                  punchDrawn = false;  // V has it drawn, so hits carry it as their weapon
+```
+```cpp
+	bool                  punchDrawn = false;  // V has it drawn, so hits carry it as their weapon
+	double                hitPower = 0.5;    // set hitpower (link::kHitPower): hits start at V's punch x damage^this
+```
+- [ ] **Step 4: Edit `src/Status.cpp`**
+
+```cpp
+		return std::format("v=hidden: {} meshes switched off\n", aLink.vMeshes);
+```
+```cpp
+		return std::format("v=hidden: {} meshes switched off, {} effects stopped{}\n", aLink.vMeshes, aLink.vEffects,
+		                   aLink.vCrosshair > 0   ? ", the crosshair hidden"
+		                   : aLink.vCrosshair < 0 ? ", the crosshair not found"
+		                                          : "");
+```
+```cpp
+	std::string out = std::format("combat=on: V's punch {:.2f}{}{}; hits {} queued, {} landed{}", aLink.punch,
+	                              aLink.punchItem.empty() ? "" : " from " + OneLine(aLink.punchItem),
+	                              aLink.punchDrawn ? ", drawn" : ", not drawn: hits skip the NPC's armour, weapon crits, stealth, blocks and skill XP",
+	                              aLink.hitsQueued, aLink.hitsLanded, aLink.hitsDropped.empty() ? "" : ", dropped: " + OneLine(aLink.hitsDropped));
+```
+```cpp
+	std::string out = std::format("combat=on: V's punch {:.2f}{}{}; hit power {:.2f}; hits {} queued, {} landed{}", aLink.punch,
+	                              aLink.punchItem.empty() ? "" : " from " + OneLine(aLink.punchItem),
+	                              aLink.punchDrawn ? ", drawn" : ", not drawn: hits skip the NPC's armour, weapon crits, stealth, blocks and skill XP",
+	                              aLink.hitPower, aLink.hitsQueued, aLink.hitsLanded,
+	                              aLink.hitsDropped.empty() ? "" : ", dropped: " + OneLine(aLink.hitsDropped));
+```
+- [ ] **Step 5: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `440 test(s), 0 failure(s)`.
+
+- [ ] **Step 6: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "npcs-and-combat: the status shows the hit power, and the effects stopped and the crosshair while V is hidden" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 35: BlockRender 0.18.1 starts hits by set hitpower, says what the game says of V's Immortal, and reads what hiding V did
+
+`GameScript` needs module version 5: 10 functions and 16 fields, `vEffects` and `vCrosshair` (`Int32`) the new ones.
+Its `HideV` now gives what the module's did, a `VLook`: the meshes, as before, then the two fields read just after the
+call. In the plugin, BlockRender 0.18.1:
+- **`set hitpower <0 to 1>`**, 0.5 by default, which `AcceptHit` takes, and the hit's log line shows:
+  `starting at 277.46 = V's punch 104.87 x 7.00^0.50`;
+- **V's Immortal in the game's words:** the module now says whether the game says V is Immortal, so the log says
+  `combat: V's Immortal on: the game says V is Immortal`, or `but the game says V isn't Immortal`; off, `the game says
+  V isn't Immortal`, or `but the game says V is still Immortal, from another source such as Second Heart`. The status's
+  Immortal is the game's word too;
+- **what hiding V did,** in the log, `build: V's meshes hidden: 112 meshes switched off, 3 effects stopped, the
+  crosshair hidden (0.07 ms)`, logged when any of it changes, and in the status's v line.
+
+**Files:**
+- Modify: `src/GameScript.h`, `src/GameScript.cpp`, `src/Plugin.cpp`, `CMakeLists.txt`
+
+- [ ] **Step 1: Edit `src/GameScript.h`**
+
+```cpp
+constexpr int32_t kModuleVersion = 4;  // BlockRenderNpcs.Version(), as this BlockRender needs it
+```
+```cpp
+constexpr int32_t kModuleVersion = 5;  // BlockRenderNpcs.Version(), as this BlockRender needs it
+```
+```cpp
+	float                        vHealthMax = 0.0f;
+```
+```cpp
+	float                        vHealthMax = 0.0f;
+};
+
+// What the module's HideV did: the meshes hidden, or shown again (-1 without Codeware, -2 V isn't found). Hiding: the
+// effects stopped since V was hidden, and the game's crosshair (1 hidden, -1 not found among the HUD layer's game
+// controllers). Showing: the effects started again, and the crosshair (1 shown again, 0 HideV hadn't hidden it).
+struct VLook
+{
+	int32_t meshes = 0;
+	int32_t effects = 0;
+	int32_t crosshair = 0;
+
+	bool operator==(const VLook&) const = default;
+```
+```cpp
+	// V's meshes hidden (aOn), or shown again: the module's HideV gives how many (-1 without Codeware, -2 V isn't found).
+	std::optional<int32_t> HideV(bool aOn, std::string& aWhy);
+	// V's Immortal, under BlockRender's own source name: on or off. Whether the game says it changed.
+```
+```cpp
+	// V hidden (aOn), or shown again: what the module's HideV did, with its meshes, effects and the game's crosshair.
+	std::optional<VLook> HideV(bool aOn, std::string& aWhy);
+	// V's Immortal, the game's override under BlockRender's own source name: on or off. Whether the game then says V is
+	// Immortal.
+```
+```cpp
+		kVHealthMax,
+```
+```cpp
+		kVHealthMax,
+		kVEffects,
+		kVCrosshair,
+```
+- [ ] **Step 2: Edit `src/GameScript.cpp`**
+
+```cpp
+// In GameScript::Field's order: the fields List fills, and their types.
+```
+```cpp
+// In GameScript::Field's order: the fields List fills, and those HideV fills, and their types.
+```
+```cpp
+		{ "punchDrawn", "Bool" },          { "vHealthMax", "Float" },
+```
+```cpp
+		{ "punchDrawn", "Bool" },          { "vHealthMax", "Float" },           { "vEffects", "Int32" },
+		{ "vCrosshair", "Int32" },
+```
+```cpp
+std::optional<int32_t> GameScript::HideV(bool aOn, std::string& aWhy)
+{
+	return Switch(kHideV, "HideV", aOn, aWhy);
+```
+```cpp
+std::optional<VLook> GameScript::HideV(bool aOn, std::string& aWhy)
+{
+	const std::optional<int32_t> meshes = Switch(kHideV, "HideV", aOn, aWhy);
+	if (!meshes)
+	{
+		return std::nullopt;
+	}
+	const Strong system = SessionSystem(*functions_[kCurrent], *class_, aWhy);
+	if (!system)
+	{
+		return std::nullopt;
+	}
+	RED4ext::IScriptable& instance = *system.GetPtr();
+	return VLook{ *meshes, FieldOf<int32_t>(*fields_[kVEffects], instance), FieldOf<int32_t>(*fields_[kVCrosshair], instance) };
+```
+- [ ] **Step 3: Edit `src/Plugin.cpp`**
+
+```cpp
+// go to Minecraft's player, whose death kills V. In build mode V's meshes are hidden, and with combat on V's unarmed
+// weapon is drawn, so that hits carry it.
+```
+```cpp
+// go to Minecraft's player, whose death kills V. In build mode V's meshes and effects and the game's crosshair are
+// hidden, and with combat on V's unarmed weapon is drawn, so that hits carry it.
+```
+```cpp
+constexpr const char* kVersion = "0.18.0";
+```
+```cpp
+constexpr const char* kVersion = "0.18.1";
+```
+```cpp
+bool                                  g_punchDrawn = false;  // V has it drawn, so hits carry it as their weapon
+```
+```cpp
+bool                                  g_punchDrawn = false;  // V has it drawn, so hits carry it as their weapon
+double                                g_hitPower = cpmc::link::kHitPower;  // set hitpower: hits start at the punch x damage^this
+```
+```cpp
+std::optional<int32_t>                g_lastHide;
+int32_t                               g_vMeshes = 0;         // the meshes HideV has switched off
+```
+```cpp
+std::optional<cpmc::VLook>            g_lastHide;
+cpmc::VLook                           g_vLook;               // what HideV has done while V is hidden: meshes, effects, crosshair
+```
+```cpp
+// the module, starting the game's damage pipeline at Minecraft's damage x V's punch.
+```
+```cpp
+// the module, starting the game's damage pipeline at V's punch x Minecraft's damage to the hit power.
+```
+```cpp
+	const std::optional<cpmc::link::NpcHit> accepted = cpmc::link::AcceptHit(aEvent, g_actorIds, aNow, g_punch, cpmc::link::kHitPower, drop);
+```
+```cpp
+	const std::optional<cpmc::link::NpcHit> accepted = cpmc::link::AcceptHit(aEvent, g_actorIds, aNow, g_punch, g_hitPower, drop);
+```
+```cpp
+	Log("{}: starting at {:.2f}, {:.2f} x V's punch {:.2f}{}{}; queued", hit, accepted->amount, accepted->damage, g_punch,
+	    accepted->strong ? ", strong" : "", g_punchDrawn ? "" : ", without V's weapon drawn");
+```
+```cpp
+	Log("{}: starting at {:.2f} = V's punch {:.2f} x {:.2f}^{:.2f}{}{}; queued", hit, accepted->amount, g_punch, accepted->damage,
+	    g_hitPower, accepted->strong ? ", strong" : "", g_punchDrawn ? "" : ", without V's weapon drawn");
+```
+```cpp
+// What the module's HideV said, in words.
+std::string HideWords(int32_t aResult, bool aOn)
+{
+	switch (aResult)
+```
+```cpp
+// What the module's HideV did, in words.
+std::string HideWords(const cpmc::VLook& aLook, bool aOn)
+{
+	switch (aLook.meshes)
+```
+```cpp
+		return std::format("{} meshes {}", aResult, aOn ? "switched off" : "switched on again");
+	}
+```
+```cpp
+		break;
+	}
+	if (aOn)
+	{
+		return std::format("{} meshes switched off, {} effects stopped, the crosshair {}", aLook.meshes, aLook.effects,
+		                   aLook.crosshair > 0 ? "hidden" : "not found among the HUD layer's game controllers");
+	}
+	return std::format("{} meshes switched on again, {} effects started again{}", aLook.meshes, aLook.effects,
+	                   aLook.crosshair > 0 ? ", the crosshair shown again" : "");
+}
+
+// What the game says of V's Immortal after the module's SetImmortal, in words.
+std::string ImmortalWords(bool aOn, bool aImmortal)
+{
+	if (aOn)
+	{
+		return aImmortal ? "the game says V is Immortal" : "but the game says V isn't Immortal";
+	}
+	return aImmortal ? "but the game says V is still Immortal, from another source such as Second Heart" : "the game says V isn't Immortal";
+```
+```cpp
+		std::string                  why;
+		const double                 start = cpmc::SteadySeconds();
+		const std::optional<int32_t> result = g_script.HideV(*hide, why);
+		const double                 ms = (cpmc::SteadySeconds() - start) * 1000.0;
+		if (!*hide || result != g_lastHide)
+		{
+			Log("build: V's meshes {}: {} ({:.2f} ms)", *hide ? "hidden" : "shown", result ? HideWords(*result, *hide) : "not done: " + why,
+			    ms);
+		}
+		g_lastHide = *hide ? result : std::nullopt;
+		g_vMeshes = *hide ? result.value_or(0) : 0;
+	}
+	else if (!g_hidden.On())
+	{
+		g_vMeshes = 0;
+```
+```cpp
+		std::string                      why;
+		const double                     start = cpmc::SteadySeconds();
+		const std::optional<cpmc::VLook> look = g_script.HideV(*hide, why);
+		const double                     ms = (cpmc::SteadySeconds() - start) * 1000.0;
+		if (!*hide || look != g_lastHide)
+		{
+			Log("build: V's meshes {}: {} ({:.2f} ms)", *hide ? "hidden" : "shown", look ? HideWords(*look, *hide) : "not done: " + why, ms);
+		}
+		g_lastHide = *hide ? look : std::nullopt;
+		g_vLook = *hide ? look.value_or(cpmc::VLook{}) : cpmc::VLook{};
+	}
+	else if (!g_hidden.On())
+	{
+		g_vLook = {};
+```
+```cpp
+		const std::optional<bool> changed = g_script.SetImmortal(*change, why);
+		if (changed)
+		{
+			g_immortal = *change;
+		}
+		Log("combat: V's Immortal {}{}", *change ? "on" : "off",
+		    changed ? (*changed ? std::string() : std::string(" (the game says it already was)")) : ": not done: " + why);
+```
+```cpp
+		const std::optional<bool> immortal = g_script.SetImmortal(*change, why);
+		if (immortal)
+		{
+			g_immortal = *immortal;
+		}
+		Log("combat: V's Immortal {}: {}", *change ? "on" : "off", immortal ? ImmortalWords(*change, *immortal) : "not done: " + why);
+```
+```cpp
+		return Report(g_hideV ? "set hidev 1: V's meshes are hidden while build mode is on" : "set hidev 0: V stays seen in build mode");
+```
+```cpp
+		return Report(g_hideV ? "set hidev 1: V's meshes are hidden while build mode is on" : "set hidev 0: V stays seen in build mode");
+	}
+	if (aRequest.what == "hitpower")
+	{
+		if (aRequest.number < 0.0 || aRequest.number > 1.0)
+		{
+			return Report("set hitpower: from 0 to 1, the power of Minecraft's damage that V's punch is multiplied by: 0.5, the default, is "
+			              "the square root; 1 makes each point of damage a whole punch, 0 every hit one punch");
+		}
+		g_hitPower = aRequest.number;
+		return Report(std::format("set hitpower {:.2f}: a hit starts at V's punch x Minecraft's damage^{:.2f}: a fist (1) one punch, a "
+		                          "diamond sword (7) {:.2f} punches",
+		                          g_hitPower, g_hitPower, std::pow(7.0, g_hitPower)));
+```
+```cpp
+	report.punchDrawn = g_punchDrawn;
+```
+```cpp
+	report.punchDrawn = g_punchDrawn;
+	report.hitPower = g_hitPower;
+```
+```cpp
+	report.vMeshes = g_vMeshes;
+```
+```cpp
+	report.vMeshes = g_vLook.meshes;
+	report.vEffects = g_vLook.effects;
+	report.vCrosshair = g_vLook.crosshair;
+```
+- [ ] **Step 4: Edit `CMakeLists.txt`: version 0.18.1**
+
+```cmake
+project(BlockRender VERSION 0.18.0 LANGUAGES C CXX)
+```
+```cmake
+project(BlockRender VERSION 0.18.1 LANGUAGES C CXX)
+```
+- [ ] **Step 5: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `440 test(s), 0 failure(s)`.
+
+- [ ] **Step 6: Check that BlockRender imports nothing from PhysX**
+
+```bash
+DUMPBIN="$(ls "/c/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/"*/bin/Hostx64/x64/dumpbin.exe | head -1)"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && MSYS_NO_PATHCONV=1 "$DUMPBIN" -imports -nologo build\\RelWithDebInfo\\BlockRender.dll \
+  | grep -ci "physx"
+```
+Expected: `0`.
+
+- [ ] **Step 7: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "npcs-and-combat: BlockRender 0.18.1 starts hits by set hitpower, says what the game says of V's Immortal, and reads what hiding V did to its effects and the crosshair, from module version 5" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 36: In the game: step 4's fixes
+
+The spec's "Step 4's fixes, in the game", with the user, on BlockRender 0.18.1 with `set combat 1`, linked to SkyCraft's
+Minecraft in the `CyberCraft` instance, its player in survival, at the 6th Street gang spot of step 4 (the save behind
+the car). The opening checks settle what the fixes left to the game:
+- **V's Immortal:** whether the game says V is Immortal in build mode with combat on, through our override, and not out
+  of it (the spec's risk 18);
+- **the crosshair and the heat:** whether both are gone with V in build mode, and back when it ends, the heat restarted
+  on blades V still holds (risks 19 and 20);
+- **where hits start:** `hit N 1` at one punch, and a diamond sword's hit at 2.65 punches.
+
+Then the fights again, now that Minecraft's weapons don't one-shot: what step 4 couldn't see, blocks, dodges, the
+NPC's armour, staggers and the skill XP; and `set hitpower` at another value.
+
+FreeFly (F7) stays off. Note what you see as you go: Step 12 records it. If the game freezes, read the logs and the
+newest folder in `%LOCALAPPDATA%\REDEngine\ReportQueue`, and force-close it only when the user asks. If a check fails,
+stop and find the cause with superpowers:systematic-debugging before going on. Fixes become new tasks. In build mode
+Minecraft's death kills V, as step 4 found: watch its hearts (the user has golden apples in slot 6 and golden carrots in
+slot 7). CET's overlay key ends build mode, so CET's console is for checks outside it.
+
+The commands of Task 31 come back: sending a request, the log's newest lines, the status, and Minecraft's log.
+
+**Files:**
+- Modify: `docs/spikes/2026-10-05-npcs-and-combat-results.md`
+
+- [ ] **Step 1: Deploy (the game must not be running)**
+
+```bash
+tasklist | grep -i -c "cyberpunk2077.exe"
+```
+Expected: `0`. If it's `1`, ask the user to quit the game first, because a running game locks the DLL.
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+P=/e/Cyberpunk2077/red4ext/plugins/BlockRender
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default -DCP2077_DIR=E:/Cyberpunk2077 > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C|error MSB"; \
+  "$CMAKE" --preset default -DCP2077_DIR= > /dev/null; \
+  cmp build/RelWithDebInfo/BlockRender.dll "$P/BlockRender.dll" && cmp scripts/BlockRender.reds "$P/Scripts/BlockRender.reds" \
+  && echo installed
+```
+Expected: `installed`. The second configure clears `CP2077_DIR` again.
+
+- [ ] **Step 2: In the game: the module and its natives**
+
+Ask the user to start the `CyberCraft` instance, then the game, and to wait at the game's main menu. If a "REDScript
+compilation has failed" message box shows instead, ask the user to click OK and quit the game, and read redscript's log
+for why. Otherwise:
+```bash
+grep -E "BlockRender|Codeware.Global|Compilation complete|ERROR" /e/Cyberpunk2077/r6/logs/redscript_rCURRENT.log; \
+  L=$(ls -t /e/Cyberpunk2077/red4ext/logs | grep -i blockrender | head -1); grep -E "loaded|natives:" "/e/Cyberpunk2077/red4ext/logs/$L"
+```
+Expected: the module's path and Codeware's among the files compiled, `Compilation complete`, and no `ERROR` line; in
+BlockRender's log, `BlockRender 0.18.1 loaded` and the seven natives added.
+
+- [ ] **Step 3: In the game: load, link, and combat on**
+
+Ask the user to load the save behind the 6th Street car, or another spot with gangers who haven't seen V, with the gun
+drawn, and click Link. Then send `set combat 1`.
+Expected:
+- in the log, `module: found BlockRenderNpcs version 5, its 10 functions, the 16 fields List fills, and BlockRender's 7
+  natives`, and `combat: V's Immortal off: the game says V isn't Immortal` once V is found;
+- in the status, `combat=on: V's punch 104.87 from Items.AdvancedMantisBladesThermalLegendary, not drawn: hits skip …;
+  hit power 0.50; hits 0 queued, 0 landed; …` and `v=shown, and hidden in build mode`.
+
+- [ ] **Step 4: In the game: the opening check, V's Immortal by the game's word**
+
+Ask the user to press F8 behind the car, stay a few seconds, and press F8 again. Expected, in the log: `combat: V's
+Immortal on: the game says V is Immortal` as build mode starts, and `combat: V's Immortal off: the game says V isn't
+Immortal` as it ends; the status's combat line says `Immortal on` meanwhile. If it says `but the game says V isn't
+Immortal`, the override doesn't make V Immortal at once: stop, and ask the user to check with CET's console, outside
+build mode, whether `EnableOverride` takes effect a frame later.
+
+- [ ] **Step 5: In the game: the opening check, the crosshair and the heat gone with V**
+
+With the gun drawn, ask the user to press F8 and look around and down. Expected:
+- in the log, `build: V's meshes hidden: N meshes switched off, E effects stopped, the crosshair hidden (… ms)`, and
+  within a second, once the blades are drawn, `… M meshes switched off, F effects stopped, the crosshair hidden`, F more
+  than E;
+- in the status, `v=hidden: M meshes switched off, F effects stopped, the crosshair hidden`;
+- on screen, nothing of V's, no crosshair and no heat: ask the user what they see.
+
+Then F8 again. Expected: `build: V's meshes shown: … meshes switched on again, … effects started again, the crosshair
+shown again`; the crosshair back with the gun. Then ask the user to draw the blades (slot 4), outside build mode, and
+see their heat; press F8 (`combat: V's unarmed weapon drawn: V has it drawn`), check it's gone, and F8 again: the
+blades stay drawn (`nothing to put back`), and their heat comes back (`… effects started again`). If the heat or the
+crosshair stays in build mode, note which, and what the log's counts say (the spec's risks 19 and 20).
+
+- [ ] **Step 6: In the game: the opening check, where hits start**
+
+Send `npcs`, and pick a ganger near V by its number `N`. Send `hit N 1`, with V holding the blades from Step 5.
+Expected: `hit on NPC N (…) for 1.00 of Minecraft's damage, knockback 0.40; unarmed: starting at 104.87 = V's punch
+104.87 x 1.00^0.50; queued` (with `, without V's weapon drawn` before `; queued` if V holds the gun), then its landing. Then ask the user to press F8 and hit a ganger once with the diamond sword (slot 1) at full cooldown, without a
+jump. Expected: `…; blade: starting at 277.46 = V's punch 104.87 x 7.00^0.50; queued`, and a landing that doesn't kill
+a ganger at full health (594 or more).
+
+- [ ] **Step 7: In the game: fights**
+
+Ask the user to fight the gangers in build mode with the sword, the axe (slot 2), the bow (slot 3, arrows in 4) and the
+planks in slot 5 as fists, with jump attacks and sprint hits. Expected, for a ganger of 594 health: two to three sword
+hits, two axe hits, and four to six punches, about half as many again for one of 891; `landed` lines with what the
+pipeline did to each: `critical` now and then, and, now that NPCs
+live long enough, `blocked`, `parried` or `armour`, and some `dealt nothing: dodged`; NPCs flinch, stagger on crits and
+sprint hits, take cover, fight back, and die, the last landing `killed it`. Ask the user to watch for skill XP
+(Reflexes, for the blades) as hits land. Minecraft's hearts drop as they hit back.
+
+- [ ] **Step 8: In the game: the hit power by feel**
+
+Send `set hitpower 0.75`. Expected: `set hitpower 0.75: a hit starts at V's punch x Minecraft's damage^0.75: a fist (1)
+one punch, a diamond sword (7) 4.30 punches`, and the status's `hit power 0.75`. Ask the user to fight a while, and say
+how it feels against 0.5. Then send `set hitpower 0.5`, or the value the user prefers, and note it.
+
+- [ ] **Step 9: In the game: combat off, and unlinking**
+
+Send `set combat 0`, then ask the user to click Unlink. Expected: `combat=off: Minecraft's hits are logged, not applied;
+V's health is V's`; then `none listed: not linked`.
+
+- [ ] **Step 10: Ask the user to quit the game and stop Minecraft**
+
+- [ ] **Step 11: Read the log once more**
+
+```bash
+L=$(ls -t /e/Cyberpunk2077/red4ext/logs | grep -i blockrender | head -1); grep -E "module:|combat:|build: V's|hit on NPC|punch:|hitpower|Minecraft's player died" "/e/Cyberpunk2077/red4ext/logs/$L" | head -300
+```
+Everything the steps above logged, for the results.
+
+- [ ] **Step 12: Record the results in `docs/spikes/2026-10-05-npcs-and-combat-results.md`**
+
+A "Step 4's fixes" section: each check above with its outcome and numbers: V's Immortal by the game's word, in and out
+of build mode; the crosshair and the heat, with the log's counts and what the user saw; where hits started, and what the
+pipeline dealt; the fights (hits a kill by weapon, flags, endings, reactions, staggers, XP, return fire); the hit power
+by feel, and the value kept; and anything that surprised, and what it means for Part 3. Update the spike's answer at the
+top.
+
+- [ ] **Step 13: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add docs/spikes/2026-10-05-npcs-and-combat-results.md docs/superpowers/plans/2026-10-05-npcs-and-combat.md \
+  && git commit -q -m "npcs-and-combat: step 4's fixes in the game" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 37: Close Part 2, and plan Part 3
 
 - [ ] **Step 1: Add "How Part 2 went" to this plan**
 
-At the end, after "The deep review of Part 2": what ran as written, what changed, and what steps 3 and 4 found.
+At the end, after "Step 4's fixes": what ran as written, what changed, and what steps 3 and 4 and the fixes' check
+found.
 
 - [ ] **Step 2: Plan Part 3**
 
-Use superpowers:writing-plans to add Part 3's tasks, from Task 33 on, to this plan: Minecraft's explosions in the game
+Use superpowers:writing-plans to add Part 3's tasks, from Task 38 on, to this plan: Minecraft's explosions in the game
 (the spec's "Part 3", and step 5). Verify them as Parts 1 and 2 were. Changes to the spec found while planning go in its
 "Changes while planning". A blast's hits now go through the whole damage pipeline too: Part 3's explosion hits start
-where `Hit` marks them, so the blast's own modifiers (`ExplosionResistance`, the distance curve) apply.
+where `Hit` marks them, so the blast's own modifiers (`ExplosionResistance`, the distance curve) apply; and their start
+needs the hit power's thought, since a TNT blast is tens of Minecraft's damage.
 
 - [ ] **Step 3: Commit**
 
@@ -9659,3 +10772,47 @@ of Minecraft's crits.
 Whether the start set at `ProcessPipeline`'s entry holds; whether the equipment system draws V's unarmed weapon while
 build mode places V; whether anything of V stays on screen when hidden, a shadow included; whether the Mantis Blades
 are what V's unarmed slot draws; and whether an NPC's health shows a hit's change at once.
+
+## Step 4's fixes
+
+Step 4 (Task 31) ran on 2026-10-05 and 06 and passed every check, settling all the review had left to it (the results'
+"Step 4"). It found three things that didn't work as the spec meant, and the user chose how to fix them; the spec's
+"Changes from step 4" says what and why. This records what it did to the plan.
+
+### What step 4 found
+
+1. **The damage was overkill:** each point of Minecraft's damage was a whole blade swing, so swords, axes and arrows
+   one-shot level-47 gangers of 594 to 891 health, while fists, a point each, took four or five hits.
+2. **Our Immortal never took effect:** V carries `Mortal` from three sources, which outrank an `Immortal` added as a god
+   mode, and the damage pipeline asks `HasGodMode`. `RemoveGodMode` returns false even when it removes, so the log's
+   "the game says it already was" was only its wording.
+3. **Hiding V left two things on screen:** the game's crosshair for the blades, and the Thermal blades' heat effect,
+   which keeps running when its spawner is switched off.
+
+### What the user decided
+
+The square root for where hits start, with `set hitpower` to change it while the game runs; only the game's crosshair
+hidden, not the rest of its HUD; and all three fixes made before Part 2 closes, then the fights again in the game.
+
+### What changed in the plan
+
+- **New tasks, 32 to 36,** after Task 31, which had run: where hits start, by the hit power (32); the module, version 5,
+  with V's Immortal through the game's override and hiding V's effects and the game's crosshair (33); the status (34);
+  `GameScript` and BlockRender 0.18.1 (35); and the fixes in the game, with the fights again (36).
+- **The close is Task 37,** and Part 3 starts at Task 38: its blasts' hits need the hit power's thought too.
+
+### What was checked
+
+- The game's god modes through CET's console during step 4, and in the decompiled scripts `GodModeSystem`'s natives,
+  `GetImmortality` and Second Heart's override; the crosshair container and the effect events, and how the game uses
+  them; Codeware's `inkSystem` and effect spawner declarations; the SDK's effect classes. The spec's "Changes from step
+  4" lists each with its source.
+- Tasks 32 to 35 as "Before you start" says: written and tested in the scratch clone, 9 mutations, the module compiled
+  both ways with a slip that fails only with Codeware's scripts, then replayed from this text in a fresh clone, every
+  expectation met and the files identical.
+
+### Left to the game
+
+Whether the override makes V Immortal at once, and how it sits with Second Heart's own; whether the heat is one of the
+blades' spawners' effects, and whether a kill reaches a spawner that's then switched off; and whether the crosshair
+container is among the HUD layer's game controllers. Task 36 opens with all three.
