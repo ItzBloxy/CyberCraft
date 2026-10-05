@@ -7,7 +7,9 @@ from the second deep review", at the end, list what changed and what was checked
 those changes. Planning Part 1 changed or settled more, which "Changes while planning" lists, as do step 2's first run
 ("Changes from step 2's first run") and planning Part 2 ("Changes while planning Part 2"); the sections above include
 those too. A deep review of Part 2's plan, before step 4, changed how Minecraft's hits land, with the user's decisions:
-"Changes from the deep review of Part 2", at the very end, says what and why, and the sections above include it.
+"Changes from the deep review of Part 2" says what and why, and the sections above include it. Step 4 then passed
+with three fixes to make, which the user chose how to make: "Changes from step 4", at the very end, says what they are,
+and the sections above include them.
 
 ## Purpose
 
@@ -54,7 +56,8 @@ Each is tested against something real as soon as it's built (see "The steps").
   - a Minecraft hit does Minecraft's damage × V's punch, the damage per hit of what V punches with, and the NPC's real
     health takes it. Since the deep review of Part 2, that's where the hit starts in the game's damage pipeline, which
     then does to it all it does to V's own punches: V's crits, perks and cyberware, the NPC's armour, resistances,
-    blocks and dodges;
+    blocks and dodges. Since step 4, which found swords and axes one-shotting gangers, it starts at V's punch ×
+    Minecraft's damage to the power 0.5, the square root, so that a fist stays one punch;
   - a hit on V costs Minecraft's player the same share of its 20 health as it would have cost V of V's max health.
 - **A redscript module for the game's side.** The user chose it over doing everything in C++ through RTTI, and over a
   CET Lua mod. The game's logic is written as the game's own scripts are, and checked against the game's declarations
@@ -222,10 +225,30 @@ From the decompiled 2.31 scripts; every function named here was read there.
   classes). The game's scripts can't list an entity's components; Codeware's `Entity.GetComponents()` can (Codeware
   1.19, installed). `TransactionSystem.GetItemList` and `GetItemInSlotByItemID` give the objects of what V wears and
   holds.
+- **Effects:** an object's effects come from its effect spawners, `ent::EffectSpawnerComponent`, which like
+  `ent::ParticlesComponent` is an `IVisualComponent` (the SDK's classes). Switching a spawner off doesn't stop the
+  effects it has started (step 4: the Thermal blades' heat stayed with V hidden). The game stops and starts an object's
+  effect by name: `entKillEffectEvent` (`effectName`, `breakAllLoops`) and `entSpawnEffectEvent` (`effectName`,
+  `persistOnDetach`), queued on the object (`GameObject.StopReplicatedEffectEvent` and `StartReplicatedEffectEvent`,
+  `gameObject.swift`; `AIActionHelper.KillWeaponEffect` on a weapon). The game's scripts don't declare a spawner's
+  effects; Codeware does: `entEffectSpawnerComponent.effectDescs`, each `entEffectDesc` with its `effectName` and
+  `isAutoSpawn`.
+- **The game's crosshair** (`crosshairContainerController.swift`): `gameuiCrosshairContainerController`, an
+  `inkHUDGameController`, holds the crosshair of whatever is drawn, and hides it for the scanner by switching its root
+  widget off (`OnPSMVisionStateChanged`: `GetRootWidget().SetVisible(value == 0)`). Codeware lists a UI layer's game
+  controllers: `GameInstance.GetInkSystem().GetLayer(name).GetGameControllers()`.
 - **God mode and health:**
   - `GodModeSystem.AddGodMode(id, type, sourceInfo)` and `RemoveGodMode(id, type, sourceInfo)` keep each mode per
     source name: the game's menus add and remove `Invulnerable` on V under their own (`n"HubMenu"`, `n"WorldMap"`);
-  - `gameGodModeType` is `Invulnerable`, `Immortal` or `Mortal`;
+    `GetGodModeCount` and `GetGodModeSources` count and name them. `RemoveGodMode` returns false even when it removes
+    (step 4);
+  - `gameGodModeType` is `Invulnerable`, `Immortal` or `Mortal`. V carries `Mortal` from three sources (step 4, read
+    through CET's console), and it outranks `Immortal`: with an `Immortal` source added, `HasGodMode(Immortal)` stays
+    false. The damage pipeline asks exactly that (`GetImmortality`, `godModeSystem.swift`: `HasGodMode(Invulnerable)`,
+    then `HasGodMode(Immortal)`), so on V an added `Immortal` does nothing;
+  - an override forces a mode over the sources: `EnableOverride(id, type, sourceInfo)` and `DisableOverride(id,
+    sourceInfo)`. Second Heart keeps V alive with it: `SecondHeartStatListener` (`playerListeners.swift`) enables
+    `Immortal` under `n"SecondHeart"` while the implant has a charge, and disables it when it has none;
   - in the damage pipeline, `Invulnerable` makes a hit deal no damage (`InvulnerabilityCheck`), while `Immortal` only
     flags it `ImmortalTarget` (`ImmortalityCheck`) and lets it go on;
   - `StatPoolsSystem.RequestSettingStatPoolMinValue(id, type, instigator)` sets a pool to its minimum. It's how the
@@ -392,8 +415,8 @@ The names are proposals; the plan settles them.
   `ScriptTypes`, beside `Puppet`.
 - **The script:** the install copies `scripts/BlockRender.reds` into the plugin folder's `Scripts/`, and BlockRender
   adds that folder to redscript's compile at load.
-- **The versions:** Part 1 deploys 0.17.0, Part 2 0.18.0, and Part 3 0.19.0, in the log line and in `Query`, which from
-  now on takes its version from `kVersion`.
+- **The versions:** Part 1 deploys 0.17.0, Part 2 0.18.0 (0.18.1 with step 4's fixes), and Part 3 0.19.0, in the log
+  line and in `Query`, which from now on takes its version from `kVersion`.
 
 ## The frame
 
@@ -502,7 +525,11 @@ and name, Minecraft's damage, the flags and the weapon class.
 - **Which hits:** a `kEvHitActor` whose formId was listed in the last 2 s (a hit can trail its stand-in's removal), with
   damage that's finite and over 0. A hit with only knockback is skipped. The damage is capped at 1,000, since `/kill`
   on a stand-in sends 3.4 × 10³⁸.
-- **Where it starts:** Minecraft's damage × V's punch.
+- **Where it starts:** V's punch × Minecraft's damage to the power `p`, `set hitpower` (0.5 by default, from 0 to 1).
+  At 0.5, the square root, a fist (1) starts at one punch, a diamond sword (7) at 2.65 punches and an axe (9) at 3; at
+  1, as step 4 had it, each point of Minecraft's damage is a whole punch, and a sword one-shot level-47 gangers; at 0,
+  every hit is one punch. Minecraft's own hurt cooldown (a target takes a new hit only after 10 of its ticks) keeps weak
+  spammed hits from beating timed ones.
 - **Strong:** a crit, or knockback over 0.45, as SkyCraft staggers; the rest are quick.
 - **What V punches with:** what V's unarmed slot draws: V's arm cyberware weapon if it has a melee attack to make hits
   with, otherwise the fists or Gorilla Arms (`BaseFists`). V's punch is its damage per hit, the inventory's number.
@@ -549,9 +576,10 @@ and name, Minecraft's damage, the flags and the weapon class.
   sent to Minecraft, it could kill Minecraft's player, and so V. The status counts those apart.
 - **Two armours:** a hit's share is what it would cost V after V's armour, and Minecraft's armour then reduces it again
   for melee and projectile hits from an attacker in range. SkyCraft does the same (it measures the health Skyrim took).
-- **Immortal**, under our own source name, stays on meanwhile, as SkyCraft's essential flag does: a backstop if a hit
-  on V gets past the wrap. Health taken outside the pipeline isn't caught at all; the status shows V's health in build
-  mode, so it would be seen.
+- **Immortal**, forced by the game's override under our own source name, stays on meanwhile, as SkyCraft's essential
+  flag does: a backstop if a hit on V gets past the wrap. Step 4 found an added `Immortal` doing nothing on V, whose
+  three `Mortal` god modes outrank it; the override is how Second Heart keeps V alive. Health taken outside the pipeline
+  isn't caught at all; the status shows V's health in build mode, so it would be seen.
 - **To Minecraft, as `kInHurt`:**
   - **amount:** its share of V's max health, as the same share of Minecraft's 20: `a` = share × 20 × 5 × 100, that is
     share × 10,000, rounded, for SkyCraft's ÷100 and ÷5;
@@ -575,9 +603,9 @@ and name, Minecraft's damage, the flags and the weapon class.
 ### Deaths
 
 - **`kEvPlayerDied`,** with combat on, while build mode is on or has ended in the last 2 s: the module takes our
-  Immortal off and kills V through the game's own death, `RequestSettingStatPoolMinValue` of V's health, with the NPC
-  behind the killer's formId as the instigator, or none. Build mode ends as soon as McState says Minecraft's player is
-  dead, which can come before the event.
+  Immortal override off and kills V through the game's own death, `RequestSettingStatPoolMinValue` of V's health, with
+  the NPC behind the killer's formId as the instigator, or none. Build mode ends as soon as McState says Minecraft's
+  player is dead, which can come before the event.
 - **Minecraft respawns by itself:** the `immediate_respawn` game rule, set once in the user's world in step 3; it's
   saved with the world. The status shows when Minecraft's player is dead, and for how long.
 - **The inventory:** a death drops what Minecraft's player carries, unless `keep_inventory` is on. That's the user's
@@ -588,7 +616,10 @@ and name, Minecraft's damage, the flags and the weapon class.
 - **On** while build mode and combat are both on, whichever came first. **Off** when build mode ends, every way it can;
   when combat is turned off; and whenever V is found again after not being found, as after a load, in case a save kept
   it.
-- Only ever added and removed under our source name, `n"BlockRender"`, and never touched at unload.
+- **The game's override,** as Second Heart's: `EnableOverride(V, Immortal, n"BlockRender")` and `DisableOverride(V,
+  n"BlockRender")`, since V's `Mortal` god modes outrank an added `Immortal` (step 4). After each change the module
+  asks the game whether V is Immortal (`HasGodMode`), and the log says what the game says, not what was asked.
+- Only ever enabled and disabled under our source name, `n"BlockRender"`, and never touched at unload.
 
 ### V's weapon and look in build mode
 
@@ -605,6 +636,12 @@ The deep review of Part 2 added these, at the user's choice.
   off stays off. Build mode then shows only Minecraft's view: no hands, no weapon, no legs, no shadow of V's. Codeware
   lists the components; the module's parts that use it compile only where it's installed
   (`@if(ModuleExists("Codeware"))`), and without it V just isn't hidden, and the status says why.
+- **V's effects and the game's crosshair, hidden with V** (step 4 saw both with V hidden). Before it switches an effect
+  spawner off, `HideV` stops each of its effects by name (`entKillEffectEvent`, all loops), and remembers those that
+  start by themselves (`isAutoSpawn`); showing V again switches the spawner on and starts those again on objects still
+  there (`entSpawnEffectEvent`). And it hides the HUD's crosshair container as the scanner does, its root widget off,
+  found among the HUD layer's game controllers; again at each quarter second, since the game may show it; showing V
+  shows it again, if `HideV` hid it. The rest of the game's HUD stays: the user chose the crosshair only.
 
 ### Combat on and off
 
@@ -613,6 +650,7 @@ The deep review of Part 2 added these, at the user's choice.
 - `hit <id> <damage> [strong]` acts as if Minecraft hit that NPC for `<damage>` of Minecraft's, for step 4's opening
   check. `punch` logs V's punch, what it's read from, the attack records, and whether V has it drawn.
 - `set hidev 0|1` keeps V seen in build mode (0), or hides it (1).
+- `set hitpower <0 to 1>` sets where a hit starts: V's punch × Minecraft's damage to that power (0.5 by default).
 
 ## Part 3: explosions
 
@@ -706,6 +744,16 @@ Then:
 - dying in Minecraft kills V, with `keep_inventory` as the user chose in step 3; after the load, V isn't Immortal: a
   hit outside build mode takes V's health.
 
+### Step 4's fixes, in the game (Part 2)
+
+BlockRender 0.18.1, with step 4's three fixes ("Changes from step 4"). The opening check:
+- in build mode with combat on, the game says V is Immortal (our override), and out of it, that V isn't;
+- in build mode, the blades' crosshair and their heat effect are gone with V, and back when build mode ends;
+- `hit N 1` starts at one punch, and a diamond sword's hit at 2.65 punches.
+
+Then the fights again, now that Minecraft's weapons don't one-shot: blocks, dodges, the NPC's armour, staggers on crits
+and sprint hits, and the skill XP; and `set hitpower` at another value, to feel the difference.
+
 ### Step 5: in the game, explosions (Part 3)
 
 BlockRender 0.19.0. The opening check: `explode` beside an NPC (knocked down?) and beside a parked car (pushed?), and the
@@ -731,6 +779,7 @@ plugin's folder or the overlay's. The new commands:
 | `hit <id> <damage> [strong]` | As if Minecraft hit NPC `<id>` for `<damage>` |
 | `punch` | Logs V's punch, what it's read from, the attack records, and whether V has it drawn |
 | `set hidev 0\|1` | V's meshes hidden in build mode (1, the default) or seen (0) |
+| `set hitpower <0 to 1>` | Where a hit starts: V's punch × Minecraft's damage to this power (0.5, the default: a fist one punch, a diamond sword 2.65) |
 | `explode <metres> <radius>` | A blast that far ahead of V, as if it were Minecraft's |
 
 The overlay gains the NPC and combat lines, and two buttons, NPCs and Combat; and, under "More controls", ones that
@@ -740,13 +789,14 @@ send `npcs` and `punch`, and one that switches `set hidev`. Its build line says 
 
 - **NPCs:** on or off; listed, of how many in the world; the nearest (distance, name); capsules found; IDs given; the
   module's time a frame, on average and at worst; and why not, if the module isn't found.
-- **Combat:** on or off; V's punch, what it's read from, and whether V has it drawn, or what hits skip without it; hits
-  queued, landed, and not applied by reason, ours and the pipeline's; the last hit (the NPC, Minecraft's damage, where
-  it started, what was dealt and what the pipeline did to it, its health before and after); V's hurts taken, sent,
-  summed, left to V and left to V as non-lethal, and the last (amount, share, Minecraft's damage, kind, attack type,
-  attacker); Immortal on or off; deaths; Minecraft's player dead, and for how long; and why combat can't do all it
-  should, while it can't.
-- **V's look:** hidden in build mode, with the meshes switched off; or seen, and why.
+- **Combat:** on or off; V's punch, what it's read from, and whether V has it drawn, or what hits skip without it; the
+  hit power; hits queued, landed, and not applied by reason, ours and the pipeline's; the last hit (the NPC, Minecraft's
+  damage, where it started, what was dealt and what the pipeline did to it, its health before and after); V's hurts
+  taken, sent, summed, left to V and left to V as non-lethal, and the last (amount, share, Minecraft's damage, kind,
+  attack type, attacker); Immortal on or off, as the game last said; deaths; Minecraft's player dead, and for how long;
+  and why combat can't do all it should, while it can't.
+- **V's look:** hidden in build mode, with the meshes switched off, the effects stopped and whether the crosshair is
+  hidden; or seen, and why.
 - **Blasts:** how many; the last (centre, reach, NPCs within it, blast hits).
 - **Frame rates:** with NPCs and combat on and off.
 
@@ -764,10 +814,11 @@ send `npcs` and `punch`, and one that switches `set hidev`. Its build line says 
   thread alone.
 - **Minecraft is untrusted:** a hit's formId must be one we listed, and its damage finite, over 0 and capped; an
   `EntityID` is found again (`FindEntityByID`) before every use.
-- **V's god mode:** only under our source name, and removed whenever build mode ends, combat goes off, or V is found
-  again.
+- **V's god mode:** the game's override, only under our source name, and disabled whenever build mode ends, combat goes
+  off, or V is found again.
 - **V's weapon and meshes:** V's own weapon is put back when combat or build mode ends; only the meshes the module
-  switched off are switched on again; neither is saved, so a load starts V as its save left it.
+  switched off are switched on again, only the effects it stopped that start by themselves are started again, and the
+  crosshair is shown again only if the module hid it; none of it is saved, so a load starts V as its save left it.
 - **Codeware is optional:** the module's parts that use it compile only where it's installed, so a missing Codeware
   can't fail the compile that every mod's scripts share (risk 9); `check_reds.py` compiles the module both ways.
 - **Off by default:** combat, until step 4 passes. NPCs are on, since listing them changes nothing in the game. Hiding V
@@ -785,7 +836,9 @@ send `npcs` and `punch`, and one that switches `set hidev`. Its build line says 
 - **The input ring is full:** the hurt waits for the next frame, and is counted.
 - **V's unarmed weapon can't be drawn** (no unarmed weapon, a place where the game restricts weapons): logged, asked
   again each second, and the status says the weapon isn't drawn, and what hits skip without it.
-- **Codeware isn't installed:** V isn't hidden, and the status says why.
+- **Codeware isn't installed:** V isn't hidden, nor V's effects and the crosshair, and the status says why.
+- **The crosshair container isn't found** among the HUD layer's game controllers: V is hidden without it, and the
+  status says the crosshair isn't hidden.
 
 ## Testing
 
@@ -805,7 +858,8 @@ send `npcs` and `punch`, and one that switches `set hidev`. Its build line says 
   once); the box's top from the tallest capsule; `mclink`'s `hurt`; `hit` and `punch`; and the status's combat line.
   Since the deep review of Part 2: what the pipeline did to our hits and why it dealt some nothing, in words; the inbox's
   endings and non-lethal hurts; V's switches for its weapon and meshes (on, off, refreshed, and lost with V); and the
-  status's v line.
+  status's v line. Since step 4: where a hit starts by the hit power (0, 0.5, 1; a fist, a sword, the cap); and the v
+  line's effects and crosshair.
 - **Part 3:** the blast window (0.15 s, the reach) and the centre in world axes.
 
 ### `mclink`
@@ -816,7 +870,7 @@ and events printed as they arrive.
 
 ### In the game
 
-Steps 2, 4 and 5. The module's code runs only in the game.
+Steps 2, 4, step 4's fixes, and 5. The module's code runs only in the game.
 
 ## Risks
 
@@ -833,7 +887,7 @@ Steps 2, 4 and 5. The module's code runs only in the game.
    shows V's health in build mode, so step 4 would see it.
 6. **Killing V doesn't bring the game's own death.** Step 4 tries it. The fallback is a hit flagged `Kill` from the
    killer, as the game kills a vehicle's driver.
-7. **A save keeps our Immortal.** It's removed whenever V is found again, so a load clears it.
+7. **A save keeps our Immortal.** It's disabled whenever V is found again, so a load clears it.
 8. **The damage pipeline runs off the main thread,** racing BlockRender's calls into the module. Since step 2, which
    found the game's script callbacks running on worker threads, it's taken to: the pipeline's wraps read only the hit
    and call BlockRender's natives, behind a lock. Step 4 watches for hits lost or doubled.
@@ -857,7 +911,15 @@ Steps 2, 4 and 5. The module's code runs only in the game.
 16. **Hiding V misses something, or switching meshes off has a side effect** (V's shadow, a visual the game needs on).
     Step 4's opening check looks around and down in build mode, and back out of it; `set hidev 0` turns it off.
 17. **The NPC's health shows a hit's change only later,** if the game applies the drain after `DealDamages`. Step 4
-    reads the health again with `npcs`.
+    found it does: a landing's "after" is the health before it, and the next hit's "before" shows the change.
+18. **The override doesn't make V Immortal either,** or it clashes with Second Heart's, which uses the same mechanism
+    under its own source name. The fixes' opening check reads what the game says in build mode; if V isn't Immortal,
+    the damage wrap stays V's only guard, as it was in step 4, where it held for all 42 hits.
+19. **The heat isn't a spawner's effect,** or a spawner switched off ignores the kill. The fixes' opening check looks
+    for it with V hidden, and the log counts the effects stopped; if it stays, the module's next try is stopping the
+    effects without switching their spawner off.
+20. **The crosshair container isn't among the HUD layer's game controllers.** The status says the crosshair isn't
+    hidden; the next try is the other layers Codeware lists.
 
 ## Found while writing
 
@@ -1152,3 +1214,70 @@ Left to step 4's opening check: whether the start set at `ProcessPipeline`'s ent
 filled in later by the game); whether the equipment system draws V's unarmed weapon while build mode places V; whether
 hiding V's meshes leaves anything of V on screen, a shadow included; whether the arm cyberware is what V's unarmed slot
 draws (it depends on how the game files it); and whether an NPC's health shows a hit's change at once.
+
+## Changes from step 4
+
+Step 4 ran on 2026-10-05 and 06 (the results' "Step 4"). Every check passed, and the game settled what the deep review
+of Part 2 had left open: the start set at `ProcessPipeline`'s entry holds; V's unarmed slot draws the Mantis Blades;
+the game draws them while build mode places V; hiding V leaves none of V's meshes on screen; and an NPC's health shows a
+hit's change only after `DealDamages`. Three things didn't work as this spec meant, and the user chose how to fix them.
+The sections above include the fixes.
+
+### What step 4 found
+
+1. **The damage was overkill.** Each point of Minecraft's damage was a whole blade swing: a diamond sword (7) started at
+   734 and the axe (9) at 944, and each one-shot a level-47 ganger of 594 to 891 health. Fists, a point each, took four
+   or five hits, which the user found right. One multiplier can't fix both: any factor that tames the sword weakens
+   the fists as much.
+2. **Our Immortal never took effect.** V carries `Mortal` from three sources, and it outranks `Immortal`: with ours
+   added, `HasGodMode(Immortal)` stayed false, and the damage pipeline's `GetImmortality` asks exactly that. In build
+   mode the damage wrap was V's only guard; it held for all 42 hits. And `RemoveGodMode` returns false even when it
+   removes, so the log's "the game says it already was" was wrong each time.
+3. **Hiding V left two things on screen:** the game's crosshair for the drawn blades, which is the HUD's, and the
+   Thermal blades' heat effect, which an effect spawner started: switching the spawner off doesn't stop it.
+
+### What the user decided
+
+- **The damage's curve:** the square root. A hit starts at V's punch × Minecraft's damage to the power 0.5, so a fist
+  stays one punch, a diamond sword is 2.65 and an axe 3; `set hitpower` changes the power while the game runs.
+- **The game's HUD in build mode:** only the crosshair is hidden; the minimap, the quest tracker and the rest stay.
+- **Fix all three before Part 2 closes,** then fight again in the game.
+
+### What changed
+
+- **Where a hit starts:** V's punch × Minecraft's damage to the power `set hitpower` (0.5), in `link/Combat`, with the
+  power in the hit's log line and in the status.
+- **V's Immortal:** the game's override (`EnableOverride` and `DisableOverride`), as Second Heart's; the log says
+  whether the game then says V is Immortal.
+- **Hiding V:** effects stopped by name before their spawners go off, and those that start by themselves started again
+  when V is shown; the HUD's crosshair container hidden with V. The status's v line counts the effects and says whether
+  the crosshair is hidden.
+- **BlockRender 0.18.1, the module's version 5,** and a step for the fixes in the game, after step 4: its opening check
+  reads the game's word on V's Immortal, looks for the crosshair and the heat, and checks where hits start; then the
+  fights again.
+- **Risks** 17 is restated; 18 to 20 are new.
+
+### What was checked
+
+- **In the game, through CET's console** (step 4): `AddGodMode` returns true and counts the source, while
+  `HasGodMode(Immortal)` stays false and `HasGodMode(Mortal)` is true, from three sources; `RemoveGodMode` returns false
+  as it removes.
+- **The game's scripts:** `GodModeSystem`'s natives (`orphans.swift`: `AddGodMode`, `RemoveGodMode`, `HasGodMode`,
+  `GetGodModeCount`, `GetGodModeSources`, `ClearGodMode`, `EnableOverride`, `DisableOverride`); `GetImmortality`
+  (`godModeSystem.swift`); `SecondHeartStatListener` (`playerListeners.swift`), the only script that uses an override;
+  `gameuiCrosshairContainerController` (`crosshairContainerController.swift`) and the crosshair controllers it holds;
+  `entKillEffectEvent`, `entSpawnEffectEvent` and `entBreakEffectLoopEvent` (`orphans.swift`), and how the game stops
+  and starts effects with them (`GameObject.StopReplicatedEffectEvent` and `StartReplicatedEffectEvent`,
+  `AIActionHelper.KillWeaponEffect`); and again `ConvertDPSToHitDamage` and `CalculateDamageVariants`, which don't
+  change our hit's start beyond the spread.
+- **Codeware 1.19's installed scripts:** `inkSystem.GetLayer` and `inkLayerWrapper.GetGameControllers`;
+  `entEffectSpawnerComponent.effectDescs` and `entEffectDesc`'s `effectName` and `isAutoSpawn`.
+- **The RED4ext SDK:** `ent::EffectSpawnerComponent` and `ent::ParticlesComponent` are `IVisualComponent`s, so step 4's
+  `HideV` already switched them off.
+
+### Not settled by reading
+
+Left to the fixes' opening check in the game: whether the override makes V Immortal at once, and how it sits with
+Second Heart's own, if V has the implant; whether the heat is one of the blades' spawners' effects, and whether a kill
+reaches a spawner that is then switched off; and the name of the layer that holds the crosshair container, taken to be
+the HUD's (`inkHUDLayer`).
