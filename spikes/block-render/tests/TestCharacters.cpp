@@ -15,14 +15,23 @@ namespace
 // An NPC's feet on the road at spike 3's corner.
 constexpr Vec3d kFeet{ -119.5, -2007.5, 6.14 };
 
-// A capsule standing at aX, aY (world axes), its centre aUp metres above the road.
+// A character controller's capsule standing at aX, aY (world axes), its centre aUp metres above the road, with V's query
+// filter (0:0:2000:0).
 CapsuleSeen Standing(double aX, double aY, double aUp, double aRadius, double aHalfHeight)
 {
 	CapsuleSeen capsule;
 	capsule.centre = { aX, aY, kFeet.z + aUp };
 	capsule.radius = aRadius;
 	capsule.halfHeight = aHalfHeight;
+	capsule.queryFilter = { 0, 0, 0x2000, 0 };
 	return capsule;
+}
+
+// aCapsule with another query filter's third word.
+CapsuleSeen Filtered(CapsuleSeen aCapsule, uint32_t aWord2)
+{
+	aCapsule.queryFilter = { 0, 0, aWord2, 0 };
+	return aCapsule;
 }
 
 // aCapsule leaning aDegrees from upright, its top towards the world's +x; with aThroughTheFeet, moved along x so its axis
@@ -47,8 +56,8 @@ CapsuleSeen Controller()
 
 TEST(CharactersPickTheNpcsOwnCapsule)
 {
-	// V's pair: its controller, and a wide capsule, radius 1, around it. The narrower is the controller.
-	const std::vector<CapsuleSeen>   pair{ Standing(kFeet.x, kFeet.y, 1.0, 1.0, 0.4), Controller() };
+	// V's pair: its controller, and a wide capsule, radius 1, around it (query filter 0:0:400001:0).
+	const std::vector<CapsuleSeen>   pair{ Filtered(Standing(kFeet.x, kFeet.y, 1.0, 1.0, 0.4), 0x400001), Controller() };
 	const std::optional<CapsuleSeen> picked = PickCapsule(pair, kFeet);
 	CHECK(picked.has_value());
 	CHECK_NEAR(picked ? picked->radius : 0.0, 0.32, 1e-9);
@@ -61,6 +70,21 @@ TEST(CharactersPickTheNpcsOwnCapsule)
 	// Leaning 20 degrees, centred over the feet: its axis passes 0.34 m from them.
 	CHECK(!PickCapsule(std::vector{ Leaning(Controller(), 20.0, false) }, kFeet).has_value());
 	CHECK(!PickCapsule(std::vector<CapsuleSeen>{}, kFeet).has_value());
+}
+
+TEST(CharactersPickTheControllerAmongAnNpcsCapsules)
+{
+	// Step 2's vendor (2026-10-05) stood in three kinematic capsules: its controller, radius 0.30, its query filter
+	// 0:0:10002000:0 sharing V's controller's 0x2000; a wider one, radius 0.40 (0:0:2000000:0); and a thin one, radius 0.06
+	// (0:0:24000002:0). The controller is the one.
+	const CapsuleSeen controller = Filtered(Standing(kFeet.x, kFeet.y, 1.0, 0.30, 0.425), 0x10002000);
+	const CapsuleSeen wide = Filtered(Standing(kFeet.x, kFeet.y, 1.0, 0.40, 0.45), 0x2000000);
+	const CapsuleSeen thin = Filtered(Standing(kFeet.x, kFeet.y, 1.0, 0.06, 0.80), 0x24000002);
+	const std::optional<CapsuleSeen> picked = PickCapsule(std::vector{ thin, wide, controller }, kFeet);
+	CHECK(picked.has_value());
+	CHECK_NEAR(picked ? picked->radius : 0.0, 0.30, 1e-9);
+	// Without a controller's capsule, none: the NPC stays person-sized.
+	CHECK(!PickCapsule(std::vector{ thin, wide }, kFeet).has_value());
 }
 
 TEST(CharactersBoxReachesFromTheFeetOrTheCapsulesBottomToItsTop)

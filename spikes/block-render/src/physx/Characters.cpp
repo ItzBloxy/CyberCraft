@@ -29,7 +29,7 @@ std::optional<CapsuleSeen> PickCapsule(std::span<const CapsuleSeen> aSeen, const
 	std::optional<CapsuleSeen> best;
 	for (const CapsuleSeen& capsule : aSeen)
 	{
-		if (Upright(capsule) < upright)
+		if ((capsule.queryFilter[2] & kControllerQueryBit) == 0 || Upright(capsule) < upright)
 		{
 			continue;
 		}

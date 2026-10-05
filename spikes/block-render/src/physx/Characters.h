@@ -23,6 +23,9 @@ constexpr double kCapsuleSearchHeight = 1.0;  // centred this far above the NPC'
 constexpr double kCapsuleAcross = 0.2;        // how far an NPC's capsule's axis may pass from its feet
 constexpr double kCapsuleTilt = 25.0;         // and how far it may lean from upright, in degrees
 constexpr size_t kCapsulesPerFrame = 8;       // NPCs looked for in one frame
+// A character controller's bit, in its capsule's query filter's third word: V's is 0:0:2000:0, and step 2's vendor's
+// 0:0:10002000:0, while the vendor's other capsules, radius 0.40 and 0.06, and V's radius-1 one, lack it.
+constexpr uint32_t kControllerQueryBit = 0x2000;
 constexpr double kCapsuleRetry = 2.0;         // seconds before an NPC whose capsule wasn't found is looked for again
 
 // A kinematic actor's capsule, in the world's axes.
@@ -35,9 +38,9 @@ struct CapsuleSeen
 	std::array<uint32_t, 4> queryFilter{};     // its shape's, for the npcs request
 };
 
-// The NPC's own among aSeen, for an NPC whose feet are at aFeet: one leaning at most kCapsuleTilt from upright, whose
-// axis passes within kCapsuleAcross of the feet; of several, the narrowest, since V has a second kinematic capsule,
-// radius 1, around its controller. Nothing if none is.
+// The NPC's own among aSeen, for an NPC whose feet are at aFeet: a character controller's, with kControllerQueryBit in
+// its query filter, leaning at most kCapsuleTilt from upright, whose axis passes within kCapsuleAcross of the feet; of
+// several, the narrowest. Nothing if none is.
 std::optional<CapsuleSeen> PickCapsule(std::span<const CapsuleSeen> aSeen, const Vec3d& aFeet);
 
 // Its box: twice the radius wide, reaching from the lower of the feet and the capsule's bottom up to its top.
