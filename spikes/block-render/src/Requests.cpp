@@ -94,7 +94,8 @@ std::optional<Request> ParseRequest(std::string_view aText, std::string& aError)
 	}
 	const std::string_view command = words[0];
 	const size_t           arguments = words.size() - 1;
-	if (command == "log" || command == "clear" || command == "reload" || command == "floor" || command == "shapes" || command == "npcs")
+	if (command == "log" || command == "clear" || command == "reload" || command == "floor" || command == "shapes" || command == "npcs" ||
+	    command == "punch")
 	{
 		if (arguments != 0)
 		{
@@ -105,6 +106,7 @@ std::optional<Request> ParseRequest(std::string_view aText, std::string& aError)
 		                           : command == "floor"  ? Request::Kind::Floor
 		                           : command == "shapes" ? Request::Kind::Shapes
 		                           : command == "npcs"   ? Request::Kind::Npcs
+		                           : command == "punch"  ? Request::Kind::Punch
 		                                                 : Request::Kind::Reload;
 		return Request{ kind };
 	}
@@ -119,6 +121,19 @@ std::optional<Request> ParseRequest(std::string_view aText, std::string& aError)
 		                           : command == "scenewatch" ? Request::Kind::SceneWatch
 		                                                     : Request::Kind::Box;
 		return Request{ kind, std::string(words[1]) };
+	}
+	if (command == "hit")
+	{
+		const std::optional<double> id = arguments >= 2 ? Number(words[1]) : std::nullopt;
+		const std::optional<double> damage = arguments >= 2 ? Number(words[2]) : std::nullopt;
+		if (arguments < 2 || arguments > 3 || !id || *id < 1.0 || *id > 4294967295.0 || *id != std::floor(*id) || !damage || *damage <= 0.0 ||
+		    (arguments == 3 && words[3] != "strong"))
+		{
+			return Fail(aError, "hit takes an NPC's number from 1, a damage over 0, and strong if it's a strong hit");
+		}
+		Request request{ Request::Kind::Hit, arguments == 3 ? "strong" : "quick", *damage };
+		request.id = uint32_t(*id);
+		return request;
 	}
 	if (command == "mc")
 	{

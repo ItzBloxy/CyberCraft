@@ -204,6 +204,19 @@ TEST(RequestsForTheNpcs)
 	CHECK(npcs && npcs->kind == cpmc::Request::Kind::Npcs);
 	CHECK(!cpmc::ParseRequest("npcs all", error));
 	CHECK_STR(error, "npcs takes nothing after it");
+	const auto hit = cpmc::ParseRequest("hit 3 7", error);
+	CHECK(hit && hit->kind == cpmc::Request::Kind::Hit && hit->id == 3 && hit->number == 7.0 && hit->what == "quick");
+	const auto strong = cpmc::ParseRequest("hit 4294967295 10.5 strong", error);
+	CHECK(strong && strong->id == 4294967295u && strong->number == 10.5 && strong->what == "strong");
+	for (const char* bad : { "hit", "hit 3", "hit 0 7", "hit 1.5 7", "hit 4294967296 7", "hit 3 0", "hit 3 -1", "hit 3 7 hard",
+	                         "hit 3 7 strong more", "hit x 7" })
+	{
+		CHECK(!cpmc::ParseRequest(bad, error));
+	}
+	CHECK_STR(error, "hit takes an NPC's number from 1, a damage over 0, and strong if it's a strong hit");
+	const auto punch = cpmc::ParseRequest("punch", error);
+	CHECK(punch && punch->kind == cpmc::Request::Kind::Punch);
+	CHECK(!cpmc::ParseRequest("punch now", error));
 	const auto off = cpmc::ParseRequest("set npcs 0", error);
 	CHECK(off && off->kind == cpmc::Request::Kind::Set && off->what == "npcs" && off->number == 0.0);
 }

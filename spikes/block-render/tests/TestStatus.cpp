@@ -334,3 +334,37 @@ TEST(StatusWritesTheNpcs)
 	report.link = link;
 	CHECK(Has(cpmc::FormatStatus(report), "npcs=off"));
 }
+
+TEST(StatusWritesCombat)
+{
+	cpmc::StatusReport report;
+	cpmc::LinkReport   link;
+	report.link = link;
+	const std::string status = cpmc::FormatStatus(report);
+	CHECK(Has(status, "combat=off: Minecraft's hits are logged, not applied; V's health is V's"));
+	CHECK(status.find("npcs=") < status.find("combat=") && status.find("combat=") < status.find("ring="));
+	link.combatOn = true;
+	link.punch = 102.0;
+	report.link = link;
+	CHECK(Has(cpmc::FormatStatus(report), "combat=on: V's punch 102.00; hits 0 queued, 0 landed; V's hurts: 0 taken, 0 sent, 0 summed, 0 "
+	                                      "left to V; Immortal off; 0 deaths; Minecraft's player alive"));
+	link.hitsQueued = 5;
+	link.hitsLanded = 4;
+	link.hitsDropped = "1 not listed";
+	link.lastHit = "NPC 35 (NC Resident): 7.00 of Minecraft's damage, 714.00 of its health; landed, 1514 -> 800";
+	link.hurtsTaken = 3;
+	link.hurtsSent = 2;
+	link.hurtsSummed = 1;
+	link.hurtsLeft = 7;
+	link.lastHurt = "45.0 of V's health (0.0987), 1.97 of Minecraft's 20, projectile (Ranged), from NPC 12";
+	link.immortal = true;
+	link.deaths = 1;
+	link.minecraftDeadFor = 0.84;
+	link.combatWhy = "V's max health isn't read, so V's hurts aren't taken";
+	report.link = link;
+	CHECK(Has(cpmc::FormatStatus(report), "combat=on: V's punch 102.00; hits 5 queued, 4 landed, dropped: 1 not listed; the last NPC 35 "
+	                                      "(NC Resident): 7.00 of Minecraft's damage, 714.00 of its health; landed, 1514 -> 800; V's "
+	                                      "hurts: 3 taken, 2 sent, 1 summed, 7 left to V; the last 45.0 of V's health (0.0987), 1.97 of "
+	                                      "Minecraft's 20, projectile (Ranged), from NPC 12; Immortal on; 1 deaths; Minecraft's player "
+	                                      "dead for 0.8 s; V's max health isn't read, so V's hurts aren't taken"));
+}

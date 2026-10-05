@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -26,6 +27,8 @@ namespace cpmc
 //   shapes                     (spike 5: the game's shapes within 2 m of V, into the log)
 //   box on|off                 (spike 5's step 4: a test box 3 m ahead of V, made as the bodies for blocks are)
 //   npcs                       (spike 6: every NPC listed, into the log, and what the game's targeting finds)
+//   hit <id> <damage> [strong] (spike 6: as if Minecraft hit NPC <id>, from 1, for <damage>, over 0, of its damage)
+//   punch                      (spike 6: V's punch, what it's read from, and what hits are made with, into the log)
 struct Request
 {
 	enum class Kind
@@ -46,11 +49,15 @@ struct Request
 		Shapes,
 		Box,
 		Npcs,
+		Hit,
+		Punch,
 	};
 
 	Kind        kind = Kind::Log;
-	std::string what;          // the dump target, mode, structure, setting name, on or off, or what to type
-	double      number = 0.0;  // the field's block count, the setting's value, or the drive log's seconds
+	std::string what;          // the dump target, mode, structure, setting name, on or off, what to type, or a hit's
+	                           // strong or quick
+	double      number = 0.0;  // the field's block count, the setting's value, the drive log's seconds, or a hit's damage
+	uint32_t    id = 0;        // a hit's NPC: its number in SkyCraft's actor table
 };
 
 // The command in aText (one line; surrounding whitespace is ignored). Nothing, with aError saying why, if the text

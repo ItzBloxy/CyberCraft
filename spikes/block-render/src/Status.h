@@ -118,6 +118,22 @@ struct LinkReport
 	double                moduleMsAverage = -1.0;  // the module's time a frame, in the last second; below 0: not called
 	double                moduleMsWorst = -1.0;
 	uint64_t              npcHits = 0;  // Minecraft's hits on them, logged
+	// Combat both ways (spike 6's "Part 2"): the counts are since the start
+	bool                  combatOn = false;  // set combat 1
+	double                punch = 0.0;       // V's punch, as last read
+	uint64_t              hitsQueued = 0;    // Minecraft's hits made V's, and queued in the game
+	uint64_t              hitsLanded = 0;    // and dealt by its damage pipeline
+	std::string           hitsDropped;       // by reason: "2 not listed, 1 the NPC is dead"; empty: none
+	std::string           lastHit;           // the NPC, Minecraft's damage, the amount, and how it went
+	uint64_t              hurtsTaken = 0;    // the game's hits on V, taken for Minecraft
+	uint64_t              hurtsSent = 0;     // kInHurts sent
+	uint64_t              hurtsSummed = 0;   // hurts that went in a sum
+	uint64_t              hurtsLeft = 0;     // offered while not taken: left to V
+	std::string           lastHurt;          // its amount and share, Minecraft's damage, kind, attack type and attacker
+	bool                  immortal = false;  // our Immortal on V
+	uint64_t              deaths = 0;        // Minecraft's deaths that killed V
+	std::optional<double> minecraftDeadFor;  // seconds; none: alive
+	std::string           combatWhy;         // why combat can't do all it should, while it can't
 	// The render ring
 	double      ringMb = 0.0;            // in the last second
 	double      ringMbWorstFrame = 0.0;  // the most in one frame of it

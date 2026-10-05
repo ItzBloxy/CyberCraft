@@ -181,6 +181,33 @@ std::string FormatNpcs(const LinkReport& aLink)
 	return out + "\n";
 }
 
+std::string FormatCombat(const LinkReport& aLink)
+{
+	if (!aLink.combatOn)
+	{
+		return "combat=off: Minecraft's hits are logged, not applied; V's health is V's\n";
+	}
+	std::string out = std::format("combat=on: V's punch {:.2f}; hits {} queued, {} landed{}", aLink.punch, aLink.hitsQueued, aLink.hitsLanded,
+	                              aLink.hitsDropped.empty() ? "" : ", dropped: " + OneLine(aLink.hitsDropped));
+	if (!aLink.lastHit.empty())
+	{
+		out += "; the last " + OneLine(aLink.lastHit);
+	}
+	out += std::format("; V's hurts: {} taken, {} sent, {} summed, {} left to V", aLink.hurtsTaken, aLink.hurtsSent, aLink.hurtsSummed,
+	                   aLink.hurtsLeft);
+	if (!aLink.lastHurt.empty())
+	{
+		out += "; the last " + OneLine(aLink.lastHurt);
+	}
+	out += std::format("; Immortal {}; {} deaths; Minecraft's player {}", aLink.immortal ? "on" : "off", aLink.deaths,
+	                   aLink.minecraftDeadFor ? std::format("dead for {:.1f} s", *aLink.minecraftDeadFor) : std::string("alive"));
+	if (!aLink.combatWhy.empty())
+	{
+		out += "; " + OneLine(aLink.combatWhy);
+	}
+	return out + "\n";
+}
+
 std::string FormatLink(const LinkReport& aLink)
 {
 	std::string       out;
@@ -210,6 +237,7 @@ std::string FormatLink(const LinkReport& aLink)
 	out += std::format("solids=Minecraft's solid blocks: {} in {} sections\n", aLink.solidBlocks, aLink.solidSections);
 	out += FormatBodies(aLink);
 	out += FormatNpcs(aLink);
+	out += FormatCombat(aLink);
 	out += std::format("ring={:.2f} MB in the last second, at most {:.2f} MB in one frame; drain {:.3f} ms average, {:.3f} ms worst; {}; "
 	                   "{} rejected, {} resyncs\n",
 	                   aLink.ringMb, aLink.ringMbWorstFrame, aLink.drainMsAverage, aLink.drainMsWorst,
