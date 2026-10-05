@@ -57,38 +57,56 @@ void NpcAt(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, RED4ext::ent::En
 	}
 }
 
-// BlockRenderVHurt(amount: Float, attackType: Int32, instigator: EntityID) -> Bool, from the wrap of DealDamages, on any
-// thread: a hit on V, taken (true) while combat and build mode are on, so the wrap deals none of it.
+// BlockRenderVHurt(amount: Float, attackType: Int32, instigator: EntityID, nonLethal: Bool) -> Bool, from the wrap of
+// DealDamages, on any thread: a hit on V, taken (true) while combat and build mode are on, so the wrap deals none of it;
+// one the game won't let kill V stays V's.
 void VHurt(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, bool* aOut, int64_t)
 {
 	float                  amount = 0.0f;
 	int32_t                attackType = 0;
 	RED4ext::ent::EntityID instigator;
+	bool                   nonLethal = false;
 	RED4ext::GetParameter(aFrame, &amount);
 	RED4ext::GetParameter(aFrame, &attackType);
 	RED4ext::GetParameter(aFrame, &instigator);
+	RED4ext::GetParameter(aFrame, &nonLethal);
 	++aFrame->code;
-	const bool taken = g_combat.Offer({ double(amount), attackType, instigator.hash });
+	const bool taken = g_combat.Offer({ double(amount), attackType, instigator.hash, nonLethal });
 	if (aOut)
 	{
 		*aOut = taken;
 	}
 }
 
-// BlockRenderHitLanded(target: EntityID, amount: Float, before: Float, after: Float), from the wrap of DealDamages, on any
-// thread: one of our hits, dealt, with the NPC's health before and after.
+// BlockRenderHitLanded(target: EntityID, amount: Float, before: Float, after: Float, flags: Int32), from the wrap of
+// DealDamages, on any thread: one of our hits, dealt: what the pipeline made of it, the NPC's health before and after,
+// and what the pipeline did to it (link::LandedFlag).
 void HitLanded(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, void*, int64_t)
 {
 	RED4ext::ent::EntityID target;
 	float                  amount = 0.0f;
 	float                  before = 0.0f;
 	float                  after = 0.0f;
+	int32_t                flags = 0;
 	RED4ext::GetParameter(aFrame, &target);
 	RED4ext::GetParameter(aFrame, &amount);
 	RED4ext::GetParameter(aFrame, &before);
 	RED4ext::GetParameter(aFrame, &after);
+	RED4ext::GetParameter(aFrame, &flags);
 	++aFrame->code;
-	g_combat.Land({ target.hash, double(amount), double(before), double(after) });
+	g_combat.Land({ target.hash, double(amount), double(before), double(after), uint32_t(flags) });
+}
+
+// BlockRenderHitEnded(target: EntityID, why: Int32), from the wrap of ProcessPipeline, on any thread: one of our hits, dealt
+// nothing, and why (link::HitEndedName).
+void HitEnded(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, void*, int64_t)
+{
+	RED4ext::ent::EntityID target;
+	int32_t                why = 0;
+	RED4ext::GetParameter(aFrame, &target);
+	RED4ext::GetParameter(aFrame, &why);
+	++aFrame->code;
+	g_combat.End({ target.hash, why });
 }
 
 // A global native function, with its parameters' and return types as the module declares them; false if a type isn't
@@ -138,16 +156,18 @@ void PostRegisterTypes()
 	typed = Add<void*>(*rtti, "BlockRenderNpcDetached", &NpcDetached, { { "entEntityID", "id" } }, nullptr) && typed;
 	typed = Add<int32_t*>(*rtti, "BlockRenderNpcCount", &NpcCount, {}, "Int32") && typed;
 	typed = Add<RED4ext::ent::EntityID*>(*rtti, "BlockRenderNpcAt", &NpcAt, { { "Int32", "i" } }, "entEntityID") && typed;
-	typed = Add<bool*>(*rtti, "BlockRenderVHurt", &VHurt, { { "Float", "amount" }, { "Int32", "attackType" }, { "entEntityID", "instigator" } },
-	                   "Bool") &&
+	typed = Add<bool*>(*rtti, "BlockRenderVHurt", &VHurt,
+	                   { { "Float", "amount" }, { "Int32", "attackType" }, { "entEntityID", "instigator" }, { "Bool", "nonLethal" } }, "Bool") &&
 	        typed;
 	typed = Add<void*>(*rtti, "BlockRenderHitLanded", &HitLanded,
-	                   { { "entEntityID", "target" }, { "Float", "amount" }, { "Float", "before" }, { "Float", "after" } }, nullptr) &&
+	                   { { "entEntityID", "target" }, { "Float", "amount" }, { "Float", "before" }, { "Float", "after" }, { "Int32", "flags" } },
+	                   nullptr) &&
 	        typed;
+	typed = Add<void*>(*rtti, "BlockRenderHitEnded", &HitEnded, { { "entEntityID", "target" }, { "Int32", "why" } }, nullptr) && typed;
 	if (g_nativesLog)
 	{
 		g_nativesLog->Push(typed ? "natives: BlockRenderNpcAttached, BlockRenderNpcDetached, BlockRenderNpcCount, BlockRenderNpcAt, "
-		                           "BlockRenderVHurt and BlockRenderHitLanded added"
+		                           "BlockRenderVHurt, BlockRenderHitLanded and BlockRenderHitEnded added"
 		                         : "natives: added, but some of their types weren't found");
 	}
 }

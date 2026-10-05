@@ -38,12 +38,12 @@ TEST(CombatInboxTakesHurtsOnlyWhileTaking)
 TEST(CombatInboxKeepsLandingsUntilTaken)
 {
 	CombatInbox inbox;
-	inbox.Land({ 7, 714.0, 1514.0, 800.0 });
+	inbox.Land({ 7, 714.0, 1514.0, 800.0, link::kLandedCritical | link::kLandedArmour });
 	inbox.Land({ 8, 102.0, 48.0, 0.0 });
 	const std::vector<CombatInbox::Landed> landed = inbox.TakeLanded();
 	CHECK_EQ(landed.size(), size_t(2));
 	CHECK(landed.size() == 2 && landed[0].target == 7 && landed[0].amount == 714.0 && landed[0].before == 1514.0 &&
-	      landed[0].after == 800.0);
+	      landed[0].after == 800.0 && landed[0].flags == (link::kLandedCritical | link::kLandedArmour));
 	CHECK(landed.size() == 2 && landed[1].target == 8);
 	CHECK(inbox.TakeLanded().empty());
 	for (size_t i = 0; i <= CombatInbox::kMaxWaiting; ++i)
@@ -53,6 +53,37 @@ TEST(CombatInboxKeepsLandingsUntilTaken)
 	CHECK_EQ(inbox.TakeLanded().size(), CombatInbox::kMaxWaiting);
 	CHECK_EQ(inbox.Count().landed, uint64_t(2 + CombatInbox::kMaxWaiting));
 	CHECK_EQ(inbox.Count().dropped, uint64_t(1));
+}
+
+TEST(CombatInboxKeepsEndingsAndLeavesNonLethalHurtsToV)
+{
+	CombatInbox inbox;
+	// Our hits the pipeline dealt nothing, with why: dodged, and friendly to V.
+	inbox.End({ 7, 4 });
+	inbox.End({ 8, 1 });
+	const std::vector<CombatInbox::Ended> ended = inbox.TakeEnded();
+	CHECK_EQ(ended.size(), size_t(2));
+	CHECK(ended.size() == 2 && ended[0].target == 7 && ended[0].why == 4 && ended[1].target == 8 && ended[1].why == 1);
+	CHECK(inbox.TakeEnded().empty());
+	for (size_t i = 0; i <= CombatInbox::kMaxWaiting; ++i)
+	{
+		inbox.End({ 9, 5 });
+	}
+	CHECK_EQ(inbox.TakeEnded().size(), CombatInbox::kMaxWaiting);
+	CHECK_EQ(inbox.Count().ended, uint64_t(2 + CombatInbox::kMaxWaiting));
+	CHECK_EQ(inbox.Count().dropped, uint64_t(1));
+	// A hit on V that the game won't let kill V stays V's while taking, counted apart; while not taking, it's refused as
+	// any other is.
+	inbox.SetTaking(true);
+	CHECK(!inbox.Offer({ 30.0, 7, 0x51, true }));
+	CHECK(inbox.Offer({ 30.0, 7, 0x51, false }));
+	inbox.SetTaking(false);
+	CHECK(!inbox.Offer({ 30.0, 7, 0x51, true }));
+	const CombatInbox::Counts counts = inbox.Count();
+	CHECK_EQ(counts.nonLethal, uint64_t(1));
+	CHECK_EQ(counts.refused, uint64_t(1));
+	CHECK_EQ(counts.taken, uint64_t(1));
+	CHECK_EQ(inbox.TakeHurts().size(), size_t(1));
 }
 
 // As the game does: the pipeline on several threads at once, while the main thread takes what they report.
@@ -74,15 +105,18 @@ TEST(CombatInboxTakesReportsFromManyThreadsAtOnce)
 					++taken;
 				}
 				inbox.Land({ uint64_t(t + 1), 1.0, 2.0, 1.0 });
+				inbox.End({ uint64_t(t + 1), 4 });
 			}
 		});
 	}
 	size_t hurts = 0;
 	size_t landed = 0;
+	size_t ended = 0;
 	for (int read = 0; read < 2000; ++read)
 	{
 		hurts += inbox.TakeHurts().size();
 		landed += inbox.TakeLanded().size();
+		ended += inbox.TakeEnded().size();
 	}
 	for (std::thread& thread : threads)
 	{
@@ -90,10 +124,12 @@ TEST(CombatInboxTakesReportsFromManyThreadsAtOnce)
 	}
 	hurts += inbox.TakeHurts().size();
 	landed += inbox.TakeLanded().size();
+	ended += inbox.TakeEnded().size();
 	const CombatInbox::Counts counts = inbox.Count();
 	CHECK_EQ(hurts, size_t(taken.load()));
 	CHECK_EQ(counts.taken + counts.refused, uint64_t(kThreads * kEach));
 	CHECK_EQ(counts.taken, uint64_t(taken.load()));
 	CHECK_EQ(uint64_t(landed), counts.landed);
-	CHECK_EQ(counts.landed + counts.dropped, uint64_t(kThreads * kEach));
+	CHECK_EQ(uint64_t(ended), counts.ended);
+	CHECK_EQ(counts.landed + counts.ended + counts.dropped, uint64_t(2 * kThreads * kEach));
 }

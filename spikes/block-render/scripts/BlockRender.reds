@@ -20,10 +20,12 @@ public native func BlockRenderNpcDetached(id: EntityID)
 // For List: copies BlockRender's list and gives how many it holds; then the copy's IDs, by index.
 public native func BlockRenderNpcCount() -> Int32
 public native func BlockRenderNpcAt(i: Int32) -> EntityID
-// For the DealDamages wrap: a hit on V, which BlockRender takes (true) for Minecraft while combat and build mode are on;
-// and one of our hits, dealt, with the NPC's health before and after.
-public native func BlockRenderVHurt(amount: Float, attackType: Int32, instigator: EntityID) -> Bool
-public native func BlockRenderHitLanded(target: EntityID, amount: Float, before: Float, after: Float)
+// For the damage pipeline's wraps: a hit on V, which BlockRender takes (true) for Minecraft while combat and build mode
+// are on, unless the game won't let it kill V; one of our hits, dealt, with what the pipeline made of it, the NPC's
+// health before and after, and what the pipeline did to it; and one of our hits the pipeline dealt nothing, with why.
+public native func BlockRenderVHurt(amount: Float, attackType: Int32, instigator: EntityID, nonLethal: Bool) -> Bool
+public native func BlockRenderHitLanded(target: EntityID, amount: Float, before: Float, after: Float, flags: Int32)
+public native func BlockRenderHitEnded(target: EntityID, why: Int32)
 
 public class BlockRenderNpcs extends ScriptableSystem {
   // What was last read of each NPC on BlockRender's list, in the list's order: parallel arrays, one entry an NPC, kept in
@@ -471,7 +473,7 @@ private final func DealDamages(hitEvent: ref<gameHitEvent>) -> Void {
     let before: Float = pools.GetStatPoolValue(stats, gamedataStatPoolType.Health, false);
     BlockRenderNpcs.SetDamage(hitEvent.attackComputed, amount);
     wrappedMethod(hitEvent);
-    BlockRenderHitLanded(target.GetEntityID(), amount, before, pools.GetStatPoolValue(stats, gamedataStatPoolType.Health, false));
+    BlockRenderHitLanded(target.GetEntityID(), amount, before, pools.GetStatPoolValue(stats, gamedataStatPoolType.Health, false), 0);
     return;
   };
   if IsDefined(target) && target.IsPlayer() && IsDefined(hitEvent.attackComputed) && IsDefined(hitEvent.attackData) {
@@ -482,7 +484,7 @@ private final func DealDamages(hitEvent: ref<gameHitEvent>) -> Void {
       if IsDefined(instigator) {
         from = instigator.GetEntityID();
       };
-      if BlockRenderVHurt(total, EnumInt(hitEvent.attackData.GetAttackType()), from) {
+      if BlockRenderVHurt(total, EnumInt(hitEvent.attackData.GetAttackType()), from, false) {
         BlockRenderNpcs.SetDamage(hitEvent.attackComputed, 0.00);
       };
     };
