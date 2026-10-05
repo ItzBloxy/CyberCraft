@@ -94,7 +94,7 @@ std::optional<Request> ParseRequest(std::string_view aText, std::string& aError)
 	}
 	const std::string_view command = words[0];
 	const size_t           arguments = words.size() - 1;
-	if (command == "log" || command == "clear" || command == "reload" || command == "floor" || command == "shapes")
+	if (command == "log" || command == "clear" || command == "reload" || command == "floor" || command == "shapes" || command == "npcs")
 	{
 		if (arguments != 0)
 		{
@@ -104,6 +104,7 @@ std::optional<Request> ParseRequest(std::string_view aText, std::string& aError)
 		                           : command == "clear"  ? Request::Kind::Clear
 		                           : command == "floor"  ? Request::Kind::Floor
 		                           : command == "shapes" ? Request::Kind::Shapes
+		                           : command == "npcs"   ? Request::Kind::Npcs
 		                                                 : Request::Kind::Reload;
 		return Request{ kind };
 	}

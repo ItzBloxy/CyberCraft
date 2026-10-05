@@ -301,3 +301,36 @@ TEST(StatusWritesTheGround)
 	          "started; PhysX's origin (0, 1024, 0), V's controller looked for 2 times; shapes since the start: 1500 kept, 30 left out, "
 	          "0 unreadable"));
 }
+
+TEST(StatusWritesTheNpcs)
+{
+	cpmc::StatusReport report;
+	cpmc::LinkReport   link;
+	report.link = link;
+	const std::string status = cpmc::FormatStatus(report);
+	CHECK(Has(status, "npcs=on: 0 listed of 0 in the world; capsules found for 0 of 0 looked for; 0 numbers given; the module not "
+	                  "called; 0 hits from Minecraft logged"));
+	CHECK(status.find("bodies=") < status.find("npcs=") && status.find("npcs=") < status.find("ring="));
+	link.npcsWhy = "the game has no BlockRenderNpcs, so redscript didn't compile BlockRender.reds";
+	report.link = link;
+	CHECK(cpmc::FormatStatus(report).find("; 0 hits from Minecraft logged; none listed: the game has no BlockRenderNpcs, so redscript "
+	                                      "didn't compile BlockRender.reds") != std::string::npos);
+	link.npcsWhy.clear();
+	link.npcsListed = 12;
+	link.npcsInWorld = 40;
+	link.nearestNpc = 3.26;
+	link.nearestNpcName = "Ganger One";
+	link.capsulesFound = 10;
+	link.capsulesLookedFor = 12;
+	link.npcIdsGiven = 57;
+	link.moduleMsAverage = 0.1234;
+	link.moduleMsWorst = 0.4567;
+	link.npcHits = 3;
+	report.link = link;
+	CHECK(Has(cpmc::FormatStatus(report), "npcs=on: 12 listed of 40 in the world, the nearest Ganger One at 3.3 m; capsules found for 10 "
+	                                      "of 12 looked for; 57 numbers given; the module 0.123 ms average, 0.457 ms worst a frame; 3 "
+	                                      "hits from Minecraft logged"));
+	link.npcsOn = false;
+	report.link = link;
+	CHECK(Has(cpmc::FormatStatus(report), "npcs=off"));
+}

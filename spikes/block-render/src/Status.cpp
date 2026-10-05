@@ -157,6 +157,30 @@ std::string FormatBodies(const LinkReport& aLink)
 	                   aLink.bodiesWhy.empty() ? "" : "; waiting: " + OneLine(aLink.bodiesWhy));
 }
 
+// NPCs in Minecraft: how many are listed, the nearest, their sizes, the module's time, and Minecraft's hits on them.
+std::string FormatNpcs(const LinkReport& aLink)
+{
+	if (!aLink.npcsOn)
+	{
+		return "npcs=off\n";
+	}
+	std::string out = std::format("npcs=on: {} listed of {} in the world", aLink.npcsListed, aLink.npcsInWorld);
+	if (aLink.nearestNpc)
+	{
+		out += std::format(", the nearest {} at {:.1f} m", aLink.nearestNpcName.empty() ? "(no name)" : OneLine(aLink.nearestNpcName),
+		                   *aLink.nearestNpc);
+	}
+	out += std::format("; capsules found for {} of {} looked for; {} numbers given; the module {}; {} hits from Minecraft logged",
+	                   aLink.capsulesFound, aLink.capsulesLookedFor, aLink.npcIdsGiven,
+	                   aLink.moduleMsAverage < 0.0 ? std::string("not called") : Ms(aLink.moduleMsAverage, aLink.moduleMsWorst) + " a frame",
+	                   aLink.npcHits);
+	if (!aLink.npcsWhy.empty())
+	{
+		out += "; none listed: " + OneLine(aLink.npcsWhy);
+	}
+	return out + "\n";
+}
+
 std::string FormatLink(const LinkReport& aLink)
 {
 	std::string       out;
@@ -185,6 +209,7 @@ std::string FormatLink(const LinkReport& aLink)
 	out += FormatGround(aLink);
 	out += std::format("solids=Minecraft's solid blocks: {} in {} sections\n", aLink.solidBlocks, aLink.solidSections);
 	out += FormatBodies(aLink);
+	out += FormatNpcs(aLink);
 	out += std::format("ring={:.2f} MB in the last second, at most {:.2f} MB in one frame; drain {:.3f} ms average, {:.3f} ms worst; {}; "
 	                   "{} rejected, {} resyncs\n",
 	                   aLink.ringMb, aLink.ringMbWorstFrame, aLink.drainMsAverage, aLink.drainMsWorst,

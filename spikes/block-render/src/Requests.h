@@ -25,6 +25,7 @@ namespace cpmc
 //   scenewatch on|off          (spike 5's step 3: who calls scene 0, and when)
 //   shapes                     (spike 5: the game's shapes within 2 m of V, into the log)
 //   box on|off                 (spike 5's step 4: a test box 3 m ahead of V, made as the bodies for blocks are)
+//   npcs                       (spike 6: every NPC listed, into the log, and what the game's targeting finds)
 struct Request
 {
 	enum class Kind
@@ -44,6 +45,7 @@ struct Request
 		SceneWatch,
 		Shapes,
 		Box,
+		Npcs,
 	};
 
 	Kind        kind = Kind::Log;

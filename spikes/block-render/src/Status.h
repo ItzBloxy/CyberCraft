@@ -105,6 +105,19 @@ struct LinkReport
 	uint64_t             originChanges = 0;
 	uint64_t             bodiesReposed = 0;
 	std::optional<Vec3d> box;               // the test box's centre, world axes, while it stands
+	// NPCs in Minecraft (spike 6's "Part 1"): the numbers given and the hits are since the start
+	bool                  npcsOn = true;      // set npcs 1
+	std::string           npcsWhy;            // why none are listed, while none can be
+	size_t                npcsListed = 0;     // in SkyCraft's actor table
+	int32_t               npcsInWorld = 0;    // the module's count of NPCs the game has attached
+	std::optional<double> nearestNpc;         // metres; none: none listed
+	std::string           nearestNpcName;
+	size_t                capsulesFound = 0;  // of the NPCs known
+	size_t                capsulesLookedFor = 0;
+	uint32_t              npcIdsGiven = 0;
+	double                moduleMsAverage = -1.0;  // the module's time a frame, in the last second; below 0: not called
+	double                moduleMsWorst = -1.0;
+	uint64_t              npcHits = 0;  // Minecraft's hits on them, logged
 	// The render ring
 	double      ringMb = 0.0;            // in the last second
 	double      ringMbWorstFrame = 0.0;  // the most in one frame of it
@@ -176,8 +189,8 @@ struct StatusReport
 };
 
 // Lines of "key=value": mode, frames, blocks, gpu, frame, streamline, hooks, request; with a link, its lines (link, build,
-// drive, positions, ground, solids, bodies, ring, atlas, hud, latency, burst and processes); then one structure line per
-// structure:
+// drive, positions, ground, solids, bodies, npcs, ring, atlas, hud, latency, burst and processes); then one structure line
+// per structure:
 // "structure=<name> <min x> <min y> <min z> <max x> <max y> <max z>".
 std::string FormatStatus(const StatusReport& aReport);
 }

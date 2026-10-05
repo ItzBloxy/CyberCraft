@@ -196,3 +196,14 @@ TEST(RequestsForTheGround)
 	CHECK(shapes && shapes->kind == cpmc::Request::Kind::Shapes);
 	CHECK(!cpmc::ParseRequest("shapes all", error));
 }
+
+TEST(RequestsForTheNpcs)
+{
+	std::string error;
+	const auto  npcs = cpmc::ParseRequest("npcs", error);
+	CHECK(npcs && npcs->kind == cpmc::Request::Kind::Npcs);
+	CHECK(!cpmc::ParseRequest("npcs all", error));
+	CHECK_STR(error, "npcs takes nothing after it");
+	const auto off = cpmc::ParseRequest("set npcs 0", error);
+	CHECK(off && off->kind == cpmc::Request::Kind::Set && off->what == "npcs" && off->number == 0.0);
+}
