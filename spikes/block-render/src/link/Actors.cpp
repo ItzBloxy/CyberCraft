@@ -56,6 +56,12 @@ void ActorIds::Forget(double aNow)
 	}
 }
 
+std::optional<uint32_t> ActorIds::IdOf(uint64_t aEntity) const
+{
+	const auto found = byEntity_.find(aEntity);
+	return found != byEntity_.end() ? std::optional<uint32_t>(found->second.id) : std::nullopt;
+}
+
 std::string CutName(std::string_view aName, size_t aBytes)
 {
 	if (aName.size() <= aBytes)

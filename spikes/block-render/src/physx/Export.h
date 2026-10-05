@@ -2,6 +2,7 @@
 
 #include "Coords.h"
 #include "link/Ground.h"
+#include "physx/Characters.h"
 #include "physx/GameAbi.h"
 #include "physx/PxHeaders.h"
 #include "physx/Session.h"
@@ -59,6 +60,10 @@ public:
 	// Every shape within aRadius of aWorld (world axes), static or dynamic, described, for the shapes request; or why
 	// there are none.
 	std::vector<std::string> Describe(const Vec3d& aWorld, double aRadius);
+
+	// The capsules of kinematic actors within aRadius of aWorld (world axes), for NPCs' sizes (spike 6), read under scene
+	// 0's read lock through the same checks. None if scene 0 or PhysX's origin can't be had this frame.
+	std::vector<CapsuleSeen> Capsules(const Vec3d& aWorld, double aRadius);
 
 	// Scene 0 and PhysX's origin this frame, as the reads have them, for part 3's bodies: read once a frame, whoever asks
 	// first. Null if they can't be had, with State().why saying why.

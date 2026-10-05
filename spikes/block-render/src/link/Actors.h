@@ -55,6 +55,8 @@ public:
 	std::optional<uint64_t> Entity(uint32_t aId, double aNow) const;
 	// Forgets the NPCs unlisted for kActorForget seconds: listed again, they get new numbers.
 	void Forget(double aNow);
+	// aEntity's number, if it has one, without marking it listed.
+	std::optional<uint32_t> IdOf(uint64_t aEntity) const;
 
 	size_t   Known() const { return byEntity_.size(); }
 	uint32_t Given() const { return next_ - 1; }  // numbers given since the start

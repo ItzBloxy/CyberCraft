@@ -352,4 +352,41 @@ std::vector<std::string> PhysxGround::Describe(const Vec3d& aWorld, double aRadi
 	}
 	return lines;
 }
+
+std::vector<CapsuleSeen> PhysxGround::Capsules(const Vec3d& aWorld, double aRadius)
+{
+	std::vector<CapsuleSeen> seen;
+	if (!Prepare())
+	{
+		return seen;
+	}
+	ReadableMemory&    memory = session_.Memory();
+	const ModuleBases& bases = session_.Bases();
+	const Vec3d        origin = *report_.origin;
+	const PxVec3       at(float(aWorld.x - origin.x), float(aWorld.y - origin.y), float(aWorld.z - origin.z));
+	scene_->lockRead();
+	for (const PxOverlapHit& hit : Overlap(*scene_, PxSphereGeometry(float(aRadius)), PxTransform(at), PxQueryFlag::eDYNAMIC))
+	{
+		const ObjectCheck actor = CheckObject(memory, bases, hit.actor, kActorBytes);
+		const ObjectCheck shape = CheckObject(memory, bases, hit.shape);
+		PxCapsuleGeometry capsule;
+		if (actor.verdict != ObjectVerdict::Ok || actor.cls != AuditedClass::RigidDynamic || shape.verdict != ObjectVerdict::Ok ||
+		    shape.cls != AuditedClass::Shape ||
+		    !static_cast<const PxRigidBody&>(*hit.actor).getRigidBodyFlags().isSet(PxRigidBodyFlag::eKINEMATIC) ||
+		    hit.shape->getGeometryType() != PxGeometryType::eCAPSULE || !hit.shape->getCapsuleGeometry(capsule))
+		{
+			continue;
+		}
+		const PxTransform  pose = hit.actor->getGlobalPose() * hit.shape->getLocalPose();
+		const PxVec3       axis = pose.q.getBasisVector0();  // a capsule's length runs along its x axis
+		const PxFilterData filter = hit.shape->getQueryFilterData();
+		seen.push_back({ { pose.p.x + origin.x, pose.p.y + origin.y, pose.p.z + origin.z },
+		                 { axis.x, axis.y, axis.z },
+		                 capsule.radius,
+		                 capsule.halfHeight,
+		                 { filter.word0, filter.word1, filter.word2, filter.word3 } });
+	}
+	scene_->unlockRead();
+	return seen;
+}
 }
