@@ -3,10 +3,10 @@
 -- frame time as CET sees it, which works without BlockRender too and goes into frames.txt here as well. It asks
 -- BlockRender for things through blockrender.request in this folder.
 -- Kept small: one row of buttons (link, Minecraft's blocks as bodies, step 4's test box, the turn, NPCs in Minecraft,
--- combat), and a line each for the last request's reply, build mode (F8) and its drive, the bodies, the NPCs, combat,
--- and V. Two folded sections hold the rest: "More controls" (the drawing mode, Minecraft's HUD, commands typed into
--- Minecraft, the drive log, the ground and its shapes, the NPCs' list and V's punch) and "Full status" (every status
--- line, and the frame time).
+-- combat), and a line each for the last request's reply, build mode (F8) with its drive and whether V is hidden, the
+-- bodies, the NPCs, combat, and V. Two folded sections hold the rest: "More controls" (the drawing mode, Minecraft's HUD,
+-- commands typed into Minecraft, the drive log, the ground and its shapes, the NPCs' list, V's punch, and V hidden or
+-- seen in build mode) and "Full status" (every status line, and the frame time).
 -- Delete this folder to remove it.
 local status = nil       -- status.txt's lines, except the structures
 local structures = {}    -- { name, min = { x, y, z }, max = { x, y, z } }, in world coordinates
@@ -22,8 +22,11 @@ local blocksOn = nil     -- whether bodies are on: "on" or "off"
 local boxOn = false      -- whether the test box stands
 local npcs = nil         -- the npcs line: on or off, how many are listed and the nearest, or why none are
 local npcsOn = nil       -- whether NPCs go into SkyCraft's actor table: "on" or "off"
-local combat = nil       -- the combat line: on or off; hits queued and landed; V's hurts; Immortal; Minecraft's death
+local combat = nil       -- the combat line: on or off; V's weapon drawn or not; hits queued and landed; V's hurts;
+                         -- Immortal; Minecraft's death
 local combatOn = nil     -- whether Minecraft's hits land as V's and V's hurts go to Minecraft: "on" or "off"
+local vLook = nil        -- the v line: V hidden in build mode, or seen and why
+local hideV = nil        -- whether V's meshes are hidden in build mode: "on" or "off"
 local reply = nil        -- the request line: what BlockRender made of the last request, cut short
 local player = nil       -- the lines about V
 local sinceRead = 1.0
@@ -95,6 +98,8 @@ local function readStatus()
     npcsOn = nil
     combat = nil
     combatOn = nil
+    vLook = nil
+    hideV = nil
     reply = nil
     for line in file:lines() do
         local said = line:match("^request=(.*)$")
@@ -115,6 +120,11 @@ local function readStatus()
                 .. (health and (", V's health " .. health) or "")
             driveState = state
             turn = line:match("; turn (%a+),")
+        end
+        local look = line:match("^v=(.*)$")
+        if look ~= nil then
+            vLook = look
+            hideV = look:match("^shown: set hidev is 0") and "off" or "on"
         end
         local setting = line:match("^ground=(%a+)")
         if setting ~= nil then
@@ -145,12 +155,14 @@ local function readStatus()
         local combatState = line:match("^combat=(%a+)")
         if combatState ~= nil then
             combatOn = combatState
+            local drawn = line:match("^combat=on: V's punch [^;]*, (not drawn)") or line:match("^combat=on: V's punch [^;]*, (drawn)")
             local hits = line:match("; hits (%d+ queued, %d+ landed)")
             local hurts = line:match("; V's hurts: (%d+ taken, %d+ sent)")
             local immortal = line:match("; Immortal (%a+);")
             local dead = line:match("; Minecraft's player (dead for [%d.]+ s)")
-            combat = combatState .. (hits and (", hits " .. hits) or "") .. (hurts and (", V's hurts " .. hurts) or "")
-                .. (immortal and (", Immortal " .. immortal) or "") .. (dead and (", Minecraft's player " .. dead) or "")
+            combat = combatState .. (drawn and (", V's weapon " .. drawn) or "") .. (hits and (", hits " .. hits) or "")
+                .. (hurts and (", V's hurts " .. hurts) or "") .. (immortal and (", Immortal " .. immortal) or "")
+                .. (dead and (", Minecraft's player " .. dead) or "")
         end
         if name ~= nil then
             table.insert(structures, {
@@ -269,7 +281,8 @@ registerForEvent("onDraw", function()
             ImGui.Text("Last request: " .. reply)
         end
         if build ~= nil then
-            ImGui.Text("Build mode (F8): " .. build .. (driveState and ("; drive " .. driveState) or ""))
+            ImGui.Text("Build mode (F8): " .. build .. (driveState and ("; drive " .. driveState) or "")
+                .. (vLook and ("; V " .. vLook) or ""))
         end
         if bodies ~= nil then
             ImGui.Text("Bodies: " .. bodies)
@@ -336,6 +349,13 @@ registerForEvent("onDraw", function()
                 ImGui.SameLine()
                 if ImGui.Button("Punch in the log") then
                     request("punch")
+                end
+            end
+            if hideV ~= nil then
+                ImGui.Text("V in build mode:")
+                ImGui.SameLine()
+                if ImGui.Button((hideV == "on" and "Hidden" or "Seen") .. "###hidev") then
+                    request("set hidev " .. (hideV == "on" and 0 or 1))
                 end
             end
         end
