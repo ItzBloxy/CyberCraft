@@ -4,15 +4,26 @@ Spike 6 brings Night City's NPCs into Minecraft as SkyCraft's stand-ins (Part 1)
 Minecraft's explosions in the game (Part 3). Step 1 ran SkyCraft's actor table with `mclink`, without Cyberpunk; later
 steps add their sections as they run, and the spike's answer goes at the top once step 2 is in.
 
-## The answer so far (Part 1, after step 2)
+## The answer so far (Parts 1 and 2, after step 4)
 
-**Yes: Night City's NPCs are in Minecraft as SkyCraft's stand-ins, where the game puts them.** On a busy pavement, every
-NPC within 80 m was listed, and the game's own targeting never found one the list lacked. A stone pressure plate on the
-pavement lit its lamp whenever people crossed it, and missed none. Minecraft's sword hits on a vendor and on a Militech
-drone came back to the game with the NPC's name and Minecraft's damage, criticals included. The list costs the game 0.08
-ms a frame. It took three fixes; the last was a crash, because the game calls NPCs' attach and detach callbacks on many
-threads (16 in this run), so the list now lives in BlockRender behind a lock. Open for Part 2: the boxes stop at the
-shoulders (1.63 m), drones have no capsule and stay person-sized, and nothing guards V's health yet.
+**Part 1, yes: Night City's NPCs are in Minecraft as SkyCraft's stand-ins, where the game puts them.** On a busy
+pavement, every NPC within 80 m was listed, and the game's own targeting never found one the list lacked. A stone
+pressure plate on the pavement lit its lamp whenever people crossed it, and missed none. Minecraft's sword hits on a
+vendor and on a Militech drone came back to the game with the NPC's name and Minecraft's damage, criticals included. The
+list costs the game 0.08 ms a frame. It took three fixes; the last was a crash, because the game calls NPCs' attach and
+detach callbacks on many threads (16 in this run), so the list now lives in BlockRender behind a lock. Since Part 2's
+first task the boxes reach 1.76 m, the top of the NPC's tallest capsule; drones have no capsule and stay person-sized.
+
+**Part 2, yes, with three fixes to make: Minecraft's weapons fight Night City's NPCs as V, and in build mode the game's
+hits on V go to Minecraft's player, whose death kills V.** A Minecraft hit starts the game's own damage pipeline at
+Minecraft's damage × V's punch, and the game does the rest as for V's own strike: the first test hit, one point of
+Minecraft's damage, started at V's 104.87 and dealt 168.72 with V's crit, beside V's own crit strike of about 180 on the
+same ganger. The hits carry V's Mantis Blades, drawn for build mode, and burn the NPCs as the blades do; NPCs flinch,
+take cover, fight back and die. In build mode V is hidden, and all 42 hits on V, melee and pistol, went to Minecraft's
+hearts instead; the one time those ran out, Minecraft's death killed V. The fixes: every point of Minecraft's damage is
+worth a whole blade swing, so swords, axes and arrows one-shot level-47 gangers, while fists felt right; our Immortal
+never took effect, because V carries three Mortal god modes from the game, which outrank it; and the game's crosshair
+for the blades and their heat effect stay on screen when V is hidden.
 
 ## Step 1: made-up NPCs in SkyCraft's actor table, with `mclink`, without Cyberpunk
 
@@ -253,3 +264,103 @@ between two of them.
 - **Minecraft's player's own armour counts** against hits from listed NPCs within 24 blocks, as Minecraft's armour does
   against its mobs. The player in the user's world wears some.
 - **`keep_inventory` is on in the user's world,** so step 4's death drops nothing.
+
+## Step 4: in the game, combat
+
+Date: 2026-10-05, 23:47, to 2026-10-06, 00:35. BlockRender 0.18.0 at `f5214b7` (module version 4: the plan's Tasks 13
+to 30, the deep review's included), Minecraft 26.3 and SkyCraft 0.1.2 in the `CyberCraft` instance as in step 3, the
+game 2.31 with Codeware 1.19. V as in step 2: Mantis Blades installed (the Thermal, Legendary ones), 456 max health. The
+user ran both games, and ran a few lines in CET's console; the agent sent the requests and read the logs and the status.
+Plan: Task 31.
+
+### Verdict
+
+**Step 4: pass, with three fixes to make.** Every check passed as the plan has it, and the game settled what the deep
+review had left open: the start set at the pipeline's entry holds; V's unarmed slot draws the Mantis Blades; the game
+draws them while build mode places V; hiding V leaves none of V's meshes on screen, no shadow either; and an NPC's
+health shows a hit's change only after the damage step, not at once. Three things don't work as the spec meant:
+- **The damage is overkill.** Each point of Minecraft's damage is a whole blade swing, so a diamond sword (7) starts at
+  734 and the axe (9) at 944, and each one-shot a level-47 ganger of 594 to 891 health. Fists, a point each, took four
+  or five hits, which the user found right.
+- **Our Immortal never took effect.** V carries three `Mortal` god modes from the game, which outrank `Immortal`: with
+  ours on, `HasGodMode(Immortal)` stays false, and the damage pipeline's `GetImmortality` asks exactly that. So in build
+  mode the damage wrap was V's only guard; it held for all 42 hits. The game's Second Heart forces Immortal with
+  `EnableOverride` instead.
+- **Hiding V leaves two things on screen:** the game's crosshair for the drawn blades, which is the HUD's, and the
+  Thermal blades' heat effect, which is a visual effect, not a mesh.
+
+### The checks
+
+- **The module (Steps 2 and 3).** redscript compiled `BlockRender.reds` with Codeware's scripts (`Compilation complete`,
+  no error), BlockRender added its seven natives, and at Link: `module: found BlockRenderNpcs version 4, its 10
+  functions, the 14 fields List fills, and BlockRender's 7 natives`. Minecraft's player was already in survival
+  (`/execute if entity @s[gamemode=survival]`: `Test passed. Count: 1`). After `set combat 1` the status read
+  `combat=on: V's punch 104.87 from Items.AdvancedMantisBladesThermalLegendary, not drawn: hits skip the NPC's armour,
+  weapon crits, stealth, blocks and skill XP; …` and `v=shown, and hidden in build mode`. An NPC with a capsule now
+  reaches 1.76 m, the thin capsule's top (`its top another's: radius 0.06`), and the list lacked none.
+- **What V punches with (Step 4).** `punch`: `V's punch 104.87, read from Items.AdvancedMantisBladesThermalLegendary;
+  quick hits with MantisBladesAttacks.MantisBladesComboAttack1 (Melee), strong ones with
+  MantisBladesAttacks.MantisBladesStrongAttack1 (StrongMelee); not drawn …`. Once the user picked weapon-wheel slot 4,
+  the same item, `drawn, so hits carry it as their weapon`: the module's item is the one the game's unarmed slot draws,
+  and its punch is the inventory's 105.
+- **Build mode draws the blades and hides V (Step 5).** With the gun drawn, F8: `combat: V's Immortal on`, `asked the
+  game to draw V's unarmed weapon`, and `build: V's meshes hidden: 82 meshes switched off (1.14 ms)`, the first call
+  looking through V's inventory; 0.26 s later 112 (0.07 ms), the blades' 30 meshes hidden too, and a second later `V
+  has it drawn`. The user saw nothing of V: no hands, blades, gun, legs, feet or shadow; only the blades' crosshair and
+  their heat effect. F8 again: the blades put away, V's gun asked back, and `100 meshes switched on again (1.88 ms)`,
+  since weapons destroyed meanwhile leave nothing to switch back on. V held the gun again, hands and legs showing. With
+  `set hidev 0`, V stayed seen in build mode, the blades drawn. CET's overlay key, Shift+F6, ends build mode.
+- **The game takes the blades back by itself.** Twice, 68 and 74 s into build mode, V's gun came back without any input
+  reaching the game; the next second's `Arm` asked for the blades again, and they were drawn within 1.5 s, the gun's
+  meshes hidden meanwhile. The cause isn't known.
+- **V's Immortal (found in Step 5).** Each time build mode ended, the log said `V's Immortal off (the game says it
+  already was)`. Lines in CET's console found why: `AddGodMode` returns true and its source is counted
+  (`GetGodModeCount` 1), but `HasGodMode(Immortal)` stays false, while V has `Mortal` from three sources and
+  `HasGodMode(Mortal)` is true. `RemoveGodMode` returns false even when it removes, so "already was" is only the log's
+  wording. V had no Immortal left after any build mode.
+- **One hit on an NPC, as V's own (Step 6).** At a 6th Street spot, NPC 147, listed as "NC Resident" until the user's
+  scan named him Scott Fowler: level 47, 594 health. The user struck him twice with the blades, the second a crit of
+  about 180. Then `hit 147 1`: `starting at 104.87, 1.00 x V's punch 104.87; queued`, and 16 ms later `landed: started
+  at 104.87, 168.72 dealt (critical, killed it); its health 22 -> 22`. The start held, and V's crit came on top as on
+  V's own strike. The health read just after the damage step hadn't changed yet; the next `npcs` didn't list him, so he
+  was dead. Then `hit 146 3 strong` on Elizaveta Petrova: `starting at 314.61`, landed 1.4 s later, `336.37 dealt` (the
+  spread, × 1.07). The user saw our hits set the NPCs burning, as the Thermal blades do.
+- **Hits on V in build mode, and Minecraft's death (Steps 7 and 11).** F8 in the fight: ten hits from NPC 145, five
+  power strikes in melee, `68.9 of V's health (0.1512), 3.02 of Minecraft's 20, melee (StrongMelee), from NPC 145, a
+  power attack`, then, once it drew a pistol, five shots of 48.6 to 52.9, `projectile (Ranged)`: all taken for
+  Minecraft. SkyCraft took each one whole, `Skyrim hit the player for 15.12 (3.024 Minecraft): health 20.0 ->
+  17.276949`, the player's 4 points of armour taking a tenth. V's health didn't move. The last shot took Minecraft's
+  player from 1.68 to 0 just as the user pressed F8: `Minecraft's player died, killed by NPC 145; so V dies: V's health
+  set to its least`, 0.17 s after build mode ended, inside the 2 s in which Minecraft's death still counts, and V died.
+  After the load, our Immortal came off as V was found again, and V took hits as usual.
+- **The fights (Steps 8 and 9).** With a diamond sword, a diamond axe, a bow and fists (oak planks): the sword started
+  at 734.08 and dealt 729.63 and 794.16, the axe 943.82 and 1,009.18, and an arrow 1,237.08 (critical, killed it), each
+  a one-shot. Punches started at 62 to 105 by the swing's cooldown, and jump crits at 157.30: gangers of 444 to 891
+  health took four or five, NPC 141 `170.51 (critical)`, `162.62 (critical)`, `105.42`, `290.77 (critical)` and
+  `286.67 (critical, killed it)`. Sprint hits and jump crits went as strong attacks, and V's crit fired on about half
+  the hits. All 21 of the session's hits landed, Step 6's two included; none was dodged, blocked, parried or cut by
+  armour, and none dealt nothing; each one's "before" showed the last one's damage taken. The NPCs flinched, moved into
+  cover, and stopped firing when blocks the user placed cut their line of sight. About 30 shots from three gangers went
+  to Minecraft's hearts meanwhile, which the user kept up with golden apples; six of the first ten went through the
+  sums. Skill XP wasn't checked.
+- **Combat off in build mode (Step 10).** `set combat 0`: our Immortal off, the blades put away and V's gun asked back,
+  the gun's meshes hidden within a quarter second (`v=hidden: 155 meshes switched off`). `set combat 1`: the blades
+  drawn again within a second, and hidden.
+- **The bodies, combat off and unlinking (Steps 12 and 13).** The blocks placed in the fight got bodies (6 boxes; 21
+  made and 18 removed, none failed or lost), and V stood on one outside build mode. Then `combat=off`, and `none listed:
+  not linked`. The module cost 0.06 ms a frame on average, 0.18 ms at worst.
+- **No crash:** the game quit normally (`25 vtable entries restored`). The log has no failed call, no hit left undealt
+  and no error.
+
+### What it means
+
+- **Combat both ways works through the game's own systems:** our hits are V's in everything but the swing, and V's
+  hurts reach Minecraft whole. Three fixes come before Part 2 closes:
+  - the damage's scale, so that Minecraft's weapons don't one-shot what V's own strikes take several for, while a punch
+    stays about one of V's;
+  - V's Immortal through the game's override (`EnableOverride`, as Second Heart does), so build mode has its backstop;
+  - the blades' crosshair and heat effect hidden with V.
+- **An NPC's health changes just after the damage step,** so a landing's "after" isn't the health left; the next hit's
+  "before" is.
+- **For Part 3:** a blast's hits start at the pipeline's entry too, and its scale needs the same thought, since a TNT
+  blast is tens of Minecraft's damage.

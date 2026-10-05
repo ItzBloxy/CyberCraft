@@ -7156,7 +7156,7 @@ take off isn't known in advance. This task is the plain C++ for what the module 
 **Files:**
 - Modify: `src/link/Combat.h`, `src/link/Combat.cpp`, `tests/TestCombat.cpp`
 
-- [ ] **Step 1: Edit `tests/TestCombat.cpp`: the words, and V's switches**
+- [x] **Step 1: Edit `tests/TestCombat.cpp`: the words, and V's switches**
 
 ```cpp
 	CHECK(god.Frame(true, true, true) == std::optional<bool>(true));
@@ -7205,7 +7205,7 @@ TEST(CombatSwitchesVsWeaponAndMeshesWhileWanted)
 	CHECK(!hide.Frame(false, true, 2.6).has_value());
 }
 ```
-- [ ] **Step 2: Build; it must fail**
+- [x] **Step 2: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -7214,7 +7214,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `error C3861: 'LandedWords': identifier not found`, and `error C2065: 'VSwitch': undeclared identifier`.
 
-- [ ] **Step 3: Edit `src/link/Combat.h`**
+- [x] **Step 3: Edit `src/link/Combat.h`**
 
 ```cpp
 // Combat both ways (spike 6's "Part 2"), the parts that don't need the game: which of Minecraft's hits on NPCs count and
@@ -7299,7 +7299,7 @@ private:
 };
 }
 ```
-- [ ] **Step 4: Edit `src/link/Combat.cpp`**
+- [x] **Step 4: Edit `src/link/Combat.cpp`**
 
 ```cpp
 #include <format>
@@ -7389,7 +7389,7 @@ std::optional<bool> VSwitch::Frame(bool aWanted, bool aVFound, double aNow)
 }
 }
 ```
-- [ ] **Step 5: Build and run the tests; they must pass**
+- [x] **Step 5: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -7399,7 +7399,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `437 test(s), 0 failure(s)`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -7426,7 +7426,7 @@ them; Task 26 rewrites the wraps that call them.
 - Modify: `src/CombatInbox.h`, `src/CombatInbox.cpp`, `tests/TestCombatInbox.cpp`, `src/Natives.h`, `src/Natives.cpp`,
   `src/GameScript.cpp`, `scripts/BlockRender.reds`
 
-- [ ] **Step 1: Edit `tests/TestCombatInbox.cpp`: landings' flags, endings and non-lethal hurts**
+- [x] **Step 1: Edit `tests/TestCombatInbox.cpp`: landings' flags, endings and non-lethal hurts**
 
 ```cpp
 	inbox.Land({ 7, 714.0, 1514.0, 800.0 });
@@ -7514,7 +7514,7 @@ TEST(CombatInboxKeepsEndingsAndLeavesNonLethalHurtsToV)
 	CHECK_EQ(uint64_t(ended), counts.ended);
 	CHECK_EQ(counts.landed + counts.ended + counts.dropped, uint64_t(2 * kThreads * kEach));
 ```
-- [ ] **Step 2: Build; it must fail**
+- [x] **Step 2: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -7523,7 +7523,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `error C2039: 'End': is not a member of 'cpmc::CombatInbox'`.
 
-- [ ] **Step 3: Edit `src/CombatInbox.h`**
+- [x] **Step 3: Edit `src/CombatInbox.h`**
 
 ```cpp
 // V's otherwise; and our hits on NPCs as they land, with the NPC's health before and after. The main thread takes both
@@ -7594,7 +7594,7 @@ public:
 	std::vector<Landed>         landed_;
 	std::vector<Ended>          ended_;
 ```
-- [ ] **Step 4: Edit `src/CombatInbox.cpp`**
+- [x] **Step 4: Edit `src/CombatInbox.cpp`**
 
 ```cpp
 	const std::lock_guard lock(mutex_);
@@ -7639,7 +7639,7 @@ std::vector<CombatInbox::Ended> CombatInbox::TakeEnded()
 
 CombatInbox::Counts CombatInbox::Count() const
 ```
-- [ ] **Step 5: Edit `src/Natives.cpp`: the three natives the pipeline's wraps call**
+- [x] **Step 5: Edit `src/Natives.cpp`: the three natives the pipeline's wraps call**
 
 ```cpp
 // BlockRenderVHurt(amount: Float, attackType: Int32, instigator: EntityID) -> Bool, from the wrap of DealDamages, on any
@@ -7733,7 +7733,7 @@ void HitEnded(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, void*, int64_
 		g_nativesLog->Push(typed ? "natives: BlockRenderNpcAttached, BlockRenderNpcDetached, BlockRenderNpcCount, BlockRenderNpcAt, "
 		                           "BlockRenderVHurt, BlockRenderHitLanded and BlockRenderHitEnded added"
 ```
-- [ ] **Step 6: Edit `src/Natives.h`**
+- [x] **Step 6: Edit `src/Natives.h`**
 
 ```cpp
 // pipeline offer hits on V and report our hits landing through them, on whichever thread runs the pipeline (Part 2).
@@ -7748,7 +7748,7 @@ void HitEnded(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, void*, int64_
 ```cpp
 // The hits on V the pipeline's wraps offer, and our hits as they land or end dealt nothing.
 ```
-- [ ] **Step 7: Edit `src/GameScript.cpp`: seven natives to check for**
+- [x] **Step 7: Edit `src/GameScript.cpp`: seven natives to check for**
 
 ```cpp
 constexpr std::array<const char*, 6> kNatives{ "BlockRenderNpcAttached", "BlockRenderNpcDetached", "BlockRenderNpcCount",
@@ -7759,7 +7759,7 @@ constexpr std::array<const char*, 7> kNatives{ "BlockRenderNpcAttached", "BlockR
 	                                           "BlockRenderNpcAt",       "BlockRenderVHurt",       "BlockRenderHitLanded",
 	                                           "BlockRenderHitEnded" };
 ```
-- [ ] **Step 8: Edit `scripts/BlockRender.reds`: the natives as they are now**
+- [x] **Step 8: Edit `scripts/BlockRender.reds`: the natives as they are now**
 
 ```swift
 // For the DealDamages wrap: a hit on V, which BlockRender takes (true) for Minecraft while combat and build mode are on;
@@ -7787,7 +7787,7 @@ public native func BlockRenderHitEnded(target: EntityID, why: Int32)
 ```swift
       if BlockRenderVHurt(total, EnumInt(hitEvent.attackData.GetAttackType()), from, false) {
 ```
-- [ ] **Step 9: Build and run the tests; they must pass**
+- [x] **Step 9: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -7797,7 +7797,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `438 test(s), 0 failure(s)`.
 
-- [ ] **Step 10: Compile the module against the game's scripts**
+- [x] **Step 10: Compile the module against the game's scripts**
 
 ```bash
 cd /d/Cyberpunk-Minecraft/spikes/block-render && uv run --no-project python tools/check_reds.py E:/Cyberpunk2077 scripts; \
@@ -7805,7 +7805,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && uv run --no-project python tool
 ```
 Expected: redscript's `Compilation complete`, then `compiled` and `exit: 0`.
 
-- [ ] **Step 11: Commit**
+- [x] **Step 11: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -7828,7 +7828,7 @@ can be compiled before deploying.
 **Files:**
 - Modify: `tools/check_reds.py`
 
-- [ ] **Step 1: Edit `tools/check_reds.py`**
+- [x] **Step 1: Edit `tools/check_reds.py`**
 
 ```python
     uv run --no-project python tools/check_reds.py <game folder> <scripts folder>
@@ -7867,7 +7867,7 @@ lib.scc_settings_add_script_path(settings, str(scripts).encode())
 for folder in more:
     lib.scc_settings_add_script_path(settings, str(folder).encode())
 ```
-- [ ] **Step 2: Compile the module against the game's scripts, without and with Codeware**
+- [x] **Step 2: Compile the module against the game's scripts, without and with Codeware**
 
 ```bash
 cd /d/Cyberpunk-Minecraft/spikes/block-render && uv run --no-project python tools/check_reds.py E:/Cyberpunk2077 scripts | tail -1; \
@@ -7877,7 +7877,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && uv run --no-project python tool
 ```
 Expected: `compiled`, `without Codeware: exit 0` and `with Codeware: exit 0`.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -7926,7 +7926,7 @@ slip in the parts for Codeware, but only where Codeware is installed: Steps 3 an
 **Files:**
 - Modify: `scripts/BlockRender.reds`
 
-- [ ] **Step 1: Edit `scripts/BlockRender.reds`**
+- [x] **Step 1: Edit `scripts/BlockRender.reds`**
 
 ```swift
 // Combat (spike 6's Part 2): Hit makes one of Minecraft's hits into a hit of V's on an NPC, marked as ours with its
@@ -8465,7 +8465,7 @@ private final func DealDamages(hitEvent: ref<gameHitEvent>) -> Void {
       if BlockRenderVHurt(total - shield, EnumInt(hitEvent.attackData.GetAttackType()), from, nonLethal) {
         BlockRenderNpcs.SetDamage(hitEvent.attackComputed, shield);
 ```
-- [ ] **Step 2: Compile the module against the game's scripts, without and with Codeware**
+- [x] **Step 2: Compile the module against the game's scripts, without and with Codeware**
 
 ```bash
 cd /d/Cyberpunk-Minecraft/spikes/block-render && uv run --no-project python tools/check_reds.py E:/Cyberpunk2077 scripts | tail -1; \
@@ -8475,7 +8475,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && uv run --no-project python tool
 ```
 Expected: `compiled`, `without Codeware: exit 0` and `with Codeware: exit 0`.
 
-- [ ] **Step 3: Check that the compile catches a slip: a wrap of a method that isn't there**
+- [x] **Step 3: Check that the compile catches a slip: a wrap of a method that isn't there**
 
 ```bash
 cd /d/Cyberpunk-Minecraft/spikes/block-render && mkdir -p build/reds-slip \
@@ -8484,7 +8484,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && mkdir -p build/reds-slip \
 ```
 Expected: `[UNRESOLVED_METHOD]` at the wrap's line, then `failed` and `exit: 1`.
 
-- [ ] **Step 4: Check that the compile catches a slip in the parts for Codeware, only with Codeware**
+- [x] **Step 4: Check that the compile catches a slip in the parts for Codeware, only with Codeware**
 
 ```bash
 cd /d/Cyberpunk-Minecraft/spikes/block-render && mkdir -p build/reds-slip \
@@ -8497,7 +8497,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && mkdir -p build/reds-slip \
 Expected: `compiled` and `without Codeware: exit 0`; then redscript's `[UNRESOLVED_METHOD]` at the slip's line, `failed`
 and `with Codeware: exit 1`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -8516,7 +8516,7 @@ must now be version 4: 10 functions, 14 fields, and seven natives.
 **Files:**
 - Modify: `src/GameScript.h`, `src/GameScript.cpp`
 
-- [ ] **Step 1: Edit `src/GameScript.h`**
+- [x] **Step 1: Edit `src/GameScript.h`**
 
 ```cpp
 constexpr int32_t kModuleVersion = 3;  // BlockRenderNpcs.Version(), as this BlockRender needs it
@@ -8574,7 +8574,7 @@ constexpr int32_t kModuleVersion = 4;  // BlockRenderNpcs.Version(), as this Blo
 	// A member function of the module's taking a Bool and giving an Int32: Arm and HideV.
 	std::optional<int32_t> Switch(Function aFunction, const char* aName, bool aOn, std::string& aWhy);
 ```
-- [ ] **Step 2: Edit `src/GameScript.cpp`**
+- [x] **Step 2: Edit `src/GameScript.cpp`**
 
 ```cpp
 		{ "Punch", nullptr, {}, { "String" } },
@@ -8640,7 +8640,7 @@ std::optional<int32_t> GameScript::Switch(Function aFunction, const char* aName,
 }
 }
 ```
-- [ ] **Step 3: Build and run the tests; they must pass**
+- [x] **Step 3: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -8650,7 +8650,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `438 test(s), 0 failure(s)`.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -8671,7 +8671,7 @@ cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
 **Files:**
 - Modify: `src/Status.h`, `src/Status.cpp`, `tests/TestStatus.cpp`
 
-- [ ] **Step 1: Edit `tests/TestStatus.cpp`: the combat line, and the v line**
+- [x] **Step 1: Edit `tests/TestStatus.cpp`: the combat line, and the v line**
 
 ```cpp
 	CHECK(Has(cpmc::FormatStatus(report), "combat=on: V's punch 102.00; hits 0 queued, 0 landed; V's hurts: 0 taken, 0 sent, 0 summed, 0 "
@@ -8740,7 +8740,7 @@ TEST(StatusWritesWhetherVIsHidden)
 	CHECK(Has(cpmc::FormatStatus(report), "v=shown: set hidev is 0"));
 }
 ```
-- [ ] **Step 2: Build; it must fail**
+- [x] **Step 2: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -8749,7 +8749,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `error C2039: 'punchItem': is not a member of 'cpmc::LinkReport'`.
 
-- [ ] **Step 3: Edit `src/Status.h`**
+- [x] **Step 3: Edit `src/Status.h`**
 
 ```cpp
 	uint32_t              minecraftFlags = 0;        // McState's
@@ -8784,7 +8784,7 @@ Expected: `error C2039: 'punchItem': is not a member of 'cpmc::LinkReport'`.
 	uint64_t              hurtsLeft = 0;     // offered while not taken: left to V
 	uint64_t              hurtsNonLethal = 0;  // offered while taken, but the game won't let them kill V: left to V
 ```
-- [ ] **Step 4: Edit `src/Status.cpp`**
+- [x] **Step 4: Edit `src/Status.cpp`**
 
 ```cpp
 // The ground's worker: how long a region took in the last second, of how many triangles, and how much of that time its
@@ -8839,7 +8839,7 @@ std::string FormatV(const LinkReport& aLink)
 	out += FormatDrive(aLink);
 	out += FormatV(aLink);
 ```
-- [ ] **Step 5: Build and run the tests; they must pass**
+- [x] **Step 5: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -8849,7 +8849,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `439 test(s), 0 failure(s)`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -8875,7 +8875,7 @@ In the plugin, still 0.18.0, since 0.18.0 was never deployed:
 **Files:**
 - Modify: `src/Plugin.cpp`
 
-- [ ] **Step 1: Edit `src/Plugin.cpp`**
+- [x] **Step 1: Edit `src/Plugin.cpp`**
 
 ```cpp
 // Minecraft's hits land on them as V's, and in build mode the game's hits on V go to Minecraft's player, whose death
@@ -9111,7 +9111,7 @@ void SwitchV(bool aBuild, bool aVFound, double aNow)
 	report.vHidden = g_hidden.On();
 	report.vMeshes = g_vMeshes;
 ```
-- [ ] **Step 2: Build and run the tests; they must pass**
+- [x] **Step 2: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -9121,7 +9121,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `439 test(s), 0 failure(s)`.
 
-- [ ] **Step 3: Check that BlockRender imports nothing from PhysX**
+- [x] **Step 3: Check that BlockRender imports nothing from PhysX**
 
 ```bash
 DUMPBIN="$(ls "/c/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/"*/bin/Hostx64/x64/dumpbin.exe | head -1)"
@@ -9130,7 +9130,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && MSYS_NO_PATHCONV=1 "$DUMPBIN" -
 ```
 Expected: `0`.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -9148,7 +9148,7 @@ The combat line's summary says whether V's unarmed weapon is drawn; the build li
 **Files:**
 - Modify: `tools/blockrender_hud/init.lua`
 
-- [ ] **Step 1: Edit `tools/blockrender_hud/init.lua`**
+- [x] **Step 1: Edit `tools/blockrender_hud/init.lua`**
 
 ```lua
 -- combat), and a line each for the last request's reply, build mode (F8) and its drive, the bodies, the NPCs, combat,
@@ -9234,14 +9234,14 @@ local hideV = nil        -- whether V's meshes are hidden in build mode: "on" or
             end
         end
 ```
-- [ ] **Step 2: Check the overlay's syntax**
+- [x] **Step 2: Check the overlay's syntax**
 
 ```bash
 cd /d/Cyberpunk-Minecraft/spikes/block-render && luac -p tools/blockrender_hud/init.lua && echo ok
 ```
 Expected: `ok`.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -9296,7 +9296,7 @@ These commands come back, as in step 2:
 **Files:**
 - Modify: `docs/spikes/2026-10-05-npcs-and-combat-results.md`
 
-- [ ] **Step 1: Deploy (the game must not be running)**
+- [x] **Step 1: Deploy (the game must not be running)**
 
 ```bash
 tasklist | grep -i -c "cyberpunk2077.exe"
@@ -9313,7 +9313,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default -DCP2
 ```
 Expected: `installed`. The second configure clears `CP2077_DIR` again.
 
-- [ ] **Step 2: In the game: the module and its natives**
+- [x] **Step 2: In the game: the module and its natives**
 
 Ask the user to start the `CyberCraft` instance, then the game, and to wait at the game's main menu. If a "REDScript
 compilation has failed" message box shows instead, ask the user to click OK and quit the game, and read redscript's log
@@ -9326,7 +9326,7 @@ Expected: the module's path and Codeware's among the files compiled, `Compilatio
 BlockRender's log, `BlockRender 0.18.0 loaded` and `natives: BlockRenderNpcAttached, BlockRenderNpcDetached,
 BlockRenderNpcCount, BlockRenderNpcAt, BlockRenderVHurt, BlockRenderHitLanded and BlockRenderHitEnded added`.
 
-- [ ] **Step 3: In the game: load, link, and combat on**
+- [x] **Step 3: In the game: load, link, and combat on**
 
 Ask the user to load the save on the busy pavement, with a gun drawn (weapon-wheel slot 1, 2 or 3), and click Link.
 Then send `mc /gamemode survival`, and `set combat 1` (or ask the user to click the overlay's `Combat: off`). Expected:
@@ -9338,7 +9338,7 @@ Then send `mc /gamemode survival`, and `set combat 1` (or ask the user to click 
 - send `npcs`: an NPC with a capsule now reaches about 1.75 m above its position, `its top another's: radius …`
   (Task 13).
 
-- [ ] **Step 4: In the game: the opening check, what V punches with**
+- [x] **Step 4: In the game: the opening check, what V punches with**
 
 Send `punch`. Expected: `punch: V's punch …, read from Items.…; quick hits with Attacks.… (Melee), strong ones with
 Attacks.… (StrongMelee); not drawn, so hits carry no weapon, …` (V's numbers as V has them). V has Mantis Blades
@@ -9349,7 +9349,7 @@ unarmed slot), and send `punch` again. Expected: the same item, now `drawn, so h
 status's combat line `…, drawn; …`: the module's item is the one the game's own slot drew. If it says `not drawn`, the
 two disagree: stop, and find which item the slot drew. Ask the user to draw the gun again.
 
-- [ ] **Step 5: In the game: the opening check, build mode draws V's unarmed weapon and hides V**
+- [x] **Step 5: In the game: the opening check, build mode draws V's unarmed weapon and hides V**
 
 Ask the user to press F8 on the pavement, with the gun drawn. Expected:
 - in the log, `combat: V's Immortal on`, `combat: V's unarmed weapon drawn: asked the game to draw V's unarmed weapon`,
@@ -9366,7 +9366,7 @@ back`, `build: V's meshes shown: M meshes switched on again (… ms)`, and `comb
 V's hands and legs show as before. Then send `set hidev 0`, ask the user to press F8 and look down, and F8 again: V is
 seen in build mode, its unarmed weapon drawn, and `v=shown: set hidev is 0`. Send `set hidev 1`.
 
-- [ ] **Step 6: In the game: the opening check, one hit on an NPC, as V's own**
+- [x] **Step 6: In the game: the opening check, one hit on an NPC, as V's own**
 
 Send `npcs`, and pick a listed NPC near V who isn't a vendor, by its number `N` (a ganger is best: civilians and vendors
 may be friendly to V, and the game deals friendly hits nothing). Ask the user to pick weapon-wheel slot 4, walk up to
@@ -9385,7 +9385,7 @@ and note it for the results. If the log says `wasn't dealt by the game within 2 
 get through the pipeline: try a ganger; if none land, stop (the spec's risk 3). Then send `hit N 3 strong`, and note how
 the NPC reacts, and what the landing says.
 
-- [ ] **Step 7: In the game: the opening check, one hit on V in build mode**
+- [x] **Step 7: In the game: the opening check, one hit on V in build mode**
 
 Ask the user to find something that hits V (the ganger from Step 6, or the hostile drone from step 2), press F8 near
 it, let it hit V once or twice, and press F8 again. Expected:
@@ -9396,7 +9396,7 @@ it, let it hit V once or twice, and press F8 again. Expected:
 - V's health unchanged (the status's drive line, `V's health …%`), and Minecraft's hearts down in its HUD;
 - the attack type names what hit V: check the kind against it (the spec's "To Minecraft, as `kInHurt`").
 
-- [ ] **Step 8: In the game: fights**
+- [x] **Step 8: In the game: fights**
 
 Send `mc /item replace entity @s hotbar.0 with minecraft:diamond_sword`, `mc /item replace entity @s hotbar.1 with
 minecraft:diamond_axe`, `mc /item replace entity @s hotbar.2 with minecraft:bow` and `mc /item replace entity @s
@@ -9409,17 +9409,17 @@ fight back, and die, the last landing `killed it`; the game's skill XP for V's u
 blades, Body for fists and Gorilla Arms: `RPGManager.AwardExperienceFromDamage`); Minecraft's hearts drop as they hit
 back. Note how they react, and anything that doesn't land.
 
-- [ ] **Step 9: In the game: shot at in build mode**
+- [x] **Step 9: In the game: shot at in build mode**
 
 Ask the user to stay in build mode in a gunfight a while. Expected: Minecraft's hearts drop in its HUD with each hit,
 V's health bar doesn't move, and the status's hurts count up, some summed.
 
-- [ ] **Step 10: In the game: V's weapon when combat goes off in build mode**
+- [x] **Step 10: In the game: V's weapon when combat goes off in build mode**
 
 In build mode, send `set combat 0`. Expected: `combat: V's unarmed weapon put away: …` and `combat: V's Immortal off`;
 V stays hidden (`v=hidden: …`). Send `set combat 1`: the weapon is drawn and V is Immortal again.
 
-- [ ] **Step 11: In the game: dying in Minecraft kills V**
+- [x] **Step 11: In the game: dying in Minecraft kills V**
 
 Ask the user whether V may die now (it ends in the game's death screen, and a load), with `keep_inventory` as they chose
 in step 3; and if so, to let Minecraft's player die in build mode (or send `mc /kill @s`). Expected: `Minecraft's player
@@ -9427,26 +9427,26 @@ died…; so V dies: V's health set to its least`; V dies in the game; Minecraft'
 user to load the last save and link again. Expected: `combat: V's Immortal off …` once V is found; outside build mode,
 a hit on V takes V's health; V is seen, and holds what the save had.
 
-- [ ] **Step 12: In the game: the overlay, build mode and the bodies**
+- [x] **Step 12: In the game: the overlay, build mode and the bodies**
 
 Ask the user to place a few blocks of stone in build mode and walk onto them, then leave build mode. Expected: as in
 step 2: the bodies line counts them, and V stands on them.
 
-- [ ] **Step 13: In the game: combat off, and unlinking**
+- [x] **Step 13: In the game: combat off, and unlinking**
 
 Send `set combat 0`, then ask the user to click Unlink. Expected: `combat=off: Minecraft's hits are logged, not applied;
 V's health is V's`; then `none listed: not linked`.
 
-- [ ] **Step 14: Ask the user to quit the game and stop Minecraft**
+- [x] **Step 14: Ask the user to quit the game and stop Minecraft**
 
-- [ ] **Step 15: Read the log once more**
+- [x] **Step 15: Read the log once more**
 
 ```bash
 L=$(ls -t /e/Cyberpunk2077/red4ext/logs | grep -i blockrender | head -1); grep -E "module:|combat:|build: V's|hit on NPC|punch:|Minecraft's player died" "/e/Cyberpunk2077/red4ext/logs/$L" | head -300
 ```
 Everything the steps above logged, for the results.
 
-- [ ] **Step 16: Record step 4's results in `docs/spikes/2026-10-05-npcs-and-combat-results.md`**
+- [x] **Step 16: Record step 4's results in `docs/spikes/2026-10-05-npcs-and-combat-results.md`**
 
 A "Step 4" section: each check above with its outcome and numbers: what V punches with, against the game's unarmed
 slot; build mode's draw and what of V the user still saw; the hit's start, what the pipeline dealt and did to it, and
@@ -9455,7 +9455,7 @@ share, and Minecraft's health; the fights (flags, endings, reactions, crits and 
 being shot at; combat off in build mode; the death and the load; and anything that surprised, and what it means for
 Part 3. Update the spike's answer at the top.
 
-- [ ] **Step 17: Commit**
+- [x] **Step 17: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add docs/spikes/2026-10-05-npcs-and-combat-results.md \
