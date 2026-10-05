@@ -43,8 +43,15 @@ struct CapsuleSeen
 // several, the narrowest. Nothing if none is.
 std::optional<CapsuleSeen> PickCapsule(std::span<const CapsuleSeen> aSeen, const Vec3d& aFeet);
 
-// Its box: twice the radius wide, reaching from the lower of the feet and the capsule's bottom up to its top.
-link::NpcBox BoxOf(const CapsuleSeen& aCapsule, const Vec3d& aFeet);
+// The capsule that reaches highest of those in aSeen standing as the NPC's controller aController does, whatever their
+// filters: leaning at most kCapsuleTilt from upright, their axes within kCapsuleAcross of aFeet. The controller stops at
+// the shoulders: step 2's vendor's reached 1.62 m above its feet, and two other capsules on its axis 1.75 and 1.76 m.
+// aController itself if none reaches higher.
+CapsuleSeen TallestCapsule(std::span<const CapsuleSeen> aSeen, const CapsuleSeen& aController, const Vec3d& aFeet);
+
+// Its box: twice the controller's radius wide, reaching from the lower of the feet and the controller's bottom up to the
+// tallest capsule's top.
+link::NpcBox BoxOf(const CapsuleSeen& aController, const CapsuleSeen& aTallest, const Vec3d& aFeet);
 
 // Which NPCs' capsules to look for, and the boxes found.
 class NpcSizes
@@ -54,14 +61,15 @@ public:
 	// those never looked for, then those whose capsule wasn't found when last looked for, kCapsuleRetry or more ago.
 	// Each counts as looked for at aNow.
 	std::vector<uint64_t> ToLookFor(std::span<const uint64_t> aListed, double aNow);
-	// aEntity's capsule, found with its feet at aFeet: its box from now on.
-	void Found(uint64_t aEntity, const CapsuleSeen& aCapsule, const Vec3d& aFeet);
+	// aEntity's controller and tallest capsule, found with its feet at aFeet: its box from now on.
+	void Found(uint64_t aEntity, const CapsuleSeen& aController, const CapsuleSeen& aTallest, const Vec3d& aFeet);
 	// Forgets the NPCs aIds has forgotten, so one listed again is looked for again.
 	void Forget(const link::ActorIds& aIds);
 
 	const std::unordered_map<uint64_t, link::NpcBox>& Boxes() const { return boxes_; }
-	// The capsule aEntity's box came from; null if it has none.
+	// The controller aEntity's box came from, and the capsule its top came from; null if it has none.
 	const CapsuleSeen* Capsule(uint64_t aEntity) const;
+	const CapsuleSeen* Tallest(uint64_t aEntity) const;
 	bool               LookedFor(uint64_t aEntity) const { return looked_.contains(aEntity); }
 	size_t             LookedForCount() const { return looked_.size(); }
 	size_t             FoundCount() const { return capsules_.size(); }
@@ -70,6 +78,7 @@ private:
 	std::unordered_map<uint64_t, double>       looked_;  // when each was last looked for
 	std::unordered_map<uint64_t, link::NpcBox> boxes_;
 	std::unordered_map<uint64_t, CapsuleSeen>  capsules_;
+	std::unordered_map<uint64_t, CapsuleSeen>  tallest_;
 };
 
 // An NPC's line for the npcs request: its number, name and distance (metres); its box and where it came from; its health,

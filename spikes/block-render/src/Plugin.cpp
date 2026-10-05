@@ -639,7 +639,7 @@ void ListNpcs(double aNow, const std::optional<cpmc::Vec3d>& aFeet)
 			    g_ground.Capsules({ feet.x, feet.y, feet.z + cpmc::px::kCapsuleSearchHeight }, cpmc::px::kCapsuleSearchRadius);
 			if (const std::optional<cpmc::px::CapsuleSeen> capsule = cpmc::px::PickCapsule(seen, feet))
 			{
-				g_npcSizes.Found(entity, *capsule, feet);
+				g_npcSizes.Found(entity, *capsule, cpmc::px::TallestCapsule(seen, *capsule, feet), feet);
 			}
 		}
 	}

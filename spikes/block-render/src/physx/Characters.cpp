@@ -21,23 +21,35 @@ double Upright(const CapsuleSeen& aCapsule)
 	const double length = Length(aCapsule.axis);
 	return length > 0.0 ? std::fabs(aCapsule.axis.z) / length : 0.0;
 }
+
+// Whether the capsule stands as an NPC's: leaning at most kCapsuleTilt from upright, its axis within kCapsuleAcross of
+// aFeet.
+bool StandsAt(const CapsuleSeen& aCapsule, const Vec3d& aFeet)
+{
+	if (Upright(aCapsule) < std::cos(kCapsuleTilt * std::numbers::pi / 180.0))
+	{
+		return false;
+	}
+	// The axis's distance from the feet: the length of (feet - centre) x axis, over the axis's length.
+	const Vec3d  to{ aFeet.x - aCapsule.centre.x, aFeet.y - aCapsule.centre.y, aFeet.z - aCapsule.centre.z };
+	const Vec3d& axis = aCapsule.axis;
+	const Vec3d  cross{ to.y * axis.z - to.z * axis.y, to.z * axis.x - to.x * axis.z, to.x * axis.y - to.y * axis.x };
+	return Length(cross) / Length(axis) <= kCapsuleAcross;
+}
+
+// How far the capsule reaches up and down from its centre.
+double Reach(const CapsuleSeen& aCapsule)
+{
+	return Upright(aCapsule) * aCapsule.halfHeight + aCapsule.radius;
+}
 }
 
 std::optional<CapsuleSeen> PickCapsule(std::span<const CapsuleSeen> aSeen, const Vec3d& aFeet)
 {
-	const double               upright = std::cos(kCapsuleTilt * std::numbers::pi / 180.0);
 	std::optional<CapsuleSeen> best;
 	for (const CapsuleSeen& capsule : aSeen)
 	{
-		if ((capsule.queryFilter[2] & kControllerQueryBit) == 0 || Upright(capsule) < upright)
-		{
-			continue;
-		}
-		// The axis's distance from the feet: the length of (feet - centre) x axis, over the axis's length.
-		const Vec3d  to{ aFeet.x - capsule.centre.x, aFeet.y - capsule.centre.y, aFeet.z - capsule.centre.z };
-		const Vec3d& axis = capsule.axis;
-		const Vec3d  cross{ to.y * axis.z - to.z * axis.y, to.z * axis.x - to.x * axis.z, to.x * axis.y - to.y * axis.x };
-		if (Length(cross) / Length(axis) > kCapsuleAcross)
+		if ((capsule.queryFilter[2] & kControllerQueryBit) == 0 || !StandsAt(capsule, aFeet))
 		{
 			continue;
 		}
@@ -49,12 +61,24 @@ std::optional<CapsuleSeen> PickCapsule(std::span<const CapsuleSeen> aSeen, const
 	return best;
 }
 
-link::NpcBox BoxOf(const CapsuleSeen& aCapsule, const Vec3d& aFeet)
+CapsuleSeen TallestCapsule(std::span<const CapsuleSeen> aSeen, const CapsuleSeen& aController, const Vec3d& aFeet)
 {
-	const double reach = Upright(aCapsule) * aCapsule.halfHeight + aCapsule.radius;  // up and down from its centre
-	const double bottom = aCapsule.centre.z - reach;
-	const double top = aCapsule.centre.z + reach;
-	return { 2.0 * aCapsule.radius, std::max(0.0, aFeet.z - bottom), top - aFeet.z };
+	CapsuleSeen tallest = aController;
+	for (const CapsuleSeen& capsule : aSeen)
+	{
+		if (StandsAt(capsule, aFeet) && capsule.centre.z + Reach(capsule) > tallest.centre.z + Reach(tallest))
+		{
+			tallest = capsule;
+		}
+	}
+	return tallest;
+}
+
+link::NpcBox BoxOf(const CapsuleSeen& aController, const CapsuleSeen& aTallest, const Vec3d& aFeet)
+{
+	const double bottom = aController.centre.z - Reach(aController);
+	const double top = std::max(aController.centre.z + Reach(aController), aTallest.centre.z + Reach(aTallest));
+	return { 2.0 * aController.radius, std::max(0.0, aFeet.z - bottom), top - aFeet.z };
 }
 
 std::vector<uint64_t> NpcSizes::ToLookFor(std::span<const uint64_t> aListed, double aNow)
@@ -87,10 +111,11 @@ std::vector<uint64_t> NpcSizes::ToLookFor(std::span<const uint64_t> aListed, dou
 	return out;
 }
 
-void NpcSizes::Found(uint64_t aEntity, const CapsuleSeen& aCapsule, const Vec3d& aFeet)
+void NpcSizes::Found(uint64_t aEntity, const CapsuleSeen& aController, const CapsuleSeen& aTallest, const Vec3d& aFeet)
 {
-	boxes_[aEntity] = BoxOf(aCapsule, aFeet);
-	capsules_[aEntity] = aCapsule;
+	boxes_[aEntity] = BoxOf(aController, aTallest, aFeet);
+	capsules_[aEntity] = aController;
+	tallest_[aEntity] = aTallest;
 }
 
 void NpcSizes::Forget(const link::ActorIds& aIds)
@@ -98,12 +123,19 @@ void NpcSizes::Forget(const link::ActorIds& aIds)
 	std::erase_if(looked_, [&](const auto& aEntry) { return !aIds.IdOf(aEntry.first); });
 	std::erase_if(boxes_, [&](const auto& aEntry) { return !aIds.IdOf(aEntry.first); });
 	std::erase_if(capsules_, [&](const auto& aEntry) { return !aIds.IdOf(aEntry.first); });
+	std::erase_if(tallest_, [&](const auto& aEntry) { return !aIds.IdOf(aEntry.first); });
 }
 
 const CapsuleSeen* NpcSizes::Capsule(uint64_t aEntity) const
 {
 	const auto found = capsules_.find(aEntity);
 	return found != capsules_.end() ? &found->second : nullptr;
+}
+
+const CapsuleSeen* NpcSizes::Tallest(uint64_t aEntity) const
+{
+	const auto found = tallest_.find(aEntity);
+	return found != tallest_.end() ? &found->second : nullptr;
 }
 
 std::string DescribeNpc(const link::NpcSample& aNpc, uint32_t aId, double aDistance, const NpcSizes& aSizes)
@@ -116,6 +148,12 @@ std::string DescribeNpc(const link::NpcSample& aNpc, uint32_t aId, double aDista
 		from = std::format("its capsule's: radius {:.2f}, half-height {:.2f}, leaning {:.0f} degrees, query filter {:x}:{:x}:{:x}:{:x}",
 		                   capsule->radius, capsule->halfHeight, std::acos(std::min(Upright(*capsule), 1.0)) * 180.0 / std::numbers::pi,
 		                   capsule->queryFilter[0], capsule->queryFilter[1], capsule->queryFilter[2], capsule->queryFilter[3]);
+		const CapsuleSeen* tallest = aSizes.Tallest(aNpc.entity);
+		if (tallest && tallest->centre.z + Reach(*tallest) > capsule->centre.z + Reach(*capsule))
+		{
+			from += std::format(", its top another's: radius {:.2f}, query filter {:x}:{:x}:{:x}:{:x}", tallest->radius,
+			                    tallest->queryFilter[0], tallest->queryFilter[1], tallest->queryFilter[2], tallest->queryFilter[3]);
+		}
 	}
 	else
 	{
