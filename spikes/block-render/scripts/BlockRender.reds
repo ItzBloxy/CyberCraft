@@ -8,11 +8,14 @@
 // crashed while the wraps kept it in the module's own arrays). Everything else here runs on the main thread, called by
 // BlockRender, and keeps no reference to an NPC from one call to the next: each is found again by its EntityID.
 //
-// Combat (spike 6's Part 2): Hit makes one of Minecraft's hits into a hit of V's on an NPC, marked as ours with its
-// amount on the hit itself, and the wraps of the damage pipeline's Process and DealDamages, at the end of this file, deal
-// it exactly; the same DealDamages wrap offers the game's hits on V to BlockRender, which takes them for Minecraft in
-// build mode. The pipeline may run on any thread, so those wraps too touch nothing of the module's: they read the hit
-// itself, and call BlockRender's natives.
+// Combat (spike 6's Part 2): Hit makes one of Minecraft's hits into a hit of V's on an NPC, made with what V punches
+// with, and marked as ours, with where it starts, on the hit itself. The wrap of the damage pipeline's ProcessPipeline, at
+// the end of this file, starts it there, and the pipeline does to it all it does to V's own punches; the DealDamages wrap
+// reports what it took off, and the ProcessPipeline wrap why it took nothing, if it didn't. The same DealDamages wrap
+// offers the game's hits on V to BlockRender, which takes them for Minecraft in build mode. The pipeline may run on any
+// thread, so those wraps too touch nothing of the module's: they read the hit itself, and call BlockRender's natives.
+// For build mode, Arm draws V's unarmed weapon, so that hits carry it, and HideV hides V's meshes, through Codeware where
+// it's installed.
 
 // BlockRender's natives, added before the game loads its scripts; any thread may call them.
 public native func BlockRenderNpcAttached(id: EntityID)
@@ -40,6 +43,12 @@ public class BlockRenderNpcs extends ScriptableSystem {
   private let knownRead: array<Bool>;
   private let vReadAt: Float;
   private let vRead: Bool;
+  // Arm's: whether it drew V's unarmed weapon, and what V held before, to put back. HideV's: whether V is hidden, and the
+  // meshes it switched off.
+  private let armed: Bool;
+  private let armedFrom: ItemID;
+  private let hiding: Bool;
+  private let hidden: array<wref<IComponent>>;
 
   // What List fills, one entry for each NPC listed, for BlockRender to read by name.
   public let npcIds: array<EntityID>;
@@ -53,15 +62,17 @@ public class BlockRenderNpcs extends ScriptableSystem {
   // NPCs on BlockRender's list: attached, and not detached; and how many of them this call found by their EntityIDs.
   public let attached: Int32;
   public let found: Int32;
-  // V's punch, the damage per hit of what V punches with (the item in the BaseFists area), and that item; and V's max
-  // health. Read at most four times a second.
+  // V's punch, the damage per hit of what V punches with (what V's unarmed slot draws: UnarmedItem), that item, and
+  // whether V has it drawn; and V's max health. Read at most four times a second.
   public let punch: Float;
   public let punchItem: String;
+  public let punchDrawn: Bool;
   public let vHealthMax: Float;
 
-  // The module's version, which BlockRender checks: 2 since the list moved into BlockRender, 3 with combat.
+  // The module's version, which BlockRender checks: 2 since the list moved into BlockRender, 3 with combat, 4 since hits
+  // go through the whole damage pipeline, with what V's unarmed slot draws.
   public final static func Version() -> Int32 {
-    return 3;
+    return 4;
   }
 
   public final static func Get(game: GameInstance) -> ref<BlockRenderNpcs> {
@@ -187,10 +198,10 @@ public class BlockRenderNpcs extends ScriptableSystem {
     return "GetTargetParts finds " + ToString(ArraySize(found)) + " NPCs within " + FloatToStringPrec(range, 0) + " m; the list lacks " + ToString(lacks) + (lacks > 0 ? ": " + lacking : "");
   }
 
-  // One of Minecraft's hits on an NPC, as V's: amount is what it takes off the NPC's health, and strong picks the strong
-  // attack. Built as the game's SendHitEvent builds one, from V, with the attack record of what V punches with, and the
-  // weapon object of it if V has it drawn. 1: queued; 0: V isn't found; -1: the NPC is gone; -2: it's dead; -3: there's no
-  // attack record to make it with.
+  // One of Minecraft's hits on an NPC, as V's: amount is where the damage pipeline starts it, Minecraft's damage x V's
+  // punch, and strong picks the strong attack. Built as the game's SendHitEvent builds one, from V, with the attack record
+  // of what V punches with, and the weapon object of it if V has it drawn. 1: queued; 0: V isn't found; -1: the NPC is
+  // gone; -2: it's dead; -3: there's no attack record to make it with.
   public final func Hit(id: EntityID, amount: Float, strong: Bool) -> Int32 {
     let game: GameInstance = this.GetGameInstance();
     let player: ref<GameObject> = GameInstance.GetPlayerSystem(game).GetLocalPlayerMainGameObject();
@@ -204,11 +215,12 @@ public class BlockRenderNpcs extends ScriptableSystem {
     if npc.IsDead() {
       return -2;
     };
-    let record: ref<Attack_Record> = this.PunchAttack(player, strong);
+    let item: ItemID = this.UnarmedItem(player);
+    let record: ref<Attack_Record> = this.AttackOf(item, strong);
     if !IsDefined(record) {
       return -3;
     };
-    let weapon: ref<WeaponObject> = this.PunchWeapon(player, game);
+    let weapon: ref<WeaponObject> = this.PunchWeapon(player, game, item);
     let context: AttackInitContext;
     context.record = record;
     context.instigator = player;
@@ -222,7 +234,7 @@ public class BlockRenderNpcs extends ScriptableSystem {
     hit.attackData.SetSource(player);
     hit.attackData.SetWeapon(weapon);
     hit.attackData.SetAttackType(record.AttackType().Type());
-    // Ours, with its amount, on the hit itself, as the game marks its environment's attacks with hitFlag.None and a
+    // Ours, with where it starts, on the hit itself, as the game marks its environment's attacks with hitFlag.None and a
     // source name: the pipeline's wraps read it back on whichever thread runs it.
     let mark: String = "BlockRender " + FloatToStringPrec(amount, 2);
     hit.attackData.AddFlag(hitFlag.None, StringToName(mark));
@@ -271,7 +283,95 @@ public class BlockRenderNpcs extends ScriptableSystem {
     return !gods.HasGodMode(id, gameGodModeType.Immortal) && !gods.HasGodMode(id, gameGodModeType.Invulnerable);
   }
 
-  // For the punch request: V's punch, what it's read from, and what Hit makes hits with.
+  // V's unarmed weapon, drawn for build mode's fights so that Minecraft's hits carry it, as V's own punches do (on); or
+  // what V held before, put back (off). Drawing asks the equipment system for weapon-wheel slot 4 at once, as the slot's
+  // key does; putting back asks for the wheel's slot V's weapon is in, or holsters if V held nothing, or something not on
+  // the wheel. Called again while on, it asks again if the weapon isn't drawn yet. 1: asked; 2: nothing to ask; 0: V isn't
+  // found; -1: V has no unarmed weapon; -2: there's no equipment system.
+  public final func Arm(on: Bool) -> Int32 {
+    let game: GameInstance = this.GetGameInstance();
+    let player: ref<GameObject> = GameInstance.GetPlayerSystem(game).GetLocalPlayerMainGameObject();
+    if !IsDefined(player) {
+      return 0;
+    };
+    let equipment: ref<EquipmentSystem> = EquipmentSystem.GetInstance(player);
+    if !IsDefined(equipment) {
+      return -2;
+    };
+    let held: ItemID;
+    let heldObject: ref<ItemObject> = GameInstance.GetTransactionSystem(game).GetItemInSlot(player, t"AttachmentSlots.WeaponRight");
+    if IsDefined(heldObject) {
+      held = heldObject.GetItemID();
+    };
+    let request: ref<EquipmentSystemWeaponManipulationRequest> = new EquipmentSystemWeaponManipulationRequest();
+    request.owner = player;
+    request.equipAnimType = gameEquipAnimationType.Instant;
+    if on {
+      let item: ItemID = this.UnarmedItem(player);
+      if !ItemID.IsValid(item) {
+        return -1;
+      };
+      if !this.armed {
+        this.armed = true;
+        this.armedFrom = held;
+      };
+      if held == item {
+        return 2;
+      };
+      request.requestType = EquipmentManipulationAction.RequestWeaponSlot4;
+      equipment.QueueRequest(request);
+      return 1;
+    };
+    if !this.armed {
+      return 2;
+    };
+    this.armed = false;
+    if held == this.armedFrom {
+      return 2;
+    };
+    request.requestType = this.WheelRequest(player, this.armedFrom);
+    equipment.QueueRequest(request);
+    return 1;
+  }
+
+  // V's meshes for build mode: V's own, and those of everything V wears and holds, hidden (on), each switched off if it
+  // was on, and remembered, so that showing V again (off) switches on exactly those and leaves off what the game had off.
+  // Called again while on, it hides what has appeared since on V and in V's hands, such as the weapon Arm drew, without
+  // looking through V's whole inventory again. The meshes hidden, or shown again; -1 without Codeware, which lists an
+  // entity's components; -2 if V isn't found.
+  public final func HideV(on: Bool) -> Int32 {
+    let i: Int32 = 0;
+    if !on {
+      let shown: Int32 = 0;
+      while i < ArraySize(this.hidden) {
+        let component: ref<IComponent> = this.hidden[i];
+        if IsDefined(component) {
+          component.Toggle(true);
+          shown += 1;
+        };
+        i += 1;
+      };
+      ArrayClear(this.hidden);
+      this.hiding = false;
+      return shown;
+    };
+    if !BlockRenderCanHideV() {
+      return -1;
+    };
+    let player: ref<GameObject> = GameInstance.GetPlayerSystem(this.GetGameInstance()).GetLocalPlayerMainGameObject();
+    if !IsDefined(player) {
+      return -2;
+    };
+    let off: array<wref<IComponent>> = BlockRenderSwitchOffMeshes(player, !this.hiding);
+    this.hiding = true;
+    while i < ArraySize(off) {
+      ArrayPush(this.hidden, off[i]);
+      i += 1;
+    };
+    return ArraySize(this.hidden);
+  }
+
+  // For the punch request: V's punch, what it's read from, what Hit makes hits with, and whether V has it drawn.
   public final func Punch() -> String {
     let game: GameInstance = this.GetGameInstance();
     let player: ref<GameObject> = GameInstance.GetPlayerSystem(game).GetLocalPlayerMainGameObject();
@@ -279,14 +379,15 @@ public class BlockRenderNpcs extends ScriptableSystem {
       return "V isn't found";
     };
     this.ReadV(player, game);
-    let drawn: ref<WeaponObject> = this.PunchWeapon(player, game);
+    let item: ItemID = this.UnarmedItem(player);
     return "V's punch " + FloatToStringPrec(this.punch, 2) + ", read from " + this.punchItem + "; quick hits with "
-      + this.AttackName(this.PunchAttack(player, false)) + ", strong ones with " + this.AttackName(this.PunchAttack(player, true))
-      + "; " + (IsDefined(drawn) ? "drawn, so hits carry it as their weapon" : "not drawn, so hits carry no weapon");
+      + this.AttackName(this.AttackOf(item, false)) + ", strong ones with " + this.AttackName(this.AttackOf(item, true)) + "; "
+      + (this.punchDrawn ? "drawn, so hits carry it as their weapon"
+                         : "not drawn, so hits carry no weapon, and skip the NPC's armour, the weapon's crits, stealth, blocks and the skill XP");
   }
 
-  // A hit's amount, if it's ours: from its hitFlag.None marked "BlockRender <amount>". -1 if it isn't. Any thread: it
-  // reads only the hit.
+  // Where one of our hits starts, if it's ours: from its hitFlag.None marked "BlockRender <amount>". -1 if it isn't. Any
+  // thread: it reads only the hit.
   public final static func AmountOf(data: ref<AttackData>) -> Float {
     if !IsDefined(data) {
       return -1.00;
@@ -319,14 +420,116 @@ public class BlockRenderNpcs extends ScriptableSystem {
     };
   }
 
-  // The attack record of what V punches with, from its item's record: its strong melee attack for a strong hit, its light
-  // one otherwise (gamedataAttackType.Melee: QuickMelee is a gun's quick melee); of neither, its first melee attack.
-  private final func PunchAttack(player: ref<GameObject>, strong: Bool) -> ref<Attack_Record> {
-    let items: array<ItemID> = EquipmentSystem.GetItemsInArea(player, gamedataEquipmentArea.BaseFists);
-    if ArraySize(items) == 0 {
+  // The attack's damage set to amount in all, split across damage types as the attack splits its own; all physical if it
+  // has none, as without a weapon. Any thread.
+  public final static func StartAt(computed: ref<gameAttackComputed>, amount: Float) -> Void {
+    let values: array<Float> = computed.GetAttackValues();
+    let total: Float = 0.00;
+    let i: Int32 = 0;
+    while i < ArraySize(values) {
+      if values[i] > 0.00 {
+        total += values[i];
+      };
+      i += 1;
+    };
+    if total <= 0.00 {
+      BlockRenderNpcs.SetDamage(computed, amount);
+      return;
+    };
+    i = 0;
+    while i < ArraySize(values) {
+      values[i] = values[i] > 0.00 ? values[i] * amount / total : 0.00;
+      i += 1;
+    };
+    computed.SetAttackValues(values);
+  }
+
+  // What the pipeline did to one of our hits, for BlockRenderHitLanded: critical 1, blocked 2, parried 4, the NPC's armour
+  // 8 (the hit type Glance, of a hit that isn't critical), mitigated 16, killed the NPC 32. Any thread.
+  public final static func LandedFlags(data: ref<AttackData>) -> Int32 {
+    let flags: Int32 = 0;
+    if data.HasFlag(hitFlag.CriticalHit) {
+      flags += 1;
+    };
+    if data.HasFlag(hitFlag.WasBlocked) {
+      flags += 2;
+    };
+    if data.HasFlag(hitFlag.WasDeflected) {
+      flags += 4;
+    };
+    if Equals(data.GetHitType(), gameuiHitType.Glance) {
+      flags += 8;
+    };
+    if data.HasFlag(hitFlag.WasMitigated) {
+      flags += 16;
+    };
+    if data.HasFlag(hitFlag.WasKillingBlow) {
+      flags += 32;
+    };
+    return flags;
+  }
+
+  // Why the pipeline dealt one of our hits nothing, from the source name its DealNoDamage flag was set under: 1 friendly to
+  // V, 2 invulnerable, 3 already dead, 4 dodged, 5 evaded, 6 killed at once, 7 no damage left; 0 another reason. Any thread.
+  public final static func WhyNoDamage(data: ref<AttackData>) -> Int32 {
+    let flags: array<SHitFlag> = data.GetFlags();
+    let i: Int32 = 0;
+    while i < ArraySize(flags) {
+      if Equals(flags[i].flag, hitFlag.DealNoDamage) {
+        let source: CName = flags[i].source;
+        if Equals(source, n"FriendlyFireIgnored") {
+          return 1;
+        };
+        if Equals(source, n"invulnerable") || Equals(source, n"invulnerable stat flag") {
+          return 2;
+        };
+        if Equals(source, n"dead") {
+          return 3;
+        };
+        if Equals(source, n"ProcessDodge") {
+          return 4;
+        };
+        if Equals(source, n"ProcessEvasion") {
+          return 5;
+        };
+        if Equals(source, n"instant_kill") {
+          return 6;
+        };
+        if Equals(source, n"no_valid_damage") {
+          return 7;
+        };
+        return 0;
+      };
+      i += 1;
+    };
+    return 0;
+  }
+
+  // What V punches with: what V's unarmed slot draws (weapon-wheel slot 4: the game's GetMeleewareOrFistsItemID), V's arm
+  // cyberware weapon if it has a melee attack to make hits with, otherwise what's in the BaseFists area, the fists or
+  // Gorilla Arms. None if there's neither.
+  private final func UnarmedItem(player: ref<GameObject>) -> ItemID {
+    let data: ref<EquipmentSystemPlayerData> = EquipmentSystem.GetData(player);
+    if IsDefined(data) {
+      let ware: ItemID = data.GetActiveMeleeWare();
+      if ItemID.IsValid(ware) && IsDefined(this.AttackOf(ware, false)) {
+        return ware;
+      };
+    };
+    let fists: array<ItemID> = EquipmentSystem.GetItemsInArea(player, gamedataEquipmentArea.BaseFists);
+    if ArraySize(fists) > 0 {
+      return fists[0];
+    };
+    return ItemID.None();
+  }
+
+  // The attack record to make a hit with, from item's record: its strong melee attack for a strong hit, its light one
+  // otherwise (gamedataAttackType.Melee: QuickMelee is a gun's quick melee); of neither, its first melee attack.
+  private final func AttackOf(item: ItemID, strong: Bool) -> ref<Attack_Record> {
+    if !ItemID.IsValid(item) {
       return null;
     };
-    let weapon: ref<WeaponItem_Record> = TweakDBInterface.GetWeaponItemRecord(ItemID.GetTDBID(items[0]));
+    let weapon: ref<WeaponItem_Record> = TweakDBInterface.GetWeaponItemRecord(ItemID.GetTDBID(item));
     if !IsDefined(weapon) {
       return null;
     };
@@ -351,17 +554,34 @@ public class BlockRenderNpcs extends ScriptableSystem {
     return fallback;
   }
 
-  // What V punches with, as the weapon object V holds, if V has it drawn; none otherwise.
-  private final func PunchWeapon(player: ref<GameObject>, game: GameInstance) -> ref<WeaponObject> {
-    let items: array<ItemID> = EquipmentSystem.GetItemsInArea(player, gamedataEquipmentArea.BaseFists);
+  // What V punches with, item, as the weapon object V holds, if V has it drawn; none otherwise.
+  private final func PunchWeapon(player: ref<GameObject>, game: GameInstance, item: ItemID) -> ref<WeaponObject> {
     let held: ref<WeaponObject> = GameInstance.GetTransactionSystem(game).GetItemInSlot(player, t"AttachmentSlots.WeaponRight") as WeaponObject;
-    if ArraySize(items) == 0 || !IsDefined(held) {
+    if !ItemID.IsValid(item) || !IsDefined(held) {
       return null;
     };
-    if ItemID.GetTDBID(held.GetItemID()) == ItemID.GetTDBID(items[0]) {
+    if ItemID.GetTDBID(held.GetItemID()) == ItemID.GetTDBID(item) {
       return held;
     };
     return null;
+  }
+
+  // The request that draws item from the weapon wheel's first three slots, by its slot; or holsters, if it isn't there or
+  // is nothing.
+  private final func WheelRequest(player: ref<GameObject>, item: ItemID) -> EquipmentManipulationAction {
+    if ItemID.IsValid(item) {
+      let wheel: array<ItemID> = EquipmentSystem.GetItemsInArea(player, gamedataEquipmentArea.WeaponWheel);
+      if ArraySize(wheel) > 0 && wheel[0] == item {
+        return EquipmentManipulationAction.RequestWeaponSlot1;
+      };
+      if ArraySize(wheel) > 1 && wheel[1] == item {
+        return EquipmentManipulationAction.RequestWeaponSlot2;
+      };
+      if ArraySize(wheel) > 2 && wheel[2] == item {
+        return EquipmentManipulationAction.RequestWeaponSlot3;
+      };
+    };
+    return EquipmentManipulationAction.UnequipWeapon;
   }
 
   private final func AttackName(record: ref<Attack_Record>) -> String {
@@ -420,18 +640,84 @@ public class BlockRenderNpcs extends ScriptableSystem {
   private final func ReadV(player: ref<GameObject>, game: GameInstance) -> Void {
     this.vHealthMax = GameInstance.GetStatPoolsSystem(game).GetStatPoolMaxPointValue(Cast<StatsObjectID>(player.GetEntityID()), gamedataStatPoolType.Health);
     this.punch = 0.00;
-    this.punchItem = "nothing in BaseFists";
-    let items: array<ItemID> = EquipmentSystem.GetItemsInArea(player, gamedataEquipmentArea.BaseFists);
-    if ArraySize(items) > 0 {
-      this.punchItem = TDBID.ToStringDEBUG(ItemID.GetTDBID(items[0]));
-      let data: wref<gameItemData> = GameInstance.GetTransactionSystem(game).GetItemData(player, items[0]);
+    this.punchDrawn = false;
+    this.punchItem = "nothing in V's unarmed slot";
+    let item: ItemID = this.UnarmedItem(player);
+    if ItemID.IsValid(item) {
+      this.punchItem = TDBID.ToStringDEBUG(ItemID.GetTDBID(item));
+      let data: wref<gameItemData> = GameInstance.GetTransactionSystem(game).GetItemData(player, item);
       if IsDefined(data) {
         this.punch = data.GetStatValueByType(gamedataStatType.EffectiveDamagePerHit);
       } else {
         this.punchItem += ", without item data";
       };
+      this.punchDrawn = IsDefined(this.PunchWeapon(player, game, item));
     };
   }
+}
+
+// Whether Codeware is installed: it lists an entity's components (Entity.GetComponents), which hiding V's meshes needs.
+// Without it, the module still compiles, and V just isn't hidden.
+@if(ModuleExists("Codeware"))
+public func BlockRenderCanHideV() -> Bool {
+  return true;
+}
+
+@if(!ModuleExists("Codeware"))
+public func BlockRenderCanHideV() -> Bool {
+  return false;
+}
+
+// V's meshes, and those of the items V wears and holds: each visual component that's on, switched off; those it switched
+// off. With everything, every item V wears and holds, found among V's whole inventory; otherwise only what's in V's
+// hands and arm slot, which is all that changes in build mode. Main thread, from HideV.
+@if(ModuleExists("Codeware"))
+public func BlockRenderSwitchOffMeshes(player: ref<GameObject>, everything: Bool) -> array<wref<IComponent>> {
+  let off: array<wref<IComponent>>;
+  BlockRenderSwitchOffEntity(player, off);
+  let transactions: ref<TransactionSystem> = GameInstance.GetTransactionSystem(player.GetGame());
+  if !everything {
+    BlockRenderSwitchOffEntity(transactions.GetItemInSlot(player, t"AttachmentSlots.WeaponRight"), off);
+    BlockRenderSwitchOffEntity(transactions.GetItemInSlot(player, t"AttachmentSlots.WeaponLeft"), off);
+    BlockRenderSwitchOffEntity(transactions.GetItemInSlot(player, t"AttachmentSlots.RightArm"), off);
+    return off;
+  };
+  let items: array<wref<gameItemData>>;
+  transactions.GetItemList(player, items);
+  let i: Int32 = 0;
+  while i < ArraySize(items) {
+    if IsDefined(items[i]) {
+      let item: ref<ItemObject> = transactions.GetItemInSlotByItemID(player, items[i].GetID());
+      if IsDefined(item) {
+        BlockRenderSwitchOffEntity(item, off);
+      };
+    };
+    i += 1;
+  };
+  return off;
+}
+
+@if(ModuleExists("Codeware"))
+public func BlockRenderSwitchOffEntity(entity: ref<Entity>, out off: array<wref<IComponent>>) -> Void {
+  if !IsDefined(entity) {
+    return;
+  };
+  let components: array<ref<IComponent>> = entity.GetComponents();
+  let i: Int32 = 0;
+  while i < ArraySize(components) {
+    let component: ref<IComponent> = components[i];
+    if IsDefined(component as IVisualComponent) && component.IsEnabled() {
+      component.Toggle(false);
+      ArrayPush(off, component);
+    };
+    i += 1;
+  };
+}
+
+@if(!ModuleExists("Codeware"))
+public func BlockRenderSwitchOffMeshes(player: ref<GameObject>, everything: Bool) -> array<wref<IComponent>> {
+  let off: array<wref<IComponent>>;
+  return off;
 }
 
 // Every NPC the game puts in the world, people, drones, mechs and animals alike, crowds included: NPCPuppet has no
@@ -449,43 +735,52 @@ protected cb func OnDetach() -> Bool {
   return wrappedMethod();
 }
 
-// Our hits: a hit with no damage of its own from the attack record is marked DealNoDamage under n"no_valid_damage" before
-// Process, which would then skip DealDamages; that mark comes off. Any other reason stays: friendly fire, god mode, a dead
-// target. Any thread.
+// Our hits start the whole pipeline where Hit marked them, Minecraft's damage x V's punch, split across damage types as
+// the attack splits its own; the pipeline then does to them all it does to V's own punches, from the spread and V's crits,
+// perks and cyberware to the NPC's armour, resistances, blocks and dodges. One it dealt nothing says why. Any thread.
 @wrapMethod(DamageSystem)
-private final func Process(hitEvent: ref<gameHitEvent>, cache: ref<CacheData>) -> Void {
-  if BlockRenderNpcs.AmountOf(hitEvent.attackData) >= 0.00 {
-    hitEvent.attackData.RemoveFlag(hitFlag.DealNoDamage, n"no_valid_damage");
+private final func ProcessPipeline(hitEvent: ref<gameHitEvent>, cache: ref<CacheData>) -> Void {
+  let amount: Float = BlockRenderNpcs.AmountOf(hitEvent.attackData);
+  if amount < 0.00 || !IsDefined(hitEvent.attackComputed) {
+    wrappedMethod(hitEvent, cache);
+    return;
   };
+  BlockRenderNpcs.StartAt(hitEvent.attackComputed, amount);
   wrappedMethod(hitEvent, cache);
+  if hitEvent.attackData.HasFlag(hitFlag.DealNoDamage) && IsDefined(hitEvent.target) {
+    BlockRenderHitEnded(hitEvent.target.GetEntityID(), BlockRenderNpcs.WhyNoDamage(hitEvent.attackData));
+  };
 }
 
-// The last step before the damage is applied, after every modifier. Our hit deals exactly its amount, as physical
-// damage, and BlockRender hears what it took off. A hit on V that BlockRender takes for Minecraft deals nothing. Any
-// thread.
+// The last step before the damage is applied, after every modifier. Our hit is reported with what the pipeline made of
+// it, what it took off the NPC's health, and what the pipeline did to it. A hit on V that BlockRender takes for Minecraft
+// deals V nothing but what V's overshield takes; one the game won't let kill V stays V's. Any thread.
 @wrapMethod(DamageSystem)
 private final func DealDamages(hitEvent: ref<gameHitEvent>) -> Void {
   let target: ref<GameObject> = hitEvent.target;
-  let amount: Float = BlockRenderNpcs.AmountOf(hitEvent.attackData);
-  if amount >= 0.00 && IsDefined(target) && IsDefined(hitEvent.attackComputed) {
+  if IsDefined(target) && IsDefined(hitEvent.attackComputed) && BlockRenderNpcs.AmountOf(hitEvent.attackData) >= 0.00 {
     let stats: StatsObjectID = Cast<StatsObjectID>(target.GetEntityID());
     let pools: ref<StatPoolsSystem> = GameInstance.GetStatPoolsSystem(target.GetGame());
     let before: Float = pools.GetStatPoolValue(stats, gamedataStatPoolType.Health, false);
-    BlockRenderNpcs.SetDamage(hitEvent.attackComputed, amount);
+    let amount: Float = hitEvent.attackComputed.GetTotalAttackValue(gamedataStatPoolType.Health);
     wrappedMethod(hitEvent);
-    BlockRenderHitLanded(target.GetEntityID(), amount, before, pools.GetStatPoolValue(stats, gamedataStatPoolType.Health, false), 0);
+    BlockRenderHitLanded(target.GetEntityID(), amount, before, pools.GetStatPoolValue(stats, gamedataStatPoolType.Health, false),
+      BlockRenderNpcs.LandedFlags(hitEvent.attackData));
     return;
   };
   if IsDefined(target) && target.IsPlayer() && IsDefined(hitEvent.attackComputed) && IsDefined(hitEvent.attackData) {
     let total: Float = hitEvent.attackComputed.GetTotalAttackValue(gamedataStatPoolType.Health);
-    if total > 0.00 {
+    let pools: ref<StatPoolsSystem> = GameInstance.GetStatPoolsSystem(target.GetGame());
+    let shield: Float = MinF(total, MaxF(pools.GetStatPoolValue(Cast<StatsObjectID>(target.GetEntityID()), gamedataStatPoolType.Overshield, false), 0.00));
+    if total > shield {
       let from: EntityID;
       let instigator: ref<GameObject> = hitEvent.attackData.GetInstigator();
       if IsDefined(instigator) {
         from = instigator.GetEntityID();
       };
-      if BlockRenderVHurt(total, EnumInt(hitEvent.attackData.GetAttackType()), from, false) {
-        BlockRenderNpcs.SetDamage(hitEvent.attackComputed, 0.00);
+      let nonLethal: Bool = hitEvent.attackData.HasFlag(hitFlag.CannotKillPlayer) || hitEvent.attackData.GetMinimumHealthPercent() > 0.00;
+      if BlockRenderVHurt(total - shield, EnumInt(hitEvent.attackData.GetAttackType()), from, nonLethal) {
+        BlockRenderNpcs.SetDamage(hitEvent.attackComputed, shield);
       };
     };
   };
