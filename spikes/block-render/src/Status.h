@@ -65,6 +65,8 @@ struct LinkReport
 	bool    hideV = true;     // set hidev 1: hidden while build mode is on
 	bool    vHidden = false;  // they are now
 	int32_t vMeshes = 0;      // as the module's HideV last said: the meshes it switched off; -1 no Codeware; -2 V isn't found
+	int32_t vEffects = 0;     // and the effects it has stopped since V was hidden
+	int32_t vCrosshair = 0;   // and the game's crosshair: 1 hidden; -1 not found among the HUD layer's game controllers
 	// The ground (spike 5's "Part 2"): figures a second are over the last second
 	std::string                    ground = "floor";          // what Minecraft gets as the game's shape
 	std::string                    groundWhy;                 // why it fell back to the floor, if it did
@@ -127,6 +129,7 @@ struct LinkReport
 	double                punch = 0.0;       // V's punch, as last read
 	std::string           punchItem;         // what it's read from: what V's unarmed slot draws
 	bool                  punchDrawn = false;  // V has it drawn, so hits carry it as their weapon
+	double                hitPower = 0.5;    // set hitpower (link::kHitPower): hits start at V's punch x damage^this
 	uint64_t              hitsQueued = 0;    // Minecraft's hits made V's, and queued in the game
 	uint64_t              hitsLanded = 0;    // and dealt by its damage pipeline
 	std::string           hitsDropped;       // by reason, ours or the pipeline's: "2 not listed, 1 dodged"; empty: none

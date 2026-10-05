@@ -116,7 +116,10 @@ std::string FormatV(const LinkReport& aLink)
 	case -2:
 		return "v=shown: V isn't found\n";
 	default:
-		return std::format("v=hidden: {} meshes switched off\n", aLink.vMeshes);
+		return std::format("v=hidden: {} meshes switched off, {} effects stopped{}\n", aLink.vMeshes, aLink.vEffects,
+		                   aLink.vCrosshair > 0   ? ", the crosshair hidden"
+		                   : aLink.vCrosshair < 0 ? ", the crosshair not found"
+		                                          : "");
 	}
 }
 
@@ -209,10 +212,11 @@ std::string FormatCombat(const LinkReport& aLink)
 	{
 		return "combat=off: Minecraft's hits are logged, not applied; V's health is V's\n";
 	}
-	std::string out = std::format("combat=on: V's punch {:.2f}{}{}; hits {} queued, {} landed{}", aLink.punch,
+	std::string out = std::format("combat=on: V's punch {:.2f}{}{}; hit power {:.2f}; hits {} queued, {} landed{}", aLink.punch,
 	                              aLink.punchItem.empty() ? "" : " from " + OneLine(aLink.punchItem),
 	                              aLink.punchDrawn ? ", drawn" : ", not drawn: hits skip the NPC's armour, weapon crits, stealth, blocks and skill XP",
-	                              aLink.hitsQueued, aLink.hitsLanded, aLink.hitsDropped.empty() ? "" : ", dropped: " + OneLine(aLink.hitsDropped));
+	                              aLink.hitPower, aLink.hitsQueued, aLink.hitsLanded,
+	                              aLink.hitsDropped.empty() ? "" : ", dropped: " + OneLine(aLink.hitsDropped));
 	if (!aLink.lastHit.empty())
 	{
 		out += "; the last " + OneLine(aLink.lastHit);
