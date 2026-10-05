@@ -63,6 +63,7 @@ add_library(render_core STATIC
 	src/link/Ground.cpp
 	src/link/GroundWorker.cpp
 	src/link/Solids.cpp
+	src/link/Actors.cpp
 	src/physx/GameAbi.cpp
 	src/physx/ShapeTriangles.cpp
 	src/physx/OriginWatch.cpp
@@ -200,6 +201,7 @@ add_executable(render_tests
 	tests/TestTurn.cpp
 	tests/TestDriveLog.cpp
 	tests/TestDumpObj.cpp
+	tests/TestActors.cpp
 	tools/mclink/DumpObj.cpp
 	tools/mclink/McLinkScript.cpp
 )
