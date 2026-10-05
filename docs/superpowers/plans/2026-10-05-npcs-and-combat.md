@@ -138,7 +138,7 @@ NPC's never does. An NPC's yaw stays between -180 and 180.
 - Create: `src/link/Actors.h`, `src/link/Actors.cpp`, `tests/TestActors.cpp`
 - Modify: `CMakeLists.txt`
 
-- [ ] **Step 1: Write the failing test, `tests/TestActors.cpp`**
+- [x] **Step 1: Write the failing test, `tests/TestActors.cpp`**
 
 ```cpp
 #include "Harness.h"
@@ -290,7 +290,7 @@ TEST(ActorsKeepTheNearest256Within80Metres)
 }
 ```
 
-- [ ] **Step 2: Edit `CMakeLists.txt` to add the test**
+- [x] **Step 2: Edit `CMakeLists.txt` to add the test**
 
 ```cmake
 	tests/TestDumpObj.cpp
@@ -302,7 +302,7 @@ TEST(ActorsKeepTheNearest256Within80Metres)
 	tools/mclink/DumpObj.cpp
 ```
 
-- [ ] **Step 3: Build; it must fail**
+- [x] **Step 3: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -311,7 +311,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `error C1083: Cannot open include file: 'link/Actors.h'`.
 
-- [ ] **Step 4: Write `src/link/Actors.h`**
+- [x] **Step 4: Write `src/link/Actors.h`**
 
 ```cpp
 #pragma once
@@ -402,7 +402,7 @@ std::vector<proto::ActorRecord> ActorRecords(std::span<const NpcSample> aNpcs, c
 }
 ```
 
-- [ ] **Step 5: Write `src/link/Actors.cpp`**
+- [x] **Step 5: Write `src/link/Actors.cpp`**
 
 ```cpp
 #include "link/Actors.h"
@@ -531,7 +531,7 @@ std::vector<proto::ActorRecord> ActorRecords(std::span<const NpcSample> aNpcs, c
 }
 ```
 
-- [ ] **Step 6: Edit `CMakeLists.txt` to add the source**
+- [x] **Step 6: Edit `CMakeLists.txt` to add the source**
 
 ```cmake
 	src/link/Solids.cpp
@@ -543,7 +543,7 @@ std::vector<proto::ActorRecord> ActorRecords(std::span<const NpcSample> aNpcs, c
 	src/physx/GameAbi.cpp
 ```
 
-- [ ] **Step 7: Build and run the tests; they must pass**
+- [x] **Step 7: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -553,7 +553,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `403 test(s), 0 failure(s)`.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -579,7 +579,7 @@ The tests' Minecraft gains a general `Event`, which `Explode` now uses, and a re
 - Modify: `src/link/Rings.h`, `src/link/Rings.cpp`, `src/link/Link.h`, `src/link/Link.cpp`, `tests/TestRings.cpp`,
   `tests/TestLink.cpp`
 
-- [ ] **Step 1: Edit `tests/TestRings.cpp`: the failing test**
+- [x] **Step 1: Edit `tests/TestRings.cpp`: the failing test**
 
 ```cpp
 	CHECK_EQ(written.teleportSeq, 7u);
@@ -618,7 +618,7 @@ TEST(RingsActorTableCountsUpByTwoAndHoldsAtMost256)
 	CHECK_EQ(memory.Bytes()[proto::kOffActorTable - 1], 0xCD);                          // nor before it
 ```
 
-- [ ] **Step 2: Edit `tests/TestLink.cpp`: the failing tests**
+- [x] **Step 2: Edit `tests/TestLink.cpp`: the failing tests**
 
 ```cpp
 	void Explode(float aX, float aY, float aZ, float aRadius)
@@ -719,7 +719,7 @@ TEST(LinkWritesTheActorTableAndEmptiesItOnce)
 	CHECK_EQ(minecraft.Actors().seq, 6u);
 ```
 
-- [ ] **Step 3: Build; it must fail**
+- [x] **Step 3: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -728,7 +728,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `error C2039: 'WriteActors': is not a member of 'cpmc::link::Link'`.
 
-- [ ] **Step 4: Edit `src/link/Rings.h`**
+- [x] **Step 4: Edit `src/link/Rings.h`**
 
 ```cpp
 void WriteSkyState(uint8_t* aBase, const proto::SkyState& aState);
@@ -741,7 +741,7 @@ void WriteSkyState(uint8_t* aBase, const proto::SkyState& aState);
 void WriteActorTable(uint8_t* aBase, std::span<const proto::ActorRecord> aRecords);
 ```
 
-- [ ] **Step 5: Edit `src/link/Rings.cpp`**
+- [x] **Step 5: Edit `src/link/Rings.cpp`**
 
 ```cpp
 #include <atomic>
@@ -773,7 +773,7 @@ void WriteActorTable(uint8_t* aBase, std::span<const proto::ActorRecord> aRecord
 	}
 ```
 
-- [ ] **Step 6: Edit `src/link/Link.h`**
+- [x] **Step 6: Edit `src/link/Link.h`**
 
 ```cpp
 // changes; and Minecraft's solid blocks by section (its "Part 3"), for V's bodies. It works on the mapping's memory, so
@@ -826,7 +826,7 @@ void WriteActorTable(uint8_t* aBase, std::span<const proto::ActorRecord> aRecord
 	bool                              actorsWritten_ = false;  // the actor table holds records ClearActors would empty
 ```
 
-- [ ] **Step 7: Edit `src/link/Link.cpp`**
+- [x] **Step 7: Edit `src/link/Link.cpp`**
 
 ```cpp
 #include <chrono>
@@ -885,7 +885,7 @@ void Link::ClearActors()
 }
 ```
 
-- [ ] **Step 8: Build and run the tests; they must pass**
+- [x] **Step 8: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -895,7 +895,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `406 test(s), 0 failure(s)`.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -933,7 +933,7 @@ Step 1 runs against SkyCraft's real mod without the game, so `mclink` writes rec
 - Modify: `tools/mclink/McLinkScript.h`, `tools/mclink/McLinkScript.cpp`, `tools/mclink/Main.cpp`,
   `src/link/Actors.h`, `src/link/Actors.cpp`, `tests/TestMcLinkScript.cpp`, `tests/TestActors.cpp`
 
-- [ ] **Step 1: Edit `tests/TestMcLinkScript.cpp`: the failing tests**
+- [x] **Step 1: Edit `tests/TestMcLinkScript.cpp`: the failing tests**
 
 ```cpp
 	for (const char* name : { "step1.txt", "again.txt", "eye.txt", "drive.txt", "relink.txt", "city.txt" })
@@ -983,7 +983,7 @@ TEST(ScriptParsesMadeUpNpcs)
 TEST(ScriptParsesTheGround)
 ```
 
-- [ ] **Step 2: Edit `tests/TestActors.cpp`: the failing test**
+- [x] **Step 2: Edit `tests/TestActors.cpp`: the failing test**
 
 ```cpp
 	CHECK_EQ(ids.Given(), 259u);            // three NPCs the first table had no room for
@@ -1009,7 +1009,7 @@ TEST(ActorsDescribeAHitsWeaponAndFlags)
 }
 ```
 
-- [ ] **Step 3: Build; it must fail**
+- [x] **Step 3: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -1018,7 +1018,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `error C3861: 'HitWords': identifier not found`.
 
-- [ ] **Step 4: Edit `tools/mclink/McLinkScript.h`**
+- [x] **Step 4: Edit `tools/mclink/McLinkScript.h`**
 
 ```cpp
 //   wait-ground [seconds]          until the city around the centre is all read and in the ring (30 s unless given)
@@ -1053,7 +1053,7 @@ Expected: `error C3861: 'HitWords': identifier not found`.
 	std::string text;        // the command, the file, the ground, or an actor's name
 ```
 
-- [ ] **Step 5: Edit `tools/mclink/McLinkScript.cpp`**
+- [x] **Step 5: Edit `tools/mclink/McLinkScript.cpp`**
 
 ```cpp
 	return error == std::errc() && end == aWord.data() + aWord.size() && std::isfinite(aOut);
@@ -1104,7 +1104,7 @@ bool WholeId(double aValue)
 		else if (verb == "floor" || verb == "status" || verb == "quit")
 ```
 
-- [ ] **Step 6: Edit `src/link/Actors.h`**
+- [x] **Step 6: Edit `src/link/Actors.h`**
 
 ```cpp
 // The records of the nearest proto::kMaxActors NPCs within kActorRange of aV (world axes), nearest first, numbered by
@@ -1116,7 +1116,7 @@ std::string HitWords(const proto::McEvent& aEvent);
 // The records of the nearest proto::kMaxActors NPCs within kActorRange of aV (world axes), nearest first, numbered by
 ```
 
-- [ ] **Step 7: Edit `src/link/Actors.cpp`**
+- [x] **Step 7: Edit `src/link/Actors.cpp`**
 
 ```cpp
 #include <cstring>
@@ -1149,7 +1149,7 @@ std::string HitWords(const proto::McEvent& aEvent)
 std::vector<proto::ActorRecord> ActorRecords(std::span<const NpcSample> aNpcs, const Vec3d& aV,
 ```
 
-- [ ] **Step 8: Edit `tools/mclink/Main.cpp`**
+- [x] **Step 8: Edit `tools/mclink/Main.cpp`**
 
 ```cpp
 // mclink: a console stand-in for Cyberpunk's side of SkyCraft's protocol, for spike 4's step 1 and spike 5's steps 1
@@ -1286,7 +1286,7 @@ std::vector<proto::ActorRecord> ActorRecords(std::span<const NpcSample> aNpcs, c
 			case Action::Kind::Status: PrintStatus(link, report, feet); break;
 ```
 
-- [ ] **Step 9: Write `tools/mclink/npcs.txt`**
+- [x] **Step 9: Write `tools/mclink/npcs.txt`**
 
 ```text
 # Spike 6's step 1: made-up NPCs in SkyCraft's actor table, against SkyCraft's real mod, without the game. At a fresh
@@ -1344,7 +1344,7 @@ status
 quit
 ```
 
-- [ ] **Step 10: Build and run the tests; they must pass**
+- [x] **Step 10: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -1354,7 +1354,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `408 test(s), 0 failure(s)`.
 
-- [ ] **Step 11: Run mclink without Minecraft**
+- [x] **Step 11: Run mclink without Minecraft**
 
 Minecraft and the game must not be running.
 ```bash
@@ -1364,7 +1364,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && printf 'status\nquit\n' > build
 Expected: `the mapping: created (process …); waiting for Minecraft`, then the status with `Minecraft: absent` and
 `events: 0 explosions, 0 hits on actors, 0 deaths, 0 others; 0 actors in the table; …`. Then `exit: 0`.
 
-- [ ] **Step 12: Commit**
+- [x] **Step 12: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -1391,14 +1391,14 @@ SkyCraft's unchanged mod in the `CyberCraft` instance, without the game.
 **Files:**
 - Create: `docs/spikes/2026-10-05-npcs-and-combat-results.md`
 
-- [ ] **Step 1: Check that the game isn't running**
+- [x] **Step 1: Check that the game isn't running**
 
 ```bash
 tasklist | grep -i -c "cyberpunk2077.exe"
 ```
 Expected: `0`. If it's `1`, ask the user to quit the game: it would hold the mapping.
 
-- [ ] **Step 2: Ask the user to start Minecraft**
+- [x] **Step 2: Ask the user to start Minecraft**
 
 The user starts the `CyberCraft` instance from the Modrinth App, and says when its title screen shows. Then:
 ```bash
@@ -1406,7 +1406,7 @@ grep -E "SkyCraft:" "/c/Users/BLOXY/AppData/Roaming/ModrinthApp/profiles/CyberCr
 ```
 Expected: `SkyCraft: can't open Skyrim's shared memory yet (Windows error 2: …)`: waiting for a game side.
 
-- [ ] **Step 3: Run step 1's script**
+- [x] **Step 3: Run step 1's script**
 
 ```bash
 L="/c/Users/BLOXY/AppData/Roaming/ModrinthApp/profiles/CyberCraft/logs/latest.log"; before=$(wc -l < "$L"); \
@@ -1435,13 +1435,13 @@ command 6 minutes. Expected, against the spec's "Step 1":
 
 Its window is hidden while `mclink` drives it, so the user stops it from the Modrinth App.
 
-- [ ] **Step 5: Write step 1's results, `docs/spikes/2026-10-05-npcs-and-combat-results.md`**
+- [x] **Step 5: Write step 1's results, `docs/spikes/2026-10-05-npcs-and-combat-results.md`**
 
 From `build/step1/npcs.log` and `build/step1/minecraft.log`, as spike 5's results doc does: the versions; each check
 above with its outcome and numbers (the hits' damage and knockback, the lamp's three checks, the counts); anything that
 surprised, and what it means for step 2. The spike's answer goes at the top once step 2 is in.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add docs/spikes/2026-10-05-npcs-and-combat-results.md \
@@ -3763,10 +3763,13 @@ These commands come back, as in spike 5's in-game steps:
   ```bash
   cat /e/Cyberpunk2077/bin/x64/plugins/cyber_engine_tweaks/mods/blockrender_hud/status.txt
   ```
-- **Minecraft's log, for SkyCraft's lines:**
+- **Minecraft's log, for SkyCraft's lines and the chat's replies:**
   ```bash
-  grep -E "SkyCraft: (hit|[0-9]+ Skyrim)" "/c/Users/BLOXY/AppData/Roaming/ModrinthApp/profiles/CyberCraft/logs/latest.log" | tail -10
+  grep -E "SkyCraft: (hit|[0-9]+ Skyrim)|\[CHAT\]" "/c/Users/BLOXY/AppData/Roaming/ModrinthApp/profiles/CyberCraft/logs/latest.log" | tail -10
   ```
+- **Counting the stand-ins:** send `mc /execute if entity @e[type=skycraft:skyrim_actor]`. Minecraft's log then has
+  `[CHAT] Test passed. Count: …`, or `[CHAT] Test failed` when there are none. SkyCraft's own `… Skyrim actors mirrored
+  as hittable stand-ins` lines come only as stand-ins are added, and only for some counts (step 1's results).
 
 **Files:**
 - Modify: `docs/spikes/2026-10-05-npcs-and-combat-results.md`
@@ -3809,7 +3812,7 @@ save there, and click the overlay's Link button. Expected:
 - in the status, `npcs=on: … listed of … in the world, the nearest … at … m; capsules found for … of … looked for; …
   numbers given; the module … ms average, … ms worst a frame; 0 hits from Minecraft logged`, and the overlay's `NPCs:`
   line;
-- in Minecraft's log, `SkyCraft: … Skyrim actors mirrored as hittable stand-ins`, as the count passes multiples of 5.
+- counting the stand-ins (above): `[CHAT] Test passed. Count: …`, about as many as the status lists.
 
 A `module: …` line saying something is missing stops the step: the class missing means redscript didn't compile the
 module (Step 2); `the game session has no BlockRenderNpcs system` means the game doesn't make a mod's scriptable system
@@ -3841,8 +3844,9 @@ rule changes to what `shapes` shows (its filter, its kind, its size), as a new t
 
 In the crowd, read the status's NPC line for 10 s: the module's time a frame, on average and at worst. Then ask the user
 to click the overlay's `NPCs: on` button, so it reads `NPCs: off`, for 10 s, then on again. Read the status's `frame=`
-line and the overlay's CET frame time each time. Expected: the NPC line says `npcs=off` while off, and Minecraft's log
-says `SkyCraft: 0 Skyrim actors mirrored as hittable stand-ins`; the stand-ins come back once it's on.
+line and the overlay's CET frame time each time, and count the stand-ins (above) while it's off and once it's on again.
+Expected: the NPC line says `npcs=off` while off, and the count says `[CHAT] Test failed`; once it's on again, the count
+is back.
 
 - [ ] **Step 7: In the game: a plate on the pavement**
 
@@ -3876,9 +3880,9 @@ and V stands on them.
 
 - [ ] **Step 11: In the game: unlinking empties the table**
 
-Ask the user to click the overlay's Unlink button. Expected: the NPC line says `none listed: not linked`, and Minecraft's
-log says `SkyCraft: 0 Skyrim actors mirrored as hittable stand-ins`: the heartbeat goes on while unlinked, and SkyCraft
-reads the emptied table.
+Ask the user to click the overlay's Unlink button, then count the stand-ins (above). Expected: the NPC line says `none
+listed: not linked`, and the count says `[CHAT] Test failed`: the heartbeat goes on while unlinked, so SkyCraft reads
+the emptied table, and the typed command too.
 
 - [ ] **Step 12: Ask the user to quit the game and stop Minecraft**
 
