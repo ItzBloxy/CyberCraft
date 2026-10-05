@@ -4,7 +4,8 @@ Date: 2026-10-05. Status: agreed with the user section by section in the brainst
 end, lists what writing it out added to what was agreed. Then revised after two deep self-reviews, which checked each claim
 against its source and walked through each step as the user would play it: "Changes from the deep review" and "Changes
 from the second deep review", at the end, list what changed and what was checked. The sections above them already include
-those changes.
+those changes. Planning Part 1 changed or settled more, which "Changes while planning", last, lists; the sections above
+include those too.
 
 ## Purpose
 
@@ -269,7 +270,9 @@ From the decompiled 2.31 scripts; every function named here was read there.
   in `r6/scripts`, and TweakXL's, ArchiveXL's, Codeware's and mod_settings' from their plugin folders; then
   `Compilation complete`, and the `final.redscripts.modded` it wrote.
 - **redscript's compiler** is the game's `engine/tools/scc.exe`, with `scc_lib.dll`. Run alone with `--help`, it prints
-  only "not compile". Whether it can check a script outside the game's own start is for the plan.
+  only "not compile". Settled while planning: `scc_lib.dll`'s C API compiles a script folder against a given
+  `final.redscripts`, with its error popup off, so the plan checks the module before deploying (`tools/check_reds.py`);
+  `scc.exe` itself shows a message box when a compile fails.
 
 ### PhysX, for NPCs' sizes
 
@@ -318,7 +321,9 @@ docs/superpowers/plans/2026-10-05-npcs-and-combat.md          the plan, written 
 docs/spikes/2026-10-05-npcs-and-combat-results.md             the results
 spikes/block-render/
   scripts/BlockRender.reds   the redscript module: the NPC list, hits, V's damage, god mode, V's death, explosions
+  tools/check_reds.py        the module compiled offline against the game's own scripts
   src/GameScript.*           the module's calls from C++, each found and checked by name and type once
+  src/ScriptTypes.*          the type checks GameScript and Puppet share
   src/link/Actors.*          NPC IDs, the nearest 256, their records, and the actor table (pure)
   src/link/Combat.*          Minecraft's hits, V's hurts, deaths and blasts: amounts, encodings, sums, windows (pure)
   src/physx/Characters.*     NPCs' capsules, for their sizes
@@ -334,7 +339,8 @@ The names are proposals; the plan settles them.
 ## Build
 
 - **The libraries:** `render_core` gains the pure parts, `link/Actors` and `link/Combat`, and `physx/Characters`,
-  which calls PhysX only through its tables, as `Export` does. `render_runtime` gains `GameScript`, beside `Puppet`.
+  which calls PhysX only through its tables, as `Export` does. The plugin's own sources gain `GameScript` and
+  `ScriptTypes`, beside `Puppet`.
 - **The script:** the install copies `scripts/BlockRender.reds` into the plugin folder's `Scripts/`, and BlockRender
   adds that folder to redscript's compile at load.
 - **The versions:** Part 1 deploys 0.17.0, Part 2 0.18.0, and Part 3 0.19.0, in the log line and in `Query`, which from
@@ -358,16 +364,20 @@ After `UpdateLink`, in `OnUpdate`, while linked and V is found:
 - **Each frame,** BlockRender asks the module for the NPCs within 80 m of V in a straight line (SkyCraft's 80 blocks, at
   a metre a block) that aren't dead. For each, the module gives:
   - every frame: its `EntityID`, position and forward vector;
-  - read again at most four times a second: its health and max health, level, name and flags.
+  - read again at most four times a second, by the game's sim time: its health and max health, level, name and flags.
+    Each NPC's first read puts its next at a random point of the quarter second, so a crowd isn't read in one frame.
 
-  With them come V's punch and V's max health, read four times a second, for Part 2.
-- **The fallback:** `TargetingSystem.GetTargetParts`, which the HUD's nameplates use. Step 2's opening check compares
+  With them come V's punch and V's max health, read four times a second: Part 2 uses them, and `npcs` logs them in
+  Part 1, so step 2 compares the punch with the inventory's number.
+- **The fallback:** `TargetingSystem.GetTargetParts`, searching for NPCs as the game's own effectors do (`TSF_NPC()`
+  over the complete set; the HUD's nameplate search keeps only quickhackable targets). Step 2's opening check compares
   the two in a crowd; if the wraps miss NPCs, the search takes over.
 - **What crosses to C++:** the module fills one object of its own, kept between frames, with parallel arrays of plain
   types (`EntityID`, `Vector4`, `Float`, `Int32`, `String`). BlockRender reads its fields by name through RTTI, each
   field's type checked once, as `Puppet` checks functions.
 - **A new system after every load:** a load makes a new game session, and with it a new module system, so BlockRender
-  looks the system up again whenever V is found again.
+  finds the session's system on every call, through the module's static `Current()`, which uses the game's global
+  `GetGameInstance()`.
 
 ### Records
 
@@ -377,7 +387,9 @@ After `UpdateLink`, in `OnUpdate`, while linked and V is found:
 - **Which:** the nearest 256 within 80 m, by distance from V.
 - **Feet:** the NPC's position, its feet as V's is, in Minecraft's axes (`McFromWorld`); with a capsule found, the
   lower of that and the capsule's bottom.
-- **Yaw:** from its forward vector, by `LookFromForward`, against its last yaw.
+- **Yaw:** from its forward vector, by `LookFromForward`, against 0, so it stays between -180 and 180. The last yaw
+  would keep a turning yaw from wrapping, which matters for Minecraft's hand sway as V turns but not for an invisible
+  stand-in, and stand in for a vertical forward vector, which an NPC's never is.
 - **Size:** from its capsule (below); until one is found, or without one, 0.6 by 1.8, the stand-in's own default.
 - **Health:** current over max; 0 when the max isn't over 0.
 - **Level:** its `PowerLevel`, rounded and held to 0 to 65,535.
@@ -387,9 +399,12 @@ After `UpdateLink`, in `OnUpdate`, while linked and V is found:
 
 ### Sizes
 
-- **Looked for once,** when an NPC is first listed, at most eight a frame: an overlap of a 1 m sphere centred 1 m above
-  its position, keeping kinematic actors' capsules whose axis passes within 0.2 m of its position; of several, the one
-  with the smallest radius, since V has a second kinematic capsule of radius 1 around its controller.
+- **Looked for** when an NPC is first listed, and again every 2 s until one is found, at most eight a frame, those never
+  looked for first, nearest first: an overlap of a 1 m sphere centred 1 m above its position, keeping kinematic
+  actors' capsules that lean at most 25 degrees from upright and whose axis passes within 0.2 m of its position; of
+  several, the one with the smallest radius, since V has a second kinematic capsule of radius 1 around its controller.
+  The retries are for an NPC the game gives a capsule only near V, or a little after it appears, since NPCs are first
+  listed up to 80 m away. An NPC forgotten with its number is looked for afresh if it comes back.
 - **Its box:** twice the radius wide, from the lower of the NPC's position and the capsule's bottom, up to the capsule's
   top. A controller's capsule doesn't reach the feet: V's, centred 1 m above V's feet with half-height 0.4 and radius
   0.32, spans 0.28 to 1.72 m above them.
@@ -409,11 +424,11 @@ and name, Minecraft's damage, the flags and the weapon class.
 
 ### Requests and status
 
-- `set npcs 0|1` (on by default: listing NPCs changes nothing in the game); `npcs` logs every listed NPC (ID, name,
-  distance, size and where it came from, health, level, flags), and, for step 2's comparison, how many NPCs
-  `GetTargetParts` finds within 80 m and which of them the list lacks.
+- `set npcs 0|1` (on by default: listing NPCs changes nothing in the game); `npcs` logs V's punch and max health, every
+  listed NPC (ID, name, distance, size and where it came from, health, level, flags), and, for step 2's comparison, how
+  many NPCs `GetTargetParts` finds within 80 m and which of them the list lacks.
 - **The status's NPC line:** listed, and in the world; the nearest; capsules found; IDs given; the module's time a
-  frame.
+  frame; Minecraft's hits logged; and why none are listed, while none can be.
 
 ## Part 2: combat both ways
 
@@ -602,13 +617,14 @@ plugin's folder or the overlay's. The new commands:
 | Command | Does |
 |---|---|
 | `set npcs 0\|1` | NPCs into the actor table (1) |
-| `npcs` | Logs every listed NPC: ID, name, distance, size and where it came from, health, level, flags; and how many NPCs `GetTargetParts` finds within 80 m, with those the list lacks |
+| `npcs` | Logs V's punch and max health; every listed NPC: ID, name, distance, size and where it came from, health, level, flags; and how many NPCs `GetTargetParts` finds within 80 m, with those the list lacks |
 | `set combat 0\|1` | Minecraft's hits on NPCs, the game's hits on V to Minecraft, V's god mode, deaths and blasts (0 until step 4 passes) |
 | `hit <id> <damage> [strong]` | As if Minecraft hit NPC `<id>` for `<damage>` |
 | `punch` | Logs V's punch, and what it's read from |
 | `explode <metres> <radius>` | A blast that far ahead of V, as if it were Minecraft's |
 
-The overlay gains the NPC and combat lines, and two buttons, NPCs and Combat.
+The overlay gains the NPC and combat lines, and two buttons, NPCs and Combat; and, under "More controls", one that
+sends `npcs`.
 
 ## Measurements and the status
 
@@ -663,8 +679,8 @@ The overlay gains the NPC and combat lines, and two buttons, NPCs and Combat.
 ### `mclink`
 
 Steps 1 and 3, against the user's Minecraft. The new commands: `actor <id> <x> <y> <z> [yaw width height name]`,
-`actor-remove <id>` and `hurt <kind> <share> [attacker] [power]`, which goes through `Combat`'s sums and encoding; and
-events printed as they arrive.
+`actor-remove <id>|all` and `hurt <kind> <share> [attacker] [power]`, which goes through `Combat`'s sums and encoding;
+and events printed as they arrive.
 
 ### In the game
 
@@ -688,8 +704,9 @@ Steps 2, 4 and 5. The module's code runs only in the game.
 8. **The damage pipeline runs off the main thread,** racing BlockRender's calls into the module. Nothing read suggests
    it does; step 4 watches for hits lost or doubled.
 9. **redscript fails to compile BlockRender's script** at the game's start, which may take the other mods' scripts with
-   it. The plan compiles it before deploying if `scc.exe` can be run that way; otherwise the first deploy is checked by
-   starting the game to its menu and reading redscript's log.
+   it. The plan compiles it against the game's own scripts before deploying, through redscript's compiler library
+   (`tools/check_reds.py`), and the first deploy is still checked by starting the game to its menu and reading
+   redscript's log, since the other mods' scripts are compiled with it there.
 10. **Minecraft's other damage reaches NPCs as V's:** a skeleton's arrow or the user's TNT hits a stand-in, and
     `kEvHitActor` doesn't say who did it. Accepted, as SkyCraft does.
 11. **Not every NPC has a capsule:** a drone's or a mech's collision may be something else, and it stays person-sized.
@@ -830,3 +847,33 @@ checked the numbers against Minecraft's and the game's code, and traced the clai
 - **SkyCraft moves the client's stand-ins every frame:** `SkyClient` calls `ProxySync.frame`.
 - **The steps, re-walked:** step 2's plate still lights, since the box still starts at the NPC's feet; in step 4,
   turning combat on during build mode now makes V Immortal; in step 5, the push comes after the blast's hits.
+
+## Changes while planning
+
+Part 1's plan (`docs/superpowers/plans/2026-10-05-npcs-and-combat.md`) changed or settled these. The sections above
+already include them.
+- **redscript compiles offline:** `scc_lib.dll`, redscript's compiler library in the game's `engine/tools`, has a C API
+  that compiles a script folder against a given `final.redscripts` with its error popup off. `tools/check_reds.py`
+  compiles the module against a copy of the game's untouched cache before every deploy, so risk 9 is checked first. Run
+  alone, `scc.exe` shows a "REDScript compilation has failed" message box on the user's screen, as it did once while
+  planning.
+- **The module's system on every call:** its static `Current()` finds the session's through the game's global
+  `GetGameInstance()`, so BlockRender needs no `GameInstance`, and a load's new system is found on the next call.
+- **The module's shape:** `List(range)` fills twelve fields (eight parallel arrays, the count of NPCs in the world, V's
+  punch, the item it's read from, and V's max health), and returns -1 when it doesn't find V; `Compare(range)` returns
+  the comparison as a string for the log; `Version()` must be 1.
+- **The yaw** is taken against 0, not the NPC's last yaw, so no per-NPC yaw is kept.
+- **The slow fields** are read per NPC four times a second by the game's sim time, each NPC's first read putting its
+  next at a random point of the quarter second.
+- **V's punch and max health** are logged by `npcs` in Part 1, so step 2 compares the punch with the inventory first.
+- **Sizes:** a capsule leans at most 25 degrees from upright to be an NPC's; NPCs are looked for nearest first, again
+  every 2 s until a capsule is found (the brainstorm said once), and forgotten with their numbers.
+- **The comparison's search** uses `TSF_NPC()` over the complete set, as the game's own effectors search for nearby
+  NPCs, not the HUD's nameplate search, which keeps only quickhackable targets.
+- **Where the C++ goes:** `GameScript` and `ScriptTypes`, the type checks it shares with `Puppet`, go in the plugin's
+  own sources beside `Puppet`, not in `render_runtime`. `HitWords` moves from `mclink` to `link/Actors`, so the plugin
+  logs hits in `mclink`'s words.
+- **`mclink`:** an `actor` without a yaw and size faces south and is person-sized, its name is the rest of the line, and
+  `actor-remove all` empties the table.
+- **`Query`'s version** is parsed from `kVersion` at compile time.
+- **The overlay** gains a button that sends `npcs`, beside the NPCs button.
