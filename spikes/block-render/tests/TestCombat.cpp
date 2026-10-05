@@ -183,3 +183,42 @@ TEST(CombatPutsVsGodModeOnWithBuildModeAndCombat)
 	CHECK(!god.On());
 	CHECK(god.Frame(true, true, true) == std::optional<bool>(true));
 }
+
+TEST(CombatSaysWhatThePipelineDidToOurHits)
+{
+	CHECK_STR(LandedWords(0), "");
+	CHECK_STR(LandedWords(kLandedCritical | kLandedArmour), "critical, armour");
+	CHECK_STR(LandedWords(kLandedBlocked | kLandedParried | kLandedMitigated | kLandedKilled), "blocked, parried, mitigated, killed it");
+	CHECK_STR(LandedWords(64), "");  // a bit it doesn't know
+	CHECK_STR(HitEndedName(4), "dodged");
+	CHECK_STR(HitEndedName(5), "evaded");
+	CHECK_STR(HitEndedName(1), "friendly to V");
+	CHECK_STR(HitEndedName(0), "another of the game's reasons");
+	CHECK_STR(HitEndedName(9), "reason 9");
+}
+
+TEST(CombatSwitchesVsWeaponAndMeshesWhileWanted)
+{
+	// Drawing V's unarmed weapon: on once, off once.
+	VSwitch arm;
+	CHECK(!arm.Frame(true, false, 0.0).has_value());  // V not found: nothing
+	CHECK(arm.Frame(true, true, 1.0) == std::optional<bool>(true));
+	CHECK(arm.On());
+	CHECK(!arm.Frame(true, true, 9.0).has_value());
+	CHECK(arm.Frame(false, true, 10.0) == std::optional<bool>(false));
+	CHECK(!arm.Frame(false, true, 11.0).has_value());
+	// Lost while on, as during a load: off, with nothing to switch back; found again while wanted: on.
+	CHECK(arm.Frame(true, true, 12.0) == std::optional<bool>(true));
+	CHECK(!arm.Frame(true, false, 13.0).has_value());
+	CHECK(!arm.On());
+	CHECK(!arm.Frame(false, true, 14.0).has_value());
+	CHECK(arm.Frame(true, true, 15.0) == std::optional<bool>(true));
+	// Hiding V's meshes: on again every half second while wanted, so that a weapon drawn meanwhile is hidden too.
+	VSwitch hide(0.5);
+	CHECK(hide.Frame(true, true, 1.0) == std::optional<bool>(true));
+	CHECK(!hide.Frame(true, true, 1.4).has_value());
+	CHECK(hide.Frame(true, true, 1.5) == std::optional<bool>(true));
+	CHECK(!hide.Frame(true, true, 1.9).has_value());
+	CHECK(hide.Frame(false, true, 2.0) == std::optional<bool>(false));
+	CHECK(!hide.Frame(false, true, 2.6).has_value());
+}

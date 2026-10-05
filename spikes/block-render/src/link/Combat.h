@@ -7,9 +7,10 @@
 #include <optional>
 #include <string>
 
-// Combat both ways (spike 6's "Part 2"), the parts that don't need the game: which of Minecraft's hits on NPCs count and
-// how much each does; V's hurts as SkyCraft's kInHurt, summed so that Minecraft takes them all; when Minecraft's death
-// kills V; and when V's god mode goes on and off. Pure: the tests give it hits and hurts of their own.
+// Combat both ways (spike 6's "Part 2"), the parts that don't need the game: which of Minecraft's hits on NPCs count, what
+// each starts at, and what the game's damage pipeline made of it; V's hurts as SkyCraft's kInHurt, summed so that
+// Minecraft takes them all; when Minecraft's death kills V; and when V's god mode, V's unarmed weapon and V's hidden
+// meshes go on and off. Pure: the tests give it hits and hurts of their own.
 namespace cpmc::link
 {
 constexpr double kHitCap = 1000.0;         // Minecraft's damage, at most: /kill on a stand-in sends 3.4e38
@@ -23,7 +24,7 @@ struct NpcHit
 	uint32_t formId = 0;
 	uint64_t entity = 0;    // the NPC, as listed
 	double   damage = 0.0;  // Minecraft's, capped
-	double   amount = 0.0;  // damage x V's punch
+	double   amount = 0.0;  // damage x V's punch: where the game's damage pipeline starts it
 	bool     strong = false;
 };
 
@@ -47,13 +48,35 @@ std::optional<NpcHit> AcceptHit(const proto::McEvent& aEvent, const ActorIds& aI
 // there's no attack record to make it with.
 std::string HitResultName(int32_t aResult);
 
+// What the game's damage pipeline did to one of our hits, as the module's DealDamages wrap reports it when it lands.
+enum LandedFlag : uint32_t
+{
+	kLandedCritical = 1,    // V's crit, rolled by the game (hitFlag.CriticalHit)
+	kLandedBlocked = 2,     // the NPC blocked it (WasBlocked)
+	kLandedParried = 4,     // the NPC parried it (WasDeflected)
+	kLandedArmour = 8,      // the NPC's armour took some, of a hit that isn't critical (the hit type Glance)
+	kLandedMitigated = 16,  // the NPC's mitigation took some (WasMitigated)
+	kLandedKilled = 32,     // it killed the NPC (WasKillingBlow)
+};
+
+// The flags in words, "critical, armour"; empty for none. Bits it doesn't know are left out.
+std::string LandedWords(uint32_t aFlags);
+
+// Why the game's damage pipeline dealt one of our hits nothing, as the module's wrap of ProcessPipeline reports it, from
+// the source name of the hit's DealNoDamage flag: 1 friendly to V ("FriendlyFireIgnored"), 2 invulnerable, 3 already dead,
+// 4 dodged ("ProcessDodge"), 5 evaded ("ProcessEvasion"), 6 killed at once ("instant_kill"), 7 no damage left
+// ("no_valid_damage"); 0 another of the game's reasons. "dodged"; "reason 9" for one it doesn't know.
+std::string HitEndedName(int32_t aWhy);
+
 // A hit on V that the module's DealDamages wrap took, in the game's terms: the health it would have taken, after V's
-// armour and the difficulty; its gamedataAttackType, as a number; and its instigator's entity, or 0.
+// armour, the difficulty and V's overshield; its gamedataAttackType, as a number; its instigator's entity, or 0; and
+// whether the game won't let it kill V (hitFlag.CannotKillPlayer, or a minimum health left), so it stays V's.
 struct GameHurt
 {
 	double   amount = 0.0;
 	int32_t  attackType = 0;
 	uint64_t instigator = 0;
+	bool     nonLethal = false;
 };
 
 // The same, for Minecraft: its share of V's max health, kind and attacker (its stand-in's formId, or 0), and whether it's
@@ -130,5 +153,25 @@ private:
 	bool on_ = false;
 	bool vFound_ = false;
 	bool clearDue_ = false;
+};
+
+// One of V's states that BlockRender switches through the module while it's wanted: V's unarmed weapon drawn (the
+// module's Arm), and V's meshes hidden (HideV). Wanted, it's switched on, and on again every aRefresh seconds while it
+// stays wanted, so that what appears meanwhile, such as the weapon once it's drawn, is caught too; not wanted, off, once.
+// Losing V, as during a load, counts as off with nothing to switch back: the next session's V starts as its save left it.
+class VSwitch
+{
+public:
+	explicit VSwitch(double aRefresh = 0.0) : refresh_(aRefresh) {}
+
+	// The frame's state at aNow (seconds). The call to make now, through the module: on (true) or off (false). Nothing
+	// while V isn't found.
+	std::optional<bool> Frame(bool aWanted, bool aVFound, double aNow);
+	bool                On() const { return on_; }
+
+private:
+	double refresh_ = 0.0;  // seconds between calls while on; 0: once
+	bool   on_ = false;
+	double onAt_ = 0.0;     // when on was last called
 };
 }

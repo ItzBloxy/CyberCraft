@@ -4,6 +4,7 @@
 #include <array>
 #include <cmath>
 #include <format>
+#include <utility>
 
 namespace cpmc::link
 {
@@ -95,6 +96,50 @@ std::string HitResultName(int32_t aResult)
 		return "no attack record to make it with";
 	default:
 		return std::format("result {}", aResult);
+	}
+}
+
+std::string LandedWords(uint32_t aFlags)
+{
+	constexpr std::array<std::pair<uint32_t, const char*>, 6> kWords{ { { kLandedCritical, "critical" },
+		                                                                { kLandedBlocked, "blocked" },
+		                                                                { kLandedParried, "parried" },
+		                                                                { kLandedArmour, "armour" },
+		                                                                { kLandedMitigated, "mitigated" },
+		                                                                { kLandedKilled, "killed it" } } };
+	std::string words;
+	for (const auto& [flag, word] : kWords)
+	{
+		if ((aFlags & flag) != 0)
+		{
+			words += (words.empty() ? "" : ", ") + std::string(word);
+		}
+	}
+	return words;
+}
+
+std::string HitEndedName(int32_t aWhy)
+{
+	switch (aWhy)
+	{
+	case 0:
+		return "another of the game's reasons";
+	case 1:
+		return "friendly to V";
+	case 2:
+		return "invulnerable";
+	case 3:
+		return "already dead";
+	case 4:
+		return "dodged";
+	case 5:
+		return "evaded";
+	case 6:
+		return "killed at once";
+	case 7:
+		return "no damage left";
+	default:
+		return std::format("reason {}", aWhy);
 	}
 }
 
@@ -235,5 +280,26 @@ std::optional<bool> GodMode::Frame(bool aCombat, bool aBuildMode, bool aVFound)
 	}
 	on_ = wanted;
 	return wanted;
+}
+
+std::optional<bool> VSwitch::Frame(bool aWanted, bool aVFound, double aNow)
+{
+	if (!aVFound)
+	{
+		on_ = false;
+		return std::nullopt;
+	}
+	if (aWanted && (!on_ || (refresh_ > 0.0 && aNow - onAt_ >= refresh_)))
+	{
+		on_ = true;
+		onAt_ = aNow;
+		return true;
+	}
+	if (!aWanted && on_)
+	{
+		on_ = false;
+		return false;
+	}
+	return std::nullopt;
 }
 }
