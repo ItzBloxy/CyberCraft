@@ -1,9 +1,10 @@
 # NPCs and combat: design (spike 6)
 
 Date: 2026-10-05. Status: agreed with the user section by section in the brainstorm. "Found while writing", near the
-end, lists what writing it out added to what was agreed. Then revised after a deep self-review, which checked each claim
-against its source and walked through each step as the user would play it: "Changes from the deep review", at the end,
-lists what changed and what was checked. The sections above it already include those changes.
+end, lists what writing it out added to what was agreed. Then revised after two deep self-reviews, which checked each claim
+against its source and walked through each step as the user would play it: "Changes from the deep review" and "Changes
+from the second deep review", at the end, list what changed and what was checked. The sections above them already include
+those changes.
 
 ## Purpose
 
@@ -57,7 +58,8 @@ Each is tested against something real as soon as it's built (see "The steps").
   - NPCs' sizes from their PhysX capsules, found once per NPC, and a person's size until then (Part 1);
   - V's damage taken out of the game's damage pipeline before it's dealt, rather than refunded after as SkyCraft must
     in Skyrim, so V's health never dips (Part 2);
-  - hurts summed into one every half second, since Minecraft ignores most damage within half a second of the last;
+  - hurts summed into one every half second, since Minecraft ignores most damage within half a second of the last
+    (Part 2 waits 11 of Minecraft's ticks, a little over its half second);
   - crits, and hits with knockback over SkyCraft's 0.45, land as strong attacks;
   - a blast's own hits land as explosion hits, so the game throws the bodies (Part 3).
 - **The parts in order, each planned after the step before it,** as spikes 4 and 5 were. Each in-game step opens by
@@ -178,16 +180,19 @@ From `skse/src/Combat.cpp` and `Link.cpp`:
 From the decompiled 2.31 scripts; every function named here was read there.
 - **Finding NPCs:**
   - `NPCPuppet` is a script class (`cyberpunk/NPC/NPCPuppet.swift`, `extends ScriptedPuppet`) with the callbacks
-    `OnGameAttached()` and `OnDetach()`;
+    `OnGameAttached()` and `OnDetach()`. No script class extends it, and only it and `PlayerPuppet` extend
+    `ScriptedPuppet`, so a wrap of its callbacks sees every NPC the scripts know;
   - `TargetingSystem.GetTargetParts(instigator, query: TargetSearchQuery, out parts) -> Bool` searches around an
     object; the HUD's nameplates use it with a maximum distance (`hudManager.swift`).
 - **Reading an NPC:**
   - `Entity` (`core/entity/entity.swift`): `GetEntityID()`, `GetWorldPosition() -> Vector4`,
-    `GetWorldForward() -> Vector4`;
+    `GetWorldForward() -> Vector4`. For V, `GetWorldPosition` is what BlockRender calls V's feet (`PlayerLocator.cpp`),
+    and V's controller is centred 1 m above it;
   - `GameObject` (`core/entity/gameObject.swift`): `GetDisplayName() -> String`, `IsDead()`, and the static
     `GetAttitudeTowards(first, second) -> EAIAttitude` (`AIA_Hostile` is 2);
   - `NPCPuppet.IsInCombat(npc)`, static;
-  - `StatsSystem.GetStatValue(id, gamedataStatType)`: `PowerLevel` for the level, and `Health` for the max health, as
+  - `StatsSystem.GetStatValue(id, gamedataStatType)`: `PowerLevel` for the level, as the game reads a target's level
+    (`quickHackableHelper.swift`, the telemetry's enemy level), and `Health` for the max health, as
     `DamageSystem.ProcessRagdollHit` reads it;
   - `StatPoolsSystem.GetStatPoolValue(id, type, opt perc)` and `GetStatPoolMaxPointValue(id, type)`;
   - `GodModeSystem.HasGodMode(id, type)`, and `GameInstance.FindEntityByID(game, id) -> ref<Entity>`;
@@ -204,7 +209,9 @@ From the decompiled 2.31 scripts; every function named here was read there.
   - `gameGodModeType` is `Invulnerable`, `Immortal` or `Mortal`;
   - in the damage pipeline, `Invulnerable` makes a hit deal no damage (`InvulnerabilityCheck`), while `Immortal` only
     flags it `ImmortalTarget` (`ImmortalityCheck`) and lets it go on;
-  - `StatPoolsSystem.RequestSettingStatPoolMinValue(id, type, instigator)` sets a pool to its minimum.
+  - `StatPoolsSystem.RequestSettingStatPoolMinValue(id, type, instigator)` sets a pool to its minimum. It's how the
+    damage pipeline's own instant kill kills (`ProcessInstantKill`: the target's `Health`, with the attack's
+    instigator), and how a security turret kills itself, with `null` as the instigator.
 - **The damage pipeline** (`cyberpunk/damage/damageSystem.swift`, mostly script):
   - `DamageSystem.QueueHitEvent(evt: ref<gameHitEvent>, receiver)` takes a hit. `ProcessPipeline` then runs
     `PreProcess`, `Process`, `ProcessHitReaction` (`target.ReactToHitProcess`) and `PostProcess`, with synchronous
@@ -223,11 +230,18 @@ From the decompiled 2.31 scripts; every function named here was read there.
     damageType)` and `SetAttackValues`. `AttackData` has `SetAttackDefinition`, `SetInstigator`, `SetSource`,
     `SetWeapon`, `SetAttackType`, `SetHitReactionSeverityMin` and `Max`, `AddFlag(flag, sourceName)`,
     `RemoveFlag(flag, sourceName)` and `HasFlag`;
+  - **one entry a flag:** `AddFlag` does nothing when the flag is already set (`attackData.swift`), so a flag keeps
+    its first source's name, and `RemoveFlag(flag, sourceName)` removes it only under that name. Every other reason
+    `PreProcess` gives `DealNoDamage` (friendly fire, an invulnerable target, a dead one) comes before `ModifyHitData`
+    sets `n"no_valid_damage"`;
   - **hits made by script:** `SendHitEvent` (`triggerAttackOnNearbyEnemiesEffector.swift`) builds one: an
     `AttackInitContext` (record, instigator, source, weapon), `IAttack.Create`, a `gameHitEvent` with a new
     `AttackData`, its target, and a hit shape at the hit's position, then `QueueHitEvent`.
     `NPCPuppet.OnStartRagdollDamageEvent` builds the ragdoll impact the same way, flagged `DeterministicDamage` and
-    `CannotModifyDamage`;
+    `CannotModifyDamage`, and `ProcessRagdollHit` then sets its amount on its `attackComputed`: so a hit built by
+    script gets an `attackComputed` from the game;
+  - **wrapping the pipeline:** redscript's own hook tutorial wraps `DamageSystem.ProcessLocalizedDamage`, one of the
+    pipeline's private methods, with `@wrapMethod(DamageSystem)` (the redmodding wiki's "How to create a hook");
   - `gamedataAttackType`: `QuickMelee`, `StrongMelee`, `Melee`, `GuardBreak`, `WhipAttack`, `ChargedWhipAttack`,
     `Reflect`, `Ranged`, `Thrown`, `Direct`, `Hack`, `Explosion`, `PressureWave`, `Effect` and `ForceKill`.
 - **Explosions** (`cyberpunk/devices/explosive/ExplosiveDevice.swift`,
@@ -329,8 +343,8 @@ The names are proposals; the plan settles them.
 ## The frame
 
 After `UpdateLink`, in `OnUpdate`, while linked and V is found:
-1. Minecraft's hits, deaths and blasts, as the sink collected them during the link's update, go through `Combat`, and
-   with combat on, to the module.
+1. Minecraft's hits, deaths and blasts, as the sink collected them during the link's update, go through `Combat` in the
+   ring's order (a blast before its own hits), and with combat on, to the module.
 2. The module lists the NPCs, and the actor table is written.
 3. With combat on, V's hurts since the last frame go out as `kInHurt`.
 
@@ -341,8 +355,8 @@ After `UpdateLink`, in `OnUpdate`, while linked and V is found:
 - **Kept by the wraps:** the module wraps `NPCPuppet.OnGameAttached` to add each NPC to its system, and `OnDetach` to
   take it off. So every NPC the game puts in the world is known without a search each frame: people, drones, mechs,
   robots and animals alike, crowds included.
-- **Each frame,** BlockRender asks the module for the NPCs within 80 m of V (SkyCraft's 80 blocks, at a metre a block)
-  that aren't dead. For each, the module gives:
+- **Each frame,** BlockRender asks the module for the NPCs within 80 m of V in a straight line (SkyCraft's 80 blocks, at
+  a metre a block) that aren't dead. For each, the module gives:
   - every frame: its `EntityID`, position and forward vector;
   - read again at most four times a second: its health and max health, level, name and flags.
 
@@ -361,9 +375,10 @@ After `UpdateLink`, in `OnUpdate`, while linked and V is found:
   number in a session. An NPC unlisted for a minute is forgotten, and gets a new number if it comes back. A hit's
   formId maps back to the `EntityID`.
 - **Which:** the nearest 256 within 80 m, by distance from V.
-- **Feet:** the NPC's position, in Minecraft's axes (`McFromWorld`), or its capsule's bottom once one is found.
+- **Feet:** the NPC's position, its feet as V's is, in Minecraft's axes (`McFromWorld`); with a capsule found, the
+  lower of that and the capsule's bottom.
 - **Yaw:** from its forward vector, by `LookFromForward`, against its last yaw.
-- **Size:** from its capsule; until one is found, or without one, 0.6 by 1.8, the stand-in's own default.
+- **Size:** from its capsule (below); until one is found, or without one, 0.6 by 1.8, the stand-in's own default.
 - **Health:** current over max; 0 when the max isn't over 0.
 - **Level:** its `PowerLevel`, rounded and held to 0 to 65,535.
 - **Name:** its display name, cut to at most 23 bytes at the start of a character, then a NUL.
@@ -372,9 +387,12 @@ After `UpdateLink`, in `OnUpdate`, while linked and V is found:
 
 ### Sizes
 
-- **Looked for once,** when an NPC is first listed, at most eight a frame: an overlap at its middle, 1 m above its
-  position, keeping kinematic actors' capsules whose axis passes within 0.2 m of its position.
-- **Its box:** twice the radius wide, the capsule's whole height tall, and its feet at the capsule's bottom.
+- **Looked for once,** when an NPC is first listed, at most eight a frame: an overlap of a 1 m sphere centred 1 m above
+  its position, keeping kinematic actors' capsules whose axis passes within 0.2 m of its position; of several, the one
+  with the smallest radius, since V has a second kinematic capsule of radius 1 around its controller.
+- **Its box:** twice the radius wide, from the lower of the NPC's position and the capsule's bottom, up to the capsule's
+  top. A controller's capsule doesn't reach the feet: V's, centred 1 m above V's feet with half-height 0.4 and radius
+  0.32, spans 0.28 to 1.72 m above them.
 - **Which capsule is an NPC's,** by its filters, is step 2's opening question (spike 5's risk 4): `shapes` beside an
   NPC lists them. The rule above stands until then, and changes to what that shows.
 
@@ -412,7 +430,8 @@ and name, Minecraft's damage, the flags and the weapon class.
     attack record of what V punches with (from its item's record in TweakDB, found in planning), and the weapon object
     of what V punches with if V has it drawn, otherwise none; the NPC as its target; its position at the NPC's middle,
     with a hit shape there; its direction from V; then `QueueHitEvent`;
-  - the module keeps the hits it queued, by reference, until they pass `DealDamages` or 2 s go by.
+  - the module records each hit as its own, by reference, before it queues it, since the pipeline might run during
+    `QueueHitEvent`, and keeps it until it passes `DealDamages` or 2 s go by.
 - **Its amount, in the pipeline:**
   - **`Process` is wrapped:** for our hits, a `DealNoDamage` marked `n"no_valid_damage"` (a hit with no damage of its
     own) is taken off. Any other reason is kept: friendly fire, god mode, a dead target;
@@ -435,12 +454,16 @@ and name, Minecraft's damage, the flags and the weapon class.
   - **kind:** melee for `QuickMelee`, `StrongMelee`, `Melee`, `GuardBreak`, `WhipAttack`, `ChargedWhipAttack` and
     `Reflect`; projectile for `Ranged`, `Thrown` and `Direct`; magic for `Hack`; other for the rest (`Explosion`,
     `PressureWave`, `Effect`, `ForceKill`);
-  - **power attack** for `StrongMelee`, `ChargedWhipAttack` and `GuardBreak`;
+  - **power attack** for `StrongMelee`, `ChargedWhipAttack` and `GuardBreak`; "blocked" is never set, since V can't
+    block in build mode;
   - **attacker:** its formId if it's listed, else 0.
 
   The status shows each hurt's attack type, so step 4 checks the kinds against what actually hit V.
-- **Summed:** a hurt goes at once when none went in the last half second; otherwise it's added to a sum, which goes when
-  the half second is up. A sum takes its biggest part's kind and attacker, and a power attack if any part had one.
+- **Summed:** for 10 of its ticks after a hurt, Minecraft takes from any other hurt only what's more than the first. A
+  hurt goes at once when none went in the last 11 of Minecraft's ticks, by McState's `tickMs` (0.55 s at its usual 50 ms); otherwise
+  it's added to a sum, which goes when those 11 ticks are up. The extra tick covers Minecraft applying each hurt at its
+  next tick, so two sends 10 ticks apart could land 9 apart. A sum takes its biggest part's kind and attacker, and a
+  power attack if any part had one.
 - **What Minecraft does with it:** armour and a shield reduce melee and projectile hits whose attacker has a stand-in
   within 24 blocks. The rest pass both, as `generic` or magic damage in 26.3, and only Protection reduces them. In
   creative mode nothing hurts Minecraft's player, so the game's hits on V cost nothing: combat both ways needs survival.
@@ -458,8 +481,9 @@ and name, Minecraft's damage, the flags and the weapon class.
 
 ### V's god mode
 
-- **On** when build mode starts with combat on. **Off** when build mode ends, every way it can; when combat is turned
-  off; and whenever V is found again after not being found, as after a load, in case a save kept it.
+- **On** while build mode and combat are both on, whichever came first. **Off** when build mode ends, every way it can;
+  when combat is turned off; and whenever V is found again after not being found, as after a load, in case a save kept
+  it.
 - Only ever added and removed under our source name, `n"BlockRender"`, and never touched at unload.
 
 ### Combat on and off
@@ -476,7 +500,8 @@ and name, Minecraft's damage, the flags and the weapon class.
 For each `kEvExplosion`, with combat on, its centre goes into world axes (`WorldFromMc`), and its reach is twice its
 radius, in metres, as SkyCraft's is. The module (`Explode`) makes:
 - **the push:** the game effect `physicalImpulseSphere` at the centre, the reach as its radius, as
-  `SpawnPhysicalImpulse` runs it;
+  `SpawnPhysicalImpulse` runs it. It runs a quarter of a second after the blast, as SkyCraft waits, so the bodies of
+  NPCs the blast's hits killed are ragdolls by then, and it throws them too;
 - **knockdowns:** an explosion attack at the centre with the reach as its radius, as `SpawnAttack` makes one, from V and
   flagged `DealNoDamage`. Its hit on V stops at `CheckForQuickExit`, and the game's hit reactions knock down or ragdoll
   the NPCs it catches;
@@ -498,8 +523,8 @@ If a hit that deals no damage doesn't knock NPCs down, the module knocks down ea
 
 ### Request
 
-`explode <metres> <radius>`: a blast that far ahead of V, at the height of V's feet, as if it were Minecraft's, for step
-5's opening check.
+`explode <metres> <radius>`: a blast that far ahead of V, at the height of V's feet, with a radius as Minecraft gives one
+(4 for TNT), as if it were Minecraft's, for step 5's opening check.
 
 ## The steps
 
@@ -601,7 +626,8 @@ The overlay gains the NPC and combat lines, and two buttons, NPCs and Combat.
   - the module's system and functions are found by name and type once, as `Puppet`'s are; a failed check keeps NPCs
     and combat off, and the status says why;
   - `GameScript` checks every handle before using it, and the module checks every object with `IsDefined`;
-  - NPCs' capsules are read through the audited tables, under the checks the exporter's reads use.
+  - NPCs' capsules are read through the audited tables, under scene 0's read lock and the checks the exporter's reads
+    use.
 - **Main thread:** every call is made in `OnUpdate`, as `Puppet`'s are, and none while V isn't found.
 - **Minecraft is untrusted:** a hit's formId must be one we listed, and its damage finite, over 0 and capped; an
   `EntityID` is found again (`FindEntityByID`) before every use.
@@ -627,10 +653,11 @@ The overlay gains the NPC and combat lines, and two buttons, NPCs and Combat.
 - **Part 1:** the IDs (from 1, kept, never reused, forgotten after a minute); the nearest 256 within 80 m; a record from
   an NPC (the axes, the yaw, the size and its feet, health, level, flags, and a name cut at the start of a character);
   the table byte for byte, its sequence order, and emptied once when it stops; `kEvHitActor` and `kEvPlayerDied` reaching
-  the sink; a capsule's box; `mclink`'s new commands parsed.
+  the sink; a capsule's box (from the NPC's feet, or the capsule's bottom if lower, to its top; the smallest of
+  several); `mclink`'s new commands parsed.
 - **Part 2:** which hits count (listed, finite, over 0, capped); the amount; strong or quick; the kind and power flag
-  from each attack type; the `kInHurt` encoding; the half-second sums, with their kind and attacker; death's 2-second
-  window; god mode on and off.
+  from each attack type; the `kInHurt` encoding; the sums, 11 of Minecraft's ticks apart at `tickMs`, with their kind
+  and attacker; death's 2-second window; god mode on and off, whichever of build mode and combat comes on first.
 - **Part 3:** the blast window (0.15 s, the reach) and the centre in world axes.
 
 ### `mclink`
@@ -670,7 +697,8 @@ Steps 2, 4 and 5. The module's code runs only in the game.
     NPC.
 13. **A hit that deals no damage doesn't knock NPCs down** (Part 3): the fallback above.
 14. **Accepted limits:** Minecraft's armour doesn't reduce hits from attackers more than 24 blocks away, or blasts;
-    Minecraft's player walks through NPCs; NPCs walk through blocks.
+    Minecraft's player walks through NPCs, and can hit a driver through a car, since cars aren't solid for Minecraft;
+    NPCs walk through blocks.
 
 ## Found while writing
 
@@ -755,3 +783,50 @@ The review traced each claim above to its source, and walked through steps 1 to 
 Left to planning and the steps' opening checks: the attack records and the explosion effect; that the game makes the
 module's system; that `RequestSettingStatPoolMinValue` brings V's death; whether a hit that deals no damage knocks an NPC
 down; whether `scc.exe` can compile outside the game; and which thread the damage pipeline runs on.
+
+## Changes from the second deep review
+
+The user asked for a second pass. It read every section again for what the plan will need but the spec left vague,
+checked the numbers against Minecraft's and the game's code, and traced the claims the first pass had taken on trust.
+
+### What changed
+
+1. **The NPC's box was wrong.** Its feet were to be the capsule's bottom, but a controller's capsule doesn't reach the
+   feet: V's, centred 1 m above V's feet with half-height 0.4 and radius 0.32, spans 0.28 to 1.72 m. Every stand-in
+   would have floated 0.28 m and been 1.44 m tall. The box now runs from the NPC's position, its feet, or the capsule's
+   bottom if that's lower, up to the capsule's top.
+2. **Of several capsules, the smallest:** V has a second kinematic capsule, radius 1, around its controller, and the
+   rule would have taken either.
+3. **The overlap's shape** wasn't given: a 1 m sphere centred 1 m above the NPC's position.
+4. **The sums wait 11 of Minecraft's ticks, not half a second.** For 10 ticks after a hurt, Minecraft takes only what's
+   more than it (`LivingEntity.hurtServer`: `invulnerableTime > 10.0F`, then `damage - lastHurt`), and it applies each
+   hurt at its next tick, so sends half a second apart could land 9 ticks apart and lose most of the second. The wait is
+   counted in McState's `tickMs`.
+5. **God mode comes on whichever is turned on first,** build mode or combat. As written, turning combat on during build
+   mode left V mortal.
+6. **A hit is recorded as ours before it's queued,** in case the pipeline runs inside `QueueHitEvent`.
+7. **Events are handled in the ring's order,** so a blast comes before its own hits, which the blast window needs.
+8. **The push waits a quarter of a second** (Part 3): the blast's hits arrive just after the blast, so a push at once
+   would come before the NPCs it killed are ragdolls. SkyCraft waits for the same reason.
+9. **Precisions:** distances are straight-line; `kInHurt`'s "blocked" is never set; `explode`'s radius is Minecraft's;
+   capsules are read under scene 0's read lock; and Minecraft's player can hit a driver through a car (an accepted
+   limit).
+
+### What was checked, newly
+
+- **`AddFlag` keeps one entry a flag,** the first source's, and `RemoveFlag(flag, sourceName)` removes it only under
+  that name (`attackData.swift`). Every other reason for `DealNoDamage` is set earlier in `PreProcess`, so the `Process`
+  wrap can't remove one.
+- **A hit built by script gets an `attackComputed`:** `ProcessRagdollHit` sets its amount on the one the ragdoll
+  impact's hit gets.
+- **`RequestSettingStatPoolMinValue` of `Health`** is the pipeline's own instant kill (`ProcessInstantKill`), and a
+  security turret's way of killing itself, with a `null` instigator.
+- **No script class extends `NPCPuppet`,** and only it and `PlayerPuppet` extend `ScriptedPuppet`.
+- **`PowerLevel` is the level the game reads for a target** (`quickHackableHelper.swift`, `telemetry.swift`).
+- **The redscript wiki's hook tutorial** wraps `DamageSystem`'s private `ProcessLocalizedDamage` with
+  `@wrapMethod(DamageSystem)`, as the module wraps `Process` and `DealDamages`.
+- **V's feet in BlockRender are V's `GetWorldPosition`** (`PlayerLocator.cpp`), the point spike 1 found V's controller
+  centred 1 m above.
+- **SkyCraft moves the client's stand-ins every frame:** `SkyClient` calls `ProxySync.frame`.
+- **The steps, re-walked:** step 2's plate still lights, since the box still starts at the NPC's feet; in step 4,
+  turning combat on during build mode now makes V Immortal; in step 5, the push comes after the blast's hits.
