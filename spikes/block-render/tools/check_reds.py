@@ -1,20 +1,23 @@
 """Compiles BlockRender's redscript module against the game's own scripts, without starting the game.
 
-    uv run --no-project python tools/check_reds.py <game folder> <scripts folder>
+    uv run --no-project python tools/check_reds.py <game folder> <scripts folder> [<more script folders>...]
 
 It loads redscript's compiler library from the game (engine/tools/scc_lib.dll), with its error popup off, and compiles
-the scripts folder against a copy of the game's untouched r6/cache/final.redscripts, so the game's own files aren't
-touched. It prints "compiled" and exits 0, or prints redscript's errors and exits 1. Its work goes in build/reds-check.
-The game must be installed; it needn't run, and may.
+the scripts folder, with any more folders given, against a copy of the game's untouched r6/cache/final.redscripts, so the
+game's own files aren't touched. Codeware's Scripts folder, given too, compiles the module's parts that need Codeware
+(@if(ModuleExists("Codeware"))), as the game does with Codeware installed; without it, the parts for its absence. It
+prints "compiled" and exits 0, or prints redscript's errors and exits 1. Its work goes in build/reds-check. The game must
+be installed; it needn't run, and may.
 """
 import ctypes
 import shutil
 import sys
 from pathlib import Path
 
-if len(sys.argv) != 3:
+if len(sys.argv) < 3:
     sys.exit(__doc__)
 game, scripts = Path(sys.argv[1]), Path(sys.argv[2]).resolve()
+more = [Path(folder).resolve() for folder in sys.argv[3:]]
 work = Path("build").resolve() / "reds-check"
 r6 = work / "r6"
 for sub in ("scripts", "cache", "logs"):
@@ -42,6 +45,8 @@ settings = lib.scc_settings_new(str(r6).encode())
 lib.scc_settings_set_custom_cache_file(settings, str(blob).encode())
 lib.scc_settings_set_output_cache_file(settings, str(out).encode())
 lib.scc_settings_add_script_path(settings, str(scripts).encode())
+for folder in more:
+    lib.scc_settings_add_script_path(settings, str(folder).encode())
 lib.scc_settings_disable_error_popup(settings)
 result = lib.scc_compile(settings)
 ok = bool(lib.scc_get_success(result)) and out.exists()
