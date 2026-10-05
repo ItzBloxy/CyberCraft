@@ -79,6 +79,9 @@ std::string CutName(std::string_view aName, size_t aBytes);
 // 65,535; its name cut to 23 bytes; its hostile, essential and in-combat flags.
 proto::ActorRecord MakeActorRecord(const NpcSample& aNpc, uint32_t aId, const NpcBox& aBox);
 
+// A hit's weapon class and flags, as SkyCraft's SkyrimActorEntity sets them: "blade, critical, sweep".
+std::string HitWords(const proto::McEvent& aEvent);
+
 // The records of the nearest proto::kMaxActors NPCs within kActorRange of aV (world axes), nearest first, numbered by
 // aIds. aBoxes holds the boxes found so far, by entity; the other NPCs are person-sized.
 std::vector<proto::ActorRecord> ActorRecords(std::span<const NpcSample> aNpcs, const Vec3d& aV,

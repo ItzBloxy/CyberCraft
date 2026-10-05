@@ -27,6 +27,11 @@
 //   ground floor|city              what Minecraft gets as the game's shape (floor at first)
 //   dump <collision.obj>           spike 1's saved collision as the city: its static shapes, around the stand-in V's feet
 //   wait-ground [seconds]          until the city around the centre is all read and in the ring (30 s unless given)
+//   actor <id> <x> <y> <z> [<yaw> <width> <height> [<name>]]
+//                                  a made-up NPC in SkyCraft's actor table (spike 6), or one moved: its number, from 1
+//                                  to 4294967295; its feet, in Minecraft blocks; its yaw, in Minecraft degrees, and its
+//                                  size, in blocks above 0 (0, 0.6 and 1.8 unless given); then a name to the line's end
+//   actor-remove <id>|all          one made-up NPC out of the table, or all of them
 //   status                         print the link's state
 //   quit                           stop here
 namespace cpmc::mclink
@@ -55,14 +60,17 @@ struct Action
 		Ground,
 		Dump,
 		WaitGround,
+		Actor,
+		ActorRemove,
 		Status,
 		Quit,
 	};
 
-	Kind        kind = Kind::Quit;
-	double      numbers[3]{};  // seconds; x, y, z; yaw and pitch; the scancode; the button (1 left, 2 middle, 3 right)
-	bool        on = false;    // link, build and hud
-	std::string text;          // the command, the file, or the ground
+	Kind   kind = Kind::Quit;
+	double numbers[7]{};  // seconds; x, y, z; yaw and pitch; the scancode; the button (1 left, 2 middle, 3 right); an
+	                      // actor's number, x, y, z, yaw, width and height; the actor to remove, or 0 for all
+	bool        on = false;  // link, build and hud
+	std::string text;        // the command, the file, the ground, or an actor's name
 	int         line = 0;
 };
 

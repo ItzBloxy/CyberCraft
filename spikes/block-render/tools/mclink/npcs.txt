@@ -1,0 +1,53 @@
+# Spike 6's step 1: made-up NPCs in SkyCraft's actor table, against SkyCraft's real mod, without the game. At a fresh
+# spot 40 blocks east of blast.txt's, three stand-ins go around the stand-in V: Minecraft's log counts them; a fist and
+# then a diamond sword hit one, and come back as hits; one stands on a stone pressure plate and lights the lamp beside
+# it; and removing their records removes them. Start Minecraft first; this waits for its world.
+status
+wait-world 180
+at 520.5 6.14 2007.5
+look 180 0
+link on
+wait 3
+type /gamemode creative
+# Three stand-ins: 2 blocks north of the stand-in V, 3 east and 3 west.
+actor 1 520.5 6.14 2005.5 0 0.6 1.8 Ganger One
+actor 2 523.5 6.14 2007.5 90 0.6 1.8 Ganger Two
+actor 3 517.5 6.14 2007.5 -90 0.6 1.8 Ganger Three
+wait 2
+type /execute if entity @e[type=skycraft:skyrim_actor]
+# The hits: in build mode, looking north and a little down at actor 1, a fist, then a diamond sword with its cooldown full.
+build on
+wait 2
+look 180 20
+type /item replace entity @s weapon.mainhand with minecraft:air
+wait 1
+click left
+wait 2
+type /item replace entity @s weapon.mainhand with minecraft:diamond_sword
+wait 2
+click left
+wait 2
+build off
+# The plate: a stone block 4 blocks south, a stone pressure plate on it, and a redstone lamp beside the plate.
+type /setblock 520 6 2011 minecraft:stone
+type /setblock 520 7 2011 minecraft:stone_pressure_plate
+type /setblock 521 7 2011 minecraft:redstone_lamp
+wait 1
+type /execute if block 521 7 2011 minecraft:redstone_lamp[lit=false]
+# Actor 1 onto the plate, its feet on the stone block's top, then off it again.
+actor 1 520.5 7 2011.5 0 0.6 1.8 Ganger One
+wait 2
+type /execute if block 521 7 2011 minecraft:redstone_lamp[lit=true]
+actor 1 520.5 6.14 2005.5 0 0.6 1.8 Ganger One
+wait 3
+type /execute if block 521 7 2011 minecraft:redstone_lamp[lit=false]
+# Removal: one record, then all of them.
+actor-remove 2
+wait 2
+type /execute if entity @e[type=skycraft:skyrim_actor]
+actor-remove all
+wait 2
+type /execute unless entity @e[type=skycraft:skyrim_actor]
+type /fill 520 6 2011 521 7 2011 minecraft:air
+status
+quit

@@ -1,17 +1,19 @@
-// mclink: a console stand-in for Cyberpunk's side of SkyCraft's protocol, for spike 4's step 1 and spike 5's steps 1
-// and 3. It runs BlockRender's link code against the real Minecraft, without the game
-// (docs/superpowers/specs/2026-10-02-minecraft-link-design.md and 2026-10-03-collision-and-movement-design.md).
+// mclink: a console stand-in for Cyberpunk's side of SkyCraft's protocol, for spike 4's step 1, spike 5's steps 1 and 3,
+// and spike 6's steps 1 and 3. It runs BlockRender's link code against the real Minecraft, without the game
+// (docs/superpowers/specs/2026-10-02-minecraft-link-design.md, 2026-10-03-collision-and-movement-design.md and
+// 2026-10-05-npcs-and-combat-design.md).
 //
 //     mclink.exe <script.txt>
 //
 // It runs the script (McLinkScript.h) at 60 Hz with a stand-in V where the script says, or, in build mode, where the
 // drive puts it, as the plugin teleports V. With the city's ground, Night City's shape comes from a dump spike 1 saved.
-// It reports what Minecraft sends, its solid blocks among it, and refuses to start while another game side uses the
-// mapping.
+// Made-up NPCs go into SkyCraft's actor table, as the plugin writes the game's. It reports what Minecraft sends, its solid
+// blocks and its hits on the NPCs among it, and refuses to start while another game side uses the mapping.
 #include "DumpObj.h"
 #include "McLinkScript.h"
 
 #include "Coords.h"
+#include "link/Actors.h"
 #include "link/Link.h"
 #include "link/Mapping.h"
 #include "log/DdsWriter.h"
@@ -23,8 +25,10 @@
 #include <chrono>
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <format>
 #include <fstream>
+#include <map>
 #include <sstream>
 #include <thread>
 
@@ -86,6 +90,24 @@ struct Report : LinkSink
 	void Explosion(const proto::McEvent& aEvent) override
 	{
 		Say("explosion at {:.1f} {:.1f} {:.1f}, radius {:.1f}", aEvent.a, aEvent.b, aEvent.c, aEvent.d);
+	}
+
+	void HitActor(const proto::McEvent& aEvent) override
+	{
+		Say("hit: actor {} for {:.2f}, knockback {:.2f} towards x {:.2f} z {:.2f}; {}", aEvent.formId, aEvent.a, aEvent.d, aEvent.b, aEvent.c,
+		    HitWords(aEvent));
+	}
+
+	void PlayerDied(const proto::McEvent& aEvent) override
+	{
+		if (aEvent.formId != 0)
+		{
+			Say("Minecraft's player died, killed by actor {}", aEvent.formId);
+		}
+		else
+		{
+			Say("Minecraft's player died, killed by none of the actors");
+		}
 	}
 
 	void Hud(const HudFrame& aFrame) override
@@ -204,8 +226,9 @@ void PrintStatus(const Link& aLink, const Report& aReport, const Vec3d& aFeet)
 	Say("render ring: {} resyncs{}, {} rejected{}, {} sections before the atlas, {} translucent triangles dropped, {} sections reported",
 	    s.resyncs, s.resyncs ? " (" + s.lastResync + ")" : "", s.rejected, s.rejected ? " (" + s.lastRejected + ")" : "", s.sectionsBeforeAtlas,
 	    s.translucentDropped, aReport.sections);
-	Say("events: {} explosions, {} others; {} inputs dropped; {} commands waiting; {} HUD images, {} refused", s.explosions, s.otherEvents,
-	    s.inputsDropped, s.commandsWaiting, s.hudImages, s.hudRefused);
+	Say("events: {} explosions, {} hits on actors, {} deaths, {} others; {} actors in the table; {} inputs dropped; {} commands waiting; "
+	    "{} HUD images, {} refused",
+	    s.explosions, s.hitEvents, s.deathEvents, s.otherEvents, s.actors, s.inputsDropped, s.commandsWaiting, s.hudImages, s.hudRefused);
 	Say("drive: {}, teleport {} applied of {}; V's eye height {:.2f}; render delay {:.1f} ms, {} frames waited for a tick, {} targets skipped",
 	    DriveStateName(s.drive), s.teleportAck, s.teleportSeq, s.eyeHeight, s.renderDelayMs, s.waitedFrames, s.driveSkipped);
 	Say("ground: the {}, epoch {}; {}; {} batches read ({} unread), {} regions sent ({} triangles); the worker: {} threads, {} regions "
@@ -307,6 +330,7 @@ int main(int aArgc, char** aArgv)
 	bool   build = false;
 	bool   hud = true;
 	DumpGround dump;
+	std::map<uint32_t, proto::ActorRecord> actors;  // the made-up NPCs, by number
 
 	LARGE_INTEGER qpcRate;
 	QueryPerformanceFrequency(&qpcRate);
@@ -343,6 +367,19 @@ int main(int aArgc, char** aArgv)
 		frame.pose = GamePose{ WorldFromMc(feet), WorldFromMc({ feet.x, feet.y + kEyeHeight, feet.z }), ForwardFromLook(look) };
 		link.Update(frame, settings, report);
 		link.ReadGround(now, dump, 1.5);  // the plugin's budget a frame
+		if (actors.empty())
+		{
+			link.ClearActors();
+		}
+		else
+		{
+			std::vector<proto::ActorRecord> records;
+			for (const auto& [id, record] : actors)
+			{
+				records.push_back(record);
+			}
+			link.WriteActors(records);  // every frame, as the plugin writes the game's NPCs
+		}
 		const auto& state = link.State();
 		if (state.placeV)
 		{
@@ -421,6 +458,35 @@ int main(int aArgc, char** aArgv)
 				    feet.y, feet.z);
 				break;
 			}
+			case Action::Kind::Actor:
+			{
+				proto::ActorRecord record{};
+				record.formId = uint32_t(action.numbers[0]);
+				record.x = float(action.numbers[1]);
+				record.y = float(action.numbers[2]);
+				record.z = float(action.numbers[3]);
+				record.yaw = float(action.numbers[4]);
+				record.width = float(action.numbers[5]);
+				record.height = float(action.numbers[6]);
+				record.healthFrac = 1.0f;
+				const std::string name = CutName(action.text, sizeof record.name - 1);
+				std::memcpy(record.name, name.data(), name.size());
+				actors[record.formId] = record;
+				Say("actor {} at {:.2f} {:.2f} {:.2f}, {:.2f} by {:.2f}{}", record.formId, record.x, record.y, record.z, record.width,
+				    record.height, name.empty() ? "" : ": " + name);
+				break;
+			}
+			case Action::Kind::ActorRemove:
+				if (action.numbers[0] == 0.0)
+				{
+					actors.clear();
+				}
+				else
+				{
+					actors.erase(uint32_t(action.numbers[0]));
+				}
+				Say("{} actors left in the table", actors.size());
+				break;
 			case Action::Kind::Status: PrintStatus(link, report, feet); break;
 			case Action::Kind::Type:
 				if (!link.Type(action.text, error))

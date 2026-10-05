@@ -41,6 +41,12 @@ bool Number(std::string_view aWord, double& aOut)
 	const auto [end, error] = std::from_chars(aWord.data(), aWord.data() + aWord.size(), aOut);
 	return error == std::errc() && end == aWord.data() + aWord.size() && std::isfinite(aOut);
 }
+
+// An actor's number: a whole one from 1 to 4294967295, as SkyCraft's 32-bit formId holds it, 0 meaning none.
+bool WholeId(double aValue)
+{
+	return aValue >= 1.0 && aValue <= 4294967295.0 && aValue == std::floor(aValue);
+}
 }
 
 std::optional<std::vector<Action>> ParseScript(std::string_view aText, std::string& aError)
@@ -198,6 +204,34 @@ std::optional<std::vector<Action>> ParseScript(std::string_view aText, std::stri
 			if (words.size() > 1 && (!numbers(1) || action.numbers[0] <= 0))
 			{
 				return fail("wait-ground takes an optional number of seconds");
+			}
+		}
+		else if (verb == "actor")
+		{
+			action.kind = Action::Kind::Actor;
+			action.numbers[5] = 0.6;
+			action.numbers[6] = 1.8;
+			const size_t given = words.size() >= 8 ? 7 : words.size() - 1;
+			bool         ok = words.size() == 5 || words.size() >= 8;
+			for (size_t i = 0; ok && i < given; ++i)
+			{
+				ok = Number(words[i + 1], action.numbers[i]);
+			}
+			if (!ok || !WholeId(action.numbers[0]) || action.numbers[5] <= 0 || action.numbers[6] <= 0)
+			{
+				return fail("actor takes a number from 1 to 4294967295, x, y and z; then a yaw, a width and a height above 0; then a name");
+			}
+			if (words.size() > 8)
+			{
+				action.text = std::string(Trim(line.substr(size_t(words[8].data() - line.data()))));  // the name, as written
+			}
+		}
+		else if (verb == "actor-remove")
+		{
+			action.kind = Action::Kind::ActorRemove;
+			if (!(words.size() == 2 && words[1] == "all") && (!numbers(1) || !WholeId(action.numbers[0])))
+			{
+				return fail("actor-remove takes a number from 1 to 4294967295, or all");
 			}
 		}
 		else if (verb == "floor" || verb == "status" || verb == "quit")

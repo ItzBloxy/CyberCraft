@@ -11,7 +11,7 @@ using Kind = Action::Kind;
 TEST(ScriptsInTheRepoParse)
 {
 	// The tests run in spikes/block-render, where the scripts are.
-	for (const char* name : { "step1.txt", "again.txt", "eye.txt", "drive.txt", "relink.txt", "city.txt" })
+	for (const char* name : { "step1.txt", "again.txt", "eye.txt", "drive.txt", "relink.txt", "city.txt", "npcs.txt" })
 	{
 		std::ifstream     in(std::string("tools/mclink/") + name, std::ios::binary);
 		std::stringstream text;
@@ -132,6 +132,41 @@ TEST(ScriptRejectsBadLines)
 	CHECK(!ParseScript("link maybe", error).has_value());
 	CHECK(!ParseScript("type", error).has_value());
 	CHECK(!ParseScript("status now", error).has_value());
+}
+
+TEST(ScriptParsesMadeUpNpcs)
+{
+	std::string error;
+	const auto  actions = ParseScript("actor 1 520.5 6.14 2005.5\nactor 2 523.5 6.14 2007.5 90 0.64 1.72 Ganger  Two \n"
+	                                  "actor-remove 2\nactor-remove all\n",
+	                                  error);
+	CHECK(actions.has_value());
+	CHECK_EQ(actions->size(), size_t(4));
+	const auto& a = *actions;
+	CHECK(a[0].kind == Kind::Actor);
+	CHECK_EQ(a[0].numbers[0], 1.0);
+	CHECK_EQ(a[0].numbers[3], 2005.5);
+	CHECK_EQ(a[0].numbers[4], 0.0);  // facing south
+	CHECK_EQ(a[0].numbers[5], 0.6);  // person-sized
+	CHECK_EQ(a[0].numbers[6], 1.8);
+	CHECK_STR(a[0].text, "");
+	CHECK_EQ(a[1].numbers[4], 90.0);
+	CHECK_EQ(a[1].numbers[5], 0.64);
+	CHECK_EQ(a[1].numbers[6], 1.72);
+	CHECK_STR(a[1].text, "Ganger  Two");  // as written, but for the line's ends
+	CHECK(a[2].kind == Kind::ActorRemove);
+	CHECK_EQ(a[2].numbers[0], 2.0);
+	CHECK(a[3].kind == Kind::ActorRemove);
+	CHECK_EQ(a[3].numbers[0], 0.0);  // all
+	CHECK(!ParseScript("actor 0 1 2 3", error).has_value());
+	CHECK(!ParseScript("actor 4294967296 1 2 3", error).has_value());
+	CHECK(!ParseScript("actor 1.5 1 2 3", error).has_value());
+	CHECK(!ParseScript("actor 1 1 2", error).has_value());
+	CHECK(!ParseScript("actor 1 1 2 3 90", error).has_value());        // a yaw needs a size with it
+	CHECK(!ParseScript("actor 1 1 2 3 90 0 1.8", error).has_value());  // no width
+	CHECK(!ParseScript("actor-remove", error).has_value());
+	CHECK(!ParseScript("actor-remove some", error).has_value());
+	CHECK_STR(error, "line 1: actor-remove takes a number from 1 to 4294967295, or all: \"actor-remove some\"");
 }
 
 TEST(ScriptParsesTheGround)

@@ -145,3 +145,18 @@ TEST(ActorsKeepTheNearest256Within80Metres)
 	CHECK_NEAR(few.back().x, -39.5, 1e-4);  // the NPC at exactly 80 m
 	CHECK_EQ(ids.Given(), 259u);            // three NPCs the first table had no room for
 }
+
+TEST(ActorsDescribeAHitsWeaponAndFlags)
+{
+	proto::McEvent hit{};
+	hit.type = proto::kEvHitActor;
+	hit.weapon = proto::kWeaponBlade;
+	hit.flags = proto::kHitCritical | proto::kHitSweep;
+	CHECK_STR(HitWords(hit), "blade, critical, sweep");
+	hit.weapon = proto::kWeaponArrow;
+	hit.flags = proto::kHitProjectile | proto::kHitFire;
+	CHECK_STR(HitWords(hit), "arrow, projectile, fire");
+	hit.weapon = 9;  // a class SkyCraft doesn't have
+	hit.flags = 0;
+	CHECK_STR(HitWords(hit), "weapon 9");
+}

@@ -5,6 +5,9 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <format>
+#include <iterator>
+#include <utility>
 
 namespace cpmc::link
 {
@@ -87,6 +90,21 @@ proto::ActorRecord MakeActorRecord(const NpcSample& aNpc, uint32_t aId, const Np
 	const std::string name = CutName(aNpc.name, sizeof record.name - 1);
 	std::memcpy(record.name, name.data(), name.size());  // the rest stays 0: the NUL
 	return record;
+}
+
+std::string HitWords(const proto::McEvent& aEvent)
+{
+	static const char* const weapons[] = { "unarmed", "blade", "axe", "blunt", "pierce", "arrow" };
+	std::string words = aEvent.weapon < std::size(weapons) ? weapons[aEvent.weapon] : std::format("weapon {}", aEvent.weapon);
+	for (const auto& [flag, word] : { std::pair{ proto::kHitCritical, "critical" }, std::pair{ proto::kHitProjectile, "projectile" },
+	                                  std::pair{ proto::kHitSweep, "sweep" }, std::pair{ proto::kHitFire, "fire" } })
+	{
+		if (aEvent.flags & flag)
+		{
+			words += std::string(", ") + word;
+		}
+	}
+	return words;
 }
 
 std::vector<proto::ActorRecord> ActorRecords(std::span<const NpcSample> aNpcs, const Vec3d& aV,
