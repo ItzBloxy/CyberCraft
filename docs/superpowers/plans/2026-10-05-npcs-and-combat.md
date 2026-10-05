@@ -42,9 +42,12 @@ real Minecraft before anything goes into the game.
 
 **Spec:** [docs/superpowers/specs/2026-10-05-npcs-and-combat-design.md](../specs/2026-10-05-npcs-and-combat-design.md)
 
-**Part 2** (Tasks 13 to 24) makes Minecraft's hits on NPCs land as V's, and in build mode gives the game's hits on V to
-Minecraft's player, whose death kills V; it was planned after step 2, and its own section below says how it's built.
-**Part 3** is planned after step 4, as the spec says: Task 24 closes Part 2 and plans it.
+**Part 2** (Tasks 13 to 32) makes Minecraft's hits on NPCs land as V's, and in build mode gives the game's hits on V to
+Minecraft's player, whose death kills V; it was planned after step 2, and its own section below says how it's built. A
+deep review of it, after Task 22 had run and before step 4, added Tasks 23 to 30, which send Minecraft's hits through
+the game's whole damage pipeline as V's own punches go, made with what V's unarmed slot draws, and draw that weapon and
+hide V in build mode; "The deep review of Part 2", at the end, says why. Step 4 is Task 31.
+**Part 3** is planned after step 4, as the spec says: Task 32 closes Part 2 and plans it.
 
 ---
 
@@ -82,16 +85,22 @@ Minecraft's player, whose death kills V; it was planned after step 2, and its ow
   mutations, all caught, one by a crash (the inbox's many-threads test without its lock). The module, its wraps
   included, compiles against the game's own scripts, and three slips each fail it, a wrap of a method that isn't there
   among them. The overlay ran under Lua with CET's functions stubbed, with combat off, on, and Minecraft's player dead.
+- **Part 2's deep review, verified the same way:** Tasks 23 to 30 were written in a scratch clone on top of Task 22's
+  commit, then replayed in a fresh clone from this plan's text: zero warnings, 439 tests, the files identical to the
+  scratch clone's. Each new or changed test was broken once: 22 mutations, all caught, one by a crash (the inbox's
+  endings without their lock). The module compiles against the game's own scripts both without and with Codeware's,
+  and two slips fail it, one of them only with Codeware's. The overlay ran under Lua with CET's functions stubbed, with
+  V's weapon drawn and V hidden, not drawn with `hidev` 0, and combat off.
 - **Test counts:** 396 at the start. Then 403, 406 and 408 after Tasks 1 to 3, 412 after Task 5, and 414 after Task 8.
   Tasks 6, 7, 9 and 10 add none.
 - **What only Minecraft and the game can test:** the actor table against SkyCraft's real mod in Task 4, and the module
   and the NPCs in the game in Task 11; in Part 2, the hurts against SkyCraft's mod in Task 16, and combat in the game in
-  Task 23. All with the user.
+  Task 31. All with the user.
 - **The user:**
   - **does everything in Minecraft, the Modrinth App and the game:** starting and stopping them, loading, moving,
     keys, clicks and screenshots. Never drive their mouse or keyboard: ask, then wait for them to say they're done;
   - **approves downloads first.** Nothing in Parts 1 and 2 downloads anything.
-- **The game:** builds deploy only with `CP2077_DIR` set, which only the deploy steps set (Tasks 11 and 23), with the
+- **The game:** builds deploy only with `CP2077_DIR` set, which only the deploy steps set (Tasks 11 and 31), with the
   game closed, and clear straight after. `mclink` needs the game closed too, since the game would hold the mapping.
 - **redscript:** a script that doesn't compile at the game's start shows a message box, and that run the mods' scripts
   don't load, the other mods' included. Task 6's offline compile runs the game's own compiler library on the module,
@@ -3989,27 +3998,33 @@ and call BlockRender's natives, and nothing in them touches the module's state.
 - **Tasks 14 and 15** make the plain C++ of combat, and `mclink`'s hurts; **Task 16** is step 3, against Minecraft,
   without the game.
 - **Tasks 17 to 22** make the game's side: the natives' inbox, the module's combat, `GameScript`'s calls, the requests
-  and status, BlockRender 0.18.0's frame, and the overlay. **Task 23** is step 4, in the game.
-- **Task 24** closes Part 2, and plans Part 3.
+  and status, BlockRender 0.18.0's frame, and the overlay.
+- **Tasks 23 to 30** come from the deep review of Part 2, after Task 22 had run: Minecraft's hits start the game's damage
+  pipeline at Minecraft's damage × V's punch, and the pipeline does the rest, as to V's own punches; V punches with
+  what its unarmed slot draws; and in build mode V's unarmed weapon is drawn and V is hidden. They replace Task 18's
+  `Process` wrap and its exact amount. **Task 31** is step 4, in the game.
+- **Task 32** closes Part 2, and plans Part 3.
 
 Test counts: 423 at the start of Part 2. Then 424 after Task 13, 429 after Task 14, 431 after Task 15, 434 after Task 17,
-and 435 after Task 20. Tasks 18, 19, 21 and 22 add none.
+and 435 after Task 20; 437 after Task 23, 438 after Task 24, and 439 after Task 28. Tasks 18, 19, 21, 22, 25 to 27, 29
+and 30 add none.
 
 ## File map (Part 2)
 
 | File | Responsibility |
 |---|---|
 | `src/physx/Characters.*` | An NPC's box reaching the top of its tallest capsule |
-| `src/link/Combat.*` | Which hits count and their amounts; V's hurts as `kInHurt`, and their sums; the death window; V's god mode |
+| `src/link/Combat.*` | Which hits count and where they start; what the pipeline did to them, and why it dealt some nothing, in words; V's hurts as `kInHurt`, and their sums; the death window; V's god mode; V's switches for its weapon and meshes |
 | `src/link/Link.*` | McState's tick length in the status |
 | `tools/mclink/*` | The `hurt` action, through the sums, and step 3's script `hurts.txt` |
-| `src/CombatInbox.*` | Hits on V offered and our hits landed, from any thread, behind a lock |
-| `src/Natives.*` | `BlockRenderVHurt` and `BlockRenderHitLanded` |
-| `scripts/BlockRender.reds` | Version 3: `Hit`, `SetImmortal`, `KillV`, `Punch`, and the wraps of `Process` and `DealDamages` |
-| `src/GameScript.*` | The module's new calls, and six natives checked |
-| `src/Requests.*`, `src/Status.*` | `hit` and `punch`; the status's combat line |
-| `src/Plugin.cpp`, `CMakeLists.txt` | 0.18.0: `Fight`, `SendHurts`, `set combat`, `hit` and `punch`, and the combat line |
-| `tools/blockrender_hud/init.lua` | The combat line, the Combat button, and V's punch in the log |
+| `src/CombatInbox.*` | Hits on V offered, non-lethal ones left to V; our hits landed or dealt nothing; from any thread, behind a lock |
+| `src/Natives.*` | `BlockRenderVHurt`, `BlockRenderHitLanded` and `BlockRenderHitEnded` |
+| `scripts/BlockRender.reds` | Version 4: `Hit`, `SetImmortal`, `KillV`, `Punch`, `Arm` and `HideV`; what V's unarmed slot draws; the wraps of `ProcessPipeline` and `DealDamages` |
+| `tools/check_reds.py` | The module compiled offline, with and without Codeware's scripts |
+| `src/GameScript.*` | The module's new calls, whether V's unarmed weapon is drawn, and seven natives checked |
+| `src/Requests.*`, `src/Status.*` | `hit` and `punch`; the status's combat line, and the v line |
+| `src/Plugin.cpp`, `CMakeLists.txt` | 0.18.0: `Fight`, `SwitchV`, `SendHurts`, `set combat`, `set hidev`, `hit` and `punch`, and the combat and v lines |
+| `tools/blockrender_hud/init.lua` | The combat line, the Combat button, V's punch in the log, V's weapon drawn or not, and V hidden or seen |
 | `tests/TestCombat.cpp`, `tests/TestCombatInbox.cpp` | One test file per new unit; the others gain tests |
 
 ---
@@ -5380,7 +5395,7 @@ lock, as the NPC list does:
 - Create: `src/CombatInbox.h`, `src/CombatInbox.cpp`, `tests/TestCombatInbox.cpp`
 - Modify: `CMakeLists.txt`, `src/Natives.h`, `src/Natives.cpp`, `src/GameScript.cpp`
 
-- [ ] **Step 1: Write the failing test, `tests/TestCombatInbox.cpp`**
+- [x] **Step 1: Write the failing test, `tests/TestCombatInbox.cpp`**
 
 ```cpp
 #include "Harness.h"
@@ -5484,7 +5499,7 @@ TEST(CombatInboxTakesReportsFromManyThreadsAtOnce)
 }
 ```
 
-- [ ] **Step 2: Edit `CMakeLists.txt` to add the test**
+- [x] **Step 2: Edit `CMakeLists.txt` to add the test**
 
 ```cmake
 	tests/TestCombat.cpp
@@ -5496,7 +5511,7 @@ TEST(CombatInboxTakesReportsFromManyThreadsAtOnce)
 	tools/mclink/DumpObj.cpp
 ```
 
-- [ ] **Step 3: Build; it must fail**
+- [x] **Step 3: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -5505,7 +5520,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `error C1083: Cannot open include file: 'CombatInbox.h'`.
 
-- [ ] **Step 4: Write `src/CombatInbox.h`**
+- [x] **Step 4: Write `src/CombatInbox.h`**
 
 ```cpp
 #pragma once
@@ -5566,7 +5581,7 @@ private:
 }
 ```
 
-- [ ] **Step 5: Write `src/CombatInbox.cpp`**
+- [x] **Step 5: Write `src/CombatInbox.cpp`**
 
 ```cpp
 #include "CombatInbox.h"
@@ -5630,7 +5645,7 @@ CombatInbox::Counts CombatInbox::Count() const
 }
 ```
 
-- [ ] **Step 6: Edit `CMakeLists.txt` to add the source**
+- [x] **Step 6: Edit `CMakeLists.txt` to add the source**
 
 ```cmake
 	src/NpcRegistry.cpp
@@ -5642,7 +5657,7 @@ CombatInbox::Counts CombatInbox::Count() const
 )
 ```
 
-- [ ] **Step 7: Edit `src/Natives.h`**
+- [x] **Step 7: Edit `src/Natives.h`**
 
 ```cpp
 #include "LogQueue.h"
@@ -5669,7 +5684,7 @@ NpcRegistry& NpcsReported();
 CombatInbox& CombatReported();
 ```
 
-- [ ] **Step 8: Edit `src/Natives.cpp`: the two natives**
+- [x] **Step 8: Edit `src/Natives.cpp`: the two natives**
 
 ```cpp
 NpcRegistry g_reported;
@@ -5757,7 +5772,7 @@ CombatInbox& CombatReported()
 }
 ```
 
-- [ ] **Step 9: Edit `src/GameScript.cpp`: six natives to check for**
+- [x] **Step 9: Edit `src/GameScript.cpp`: six natives to check for**
 
 ```cpp
 constexpr std::array<const char*, 4> kNatives{ "BlockRenderNpcAttached", "BlockRenderNpcDetached", "BlockRenderNpcCount",
@@ -5768,7 +5783,7 @@ constexpr std::array<const char*, 6> kNatives{ "BlockRenderNpcAttached", "BlockR
 	                                           "BlockRenderNpcAt",       "BlockRenderVHurt",       "BlockRenderHitLanded" };
 ```
 
-- [ ] **Step 10: Build and run the tests; they must pass**
+- [x] **Step 10: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -5778,7 +5793,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `434 test(s), 0 failure(s)`.
 
-- [ ] **Step 11: Commit**
+- [x] **Step 11: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -5815,7 +5830,7 @@ compile, which Step 3 checks.
 **Files:**
 - Modify: `scripts/BlockRender.reds`
 
-- [ ] **Step 1: Edit `scripts/BlockRender.reds`**
+- [x] **Step 1: Edit `scripts/BlockRender.reds`**
 
 ```swift
 // BlockRender, and keeps no reference to an NPC from one call to the next: each is found again by its EntityID.
@@ -6092,7 +6107,7 @@ private final func DealDamages(hitEvent: ref<gameHitEvent>) -> Void {
 }
 ```
 
-- [ ] **Step 2: Compile the module against the game's scripts**
+- [x] **Step 2: Compile the module against the game's scripts**
 
 ```bash
 cd /d/Cyberpunk-Minecraft/spikes/block-render && uv run --no-project python tools/check_reds.py E:/Cyberpunk2077 scripts; \
@@ -6100,7 +6115,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && uv run --no-project python tool
 ```
 Expected: redscript's `Compilation complete`, then `compiled` and `exit: 0`.
 
-- [ ] **Step 3: Check that the compile catches a slip: a wrap of a method that isn't there**
+- [x] **Step 3: Check that the compile catches a slip: a wrap of a method that isn't there**
 
 ```bash
 cd /d/Cyberpunk-Minecraft/spikes/block-render && mkdir -p build/reds-slip \
@@ -6109,7 +6124,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && mkdir -p build/reds-slip \
 ```
 Expected: `[UNRESOLVED_METHOD]` at the wrap's line, then `failed` and `exit: 1`.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -6128,7 +6143,7 @@ Each is found by its types once, with the others, as Part 1's are: `Hit(EntityID
 **Files:**
 - Modify: `src/GameScript.h`, `src/GameScript.cpp`
 
-- [ ] **Step 1: Edit `src/GameScript.h`**
+- [x] **Step 1: Edit `src/GameScript.h`**
 
 ```cpp
 constexpr int32_t kModuleVersion = 2;  // BlockRenderNpcs.Version(), as this BlockRender needs it
@@ -6164,7 +6179,7 @@ constexpr int32_t kModuleVersion = 3;  // BlockRenderNpcs.Version(), as this Blo
 		kPunchReport,
 ```
 
-- [ ] **Step 2: Edit `src/GameScript.cpp`**
+- [x] **Step 2: Edit `src/GameScript.cpp`**
 
 ```cpp
 		{ "Compare", nullptr, { { "Float" } }, { "String" } },
@@ -6278,7 +6293,7 @@ std::string GameScript::Punch()
 }
 ```
 
-- [ ] **Step 3: Build and run the tests; they must pass**
+- [x] **Step 3: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -6288,7 +6303,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `434 test(s), 0 failure(s)`.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -6311,7 +6326,7 @@ The spec's "Requests" and "Measurements and the status", for Part 2:
 - Modify: `src/Requests.h`, `src/Requests.cpp`, `src/Status.h`, `src/Status.cpp`, `tests/TestRequests.cpp`,
   `tests/TestStatus.cpp`
 
-- [ ] **Step 1: Edit `tests/TestRequests.cpp`: hit and punch**
+- [x] **Step 1: Edit `tests/TestRequests.cpp`: hit and punch**
 
 ```cpp
 	CHECK_STR(error, "npcs takes nothing after it");
@@ -6333,7 +6348,7 @@ The spec's "Requests" and "Measurements and the status", for Part 2:
 	CHECK(!cpmc::ParseRequest("punch now", error));
 ```
 
-- [ ] **Step 2: Edit `tests/TestStatus.cpp`: the combat line**
+- [x] **Step 2: Edit `tests/TestStatus.cpp`: the combat line**
 
 ```cpp
 	CHECK(Has(cpmc::FormatStatus(report), "npcs=off"));
@@ -6378,7 +6393,7 @@ TEST(StatusWritesCombat)
 }
 ```
 
-- [ ] **Step 3: Build; it must fail**
+- [x] **Step 3: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -6387,7 +6402,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `error C2039: 'id': is not a member of 'cpmc::Request'`, and `error C2065: 'Hit': undeclared identifier`.
 
-- [ ] **Step 4: Edit `src/Requests.h`**
+- [x] **Step 4: Edit `src/Requests.h`**
 
 ```cpp
 #include <optional>
@@ -6425,7 +6440,7 @@ Expected: `error C2039: 'id': is not a member of 'cpmc::Request'`, and `error C2
 	uint32_t    id = 0;        // a hit's NPC: its number in SkyCraft's actor table
 ```
 
-- [ ] **Step 5: Edit `src/Requests.cpp`**
+- [x] **Step 5: Edit `src/Requests.cpp`**
 
 ```cpp
 	if (command == "log" || command == "clear" || command == "reload" || command == "floor" || command == "shapes" || command == "npcs")
@@ -6461,7 +6476,7 @@ Expected: `error C2039: 'id': is not a member of 'cpmc::Request'`, and `error C2
 		return request;
 ```
 
-- [ ] **Step 6: Edit `src/Status.h`**
+- [x] **Step 6: Edit `src/Status.h`**
 
 ```cpp
 	uint64_t              npcHits = 0;  // Minecraft's hits on them, logged
@@ -6486,7 +6501,7 @@ Expected: `error C2039: 'id': is not a member of 'cpmc::Request'`, and `error C2
 	std::string           combatWhy;         // why combat can't do all it should, while it can't
 ```
 
-- [ ] **Step 7: Edit `src/Status.cpp`**
+- [x] **Step 7: Edit `src/Status.cpp`**
 
 ```cpp
 std::string FormatLink(const LinkReport& aLink)
@@ -6529,7 +6544,7 @@ std::string FormatLink(const LinkReport& aLink)
 	out += FormatCombat(aLink);
 ```
 
-- [ ] **Step 8: Build and run the tests; they must pass**
+- [x] **Step 8: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -6539,7 +6554,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `435 test(s), 0 failure(s)`.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -6568,7 +6583,7 @@ and off", in the plugin:
 **Files:**
 - Modify: `src/Plugin.cpp`, `CMakeLists.txt`
 
-- [ ] **Step 1: Edit `src/Plugin.cpp`**
+- [x] **Step 1: Edit `src/Plugin.cpp`**
 
 ```cpp
 // (scripts/BlockRender.reds), so that Minecraft's weapons hit them and they press its pressure plates.
@@ -6966,7 +6981,7 @@ void HitRequest(const cpmc::Request& aRequest)
 	SendHurts(seconds);
 ```
 
-- [ ] **Step 2: Edit `CMakeLists.txt`: version 0.18.0**
+- [x] **Step 2: Edit `CMakeLists.txt`: version 0.18.0**
 
 ```cmake
 project(BlockRender VERSION 0.17.0 LANGUAGES C CXX)
@@ -6975,7 +6990,7 @@ project(BlockRender VERSION 0.17.0 LANGUAGES C CXX)
 project(BlockRender VERSION 0.18.0 LANGUAGES C CXX)
 ```
 
-- [ ] **Step 3: Build and run the tests; they must pass**
+- [x] **Step 3: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -6985,7 +7000,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `435 test(s), 0 failure(s)`.
 
-- [ ] **Step 4: Check that BlockRender imports nothing from PhysX**
+- [x] **Step 4: Check that BlockRender imports nothing from PhysX**
 
 ```bash
 DUMPBIN="$(ls "/c/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/"*/bin/Hostx64/x64/dumpbin.exe | head -1)"
@@ -6994,7 +7009,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && MSYS_NO_PATHCONV=1 "$DUMPBIN" -
 ```
 Expected: `0`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -7013,7 +7028,7 @@ the log", under "More controls", sends `punch`.
 **Files:**
 - Modify: `tools/blockrender_hud/init.lua`
 
-- [ ] **Step 1: Edit `tools/blockrender_hud/init.lua`**
+- [x] **Step 1: Edit `tools/blockrender_hud/init.lua`**
 
 ```lua
 -- Kept small: one row of buttons (link, Minecraft's blocks as bodies, step 4's test box, the turn, NPCs in Minecraft),
@@ -7103,6 +7118,2122 @@ local combatOn = nil     -- whether Minecraft's hits land as V's and V's hurts g
         end
 ```
 
+- [x] **Step 2: Check the overlay's syntax**
+
+```bash
+cd /d/Cyberpunk-Minecraft/spikes/block-render && luac -p tools/blockrender_hud/init.lua && echo ok
+```
+Expected: `ok`.
+
+- [x] **Step 3: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "npcs-and-combat: the overlay's combat line, its Combat button, and V's punch in the log" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 23: What the pipeline did to our hits, in words; V's non-lethal hurts; and V's switches for its weapon and meshes
+
+The deep review of Part 2 (at the end of this plan) changed how Minecraft's hits land: they now start the game's damage
+pipeline at Minecraft's damage × V's punch, and the pipeline does to them all it does to V's own punches, so what they
+take off isn't known in advance. This task is the plain C++ for what the module will report, in `link/Combat`:
+- **What the pipeline did to one of our hits,** as flags with its landing: critical (V's crit, rolled by the game),
+  blocked, parried, the NPC's armour (the hit type `Glance`, of a hit that isn't critical), mitigated, and killed the
+  NPC. `LandedWords` says them: `critical, armour`.
+- **Why the pipeline dealt one of our hits nothing,** from the source name of its `DealNoDamage` flag: friendly to V,
+  invulnerable, already dead, dodged, evaded, killed at once, no damage left, or another of the game's reasons.
+  `HitEndedName` says it.
+- **A hit on V the game won't let kill V** (`CannotKillPlayer`, or a minimum health left) is marked `nonLethal`, so the
+  inbox leaves it V's (Task 24): sent to Minecraft, it could kill Minecraft's player, and so V.
+- **`VSwitch`:** one of V's states switched through the module while it's wanted: V's unarmed weapon drawn (with combat
+  and build mode on), and V's meshes hidden (in build mode). Wanted, it's switched on, and on again every `aRefresh`
+  seconds while it stays wanted, so that the weapon, once drawn, is hidden too; not wanted, off, once. Losing V, as
+  during a load, counts as off with nothing to switch back.
+
+**Files:**
+- Modify: `src/link/Combat.h`, `src/link/Combat.cpp`, `tests/TestCombat.cpp`
+
+- [ ] **Step 1: Edit `tests/TestCombat.cpp`: the words, and V's switches**
+
+```cpp
+	CHECK(god.Frame(true, true, true) == std::optional<bool>(true));
+}
+```
+```cpp
+	CHECK(god.Frame(true, true, true) == std::optional<bool>(true));
+}
+
+TEST(CombatSaysWhatThePipelineDidToOurHits)
+{
+	CHECK_STR(LandedWords(0), "");
+	CHECK_STR(LandedWords(kLandedCritical | kLandedArmour), "critical, armour");
+	CHECK_STR(LandedWords(kLandedBlocked | kLandedParried | kLandedMitigated | kLandedKilled), "blocked, parried, mitigated, killed it");
+	CHECK_STR(LandedWords(64), "");  // a bit it doesn't know
+	CHECK_STR(HitEndedName(4), "dodged");
+	CHECK_STR(HitEndedName(5), "evaded");
+	CHECK_STR(HitEndedName(1), "friendly to V");
+	CHECK_STR(HitEndedName(0), "another of the game's reasons");
+	CHECK_STR(HitEndedName(9), "reason 9");
+}
+
+TEST(CombatSwitchesVsWeaponAndMeshesWhileWanted)
+{
+	// Drawing V's unarmed weapon: on once, off once.
+	VSwitch arm;
+	CHECK(!arm.Frame(true, false, 0.0).has_value());  // V not found: nothing
+	CHECK(arm.Frame(true, true, 1.0) == std::optional<bool>(true));
+	CHECK(arm.On());
+	CHECK(!arm.Frame(true, true, 9.0).has_value());
+	CHECK(arm.Frame(false, true, 10.0) == std::optional<bool>(false));
+	CHECK(!arm.Frame(false, true, 11.0).has_value());
+	// Lost while on, as during a load: off, with nothing to switch back; found again while wanted: on.
+	CHECK(arm.Frame(true, true, 12.0) == std::optional<bool>(true));
+	CHECK(!arm.Frame(true, false, 13.0).has_value());
+	CHECK(!arm.On());
+	CHECK(!arm.Frame(false, true, 14.0).has_value());
+	CHECK(arm.Frame(true, true, 15.0) == std::optional<bool>(true));
+	// Hiding V's meshes: on again every half second while wanted, so that a weapon drawn meanwhile is hidden too.
+	VSwitch hide(0.5);
+	CHECK(hide.Frame(true, true, 1.0) == std::optional<bool>(true));
+	CHECK(!hide.Frame(true, true, 1.4).has_value());
+	CHECK(hide.Frame(true, true, 1.5) == std::optional<bool>(true));
+	CHECK(!hide.Frame(true, true, 1.9).has_value());
+	CHECK(hide.Frame(false, true, 2.0) == std::optional<bool>(false));
+	CHECK(!hide.Frame(false, true, 2.6).has_value());
+}
+```
+- [ ] **Step 2: Build; it must fail**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C" | sort -u | head -3
+```
+Expected: `error C3861: 'LandedWords': identifier not found`, and `error C2065: 'VSwitch': undeclared identifier`.
+
+- [ ] **Step 3: Edit `src/link/Combat.h`**
+
+```cpp
+// Combat both ways (spike 6's "Part 2"), the parts that don't need the game: which of Minecraft's hits on NPCs count and
+// how much each does; V's hurts as SkyCraft's kInHurt, summed so that Minecraft takes them all; when Minecraft's death
+// kills V; and when V's god mode goes on and off. Pure: the tests give it hits and hurts of their own.
+```
+```cpp
+// Combat both ways (spike 6's "Part 2"), the parts that don't need the game: which of Minecraft's hits on NPCs count, what
+// each starts at, and what the game's damage pipeline made of it; V's hurts as SkyCraft's kInHurt, summed so that
+// Minecraft takes them all; when Minecraft's death kills V; and when V's god mode, V's unarmed weapon and V's hidden
+// meshes go on and off. Pure: the tests give it hits and hurts of their own.
+```
+```cpp
+	double   amount = 0.0;  // damage x V's punch
+```
+```cpp
+	double   amount = 0.0;  // damage x V's punch: where the game's damage pipeline starts it
+```
+```cpp
+// A hit on V that the module's DealDamages wrap took, in the game's terms: the health it would have taken, after V's
+// armour and the difficulty; its gamedataAttackType, as a number; and its instigator's entity, or 0.
+```
+```cpp
+// What the game's damage pipeline did to one of our hits, as the module's DealDamages wrap reports it when it lands.
+enum LandedFlag : uint32_t
+{
+	kLandedCritical = 1,    // V's crit, rolled by the game (hitFlag.CriticalHit)
+	kLandedBlocked = 2,     // the NPC blocked it (WasBlocked)
+	kLandedParried = 4,     // the NPC parried it (WasDeflected)
+	kLandedArmour = 8,      // the NPC's armour took some, of a hit that isn't critical (the hit type Glance)
+	kLandedMitigated = 16,  // the NPC's mitigation took some (WasMitigated)
+	kLandedKilled = 32,     // it killed the NPC (WasKillingBlow)
+};
+
+// The flags in words, "critical, armour"; empty for none. Bits it doesn't know are left out.
+std::string LandedWords(uint32_t aFlags);
+
+// Why the game's damage pipeline dealt one of our hits nothing, as the module's wrap of ProcessPipeline reports it, from
+// the source name of the hit's DealNoDamage flag: 1 friendly to V ("FriendlyFireIgnored"), 2 invulnerable, 3 already dead,
+// 4 dodged ("ProcessDodge"), 5 evaded ("ProcessEvasion"), 6 killed at once ("instant_kill"), 7 no damage left
+// ("no_valid_damage"); 0 another of the game's reasons. "dodged"; "reason 9" for one it doesn't know.
+std::string HitEndedName(int32_t aWhy);
+
+// A hit on V that the module's DealDamages wrap took, in the game's terms: the health it would have taken, after V's
+// armour, the difficulty and V's overshield; its gamedataAttackType, as a number; its instigator's entity, or 0; and
+// whether the game won't let it kill V (hitFlag.CannotKillPlayer, or a minimum health left), so it stays V's.
+```
+```cpp
+	uint64_t instigator = 0;
+```
+```cpp
+	uint64_t instigator = 0;
+	bool     nonLethal = false;
+```
+```cpp
+	bool clearDue_ = false;
+};
+}
+```
+```cpp
+	bool clearDue_ = false;
+};
+
+// One of V's states that BlockRender switches through the module while it's wanted: V's unarmed weapon drawn (the
+// module's Arm), and V's meshes hidden (HideV). Wanted, it's switched on, and on again every aRefresh seconds while it
+// stays wanted, so that what appears meanwhile, such as the weapon once it's drawn, is caught too; not wanted, off, once.
+// Losing V, as during a load, counts as off with nothing to switch back: the next session's V starts as its save left it.
+class VSwitch
+{
+public:
+	explicit VSwitch(double aRefresh = 0.0) : refresh_(aRefresh) {}
+
+	// The frame's state at aNow (seconds). The call to make now, through the module: on (true) or off (false). Nothing
+	// while V isn't found.
+	std::optional<bool> Frame(bool aWanted, bool aVFound, double aNow);
+	bool                On() const { return on_; }
+
+private:
+	double refresh_ = 0.0;  // seconds between calls while on; 0: once
+	bool   on_ = false;
+	double onAt_ = 0.0;     // when on was last called
+};
+}
+```
+- [ ] **Step 4: Edit `src/link/Combat.cpp`**
+
+```cpp
+#include <format>
+```
+```cpp
+#include <format>
+#include <utility>
+```
+```cpp
+		return std::format("result {}", aResult);
+```
+```cpp
+		return std::format("result {}", aResult);
+	}
+}
+
+std::string LandedWords(uint32_t aFlags)
+{
+	constexpr std::array<std::pair<uint32_t, const char*>, 6> kWords{ { { kLandedCritical, "critical" },
+		                                                                { kLandedBlocked, "blocked" },
+		                                                                { kLandedParried, "parried" },
+		                                                                { kLandedArmour, "armour" },
+		                                                                { kLandedMitigated, "mitigated" },
+		                                                                { kLandedKilled, "killed it" } } };
+	std::string words;
+	for (const auto& [flag, word] : kWords)
+	{
+		if ((aFlags & flag) != 0)
+		{
+			words += (words.empty() ? "" : ", ") + std::string(word);
+		}
+	}
+	return words;
+}
+
+std::string HitEndedName(int32_t aWhy)
+{
+	switch (aWhy)
+	{
+	case 0:
+		return "another of the game's reasons";
+	case 1:
+		return "friendly to V";
+	case 2:
+		return "invulnerable";
+	case 3:
+		return "already dead";
+	case 4:
+		return "dodged";
+	case 5:
+		return "evaded";
+	case 6:
+		return "killed at once";
+	case 7:
+		return "no damage left";
+	default:
+		return std::format("reason {}", aWhy);
+```
+```cpp
+	return wanted;
+}
+}
+```
+```cpp
+	return wanted;
+}
+
+std::optional<bool> VSwitch::Frame(bool aWanted, bool aVFound, double aNow)
+{
+	if (!aVFound)
+	{
+		on_ = false;
+		return std::nullopt;
+	}
+	if (aWanted && (!on_ || (refresh_ > 0.0 && aNow - onAt_ >= refresh_)))
+	{
+		on_ = true;
+		onAt_ = aNow;
+		return true;
+	}
+	if (!aWanted && on_)
+	{
+		on_ = false;
+		return false;
+	}
+	return std::nullopt;
+}
+}
+```
+- [ ] **Step 5: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `437 test(s), 0 failure(s)`.
+
+- [ ] **Step 6: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "npcs-and-combat: what the pipeline did to our hits, in words; V's non-lethal hurts; and V's switches for its weapon and meshes" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 24: The inbox keeps what the pipeline did to our hits and why it dealt some nothing, and leaves V's non-lethal hurts to V
+
+The natives the pipeline's wraps call change with what they report, and the inbox keeps it:
+- **`BlockRenderHitLanded(target, amount, before, after, flags)`:** `amount` is now what the pipeline made of our hit,
+  after all its modifiers, and `flags` what it did to it (Task 23's `LandedFlag`).
+- **`BlockRenderHitEnded(target, why)`,** new: one of our hits the pipeline dealt nothing, and why (`HitEndedName`). The
+  inbox keeps these as endings, at most 256 waiting, as it keeps landings.
+- **`BlockRenderVHurt(amount, attackType, instigator, nonLethal)`:** a hit on V the game won't let kill V is refused while
+  the inbox takes hurts, and counted apart: it stays V's.
+
+`GameScript` checks all seven natives. The module's declarations and calls follow here, so that it keeps compiling against
+them; Task 26 rewrites the wraps that call them.
+
+**Files:**
+- Modify: `src/CombatInbox.h`, `src/CombatInbox.cpp`, `tests/TestCombatInbox.cpp`, `src/Natives.h`, `src/Natives.cpp`,
+  `src/GameScript.cpp`, `scripts/BlockRender.reds`
+
+- [ ] **Step 1: Edit `tests/TestCombatInbox.cpp`: landings' flags, endings and non-lethal hurts**
+
+```cpp
+	inbox.Land({ 7, 714.0, 1514.0, 800.0 });
+```
+```cpp
+	inbox.Land({ 7, 714.0, 1514.0, 800.0, link::kLandedCritical | link::kLandedArmour });
+```
+```cpp
+	      landed[0].after == 800.0);
+```
+```cpp
+	      landed[0].after == 800.0 && landed[0].flags == (link::kLandedCritical | link::kLandedArmour));
+```
+```cpp
+	CHECK_EQ(inbox.Count().dropped, uint64_t(1));
+```
+```cpp
+	CHECK_EQ(inbox.Count().dropped, uint64_t(1));
+}
+
+TEST(CombatInboxKeepsEndingsAndLeavesNonLethalHurtsToV)
+{
+	CombatInbox inbox;
+	// Our hits the pipeline dealt nothing, with why: dodged, and friendly to V.
+	inbox.End({ 7, 4 });
+	inbox.End({ 8, 1 });
+	const std::vector<CombatInbox::Ended> ended = inbox.TakeEnded();
+	CHECK_EQ(ended.size(), size_t(2));
+	CHECK(ended.size() == 2 && ended[0].target == 7 && ended[0].why == 4 && ended[1].target == 8 && ended[1].why == 1);
+	CHECK(inbox.TakeEnded().empty());
+	for (size_t i = 0; i <= CombatInbox::kMaxWaiting; ++i)
+	{
+		inbox.End({ 9, 5 });
+	}
+	CHECK_EQ(inbox.TakeEnded().size(), CombatInbox::kMaxWaiting);
+	CHECK_EQ(inbox.Count().ended, uint64_t(2 + CombatInbox::kMaxWaiting));
+	CHECK_EQ(inbox.Count().dropped, uint64_t(1));
+	// A hit on V that the game won't let kill V stays V's while taking, counted apart; while not taking, it's refused as
+	// any other is.
+	inbox.SetTaking(true);
+	CHECK(!inbox.Offer({ 30.0, 7, 0x51, true }));
+	CHECK(inbox.Offer({ 30.0, 7, 0x51, false }));
+	inbox.SetTaking(false);
+	CHECK(!inbox.Offer({ 30.0, 7, 0x51, true }));
+	const CombatInbox::Counts counts = inbox.Count();
+	CHECK_EQ(counts.nonLethal, uint64_t(1));
+	CHECK_EQ(counts.refused, uint64_t(1));
+	CHECK_EQ(counts.taken, uint64_t(1));
+	CHECK_EQ(inbox.TakeHurts().size(), size_t(1));
+```
+```cpp
+				inbox.Land({ uint64_t(t + 1), 1.0, 2.0, 1.0 });
+```
+```cpp
+				inbox.Land({ uint64_t(t + 1), 1.0, 2.0, 1.0 });
+				inbox.End({ uint64_t(t + 1), 4 });
+```
+```cpp
+	size_t landed = 0;
+```
+```cpp
+	size_t landed = 0;
+	size_t ended = 0;
+```
+```cpp
+		landed += inbox.TakeLanded().size();
+```
+```cpp
+		landed += inbox.TakeLanded().size();
+		ended += inbox.TakeEnded().size();
+```
+```cpp
+	landed += inbox.TakeLanded().size();
+	const CombatInbox::Counts counts = inbox.Count();
+```
+```cpp
+	landed += inbox.TakeLanded().size();
+	ended += inbox.TakeEnded().size();
+	const CombatInbox::Counts counts = inbox.Count();
+```
+```cpp
+	CHECK_EQ(counts.landed + counts.dropped, uint64_t(kThreads * kEach));
+```
+```cpp
+	CHECK_EQ(uint64_t(ended), counts.ended);
+	CHECK_EQ(counts.landed + counts.ended + counts.dropped, uint64_t(2 * kThreads * kEach));
+```
+- [ ] **Step 2: Build; it must fail**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C" | sort -u | head -3
+```
+Expected: `error C2039: 'End': is not a member of 'cpmc::CombatInbox'`.
+
+- [ ] **Step 3: Edit `src/CombatInbox.h`**
+
+```cpp
+// V's otherwise; and our hits on NPCs as they land, with the NPC's health before and after. The main thread takes both
+// each frame.
+class CombatInbox
+{
+public:
+	static constexpr size_t kMaxWaiting = 256;  // of each: a hurt past it is left to V, a landing is only counted
+```
+```cpp
+// V's otherwise; our hits on NPCs as they land, with what the pipeline made of them and the NPC's health before and
+// after; and those the pipeline dealt nothing, with why. The main thread takes them each frame.
+class CombatInbox
+{
+public:
+	static constexpr size_t kMaxWaiting = 256;  // of each: a hurt past it is left to V, a landing or an ending is only counted
+```
+```cpp
+		double   amount = 0.0;
+		double   before = 0.0;  // the NPC's health
+		double   after = 0.0;
+```
+```cpp
+		double   amount = 0.0;  // what the pipeline made of it, before the NPC's health took it
+		double   before = 0.0;  // the NPC's health
+		double   after = 0.0;
+		uint32_t flags = 0;     // link::LandedFlag
+	};
+
+	// One of our hits that the pipeline dealt nothing.
+	struct Ended
+	{
+		uint64_t target = 0;
+		int32_t  why = 0;  // link::HitEndedName
+```
+```cpp
+		uint64_t taken = 0;    // hits on V taken from the game
+		uint64_t refused = 0;  // offered while not taking, or with kMaxWaiting waiting: left to V
+		uint64_t landed = 0;   // our hits reported as dealt
+		uint64_t dropped = 0;  // landings past kMaxWaiting
+```
+```cpp
+		uint64_t taken = 0;      // hits on V taken from the game
+		uint64_t refused = 0;    // offered while not taking, or with kMaxWaiting waiting: left to V
+		uint64_t nonLethal = 0;  // offered while taking, but the game won't let them kill V: left to V
+		uint64_t landed = 0;     // our hits reported as dealt
+		uint64_t ended = 0;      // our hits reported as dealt nothing
+		uint64_t dropped = 0;    // landings and endings past kMaxWaiting
+```
+```cpp
+	void Land(const Landed& aLanded);  // any thread
+
+	std::vector<link::GameHurt> TakeHurts();  // main thread, oldest first
+	std::vector<Landed>         TakeLanded();
+```
+```cpp
+	void Land(const Landed& aLanded);  // any thread
+	void End(const Ended& aEnded);     // any thread
+
+	std::vector<link::GameHurt> TakeHurts();  // main thread, oldest first
+	std::vector<Landed>         TakeLanded();
+	std::vector<Ended>          TakeEnded();
+```
+```cpp
+	std::vector<Landed>         landed_;
+```
+```cpp
+	std::vector<Landed>         landed_;
+	std::vector<Ended>          ended_;
+```
+- [ ] **Step 4: Edit `src/CombatInbox.cpp`**
+
+```cpp
+	const std::lock_guard lock(mutex_);
+	if (!Taking() || hurts_.size() >= kMaxWaiting)
+```
+```cpp
+	const std::lock_guard lock(mutex_);
+	if (Taking() && aHurt.nonLethal)
+	{
+		++counts_.nonLethal;
+		return false;
+	}
+	if (!Taking() || hurts_.size() >= kMaxWaiting)
+```
+```cpp
+std::vector<link::GameHurt> CombatInbox::TakeHurts()
+```
+```cpp
+void CombatInbox::End(const Ended& aEnded)
+{
+	const std::lock_guard lock(mutex_);
+	if (ended_.size() >= kMaxWaiting)
+	{
+		++counts_.dropped;
+		return;
+	}
+	ended_.push_back(aEnded);
+	++counts_.ended;
+}
+
+std::vector<link::GameHurt> CombatInbox::TakeHurts()
+```
+```cpp
+CombatInbox::Counts CombatInbox::Count() const
+```
+```cpp
+std::vector<CombatInbox::Ended> CombatInbox::TakeEnded()
+{
+	const std::lock_guard lock(mutex_);
+	return std::exchange(ended_, {});
+}
+
+CombatInbox::Counts CombatInbox::Count() const
+```
+- [ ] **Step 5: Edit `src/Natives.cpp`: the three natives the pipeline's wraps call**
+
+```cpp
+// BlockRenderVHurt(amount: Float, attackType: Int32, instigator: EntityID) -> Bool, from the wrap of DealDamages, on any
+// thread: a hit on V, taken (true) while combat and build mode are on, so the wrap deals none of it.
+```
+```cpp
+// BlockRenderVHurt(amount: Float, attackType: Int32, instigator: EntityID, nonLethal: Bool) -> Bool, from the wrap of
+// DealDamages, on any thread: a hit on V, taken (true) while combat and build mode are on, so the wrap deals none of it;
+// one the game won't let kill V stays V's.
+```
+```cpp
+	RED4ext::ent::EntityID instigator;
+	RED4ext::GetParameter(aFrame, &amount);
+	RED4ext::GetParameter(aFrame, &attackType);
+	RED4ext::GetParameter(aFrame, &instigator);
+	++aFrame->code;
+	const bool taken = g_combat.Offer({ double(amount), attackType, instigator.hash });
+```
+```cpp
+	RED4ext::ent::EntityID instigator;
+	bool                   nonLethal = false;
+	RED4ext::GetParameter(aFrame, &amount);
+	RED4ext::GetParameter(aFrame, &attackType);
+	RED4ext::GetParameter(aFrame, &instigator);
+	RED4ext::GetParameter(aFrame, &nonLethal);
+	++aFrame->code;
+	const bool taken = g_combat.Offer({ double(amount), attackType, instigator.hash, nonLethal });
+```
+```cpp
+// BlockRenderHitLanded(target: EntityID, amount: Float, before: Float, after: Float), from the wrap of DealDamages, on any
+// thread: one of our hits, dealt, with the NPC's health before and after.
+```
+```cpp
+// BlockRenderHitLanded(target: EntityID, amount: Float, before: Float, after: Float, flags: Int32), from the wrap of
+// DealDamages, on any thread: one of our hits, dealt: what the pipeline made of it, the NPC's health before and after,
+// and what the pipeline did to it (link::LandedFlag).
+```
+```cpp
+	float                  after = 0.0f;
+```
+```cpp
+	float                  after = 0.0f;
+	int32_t                flags = 0;
+```
+```cpp
+	RED4ext::GetParameter(aFrame, &after);
+	++aFrame->code;
+	g_combat.Land({ target.hash, double(amount), double(before), double(after) });
+```
+```cpp
+	RED4ext::GetParameter(aFrame, &after);
+	RED4ext::GetParameter(aFrame, &flags);
+	++aFrame->code;
+	g_combat.Land({ target.hash, double(amount), double(before), double(after), uint32_t(flags) });
+}
+
+// BlockRenderHitEnded(target: EntityID, why: Int32), from the wrap of ProcessPipeline, on any thread: one of our hits, dealt
+// nothing, and why (link::HitEndedName).
+void HitEnded(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, void*, int64_t)
+{
+	RED4ext::ent::EntityID target;
+	int32_t                why = 0;
+	RED4ext::GetParameter(aFrame, &target);
+	RED4ext::GetParameter(aFrame, &why);
+	++aFrame->code;
+	g_combat.End({ target.hash, why });
+```
+```cpp
+	typed = Add<bool*>(*rtti, "BlockRenderVHurt", &VHurt, { { "Float", "amount" }, { "Int32", "attackType" }, { "entEntityID", "instigator" } },
+	                   "Bool") &&
+	        typed;
+	typed = Add<void*>(*rtti, "BlockRenderHitLanded", &HitLanded,
+	                   { { "entEntityID", "target" }, { "Float", "amount" }, { "Float", "before" }, { "Float", "after" } }, nullptr) &&
+	        typed;
+	if (g_nativesLog)
+	{
+		g_nativesLog->Push(typed ? "natives: BlockRenderNpcAttached, BlockRenderNpcDetached, BlockRenderNpcCount, BlockRenderNpcAt, "
+		                           "BlockRenderVHurt and BlockRenderHitLanded added"
+```
+```cpp
+	typed = Add<bool*>(*rtti, "BlockRenderVHurt", &VHurt,
+	                   { { "Float", "amount" }, { "Int32", "attackType" }, { "entEntityID", "instigator" }, { "Bool", "nonLethal" } }, "Bool") &&
+	        typed;
+	typed = Add<void*>(*rtti, "BlockRenderHitLanded", &HitLanded,
+	                   { { "entEntityID", "target" }, { "Float", "amount" }, { "Float", "before" }, { "Float", "after" }, { "Int32", "flags" } },
+	                   nullptr) &&
+	        typed;
+	typed = Add<void*>(*rtti, "BlockRenderHitEnded", &HitEnded, { { "entEntityID", "target" }, { "Int32", "why" } }, nullptr) && typed;
+	if (g_nativesLog)
+	{
+		g_nativesLog->Push(typed ? "natives: BlockRenderNpcAttached, BlockRenderNpcDetached, BlockRenderNpcCount, BlockRenderNpcAt, "
+		                           "BlockRenderVHurt, BlockRenderHitLanded and BlockRenderHitEnded added"
+```
+- [ ] **Step 6: Edit `src/Natives.h`**
+
+```cpp
+// pipeline offer hits on V and report our hits landing through them, on whichever thread runs the pipeline (Part 2).
+```
+```cpp
+// pipeline offer hits on V, and report our hits landing or dealt nothing, through them, on whichever thread runs the
+// pipeline (Part 2).
+```
+```cpp
+// The hits on V the pipeline's wraps offer, and our hits as they land.
+```
+```cpp
+// The hits on V the pipeline's wraps offer, and our hits as they land or end dealt nothing.
+```
+- [ ] **Step 7: Edit `src/GameScript.cpp`: seven natives to check for**
+
+```cpp
+constexpr std::array<const char*, 6> kNatives{ "BlockRenderNpcAttached", "BlockRenderNpcDetached", "BlockRenderNpcCount",
+	                                           "BlockRenderNpcAt",       "BlockRenderVHurt",       "BlockRenderHitLanded" };
+```
+```cpp
+constexpr std::array<const char*, 7> kNatives{ "BlockRenderNpcAttached", "BlockRenderNpcDetached", "BlockRenderNpcCount",
+	                                           "BlockRenderNpcAt",       "BlockRenderVHurt",       "BlockRenderHitLanded",
+	                                           "BlockRenderHitEnded" };
+```
+- [ ] **Step 8: Edit `scripts/BlockRender.reds`: the natives as they are now**
+
+```swift
+// For the DealDamages wrap: a hit on V, which BlockRender takes (true) for Minecraft while combat and build mode are on;
+// and one of our hits, dealt, with the NPC's health before and after.
+public native func BlockRenderVHurt(amount: Float, attackType: Int32, instigator: EntityID) -> Bool
+public native func BlockRenderHitLanded(target: EntityID, amount: Float, before: Float, after: Float)
+```
+```swift
+// For the damage pipeline's wraps: a hit on V, which BlockRender takes (true) for Minecraft while combat and build mode
+// are on, unless the game won't let it kill V; one of our hits, dealt, with what the pipeline made of it, the NPC's
+// health before and after, and what the pipeline did to it; and one of our hits the pipeline dealt nothing, with why.
+public native func BlockRenderVHurt(amount: Float, attackType: Int32, instigator: EntityID, nonLethal: Bool) -> Bool
+public native func BlockRenderHitLanded(target: EntityID, amount: Float, before: Float, after: Float, flags: Int32)
+public native func BlockRenderHitEnded(target: EntityID, why: Int32)
+```
+```swift
+    BlockRenderHitLanded(target.GetEntityID(), amount, before, pools.GetStatPoolValue(stats, gamedataStatPoolType.Health, false));
+```
+```swift
+    BlockRenderHitLanded(target.GetEntityID(), amount, before, pools.GetStatPoolValue(stats, gamedataStatPoolType.Health, false), 0);
+```
+```swift
+      if BlockRenderVHurt(total, EnumInt(hitEvent.attackData.GetAttackType()), from) {
+```
+```swift
+      if BlockRenderVHurt(total, EnumInt(hitEvent.attackData.GetAttackType()), from, false) {
+```
+- [ ] **Step 9: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `438 test(s), 0 failure(s)`.
+
+- [ ] **Step 10: Compile the module against the game's scripts**
+
+```bash
+cd /d/Cyberpunk-Minecraft/spikes/block-render && uv run --no-project python tools/check_reds.py E:/Cyberpunk2077 scripts; \
+  echo "exit: $?"
+```
+Expected: redscript's `Compilation complete`, then `compiled` and `exit: 0`.
+
+- [ ] **Step 11: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "npcs-and-combat: the inbox keeps what the pipeline did to our hits and why it dealt some nothing, and leaves V's non-lethal hurts to V" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 25: `check_reds.py` compiles the module with Codeware's scripts too
+
+Hiding V's meshes (Task 26) needs Codeware's `Entity.GetComponents`, which lists an entity's components: the game's own
+scripts can't. Codeware 1.19 is installed, but the module mustn't fail to compile without it, since a failed compile
+takes every mod's scripts with it (the spec's risk 9). So the parts that use Codeware are compiled only where it's
+installed, with redscript's `@if(ModuleExists("Codeware"))`, and the parts for its absence otherwise. The installed
+redscript honours that both ways (checked while reviewing: a broken line in a Codeware-only function compiled without
+Codeware's scripts, and failed with them). `check_reds.py` takes more script folders after the module's, so both ways
+can be compiled before deploying.
+
+**Files:**
+- Modify: `tools/check_reds.py`
+
+- [ ] **Step 1: Edit `tools/check_reds.py`**
+
+```python
+    uv run --no-project python tools/check_reds.py <game folder> <scripts folder>
+
+It loads redscript's compiler library from the game (engine/tools/scc_lib.dll), with its error popup off, and compiles
+the scripts folder against a copy of the game's untouched r6/cache/final.redscripts, so the game's own files aren't
+touched. It prints "compiled" and exits 0, or prints redscript's errors and exits 1. Its work goes in build/reds-check.
+The game must be installed; it needn't run, and may.
+```
+```python
+    uv run --no-project python tools/check_reds.py <game folder> <scripts folder> [<more script folders>...]
+
+It loads redscript's compiler library from the game (engine/tools/scc_lib.dll), with its error popup off, and compiles
+the scripts folder, with any more folders given, against a copy of the game's untouched r6/cache/final.redscripts, so the
+game's own files aren't touched. Codeware's Scripts folder, given too, compiles the module's parts that need Codeware
+(@if(ModuleExists("Codeware"))), as the game does with Codeware installed; without it, the parts for its absence. It
+prints "compiled" and exits 0, or prints redscript's errors and exits 1. Its work goes in build/reds-check. The game must
+be installed; it needn't run, and may.
+```
+```python
+if len(sys.argv) != 3:
+    sys.exit(__doc__)
+game, scripts = Path(sys.argv[1]), Path(sys.argv[2]).resolve()
+```
+```python
+if len(sys.argv) < 3:
+    sys.exit(__doc__)
+game, scripts = Path(sys.argv[1]), Path(sys.argv[2]).resolve()
+more = [Path(folder).resolve() for folder in sys.argv[3:]]
+```
+```python
+lib.scc_settings_add_script_path(settings, str(scripts).encode())
+```
+```python
+lib.scc_settings_add_script_path(settings, str(scripts).encode())
+for folder in more:
+    lib.scc_settings_add_script_path(settings, str(folder).encode())
+```
+- [ ] **Step 2: Compile the module against the game's scripts, without and with Codeware**
+
+```bash
+cd /d/Cyberpunk-Minecraft/spikes/block-render && uv run --no-project python tools/check_reds.py E:/Cyberpunk2077 scripts | tail -1; \
+  echo "without Codeware: exit ${PIPESTATUS[0]}"; \
+  uv run --no-project python tools/check_reds.py E:/Cyberpunk2077 scripts E:/Cyberpunk2077/red4ext/plugins/Codeware/Scripts | tail -1; \
+  echo "with Codeware: exit ${PIPESTATUS[0]}"
+```
+Expected: `compiled`, `without Codeware: exit 0` and `with Codeware: exit 0`.
+
+- [ ] **Step 3: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "npcs-and-combat: check_reds compiles the module with Codeware's scripts too" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 26: The module starts our hits at the pipeline's entry, punches with V's unarmed slot, draws it and hides V for build mode
+
+The module's side of the review, in `scripts/BlockRender.reds`, version 4:
+- **Our hits go through the whole pipeline.** A wrap of `DamageSystem.ProcessPipeline` (`damageSystem.swift`'s `private
+  final func ProcessPipeline(hitEvent: ref<gameHitEvent>, cache: ref<CacheData>)`), the pipeline's entry, before even
+  its first stage's callbacks, starts our hit at the amount `Hit` marked on it, Minecraft's damage × V's punch, split
+  across damage types as the attack splits its own (`StartAt`; all physical when it has none, as without a weapon). The
+  pipeline then does to it all it does to V's own punches. After it, a hit flagged `DealNoDamage` reports why
+  (`BlockRenderHitEnded`, from the flag's source name: `WhyNoDamage`).
+- **The `Process` wrap goes:** a hit that starts with damage is never marked `n"no_valid_damage"`. (It also let dodged and
+  evaded hits through: `ProcessDodge` and `ProcessEvasion` set `DealNoDamage` after `no_valid_damage`, and `AddFlag`
+  keeps one entry a flag, so theirs never went in.)
+- **The `DealDamages` wrap** no longer sets our hit's damage: it reports what the pipeline made of it
+  (`GetTotalAttackValue(Health)`), the NPC's health before and after, and what the pipeline did to it (`LandedFlags`).
+  For a hit on V, the part V's overshield would take stays in the game, and only the rest is offered; a hit the game
+  won't let kill V is offered as non-lethal, which the inbox leaves V's.
+- **What V punches with** is what V's unarmed slot draws (`UnarmedItem`): weapon-wheel slot 4, the game's
+  `GetMeleewareOrFistsItemID`, is V's arm cyberware weapon if V has one (`EquipmentSystemPlayerData.GetActiveMeleeWare`),
+  or the fists or Gorilla Arms in `BaseFists`. Arm cyberware without a melee attack to make hits with (a Monowire, the
+  Projectile Launch System) falls back to `BaseFists`. V's punch, the attack records and the weapon object all come
+  from it, and `List` says whether V has it drawn (`punchDrawn`).
+- **`Arm(on)`** draws V's unarmed weapon for build mode's fights, so that hits carry it, as V's own punches do: the
+  NPC's armour, the weapon's crits, the stealth bonus, blocks, the skill XP and the perks that check the weapon all read
+  the hit's weapon. It asks the equipment system for weapon-wheel slot 4 at once (`RequestWeaponSlot4`, `Instant`), as
+  `StatusEffectHelper`'s requests do; off, it asks for the wheel slot V's weapon was in, or holsters
+  (`UnequipWeapon`).
+- **`HideV(on)`** hides V for build mode: every visual component (`IVisualComponent`) of V's, and of each item V wears
+  and holds, that's on, is switched off (`IComponent.Toggle`) and remembered, so that showing V again switches on
+  exactly those, and leaves off what the game had off. The first call finds what V wears among V's whole inventory;
+  called again while on, it hides what has appeared since on V and in its hands and arm slot, such as the weapon `Arm`
+  drew, without looking through the inventory again. Codeware lists the components; without it, `HideV` says so (-1)
+  and V stays seen.
+
+The pipeline's methods are `damageSystem.swift`'s; a wrap of a method that isn't there fails the compile, and so does a
+slip in the parts for Codeware, but only where Codeware is installed: Steps 3 and 4 check both.
+
+**Files:**
+- Modify: `scripts/BlockRender.reds`
+
+- [ ] **Step 1: Edit `scripts/BlockRender.reds`**
+
+```swift
+// Combat (spike 6's Part 2): Hit makes one of Minecraft's hits into a hit of V's on an NPC, marked as ours with its
+// amount on the hit itself, and the wraps of the damage pipeline's Process and DealDamages, at the end of this file, deal
+// it exactly; the same DealDamages wrap offers the game's hits on V to BlockRender, which takes them for Minecraft in
+// build mode. The pipeline may run on any thread, so those wraps too touch nothing of the module's: they read the hit
+// itself, and call BlockRender's natives.
+```
+```swift
+// Combat (spike 6's Part 2): Hit makes one of Minecraft's hits into a hit of V's on an NPC, made with what V punches
+// with, and marked as ours, with where it starts, on the hit itself. The wrap of the damage pipeline's ProcessPipeline, at
+// the end of this file, starts it there, and the pipeline does to it all it does to V's own punches; the DealDamages wrap
+// reports what it took off, and the ProcessPipeline wrap why it took nothing, if it didn't. The same DealDamages wrap
+// offers the game's hits on V to BlockRender, which takes them for Minecraft in build mode. The pipeline may run on any
+// thread, so those wraps too touch nothing of the module's: they read the hit itself, and call BlockRender's natives.
+// For build mode, Arm draws V's unarmed weapon, so that hits carry it, and HideV hides V's meshes, through Codeware where
+// it's installed.
+```
+```swift
+  private let vRead: Bool;
+```
+```swift
+  private let vRead: Bool;
+  // Arm's: whether it drew V's unarmed weapon, and what V held before, to put back. HideV's: whether V is hidden, and the
+  // meshes it switched off.
+  private let armed: Bool;
+  private let armedFrom: ItemID;
+  private let hiding: Bool;
+  private let hidden: array<wref<IComponent>>;
+```
+```swift
+  // V's punch, the damage per hit of what V punches with (the item in the BaseFists area), and that item; and V's max
+  // health. Read at most four times a second.
+  public let punch: Float;
+  public let punchItem: String;
+  public let vHealthMax: Float;
+
+  // The module's version, which BlockRender checks: 2 since the list moved into BlockRender, 3 with combat.
+  public final static func Version() -> Int32 {
+    return 3;
+```
+```swift
+  // V's punch, the damage per hit of what V punches with (what V's unarmed slot draws: UnarmedItem), that item, and
+  // whether V has it drawn; and V's max health. Read at most four times a second.
+  public let punch: Float;
+  public let punchItem: String;
+  public let punchDrawn: Bool;
+  public let vHealthMax: Float;
+
+  // The module's version, which BlockRender checks: 2 since the list moved into BlockRender, 3 with combat, 4 since hits
+  // go through the whole damage pipeline, with what V's unarmed slot draws.
+  public final static func Version() -> Int32 {
+    return 4;
+```
+```swift
+  // One of Minecraft's hits on an NPC, as V's: amount is what it takes off the NPC's health, and strong picks the strong
+  // attack. Built as the game's SendHitEvent builds one, from V, with the attack record of what V punches with, and the
+  // weapon object of it if V has it drawn. 1: queued; 0: V isn't found; -1: the NPC is gone; -2: it's dead; -3: there's no
+  // attack record to make it with.
+```
+```swift
+  // One of Minecraft's hits on an NPC, as V's: amount is where the damage pipeline starts it, Minecraft's damage x V's
+  // punch, and strong picks the strong attack. Built as the game's SendHitEvent builds one, from V, with the attack record
+  // of what V punches with, and the weapon object of it if V has it drawn. 1: queued; 0: V isn't found; -1: the NPC is
+  // gone; -2: it's dead; -3: there's no attack record to make it with.
+```
+```swift
+    let record: ref<Attack_Record> = this.PunchAttack(player, strong);
+    if !IsDefined(record) {
+      return -3;
+    };
+    let weapon: ref<WeaponObject> = this.PunchWeapon(player, game);
+```
+```swift
+    let item: ItemID = this.UnarmedItem(player);
+    let record: ref<Attack_Record> = this.AttackOf(item, strong);
+    if !IsDefined(record) {
+      return -3;
+    };
+    let weapon: ref<WeaponObject> = this.PunchWeapon(player, game, item);
+```
+```swift
+    // Ours, with its amount, on the hit itself, as the game marks its environment's attacks with hitFlag.None and a
+```
+```swift
+    // Ours, with where it starts, on the hit itself, as the game marks its environment's attacks with hitFlag.None and a
+```
+```swift
+  // For the punch request: V's punch, what it's read from, and what Hit makes hits with.
+```
+```swift
+  // V's unarmed weapon, drawn for build mode's fights so that Minecraft's hits carry it, as V's own punches do (on); or
+  // what V held before, put back (off). Drawing asks the equipment system for weapon-wheel slot 4 at once, as the slot's
+  // key does; putting back asks for the wheel's slot V's weapon is in, or holsters if V held nothing, or something not on
+  // the wheel. Called again while on, it asks again if the weapon isn't drawn yet. 1: asked; 2: nothing to ask; 0: V isn't
+  // found; -1: V has no unarmed weapon; -2: there's no equipment system.
+  public final func Arm(on: Bool) -> Int32 {
+    let game: GameInstance = this.GetGameInstance();
+    let player: ref<GameObject> = GameInstance.GetPlayerSystem(game).GetLocalPlayerMainGameObject();
+    if !IsDefined(player) {
+      return 0;
+    };
+    let equipment: ref<EquipmentSystem> = EquipmentSystem.GetInstance(player);
+    if !IsDefined(equipment) {
+      return -2;
+    };
+    let held: ItemID;
+    let heldObject: ref<ItemObject> = GameInstance.GetTransactionSystem(game).GetItemInSlot(player, t"AttachmentSlots.WeaponRight");
+    if IsDefined(heldObject) {
+      held = heldObject.GetItemID();
+    };
+    let request: ref<EquipmentSystemWeaponManipulationRequest> = new EquipmentSystemWeaponManipulationRequest();
+    request.owner = player;
+    request.equipAnimType = gameEquipAnimationType.Instant;
+    if on {
+      let item: ItemID = this.UnarmedItem(player);
+      if !ItemID.IsValid(item) {
+        return -1;
+      };
+      if !this.armed {
+        this.armed = true;
+        this.armedFrom = held;
+      };
+      if held == item {
+        return 2;
+      };
+      request.requestType = EquipmentManipulationAction.RequestWeaponSlot4;
+      equipment.QueueRequest(request);
+      return 1;
+    };
+    if !this.armed {
+      return 2;
+    };
+    this.armed = false;
+    if held == this.armedFrom {
+      return 2;
+    };
+    request.requestType = this.WheelRequest(player, this.armedFrom);
+    equipment.QueueRequest(request);
+    return 1;
+  }
+
+  // V's meshes for build mode: V's own, and those of everything V wears and holds, hidden (on), each switched off if it
+  // was on, and remembered, so that showing V again (off) switches on exactly those and leaves off what the game had off.
+  // Called again while on, it hides what has appeared since on V and in V's hands, such as the weapon Arm drew, without
+  // looking through V's whole inventory again. The meshes hidden, or shown again; -1 without Codeware, which lists an
+  // entity's components; -2 if V isn't found.
+  public final func HideV(on: Bool) -> Int32 {
+    let i: Int32 = 0;
+    if !on {
+      let shown: Int32 = 0;
+      while i < ArraySize(this.hidden) {
+        let component: ref<IComponent> = this.hidden[i];
+        if IsDefined(component) {
+          component.Toggle(true);
+          shown += 1;
+        };
+        i += 1;
+      };
+      ArrayClear(this.hidden);
+      this.hiding = false;
+      return shown;
+    };
+    if !BlockRenderCanHideV() {
+      return -1;
+    };
+    let player: ref<GameObject> = GameInstance.GetPlayerSystem(this.GetGameInstance()).GetLocalPlayerMainGameObject();
+    if !IsDefined(player) {
+      return -2;
+    };
+    let off: array<wref<IComponent>> = BlockRenderSwitchOffMeshes(player, !this.hiding);
+    this.hiding = true;
+    while i < ArraySize(off) {
+      ArrayPush(this.hidden, off[i]);
+      i += 1;
+    };
+    return ArraySize(this.hidden);
+  }
+
+  // For the punch request: V's punch, what it's read from, what Hit makes hits with, and whether V has it drawn.
+```
+```swift
+    let drawn: ref<WeaponObject> = this.PunchWeapon(player, game);
+    return "V's punch " + FloatToStringPrec(this.punch, 2) + ", read from " + this.punchItem + "; quick hits with "
+      + this.AttackName(this.PunchAttack(player, false)) + ", strong ones with " + this.AttackName(this.PunchAttack(player, true))
+      + "; " + (IsDefined(drawn) ? "drawn, so hits carry it as their weapon" : "not drawn, so hits carry no weapon");
+  }
+
+  // A hit's amount, if it's ours: from its hitFlag.None marked "BlockRender <amount>". -1 if it isn't. Any thread: it
+  // reads only the hit.
+```
+```swift
+    let item: ItemID = this.UnarmedItem(player);
+    return "V's punch " + FloatToStringPrec(this.punch, 2) + ", read from " + this.punchItem + "; quick hits with "
+      + this.AttackName(this.AttackOf(item, false)) + ", strong ones with " + this.AttackName(this.AttackOf(item, true)) + "; "
+      + (this.punchDrawn ? "drawn, so hits carry it as their weapon"
+                         : "not drawn, so hits carry no weapon, and skip the NPC's armour, the weapon's crits, stealth, blocks and the skill XP");
+  }
+
+  // Where one of our hits starts, if it's ours: from its hitFlag.None marked "BlockRender <amount>". -1 if it isn't. Any
+  // thread: it reads only the hit.
+```
+```swift
+  // The attack record of what V punches with, from its item's record: its strong melee attack for a strong hit, its light
+  // one otherwise (gamedataAttackType.Melee: QuickMelee is a gun's quick melee); of neither, its first melee attack.
+  private final func PunchAttack(player: ref<GameObject>, strong: Bool) -> ref<Attack_Record> {
+    let items: array<ItemID> = EquipmentSystem.GetItemsInArea(player, gamedataEquipmentArea.BaseFists);
+    if ArraySize(items) == 0 {
+      return null;
+    };
+    let weapon: ref<WeaponItem_Record> = TweakDBInterface.GetWeaponItemRecord(ItemID.GetTDBID(items[0]));
+```
+```swift
+  // The attack's damage set to amount in all, split across damage types as the attack splits its own; all physical if it
+  // has none, as without a weapon. Any thread.
+  public final static func StartAt(computed: ref<gameAttackComputed>, amount: Float) -> Void {
+    let values: array<Float> = computed.GetAttackValues();
+    let total: Float = 0.00;
+    let i: Int32 = 0;
+    while i < ArraySize(values) {
+      if values[i] > 0.00 {
+        total += values[i];
+      };
+      i += 1;
+    };
+    if total <= 0.00 {
+      BlockRenderNpcs.SetDamage(computed, amount);
+      return;
+    };
+    i = 0;
+    while i < ArraySize(values) {
+      values[i] = values[i] > 0.00 ? values[i] * amount / total : 0.00;
+      i += 1;
+    };
+    computed.SetAttackValues(values);
+  }
+
+  // What the pipeline did to one of our hits, for BlockRenderHitLanded: critical 1, blocked 2, parried 4, the NPC's armour
+  // 8 (the hit type Glance, of a hit that isn't critical), mitigated 16, killed the NPC 32. Any thread.
+  public final static func LandedFlags(data: ref<AttackData>) -> Int32 {
+    let flags: Int32 = 0;
+    if data.HasFlag(hitFlag.CriticalHit) {
+      flags += 1;
+    };
+    if data.HasFlag(hitFlag.WasBlocked) {
+      flags += 2;
+    };
+    if data.HasFlag(hitFlag.WasDeflected) {
+      flags += 4;
+    };
+    if Equals(data.GetHitType(), gameuiHitType.Glance) {
+      flags += 8;
+    };
+    if data.HasFlag(hitFlag.WasMitigated) {
+      flags += 16;
+    };
+    if data.HasFlag(hitFlag.WasKillingBlow) {
+      flags += 32;
+    };
+    return flags;
+  }
+
+  // Why the pipeline dealt one of our hits nothing, from the source name its DealNoDamage flag was set under: 1 friendly to
+  // V, 2 invulnerable, 3 already dead, 4 dodged, 5 evaded, 6 killed at once, 7 no damage left; 0 another reason. Any thread.
+  public final static func WhyNoDamage(data: ref<AttackData>) -> Int32 {
+    let flags: array<SHitFlag> = data.GetFlags();
+    let i: Int32 = 0;
+    while i < ArraySize(flags) {
+      if Equals(flags[i].flag, hitFlag.DealNoDamage) {
+        let source: CName = flags[i].source;
+        if Equals(source, n"FriendlyFireIgnored") {
+          return 1;
+        };
+        if Equals(source, n"invulnerable") || Equals(source, n"invulnerable stat flag") {
+          return 2;
+        };
+        if Equals(source, n"dead") {
+          return 3;
+        };
+        if Equals(source, n"ProcessDodge") {
+          return 4;
+        };
+        if Equals(source, n"ProcessEvasion") {
+          return 5;
+        };
+        if Equals(source, n"instant_kill") {
+          return 6;
+        };
+        if Equals(source, n"no_valid_damage") {
+          return 7;
+        };
+        return 0;
+      };
+      i += 1;
+    };
+    return 0;
+  }
+
+  // What V punches with: what V's unarmed slot draws (weapon-wheel slot 4: the game's GetMeleewareOrFistsItemID), V's arm
+  // cyberware weapon if it has a melee attack to make hits with, otherwise what's in the BaseFists area, the fists or
+  // Gorilla Arms. None if there's neither.
+  private final func UnarmedItem(player: ref<GameObject>) -> ItemID {
+    let data: ref<EquipmentSystemPlayerData> = EquipmentSystem.GetData(player);
+    if IsDefined(data) {
+      let ware: ItemID = data.GetActiveMeleeWare();
+      if ItemID.IsValid(ware) && IsDefined(this.AttackOf(ware, false)) {
+        return ware;
+      };
+    };
+    let fists: array<ItemID> = EquipmentSystem.GetItemsInArea(player, gamedataEquipmentArea.BaseFists);
+    if ArraySize(fists) > 0 {
+      return fists[0];
+    };
+    return ItemID.None();
+  }
+
+  // The attack record to make a hit with, from item's record: its strong melee attack for a strong hit, its light one
+  // otherwise (gamedataAttackType.Melee: QuickMelee is a gun's quick melee); of neither, its first melee attack.
+  private final func AttackOf(item: ItemID, strong: Bool) -> ref<Attack_Record> {
+    if !ItemID.IsValid(item) {
+      return null;
+    };
+    let weapon: ref<WeaponItem_Record> = TweakDBInterface.GetWeaponItemRecord(ItemID.GetTDBID(item));
+```
+```swift
+  // What V punches with, as the weapon object V holds, if V has it drawn; none otherwise.
+  private final func PunchWeapon(player: ref<GameObject>, game: GameInstance) -> ref<WeaponObject> {
+    let items: array<ItemID> = EquipmentSystem.GetItemsInArea(player, gamedataEquipmentArea.BaseFists);
+    let held: ref<WeaponObject> = GameInstance.GetTransactionSystem(game).GetItemInSlot(player, t"AttachmentSlots.WeaponRight") as WeaponObject;
+    if ArraySize(items) == 0 || !IsDefined(held) {
+      return null;
+    };
+    if ItemID.GetTDBID(held.GetItemID()) == ItemID.GetTDBID(items[0]) {
+      return held;
+    };
+    return null;
+```
+```swift
+  // What V punches with, item, as the weapon object V holds, if V has it drawn; none otherwise.
+  private final func PunchWeapon(player: ref<GameObject>, game: GameInstance, item: ItemID) -> ref<WeaponObject> {
+    let held: ref<WeaponObject> = GameInstance.GetTransactionSystem(game).GetItemInSlot(player, t"AttachmentSlots.WeaponRight") as WeaponObject;
+    if !ItemID.IsValid(item) || !IsDefined(held) {
+      return null;
+    };
+    if ItemID.GetTDBID(held.GetItemID()) == ItemID.GetTDBID(item) {
+      return held;
+    };
+    return null;
+  }
+
+  // The request that draws item from the weapon wheel's first three slots, by its slot; or holsters, if it isn't there or
+  // is nothing.
+  private final func WheelRequest(player: ref<GameObject>, item: ItemID) -> EquipmentManipulationAction {
+    if ItemID.IsValid(item) {
+      let wheel: array<ItemID> = EquipmentSystem.GetItemsInArea(player, gamedataEquipmentArea.WeaponWheel);
+      if ArraySize(wheel) > 0 && wheel[0] == item {
+        return EquipmentManipulationAction.RequestWeaponSlot1;
+      };
+      if ArraySize(wheel) > 1 && wheel[1] == item {
+        return EquipmentManipulationAction.RequestWeaponSlot2;
+      };
+      if ArraySize(wheel) > 2 && wheel[2] == item {
+        return EquipmentManipulationAction.RequestWeaponSlot3;
+      };
+    };
+    return EquipmentManipulationAction.UnequipWeapon;
+```
+```swift
+    this.punchItem = "nothing in BaseFists";
+    let items: array<ItemID> = EquipmentSystem.GetItemsInArea(player, gamedataEquipmentArea.BaseFists);
+    if ArraySize(items) > 0 {
+      this.punchItem = TDBID.ToStringDEBUG(ItemID.GetTDBID(items[0]));
+      let data: wref<gameItemData> = GameInstance.GetTransactionSystem(game).GetItemData(player, items[0]);
+```
+```swift
+    this.punchDrawn = false;
+    this.punchItem = "nothing in V's unarmed slot";
+    let item: ItemID = this.UnarmedItem(player);
+    if ItemID.IsValid(item) {
+      this.punchItem = TDBID.ToStringDEBUG(ItemID.GetTDBID(item));
+      let data: wref<gameItemData> = GameInstance.GetTransactionSystem(game).GetItemData(player, item);
+```
+```swift
+        this.punchItem += ", without item data";
+      };
+    };
+  }
+}
+```
+```swift
+        this.punchItem += ", without item data";
+      };
+      this.punchDrawn = IsDefined(this.PunchWeapon(player, game, item));
+    };
+  }
+}
+
+// Whether Codeware is installed: it lists an entity's components (Entity.GetComponents), which hiding V's meshes needs.
+// Without it, the module still compiles, and V just isn't hidden.
+@if(ModuleExists("Codeware"))
+public func BlockRenderCanHideV() -> Bool {
+  return true;
+}
+
+@if(!ModuleExists("Codeware"))
+public func BlockRenderCanHideV() -> Bool {
+  return false;
+}
+
+// V's meshes, and those of the items V wears and holds: each visual component that's on, switched off; those it switched
+// off. With everything, every item V wears and holds, found among V's whole inventory; otherwise only what's in V's
+// hands and arm slot, which is all that changes in build mode. Main thread, from HideV.
+@if(ModuleExists("Codeware"))
+public func BlockRenderSwitchOffMeshes(player: ref<GameObject>, everything: Bool) -> array<wref<IComponent>> {
+  let off: array<wref<IComponent>>;
+  BlockRenderSwitchOffEntity(player, off);
+  let transactions: ref<TransactionSystem> = GameInstance.GetTransactionSystem(player.GetGame());
+  if !everything {
+    BlockRenderSwitchOffEntity(transactions.GetItemInSlot(player, t"AttachmentSlots.WeaponRight"), off);
+    BlockRenderSwitchOffEntity(transactions.GetItemInSlot(player, t"AttachmentSlots.WeaponLeft"), off);
+    BlockRenderSwitchOffEntity(transactions.GetItemInSlot(player, t"AttachmentSlots.RightArm"), off);
+    return off;
+  };
+  let items: array<wref<gameItemData>>;
+  transactions.GetItemList(player, items);
+  let i: Int32 = 0;
+  while i < ArraySize(items) {
+    if IsDefined(items[i]) {
+      let item: ref<ItemObject> = transactions.GetItemInSlotByItemID(player, items[i].GetID());
+      if IsDefined(item) {
+        BlockRenderSwitchOffEntity(item, off);
+      };
+    };
+    i += 1;
+  };
+  return off;
+}
+
+@if(ModuleExists("Codeware"))
+public func BlockRenderSwitchOffEntity(entity: ref<Entity>, out off: array<wref<IComponent>>) -> Void {
+  if !IsDefined(entity) {
+    return;
+  };
+  let components: array<ref<IComponent>> = entity.GetComponents();
+  let i: Int32 = 0;
+  while i < ArraySize(components) {
+    let component: ref<IComponent> = components[i];
+    if IsDefined(component as IVisualComponent) && component.IsEnabled() {
+      component.Toggle(false);
+      ArrayPush(off, component);
+    };
+    i += 1;
+  };
+}
+
+@if(!ModuleExists("Codeware"))
+public func BlockRenderSwitchOffMeshes(player: ref<GameObject>, everything: Bool) -> array<wref<IComponent>> {
+  let off: array<wref<IComponent>>;
+  return off;
+}
+```
+```swift
+// Our hits: a hit with no damage of its own from the attack record is marked DealNoDamage under n"no_valid_damage" before
+// Process, which would then skip DealDamages; that mark comes off. Any other reason stays: friendly fire, god mode, a dead
+// target. Any thread.
+@wrapMethod(DamageSystem)
+private final func Process(hitEvent: ref<gameHitEvent>, cache: ref<CacheData>) -> Void {
+  if BlockRenderNpcs.AmountOf(hitEvent.attackData) >= 0.00 {
+    hitEvent.attackData.RemoveFlag(hitFlag.DealNoDamage, n"no_valid_damage");
+  };
+  wrappedMethod(hitEvent, cache);
+}
+
+// The last step before the damage is applied, after every modifier. Our hit deals exactly its amount, as physical
+// damage, and BlockRender hears what it took off. A hit on V that BlockRender takes for Minecraft deals nothing. Any
+// thread.
+@wrapMethod(DamageSystem)
+private final func DealDamages(hitEvent: ref<gameHitEvent>) -> Void {
+  let target: ref<GameObject> = hitEvent.target;
+  let amount: Float = BlockRenderNpcs.AmountOf(hitEvent.attackData);
+  if amount >= 0.00 && IsDefined(target) && IsDefined(hitEvent.attackComputed) {
+    let stats: StatsObjectID = Cast<StatsObjectID>(target.GetEntityID());
+    let pools: ref<StatPoolsSystem> = GameInstance.GetStatPoolsSystem(target.GetGame());
+    let before: Float = pools.GetStatPoolValue(stats, gamedataStatPoolType.Health, false);
+    BlockRenderNpcs.SetDamage(hitEvent.attackComputed, amount);
+    wrappedMethod(hitEvent);
+    BlockRenderHitLanded(target.GetEntityID(), amount, before, pools.GetStatPoolValue(stats, gamedataStatPoolType.Health, false), 0);
+```
+```swift
+// Our hits start the whole pipeline where Hit marked them, Minecraft's damage x V's punch, split across damage types as
+// the attack splits its own; the pipeline then does to them all it does to V's own punches, from the spread and V's crits,
+// perks and cyberware to the NPC's armour, resistances, blocks and dodges. One it dealt nothing says why. Any thread.
+@wrapMethod(DamageSystem)
+private final func ProcessPipeline(hitEvent: ref<gameHitEvent>, cache: ref<CacheData>) -> Void {
+  let amount: Float = BlockRenderNpcs.AmountOf(hitEvent.attackData);
+  if amount < 0.00 || !IsDefined(hitEvent.attackComputed) {
+    wrappedMethod(hitEvent, cache);
+    return;
+  };
+  BlockRenderNpcs.StartAt(hitEvent.attackComputed, amount);
+  wrappedMethod(hitEvent, cache);
+  if hitEvent.attackData.HasFlag(hitFlag.DealNoDamage) && IsDefined(hitEvent.target) {
+    BlockRenderHitEnded(hitEvent.target.GetEntityID(), BlockRenderNpcs.WhyNoDamage(hitEvent.attackData));
+  };
+}
+
+// The last step before the damage is applied, after every modifier. Our hit is reported with what the pipeline made of
+// it, what it took off the NPC's health, and what the pipeline did to it. A hit on V that BlockRender takes for Minecraft
+// deals V nothing but what V's overshield takes; one the game won't let kill V stays V's. Any thread.
+@wrapMethod(DamageSystem)
+private final func DealDamages(hitEvent: ref<gameHitEvent>) -> Void {
+  let target: ref<GameObject> = hitEvent.target;
+  if IsDefined(target) && IsDefined(hitEvent.attackComputed) && BlockRenderNpcs.AmountOf(hitEvent.attackData) >= 0.00 {
+    let stats: StatsObjectID = Cast<StatsObjectID>(target.GetEntityID());
+    let pools: ref<StatPoolsSystem> = GameInstance.GetStatPoolsSystem(target.GetGame());
+    let before: Float = pools.GetStatPoolValue(stats, gamedataStatPoolType.Health, false);
+    let amount: Float = hitEvent.attackComputed.GetTotalAttackValue(gamedataStatPoolType.Health);
+    wrappedMethod(hitEvent);
+    BlockRenderHitLanded(target.GetEntityID(), amount, before, pools.GetStatPoolValue(stats, gamedataStatPoolType.Health, false),
+      BlockRenderNpcs.LandedFlags(hitEvent.attackData));
+```
+```swift
+    if total > 0.00 {
+```
+```swift
+    let pools: ref<StatPoolsSystem> = GameInstance.GetStatPoolsSystem(target.GetGame());
+    let shield: Float = MinF(total, MaxF(pools.GetStatPoolValue(Cast<StatsObjectID>(target.GetEntityID()), gamedataStatPoolType.Overshield, false), 0.00));
+    if total > shield {
+```
+```swift
+      if BlockRenderVHurt(total, EnumInt(hitEvent.attackData.GetAttackType()), from, false) {
+        BlockRenderNpcs.SetDamage(hitEvent.attackComputed, 0.00);
+```
+```swift
+      let nonLethal: Bool = hitEvent.attackData.HasFlag(hitFlag.CannotKillPlayer) || hitEvent.attackData.GetMinimumHealthPercent() > 0.00;
+      if BlockRenderVHurt(total - shield, EnumInt(hitEvent.attackData.GetAttackType()), from, nonLethal) {
+        BlockRenderNpcs.SetDamage(hitEvent.attackComputed, shield);
+```
+- [ ] **Step 2: Compile the module against the game's scripts, without and with Codeware**
+
+```bash
+cd /d/Cyberpunk-Minecraft/spikes/block-render && uv run --no-project python tools/check_reds.py E:/Cyberpunk2077 scripts | tail -1; \
+  echo "without Codeware: exit ${PIPESTATUS[0]}"; \
+  uv run --no-project python tools/check_reds.py E:/Cyberpunk2077 scripts E:/Cyberpunk2077/red4ext/plugins/Codeware/Scripts | tail -1; \
+  echo "with Codeware: exit ${PIPESTATUS[0]}"
+```
+Expected: `compiled`, `without Codeware: exit 0` and `with Codeware: exit 0`.
+
+- [ ] **Step 3: Check that the compile catches a slip: a wrap of a method that isn't there**
+
+```bash
+cd /d/Cyberpunk-Minecraft/spikes/block-render && mkdir -p build/reds-slip \
+  && sed 's/private final func ProcessPipeline(hitEvent/private final func ProcessPipelineX(hitEvent/' scripts/BlockRender.reds > build/reds-slip/BlockRender.reds \
+  && uv run --no-project python tools/check_reds.py E:/Cyberpunk2077 build/reds-slip; echo "exit: $?"
+```
+Expected: `[UNRESOLVED_METHOD]` at the wrap's line, then `failed` and `exit: 1`.
+
+- [ ] **Step 4: Check that the compile catches a slip in the parts for Codeware, only with Codeware**
+
+```bash
+cd /d/Cyberpunk-Minecraft/spikes/block-render && mkdir -p build/reds-slip \
+  && sed 's/= entity.GetComponents();/= entity.GetComponentsX();/' scripts/BlockRender.reds > build/reds-slip/BlockRender.reds \
+  && uv run --no-project python tools/check_reds.py E:/Cyberpunk2077 build/reds-slip | grep -E "^compiled|^failed|UNRESOLVED"; \
+  echo "without Codeware: exit ${PIPESTATUS[0]}"; \
+  uv run --no-project python tools/check_reds.py E:/Cyberpunk2077 build/reds-slip E:/Cyberpunk2077/red4ext/plugins/Codeware/Scripts \
+    | grep -E "^compiled|^failed|UNRESOLVED"; echo "with Codeware: exit ${PIPESTATUS[0]}"
+```
+Expected: `compiled` and `without Codeware: exit 0`; then redscript's `[UNRESOLVED_METHOD]` at the slip's line, `failed`
+and `with Codeware: exit 1`.
+
+- [ ] **Step 5: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "npcs-and-combat: the module starts our hits at the pipeline's entry and lets it do the rest, punches with V's unarmed slot, draws it and hides V for build mode, and leaves V's non-lethal hurts and overshield to V" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 27: `GameScript` calls the module's `Arm` and `HideV`, and reads whether V's unarmed weapon is drawn
+
+Both are found by their types once, with the others: `Arm(Bool) -> Int32` and `HideV(Bool) -> Int32`, through one
+shared call. `List`'s fourteenth field, `punchDrawn` (`Bool`), says whether V has its unarmed weapon drawn. The module
+must now be version 4: 10 functions, 14 fields, and seven natives.
+
+**Files:**
+- Modify: `src/GameScript.h`, `src/GameScript.cpp`
+
+- [ ] **Step 1: Edit `src/GameScript.h`**
+
+```cpp
+constexpr int32_t kModuleVersion = 3;  // BlockRenderNpcs.Version(), as this BlockRender needs it
+```
+```cpp
+constexpr int32_t kModuleVersion = 4;  // BlockRenderNpcs.Version(), as this BlockRender needs it
+```
+```cpp
+	float                        punch = 0.0f;  // V's punch, read from punchItem
+	std::string                  punchItem;
+```
+```cpp
+	float                        punch = 0.0f;  // V's punch, read from punchItem, what V's unarmed slot draws
+	std::string                  punchItem;
+	bool                         punchDrawn = false;  // V has it drawn, so hits carry it as their weapon
+```
+```cpp
+	// Combat (spike 6's "Part 2"). One of Minecraft's hits on the NPC aEntity, as V's: aAmount off its health, the strong
+	// attack if aStrong. The module's Hit says what became of it (link::HitResultName). Nothing, with aWhy saying why, if
+	// the module can't be called.
+	std::optional<int32_t> Hit(uint64_t aEntity, double aAmount, bool aStrong, std::string& aWhy);
+```
+```cpp
+	// Combat (spike 6's "Part 2"). One of Minecraft's hits on the NPC aEntity, as V's: aAmount where the game's damage
+	// pipeline starts it, the strong attack if aStrong. The module's Hit says what became of it (link::HitResultName).
+	// Nothing, with aWhy saying why, if the module can't be called.
+	std::optional<int32_t> Hit(uint64_t aEntity, double aAmount, bool aStrong, std::string& aWhy);
+	// V's unarmed weapon drawn (aOn), or V's own weapon put back: the module's Arm says how it went (1 asked, 2 nothing to
+	// ask, 0 V isn't found, -1 no unarmed weapon, -2 no equipment system).
+	std::optional<int32_t> Arm(bool aOn, std::string& aWhy);
+	// V's meshes hidden (aOn), or shown again: the module's HideV gives how many (-1 without Codeware, -2 V isn't found).
+	std::optional<int32_t> HideV(bool aOn, std::string& aWhy);
+```
+```cpp
+		kPunchReport,
+```
+```cpp
+		kPunchReport,
+		kArm,
+		kHideV,
+```
+```cpp
+		kPunchItem,
+		kVHealthMax,
+		kFields,
+	};
+```
+```cpp
+		kPunchItem,
+		kPunchDrawn,
+		kVHealthMax,
+		kFields,
+	};
+
+	// A member function of the module's taking a Bool and giving an Int32: Arm and HideV.
+	std::optional<int32_t> Switch(Function aFunction, const char* aName, bool aOn, std::string& aWhy);
+```
+- [ ] **Step 2: Edit `src/GameScript.cpp`**
+
+```cpp
+		{ "Punch", nullptr, {}, { "String" } },
+```
+```cpp
+		{ "Punch", nullptr, {}, { "String" } },
+		{ "Arm", nullptr, { { "Bool" } }, { "Int32" } },
+		{ "HideV", nullptr, { { "Bool" } }, { "Int32" } },
+```
+```cpp
+		{ "vHealthMax", "Float" },
+```
+```cpp
+		{ "punchDrawn", "Bool" },          { "vHealthMax", "Float" },
+```
+```cpp
+	list.punchItem = FieldOf<RED4ext::CString>(*fields_[kPunchItem], instance).c_str();
+```
+```cpp
+	list.punchItem = FieldOf<RED4ext::CString>(*fields_[kPunchItem], instance).c_str();
+	list.punchDrawn = FieldOf<bool>(*fields_[kPunchDrawn], instance);
+```
+```cpp
+	return result.c_str();
+}
+}
+```
+```cpp
+	return result.c_str();
+}
+
+std::optional<int32_t> GameScript::Arm(bool aOn, std::string& aWhy)
+{
+	return Switch(kArm, "Arm", aOn, aWhy);
+}
+
+std::optional<int32_t> GameScript::HideV(bool aOn, std::string& aWhy)
+{
+	return Switch(kHideV, "HideV", aOn, aWhy);
+}
+
+std::optional<int32_t> GameScript::Switch(Function aFunction, const char* aName, bool aOn, std::string& aWhy)
+{
+	if (const std::string& missing = Check(); !missing.empty())
+	{
+		aWhy = missing;
+		return std::nullopt;
+	}
+	const Strong system = SessionSystem(*functions_[kCurrent], *class_, aWhy);
+	if (!system)
+	{
+		return std::nullopt;
+	}
+	bool                 on = aOn;
+	int32_t              result = 0;
+	RED4ext::StackArgs_t args{ { nullptr, &on } };
+	if (!RED4ext::ExecuteFunction(system.GetPtr(), functions_[aFunction], &result, args))
+	{
+		aWhy = std::format("BlockRenderNpcs.{} failed", aName);
+		return std::nullopt;
+	}
+	return result;
+}
+}
+```
+- [ ] **Step 3: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `438 test(s), 0 failure(s)`.
+
+- [ ] **Step 4: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "npcs-and-combat: GameScript calls the module's Arm and HideV and reads whether V's unarmed weapon is drawn, from module version 4" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 28: The status says what V punches with and whether it's drawn, V's non-lethal hurts, and whether V is hidden
+
+- **The combat line** names what V's punch is read from, and says whether V has it drawn, or what hits skip without
+  it: `combat=on: V's punch 105.00 from Items.…, drawn; …`. Its hurts count those left to V as non-lethal. The last hit
+  says where it started and what was dealt, with what the pipeline did to it (written by Task 29).
+- **A new line, `v=`,** after the drive line: `hidden: 23 meshes switched off`; `shown, and hidden in build mode`; why
+  it can't be hidden; or `shown: set hidev is 0`.
+
+**Files:**
+- Modify: `src/Status.h`, `src/Status.cpp`, `tests/TestStatus.cpp`
+
+- [ ] **Step 1: Edit `tests/TestStatus.cpp`: the combat line, and the v line**
+
+```cpp
+	CHECK(Has(cpmc::FormatStatus(report), "combat=on: V's punch 102.00; hits 0 queued, 0 landed; V's hurts: 0 taken, 0 sent, 0 summed, 0 "
+	                                      "left to V; Immortal off; 0 deaths; Minecraft's player alive"));
+	link.hitsQueued = 5;
+	link.hitsLanded = 4;
+	link.hitsDropped = "1 not listed";
+	link.lastHit = "NPC 35 (NC Resident): 7.00 of Minecraft's damage, 714.00 of its health; landed, 1514 -> 800";
+```
+```cpp
+	CHECK(Has(cpmc::FormatStatus(report), "combat=on: V's punch 102.00, not drawn: hits skip the NPC's armour, weapon crits, stealth, "
+	                                      "blocks and skill XP; hits 0 queued, 0 landed; V's hurts: 0 taken, 0 sent, 0 summed, 0 left to V, "
+	                                      "0 non-lethal left to V; Immortal off; 0 deaths; Minecraft's player alive"));
+	link.punch = 105.0;
+	link.punchItem = "Items.mantis_blade";
+	link.punchDrawn = true;
+	link.hitsQueued = 5;
+	link.hitsLanded = 3;
+	link.hitsDropped = "1 dodged, 1 not listed";
+	link.lastHit = "NPC 35 (NC Resident): 7.00 of Minecraft's damage, started at 735.00, 612.40 dealt (critical, armour); 1514 -> 902";
+```
+```cpp
+	link.hurtsLeft = 7;
+```
+```cpp
+	link.hurtsLeft = 7;
+	link.hurtsNonLethal = 2;
+```
+```cpp
+	CHECK(Has(cpmc::FormatStatus(report), "combat=on: V's punch 102.00; hits 5 queued, 4 landed, dropped: 1 not listed; the last NPC 35 "
+	                                      "(NC Resident): 7.00 of Minecraft's damage, 714.00 of its health; landed, 1514 -> 800; V's "
+	                                      "hurts: 3 taken, 2 sent, 1 summed, 7 left to V; the last 45.0 of V's health (0.0987), 1.97 of "
+	                                      "Minecraft's 20, projectile (Ranged), from NPC 12; Immortal on; 1 deaths; Minecraft's player "
+	                                      "dead for 0.8 s; V's max health isn't read, so V's hurts aren't taken"));
+}
+```
+```cpp
+	CHECK(Has(cpmc::FormatStatus(report), "combat=on: V's punch 105.00 from Items.mantis_blade, drawn; hits 5 queued, 3 landed, dropped: 1 "
+	                                      "dodged, 1 not listed; the last NPC 35 (NC Resident): 7.00 of Minecraft's damage, started at "
+	                                      "735.00, 612.40 dealt (critical, armour); 1514 -> 902; V's hurts: 3 taken, 2 sent, 1 summed, 7 "
+	                                      "left to V, 2 non-lethal left to V; the last 45.0 of V's health (0.0987), 1.97 of Minecraft's "
+	                                      "20, projectile (Ranged), from NPC 12; Immortal on; 1 deaths; Minecraft's player dead for 0.8 "
+	                                      "s; V's max health isn't read, so V's hurts aren't taken"));
+}
+
+TEST(StatusWritesWhetherVIsHidden)
+{
+	cpmc::StatusReport report;
+	cpmc::LinkReport   link;
+	report.link = link;
+	std::string status = cpmc::FormatStatus(report);
+	CHECK(Has(status, "v=shown, and hidden in build mode"));
+	CHECK(status.find("drive=") < status.find("v=") && status.find("v=") < status.find("positions="));
+	link.vHidden = true;
+	link.vMeshes = 23;
+	report.link = link;
+	CHECK(Has(cpmc::FormatStatus(report), "v=hidden: 23 meshes switched off"));
+	link.vMeshes = -1;
+	report.link = link;
+	CHECK(Has(cpmc::FormatStatus(report), "v=shown: hiding V's meshes needs Codeware, which isn't installed"));
+	link.vMeshes = -2;
+	report.link = link;
+	CHECK(Has(cpmc::FormatStatus(report), "v=shown: V isn't found"));
+	link.hideV = false;
+	report.link = link;
+	CHECK(Has(cpmc::FormatStatus(report), "v=shown: set hidev is 0"));
+}
+```
+- [ ] **Step 2: Build; it must fail**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C" | sort -u | head -3
+```
+Expected: `error C2039: 'punchItem': is not a member of 'cpmc::LinkReport'`.
+
+- [ ] **Step 3: Edit `src/Status.h`**
+
+```cpp
+	uint32_t              minecraftFlags = 0;        // McState's
+```
+```cpp
+	uint32_t              minecraftFlags = 0;        // McState's
+	// V's meshes in build mode (spike 6's "Part 2")
+	bool    hideV = true;     // set hidev 1: hidden while build mode is on
+	bool    vHidden = false;  // they are now
+	int32_t vMeshes = 0;      // as the module's HideV last said: the meshes it switched off; -1 no Codeware; -2 V isn't found
+```
+```cpp
+	double                punch = 0.0;       // V's punch, as last read
+	uint64_t              hitsQueued = 0;    // Minecraft's hits made V's, and queued in the game
+	uint64_t              hitsLanded = 0;    // and dealt by its damage pipeline
+	std::string           hitsDropped;       // by reason: "2 not listed, 1 the NPC is dead"; empty: none
+	std::string           lastHit;           // the NPC, Minecraft's damage, the amount, and how it went
+```
+```cpp
+	double                punch = 0.0;       // V's punch, as last read
+	std::string           punchItem;         // what it's read from: what V's unarmed slot draws
+	bool                  punchDrawn = false;  // V has it drawn, so hits carry it as their weapon
+	uint64_t              hitsQueued = 0;    // Minecraft's hits made V's, and queued in the game
+	uint64_t              hitsLanded = 0;    // and dealt by its damage pipeline
+	std::string           hitsDropped;       // by reason, ours or the pipeline's: "2 not listed, 1 dodged"; empty: none
+	std::string           lastHit;           // the NPC, Minecraft's damage, where it started, and how it went
+```
+```cpp
+	uint64_t              hurtsLeft = 0;     // offered while not taken: left to V
+```
+```cpp
+	uint64_t              hurtsLeft = 0;     // offered while not taken: left to V
+	uint64_t              hurtsNonLethal = 0;  // offered while taken, but the game won't let them kill V: left to V
+```
+- [ ] **Step 4: Edit `src/Status.cpp`**
+
+```cpp
+// The ground's worker: how long a region took in the last second, of how many triangles, and how much of that time its
+```
+```cpp
+// V's meshes in build mode (spike 6's "Part 2"): hidden while build mode is on, unless set hidev is 0.
+std::string FormatV(const LinkReport& aLink)
+{
+	if (!aLink.hideV)
+	{
+		return "v=shown: set hidev is 0\n";
+	}
+	if (!aLink.vHidden)
+	{
+		return "v=shown, and hidden in build mode\n";
+	}
+	switch (aLink.vMeshes)
+	{
+	case -1:
+		return "v=shown: hiding V's meshes needs Codeware, which isn't installed\n";
+	case -2:
+		return "v=shown: V isn't found\n";
+	default:
+		return std::format("v=hidden: {} meshes switched off\n", aLink.vMeshes);
+	}
+}
+
+// The ground's worker: how long a region took in the last second, of how many triangles, and how much of that time its
+```
+```cpp
+	std::string out = std::format("combat=on: V's punch {:.2f}; hits {} queued, {} landed{}", aLink.punch, aLink.hitsQueued, aLink.hitsLanded,
+	                              aLink.hitsDropped.empty() ? "" : ", dropped: " + OneLine(aLink.hitsDropped));
+```
+```cpp
+	std::string out = std::format("combat=on: V's punch {:.2f}{}{}; hits {} queued, {} landed{}", aLink.punch,
+	                              aLink.punchItem.empty() ? "" : " from " + OneLine(aLink.punchItem),
+	                              aLink.punchDrawn ? ", drawn" : ", not drawn: hits skip the NPC's armour, weapon crits, stealth, blocks and skill XP",
+	                              aLink.hitsQueued, aLink.hitsLanded, aLink.hitsDropped.empty() ? "" : ", dropped: " + OneLine(aLink.hitsDropped));
+```
+```cpp
+	out += std::format("; V's hurts: {} taken, {} sent, {} summed, {} left to V", aLink.hurtsTaken, aLink.hurtsSent, aLink.hurtsSummed,
+	                   aLink.hurtsLeft);
+```
+```cpp
+	out += std::format("; V's hurts: {} taken, {} sent, {} summed, {} left to V, {} non-lethal left to V", aLink.hurtsTaken, aLink.hurtsSent,
+	                   aLink.hurtsSummed, aLink.hurtsLeft, aLink.hurtsNonLethal);
+```
+```cpp
+	out += FormatDrive(aLink);
+```
+```cpp
+	out += FormatDrive(aLink);
+	out += FormatV(aLink);
+```
+- [ ] **Step 5: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `439 test(s), 0 failure(s)`.
+
+- [ ] **Step 6: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "npcs-and-combat: the status says what V punches with and whether it's drawn, V's non-lethal hurts, and whether V is hidden" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 29: BlockRender 0.18.0 reports what the pipeline made of our hits, draws V's unarmed weapon for combat in build mode, and hides V there
+
+In the plugin, still 0.18.0, since 0.18.0 was never deployed:
+- **`Fight`** takes the inbox's landings, with where each hit started and what the pipeline dealt and did to it, and
+  its endings, counted with the hits not applied by their reason (`1 dodged`). A hit the game neither dealt nor said
+  anything about within 2 s is still counted as not dealt.
+- **`SwitchV`,** in `Fight` after V's god mode: V's unarmed weapon drawn while combat and build mode are on, asked again
+  each second until it's drawn (`VSwitch` with a 1 s refresh); V's meshes hidden while build mode is on and `set hidev`
+  is 1, hidden again every quarter second, so the weapon, once drawn, goes too. Each logged when what the module says
+  changes, the hiding with the time its call took: the first looks through V's whole inventory.
+- **`set hidev 0|1`,** on by default; `npcs` says whether V's unarmed weapon is drawn; the status gets what V punches
+  with, whether it's drawn, V's non-lethal hurts, and the v line.
+
+**Files:**
+- Modify: `src/Plugin.cpp`
+
+- [ ] **Step 1: Edit `src/Plugin.cpp`**
+
+```cpp
+// Minecraft's hits land on them as V's, and in build mode the game's hits on V go to Minecraft's player, whose death
+// kills V.
+```
+```cpp
+// Minecraft's hits land on them as V's, through the game's whole damage pipeline, and in build mode the game's hits on V
+// go to Minecraft's player, whose death kills V. In build mode V's meshes are hidden, and with combat on V's unarmed
+// weapon is drawn, so that hits carry it.
+```
+```cpp
+double                                g_vHealthMax = 0.0;
+```
+```cpp
+double                                g_vHealthMax = 0.0;
+std::string                           g_punchItem;           // what V's unarmed slot draws, which the punch is read from
+bool                                  g_punchDrawn = false;  // V has it drawn, so hits carry it as their weapon
+cpmc::link::VSwitch                   g_armed{ 1.0 };        // V's unarmed weapon, drawn while combat and build mode are on
+cpmc::link::VSwitch                   g_hidden{ 0.25 };      // V's meshes, hidden while build mode is on and hidev is 1
+bool                                  g_hideV = true;        // set hidev 0|1
+std::optional<int32_t>                g_lastArm;             // what Arm and HideV last said, so that a refresh logs a change
+std::optional<int32_t>                g_lastHide;
+int32_t                               g_vMeshes = 0;         // the meshes HideV has switched off
+```
+```cpp
+	double   amount = 0.0;
+```
+```cpp
+	double   amount = 0.0;  // where the pipeline starts it
+```
+```cpp
+	g_punch = g_npcList->punch;
+```
+```cpp
+	g_punch = g_npcList->punch;
+	g_punchItem = g_npcList->punchItem;
+	g_punchDrawn = g_npcList->punchDrawn;
+```
+```cpp
+// the module: Minecraft's damage x V's punch off the NPC's health.
+```
+```cpp
+// the module, starting the game's damage pipeline at Minecraft's damage x V's punch.
+```
+```cpp
+	g_lastHit = std::format("NPC {} ({}): {:.2f} of Minecraft's damage, {:.2f} of its health{}; queued", accepted->formId,
+	                        NpcName(accepted->formId), accepted->damage, accepted->amount, accepted->strong ? ", strong" : "");
+	Log("{}: {:.2f} of its health, {:.2f} x V's punch {:.2f}{}; queued", hit, accepted->amount, accepted->damage, g_punch,
+	    accepted->strong ? ", strong" : "");
+```
+```cpp
+	g_lastHit = std::format("NPC {} ({}): {:.2f} of Minecraft's damage, starting at {:.2f}{}; queued", accepted->formId,
+	                        NpcName(accepted->formId), accepted->damage, accepted->amount, accepted->strong ? ", strong" : "");
+	Log("{}: starting at {:.2f}, {:.2f} x V's punch {:.2f}{}{}; queued", hit, accepted->amount, accepted->damage, g_punch,
+	    accepted->strong ? ", strong" : "", g_punchDrawn ? "" : ", without V's weapon drawn");
+```
+```cpp
+// Spike 6's combat, after the link's update and before the NPCs are listed (its spec's "The frame"): Minecraft's hits and
+// deaths in the ring's order; our hits the game has dealt, and those it hasn't within kHitTrail; V's god mode; and
+// whether V's hurts are taken.
+```
+```cpp
+// What the module's Arm said, in words.
+std::string ArmWords(int32_t aResult, bool aOn)
+{
+	switch (aResult)
+	{
+	case 1:
+		return aOn ? "asked the game to draw V's unarmed weapon" : "asked the game for V's own weapon back";
+	case 2:
+		return aOn ? "V has it drawn" : "nothing to put back";
+	case 0:
+		return "V isn't found";
+	case -1:
+		return "V has no unarmed weapon";
+	case -2:
+		return "there's no equipment system";
+	default:
+		return std::format("result {}", aResult);
+	}
+}
+
+// What the module's HideV said, in words.
+std::string HideWords(int32_t aResult, bool aOn)
+{
+	switch (aResult)
+	{
+	case -1:
+		return "not done: hiding V's meshes needs Codeware, which isn't installed";
+	case -2:
+		return "not done: V isn't found";
+	default:
+		return std::format("{} meshes {}", aResult, aOn ? "switched off" : "switched on again");
+	}
+}
+
+// V's unarmed weapon, drawn while combat and build mode are on (spike 6's "V's weapon in build mode"), and V's meshes,
+// hidden while build mode is on (its "V unseen in build mode"): each through the module, logged when what it says changes.
+void SwitchV(bool aBuild, bool aVFound, double aNow)
+{
+	if (const std::optional<bool> arm = g_armed.Frame(g_combat && aBuild, aVFound, aNow))
+	{
+		std::string                  why;
+		const std::optional<int32_t> result = g_script.Arm(*arm, why);
+		if (!*arm || result != g_lastArm)
+		{
+			Log("combat: V's unarmed weapon {}: {}", *arm ? "drawn" : "put away", result ? ArmWords(*result, *arm) : "not done: " + why);
+		}
+		g_lastArm = *arm ? result : std::nullopt;
+	}
+	if (const std::optional<bool> hide = g_hidden.Frame(g_hideV && aBuild, aVFound, aNow))
+	{
+		std::string                  why;
+		const double                 start = cpmc::SteadySeconds();
+		const std::optional<int32_t> result = g_script.HideV(*hide, why);
+		const double                 ms = (cpmc::SteadySeconds() - start) * 1000.0;
+		if (!*hide || result != g_lastHide)
+		{
+			Log("build: V's meshes {}: {} ({:.2f} ms)", *hide ? "hidden" : "shown", result ? HideWords(*result, *hide) : "not done: " + why,
+			    ms);
+		}
+		g_lastHide = *hide ? result : std::nullopt;
+		g_vMeshes = *hide ? result.value_or(0) : 0;
+	}
+	else if (!g_hidden.On())
+	{
+		g_vMeshes = 0;
+	}
+}
+
+// Spike 6's combat, after the link's update and before the NPCs are listed (its spec's "The frame"): Minecraft's hits and
+// deaths in the ring's order; our hits the game has dealt, those it dealt nothing and why, and those it hasn't said
+// within kHitTrail; V's god mode, V's unarmed weapon and V's meshes; and whether V's hurts are taken.
+```
+```cpp
+		const double   damage = pending != g_pendingHits.end() ? pending->damage : 0.0;
+```
+```cpp
+		const double   damage = pending != g_pendingHits.end() ? pending->damage : 0.0;
+		const double   start = pending != g_pendingHits.end() ? pending->amount : 0.0;
+```
+```cpp
+		g_lastHit = std::format("NPC {} ({}): {:.2f} of Minecraft's damage, {:.2f} of its health; landed, {:.0f} -> {:.0f}", formId,
+		                        NpcName(formId), damage, landed.amount, landed.before, landed.after);
+		Log("hit on NPC {} landed: {:.2f} of its health, {:.0f} -> {:.0f}", formId, landed.amount, landed.before, landed.after);
+```
+```cpp
+		const std::string how = cpmc::link::LandedWords(landed.flags);
+		g_lastHit = std::format("NPC {} ({}): {:.2f} of Minecraft's damage, started at {:.2f}, {:.2f} dealt{}; {:.0f} -> {:.0f}", formId,
+		                        NpcName(formId), damage, start, landed.amount, how.empty() ? "" : " (" + how + ")", landed.before,
+		                        landed.after);
+		Log("hit on NPC {} landed: started at {:.2f}, {:.2f} dealt{}; its health {:.0f} -> {:.0f}", formId, start, landed.amount,
+		    how.empty() ? "" : " (" + how + ")", landed.before, landed.after);
+	}
+	for (const cpmc::CombatInbox::Ended& ended : cpmc::CombatReported().TakeEnded())
+	{
+		const auto pending = std::find_if(g_pendingHits.begin(), g_pendingHits.end(),
+		                                  [&](const PendingHit& aHit) { return aHit.entity == ended.target; });
+		const uint32_t formId = pending != g_pendingHits.end() ? pending->formId : g_actorIds.IdOf(ended.target).value_or(0);
+		if (pending != g_pendingHits.end())
+		{
+			g_pendingHits.erase(pending);
+		}
+		const std::string why = cpmc::link::HitEndedName(ended.why);
+		++g_hitDrops[why];
+		Log("hit on NPC {} dealt nothing: {}", formId, why);
+```
+```cpp
+		Log("hit on NPC {} ({:.2f} of its health) wasn't dealt by the game within {:.0f} s: friendly, invulnerable or dead by then",
+		    aHit.formId, aHit.amount, cpmc::link::kHitTrail);
+```
+```cpp
+		Log("hit on NPC {} (starting at {:.2f}) wasn't dealt by the game within {:.0f} s, nor said why", aHit.formId, aHit.amount,
+		    cpmc::link::kHitTrail);
+```
+```cpp
+	}
+	cpmc::CombatReported().SetTaking(g_combat && build && vFound && g_vHealthMax > 0.0);
+```
+```cpp
+	}
+	SwitchV(build, vFound, aNow);
+	cpmc::CombatReported().SetTaking(g_combat && build && vFound && g_vHealthMax > 0.0);
+```
+```cpp
+		return Report(g_combat ? "set combat 1: Minecraft's hits land on NPCs as V's; in build mode V is Immortal, the game's hits on V go "
+		                         "to Minecraft's player, and its death kills V"
+		                       : "set combat 0: Minecraft's hits are only logged, and V's health is V's");
+```
+```cpp
+		return Report(g_combat ? "set combat 1: Minecraft's hits land on NPCs as V's; in build mode V is Immortal with its unarmed weapon "
+		                         "drawn, the game's hits on V go to Minecraft's player, and its death kills V"
+		                       : "set combat 0: Minecraft's hits are only logged, and V's health is V's");
+	}
+	if (aRequest.what == "hidev")
+	{
+		if (aRequest.number != 0.0 && aRequest.number != 1.0)
+		{
+			return Report("set hidev: 1 hides V's meshes while build mode is on, so only Minecraft's view shows; 0 leaves V seen");
+		}
+		g_hideV = aRequest.number == 1.0;
+		return Report(g_hideV ? "set hidev 1: V's meshes are hidden while build mode is on" : "set hidev 0: V stays seen in build mode");
+```
+```cpp
+	Log("npcs: {} listed of {} in the world; V's punch {:.2f}, read from {}; V's max health {:.0f}", g_actorRecords.size(),
+	    g_npcList->attached, g_npcList->punch, g_npcList->punchItem, g_npcList->vHealthMax);
+```
+```cpp
+	Log("npcs: {} listed of {} in the world; V's punch {:.2f}, read from {}, {}; V's max health {:.0f}", g_actorRecords.size(),
+	    g_npcList->attached, g_npcList->punch, g_npcList->punchItem, g_npcList->punchDrawn ? "drawn" : "not drawn", g_npcList->vHealthMax);
+```
+```cpp
+	report.punch = g_punch;
+```
+```cpp
+	report.punch = g_punch;
+	report.punchItem = g_punchItem;
+	report.punchDrawn = g_punchDrawn;
+```
+```cpp
+	report.hurtsLeft = combat.refused;
+```
+```cpp
+	report.hurtsLeft = combat.refused;
+	report.hurtsNonLethal = combat.nonLethal;
+```
+```cpp
+	report.health = g_linked ? g_puppet.Health() : std::nullopt;  // once a second, so fall damage shows
+```
+```cpp
+	report.health = g_linked ? g_puppet.Health() : std::nullopt;  // once a second, so fall damage shows
+	report.hideV = g_hideV;
+	report.vHidden = g_hidden.On();
+	report.vMeshes = g_vMeshes;
+```
+- [ ] **Step 2: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `439 test(s), 0 failure(s)`.
+
+- [ ] **Step 3: Check that BlockRender imports nothing from PhysX**
+
+```bash
+DUMPBIN="$(ls "/c/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/"*/bin/Hostx64/x64/dumpbin.exe | head -1)"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && MSYS_NO_PATHCONV=1 "$DUMPBIN" -imports -nologo build\\RelWithDebInfo\\BlockRender.dll \
+  | grep -ci "physx"
+```
+Expected: `0`.
+
+- [ ] **Step 4: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "npcs-and-combat: BlockRender 0.18.0 reports what the pipeline made of our hits and why some dealt nothing, draws V's unarmed weapon for combat in build mode, and hides V there" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 30: The overlay shows whether V's unarmed weapon is drawn and whether V is hidden, and switches hidev
+
+The combat line's summary says whether V's unarmed weapon is drawn; the build line says whether V is hidden; and under
+"More controls", "V in build mode: Hidden" switches `set hidev`.
+
+**Files:**
+- Modify: `tools/blockrender_hud/init.lua`
+
+- [ ] **Step 1: Edit `tools/blockrender_hud/init.lua`**
+
+```lua
+-- combat), and a line each for the last request's reply, build mode (F8) and its drive, the bodies, the NPCs, combat,
+-- and V. Two folded sections hold the rest: "More controls" (the drawing mode, Minecraft's HUD, commands typed into
+-- Minecraft, the drive log, the ground and its shapes, the NPCs' list and V's punch) and "Full status" (every status
+-- line, and the frame time).
+```
+```lua
+-- combat), and a line each for the last request's reply, build mode (F8) with its drive and whether V is hidden, the
+-- bodies, the NPCs, combat, and V. Two folded sections hold the rest: "More controls" (the drawing mode, Minecraft's HUD,
+-- commands typed into Minecraft, the drive log, the ground and its shapes, the NPCs' list, V's punch, and V hidden or
+-- seen in build mode) and "Full status" (every status line, and the frame time).
+```
+```lua
+local combat = nil       -- the combat line: on or off; hits queued and landed; V's hurts; Immortal; Minecraft's death
+local combatOn = nil     -- whether Minecraft's hits land as V's and V's hurts go to Minecraft: "on" or "off"
+```
+```lua
+local combat = nil       -- the combat line: on or off; V's weapon drawn or not; hits queued and landed; V's hurts;
+                         -- Immortal; Minecraft's death
+local combatOn = nil     -- whether Minecraft's hits land as V's and V's hurts go to Minecraft: "on" or "off"
+local vLook = nil        -- the v line: V hidden in build mode, or seen and why
+local hideV = nil        -- whether V's meshes are hidden in build mode: "on" or "off"
+```
+```lua
+    combatOn = nil
+```
+```lua
+    combatOn = nil
+    vLook = nil
+    hideV = nil
+```
+```lua
+            turn = line:match("; turn (%a+),")
+```
+```lua
+            turn = line:match("; turn (%a+),")
+        end
+        local look = line:match("^v=(.*)$")
+        if look ~= nil then
+            vLook = look
+            hideV = look:match("^shown: set hidev is 0") and "off" or "on"
+```
+```lua
+            combatOn = combatState
+```
+```lua
+            combatOn = combatState
+            local drawn = line:match("^combat=on: V's punch [^;]*, (not drawn)") or line:match("^combat=on: V's punch [^;]*, (drawn)")
+```
+```lua
+            combat = combatState .. (hits and (", hits " .. hits) or "") .. (hurts and (", V's hurts " .. hurts) or "")
+                .. (immortal and (", Immortal " .. immortal) or "") .. (dead and (", Minecraft's player " .. dead) or "")
+```
+```lua
+            combat = combatState .. (drawn and (", V's weapon " .. drawn) or "") .. (hits and (", hits " .. hits) or "")
+                .. (hurts and (", V's hurts " .. hurts) or "") .. (immortal and (", Immortal " .. immortal) or "")
+                .. (dead and (", Minecraft's player " .. dead) or "")
+```
+```lua
+            ImGui.Text("Build mode (F8): " .. build .. (driveState and ("; drive " .. driveState) or ""))
+```
+```lua
+            ImGui.Text("Build mode (F8): " .. build .. (driveState and ("; drive " .. driveState) or "")
+                .. (vLook and ("; V " .. vLook) or ""))
+```
+```lua
+                    request("punch")
+                end
+            end
+        end
+```
+```lua
+                    request("punch")
+                end
+            end
+            if hideV ~= nil then
+                ImGui.Text("V in build mode:")
+                ImGui.SameLine()
+                if ImGui.Button((hideV == "on" and "Hidden" or "Seen") .. "###hidev") then
+                    request("set hidev " .. (hideV == "on" and 0 or 1))
+                end
+            end
+        end
+```
 - [ ] **Step 2: Check the overlay's syntax**
 
 ```bash
@@ -7114,25 +9245,33 @@ Expected: `ok`.
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
-  && git commit -q -m "npcs-and-combat: the overlay's combat line, its Combat button, and V's punch in the log" \
+  && git commit -q -m "npcs-and-combat: the overlay shows whether V's unarmed weapon is drawn and whether V is hidden, and switches hidev" \
        -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
 ```
 
 ---
 
-### Task 23: In the game: step 4
+### Task 31: In the game: step 4
 
 Step 4 of the spec's "The steps", with the user, on BlockRender 0.18.0 with `set combat 1`, linked to SkyCraft's
-Minecraft in the `CyberCraft` instance, its player in survival. The opening check comes first, with the least code: V's
-punch against the game's own number, one `hit` on an NPC with its health before and after, and one hit on V in build
-mode. Then fights, being shot at in build mode, and dying in Minecraft.
+Minecraft in the `CyberCraft` instance, its player in survival. The opening checks come first, with the least code, and
+settle what the review left to the game:
+- **what V punches with,** as the module reads it, against the game's own unarmed slot (V has Mantis Blades installed,
+  which step 2 saw at 105, so it should be them, not the fists' 102);
+- **build mode draws V's unarmed weapon and hides V,** and leaving it puts V's own weapon back and shows V again;
+- **one hit on an NPC lands as V's own does:** `hit N 1` starts at 1 × V's punch, and what the pipeline deals should be
+  in the same range as V's own strike with the same weapon on the same NPC; whether the NPC's health shows the change at
+  once;
+- **one hit on V in build mode.**
 
-FreeFly (F7) stays off. Note what you see as you go: Step 14 records it. If the game freezes, read the logs and the
+Then fights, being shot at in build mode, and dying in Minecraft.
+
+FreeFly (F7) stays off. Note what you see as you go: Step 15 records it. If the game freezes, read the logs and the
 newest folder in `%LOCALAPPDATA%\REDEngine\ReportQueue`, and force-close it only when the user asks. If a check fails,
 stop and find the cause with superpowers:systematic-debugging before going on. Fixes become new tasks.
 
-From Step 6 on, the hits V takes in build mode go to Minecraft's player, in survival: if its hearts run out, V dies
-too, and the game wants a load. Watch its hearts; if it dies early, that's Step 9's check, done early: note it, load the
+From Step 7 on, the hits V takes in build mode go to Minecraft's player, in survival: if its hearts run out, V dies
+too, and the game wants a load. Watch its hearts; if it dies early, that's Step 11's check, done early: note it, load the
 save on the pavement, link, and go on.
 
 These commands come back, as in step 2:
@@ -7180,51 +9319,76 @@ Ask the user to start the `CyberCraft` instance, then the game, and to wait at t
 compilation has failed" message box shows instead, ask the user to click OK and quit the game, and read redscript's log
 for why. Otherwise:
 ```bash
-grep -E "BlockRender|Compilation complete|ERROR" /e/Cyberpunk2077/r6/logs/redscript_rCURRENT.log; \
+grep -E "BlockRender|Codeware.Global|Compilation complete|ERROR" /e/Cyberpunk2077/r6/logs/redscript_rCURRENT.log; \
   L=$(ls -t /e/Cyberpunk2077/red4ext/logs | grep -i blockrender | head -1); grep -E "loaded|natives:" "/e/Cyberpunk2077/red4ext/logs/$L"
 ```
-Expected: the module's path among the files compiled, `Compilation complete`, and no `ERROR` line; in BlockRender's log,
-`BlockRender 0.18.0 loaded` and `natives: BlockRenderNpcAttached, BlockRenderNpcDetached, BlockRenderNpcCount,
-BlockRenderNpcAt, BlockRenderVHurt and BlockRenderHitLanded added`.
+Expected: the module's path and Codeware's among the files compiled, `Compilation complete`, and no `ERROR` line; in
+BlockRender's log, `BlockRender 0.18.0 loaded` and `natives: BlockRenderNpcAttached, BlockRenderNpcDetached,
+BlockRenderNpcCount, BlockRenderNpcAt, BlockRenderVHurt, BlockRenderHitLanded and BlockRenderHitEnded added`.
 
 - [ ] **Step 3: In the game: load, link, and combat on**
 
-Ask the user to load the save on the busy pavement and click Link. Then send `mc /gamemode survival`, and `set combat
-1` (or ask the user to click the overlay's `Combat: off`). Expected:
-- in the log, `module: found BlockRenderNpcs version 3, its 8 functions, the 13 fields List fills, and BlockRender's 6
+Ask the user to load the save on the busy pavement, with a gun drawn (weapon-wheel slot 1, 2 or 3), and click Link.
+Then send `mc /gamemode survival`, and `set combat 1` (or ask the user to click the overlay's `Combat: off`). Expected:
+- in the log, `module: found BlockRenderNpcs version 4, its 10 functions, the 14 fields List fills, and BlockRender's 7
   natives`, and `combat: V's Immortal off (the game says it already was)` once V is found;
-- in the status, `combat=on: V's punch 102.00; hits 0 queued, 0 landed; V's hurts: 0 taken, 0 sent, 0 summed, … left to
-  V; Immortal off; 0 deaths; Minecraft's player alive`, and in the overlay its `Combat:` line;
+- in the status, `combat=on: V's punch … from Items.…, not drawn: hits skip …; hits 0 queued, 0 landed; V's hurts: 0
+  taken, 0 sent, 0 summed, … left to V, 0 non-lethal left to V; Immortal off; 0 deaths; Minecraft's player alive`, and
+  `v=shown, and hidden in build mode`; in the overlay its `Combat:` line, `V's weapon not drawn`;
 - send `npcs`: an NPC with a capsule now reaches about 1.75 m above its position, `its top another's: radius …`
   (Task 13).
 
-- [ ] **Step 4: In the game: the opening check, V's punch**
+- [ ] **Step 4: In the game: the opening check, what V punches with**
 
-Send `punch`. Expected: `punch: V's punch 102.00, read from Items.w_melee_004__fists_a; quick hits with Attacks.…
-(Melee), strong ones with Attacks.… (StrongMelee); not drawn, so hits carry no weapon` (V's numbers as V has them). If
-either attack says `none`, `Hit` can't make hits (`-3`): stop, and a new task finds the attack another way. Then ask the
-user to turn the game's damage numbers on if they're off, holster V's weapon so V's fists are drawn, and, outside build
-mode, punch a ganger once (a civilian may call the police), and read the number the game shows. Send `punch` again.
-Expected: the game's number about V's punch (a hit varies by up to a tenth either way, and a crit is more), and now
-`drawn, so hits carry it as their weapon`.
+Send `punch`. Expected: `punch: V's punch …, read from Items.…; quick hits with Attacks.… (Melee), strong ones with
+Attacks.… (StrongMelee); not drawn, so hits carry no weapon, …` (V's numbers as V has them). V has Mantis Blades
+installed, which the inventory showed at 105 in step 2: if the game files them as a weapon, they're V's unarmed slot,
+and the item is theirs; otherwise it's `Items.w_melee_004__fists_a`, at 102. If either attack says `none`, `Hit` can't
+make hits (`-3`): stop, and a new task finds the attack another way. Then ask the user to pick weapon-wheel slot 4 (V's
+unarmed slot), and send `punch` again. Expected: the same item, now `drawn, so hits carry it as their weapon`, and the
+status's combat line `…, drawn; …`: the module's item is the one the game's own slot drew. If it says `not drawn`, the
+two disagree: stop, and find which item the slot drew. Ask the user to draw the gun again.
 
-- [ ] **Step 5: In the game: the opening check, one hit on an NPC**
+- [ ] **Step 5: In the game: the opening check, build mode draws V's unarmed weapon and hides V**
+
+Ask the user to press F8 on the pavement, with the gun drawn. Expected:
+- in the log, `combat: V's Immortal on`, `combat: V's unarmed weapon drawn: asked the game to draw V's unarmed weapon`,
+  and `build: V's meshes hidden: N meshes switched off (… ms)`, the time it took to look through V's inventory (note
+  it: a few milliseconds at most); within a second, `build: V's meshes hidden: M meshes switched off (… ms)`, M more
+  than N, once the drawn weapon's meshes are hidden too, and `combat: V's unarmed weapon drawn: V has it drawn` at the
+  next second's ask;
+- in the status, `combat=on: V's punch … drawn; …` and `v=hidden: M meshes switched off`;
+- on screen, Minecraft's view with nothing of V's: no hands, no blades or gun; looking down, no legs or feet; and no
+  shadow of V's. Ask the user to look around and down, and to say what they see of V, if anything.
+
+Then ask the user to press F8 again. Expected: `combat: V's unarmed weapon put away: asked the game for V's own weapon
+back`, `build: V's meshes shown: M meshes switched on again (… ms)`, and `combat: V's Immortal off`; V holds the gun again, and
+V's hands and legs show as before. Then send `set hidev 0`, ask the user to press F8 and look down, and F8 again: V is
+seen in build mode, its unarmed weapon drawn, and `v=shown: set hidev is 0`. Send `set hidev 1`.
+
+- [ ] **Step 6: In the game: the opening check, one hit on an NPC, as V's own**
 
 Send `npcs`, and pick a listed NPC near V who isn't a vendor, by its number `N` (a ganger is best: civilians and vendors
-may be friendly to V, and the game deals friendly hits nothing). Send `hit N 1`. Expected, in the log:
-- `hit on NPC N (…) for 1.00 of Minecraft's damage, knockback 0.40; unarmed: 102.00 of its health, 1.00 x V's punch
-  102.00; queued`;
-- then `hit on NPC N landed: 102.00 of its health, H -> H-102`: its health after is exactly its health before less the
-  amount, or 0;
-- the status's combat line `hits 1 queued, 1 landed`, the last `…; landed, H -> …`; and in the game, the NPC reacts.
+may be friendly to V, and the game deals friendly hits nothing). Ask the user to pick weapon-wheel slot 4, walk up to
+it, and, outside build mode, strike it once with V's own unarmed weapon, with the game's damage numbers on, and say the
+number it shows. It's in combat with V from then on. Then send `hit N 1`. Expected, in the log:
+- `hit on NPC N (…) for 1.00 of Minecraft's damage, knockback 0.40; unarmed: starting at P, 1.00 x V's punch P; queued`,
+  P being V's punch;
+- then either `hit on NPC N landed: started at P, X dealt (…); its health H -> H'`, with X in the same range as the
+  number V's own strike showed (the game spreads hits by a tenth either way, and a crit is more: the flags say
+  `critical`), and H' = H − X, or 0; or `hit on NPC N dealt nothing: …`, with why (`dodged`, `evaded`, `friendly to V`);
+  if it's that, send `hit N 1` again;
+- the status's combat line, `hits 1 queued, 1 landed` and the last hit as logged; and in the game, the NPC reacts.
 
-If the log says `wasn't dealt by the game within 2 s` instead, the hit didn't get through the damage pipeline: try a
-ganger; if none land, stop (the spec's risk 3). Then send `hit N 3 strong`, and note how the NPC reacts.
+If H' is H while X is over 0, the game applies the change after `DealDamages`: send `npcs` and read N's health there,
+and note it for the results. If the log says `wasn't dealt by the game within 2 s, nor said why` instead, the hit didn't
+get through the pipeline: try a ganger; if none land, stop (the spec's risk 3). Then send `hit N 3 strong`, and note how
+the NPC reacts, and what the landing says.
 
-- [ ] **Step 6: In the game: the opening check, one hit on V in build mode**
+- [ ] **Step 7: In the game: the opening check, one hit on V in build mode**
 
-Ask the user to find something that hits V (a ganger after a hit, or the hostile drone from step 2), press F8 near it,
-let it hit V once or twice, and press F8 again. Expected:
+Ask the user to find something that hits V (the ganger from Step 6, or the hostile drone from step 2), press F8 near
+it, let it hit V once or twice, and press F8 again. Expected:
 - in the log, `combat: V's Immortal on` as build mode starts, then `combat: V hurt, taken for Minecraft: <amount> of
   V's health (<share>), <x> of Minecraft's 20, <kind> (<attack type>), from NPC N`, and `combat: V's Immortal off` as it
   ends;
@@ -7232,56 +9396,66 @@ let it hit V once or twice, and press F8 again. Expected:
 - V's health unchanged (the status's drive line, `V's health …%`), and Minecraft's hearts down in its HUD;
 - the attack type names what hit V: check the kind against it (the spec's "To Minecraft, as `kInHurt`").
 
-- [ ] **Step 7: In the game: fights**
+- [ ] **Step 8: In the game: fights**
 
 Send `mc /item replace entity @s hotbar.0 with minecraft:diamond_sword`, `mc /item replace entity @s hotbar.1 with
 minecraft:diamond_axe`, `mc /item replace entity @s hotbar.2 with minecraft:bow` and `mc /item replace entity @s
 hotbar.3 with minecraft:arrow 64`, each once the last shows in the status's `request=` line; slot 5 stays empty, for
 fists. Ask the user to fight NPCs in build mode, gangers best, with the sword, the axe, the bow and fists, with jump
-attacks (crits) and sprint hits. Expected: `landed` lines for each hit; NPCs flinch, stagger on crits and sprint hits,
-fight back, and die; the game's XP comes; Minecraft's hearts drop as they hit back. Note how they react, and anything
-that doesn't land.
+attacks (Minecraft's crits) and sprint hits. Expected: `landed` lines for each hit, with what the pipeline did to it:
+`critical` now and then (V's crits, apart from Minecraft's), `armour` on armoured NPCs, `blocked` or `parried` when an
+NPC defends; some hits `dealt nothing: dodged` or `evaded`; NPCs flinch, stagger on Minecraft's crits and sprint hits,
+fight back, and die, the last landing `killed it`; the game's skill XP for V's unarmed weapon comes (Reflexes for
+blades, Body for fists and Gorilla Arms: `RPGManager.AwardExperienceFromDamage`); Minecraft's hearts drop as they hit
+back. Note how they react, and anything that doesn't land.
 
-- [ ] **Step 8: In the game: shot at in build mode**
+- [ ] **Step 9: In the game: shot at in build mode**
 
 Ask the user to stay in build mode in a gunfight a while. Expected: Minecraft's hearts drop in its HUD with each hit,
 V's health bar doesn't move, and the status's hurts count up, some summed.
 
-- [ ] **Step 9: In the game: dying in Minecraft kills V**
+- [ ] **Step 10: In the game: V's weapon when combat goes off in build mode**
+
+In build mode, send `set combat 0`. Expected: `combat: V's unarmed weapon put away: …` and `combat: V's Immortal off`;
+V stays hidden (`v=hidden: …`). Send `set combat 1`: the weapon is drawn and V is Immortal again.
+
+- [ ] **Step 11: In the game: dying in Minecraft kills V**
 
 Ask the user whether V may die now (it ends in the game's death screen, and a load), with `keep_inventory` as they chose
 in step 3; and if so, to let Minecraft's player die in build mode (or send `mc /kill @s`). Expected: `Minecraft's player
 died…; so V dies: V's health set to its least`; V dies in the game; Minecraft's player respawns at once. Then ask the
 user to load the last save and link again. Expected: `combat: V's Immortal off …` once V is found; outside build mode,
-a hit on V takes V's health.
+a hit on V takes V's health; V is seen, and holds what the save had.
 
-- [ ] **Step 10: In the game: the overlay, build mode and the bodies**
+- [ ] **Step 12: In the game: the overlay, build mode and the bodies**
 
 Ask the user to place a few blocks of stone in build mode and walk onto them, then leave build mode. Expected: as in
 step 2: the bodies line counts them, and V stands on them.
 
-- [ ] **Step 11: In the game: combat off, and unlinking**
+- [ ] **Step 13: In the game: combat off, and unlinking**
 
 Send `set combat 0`, then ask the user to click Unlink. Expected: `combat=off: Minecraft's hits are logged, not applied;
 V's health is V's`; then `none listed: not linked`.
 
-- [ ] **Step 12: Ask the user to quit the game and stop Minecraft**
+- [ ] **Step 14: Ask the user to quit the game and stop Minecraft**
 
-- [ ] **Step 13: Read the log once more**
+- [ ] **Step 15: Read the log once more**
 
 ```bash
-L=$(ls -t /e/Cyberpunk2077/red4ext/logs | grep -i blockrender | head -1); grep -E "module:|combat:|hit on NPC|punch:|Minecraft's player died" "/e/Cyberpunk2077/red4ext/logs/$L" | head -300
+L=$(ls -t /e/Cyberpunk2077/red4ext/logs | grep -i blockrender | head -1); grep -E "module:|combat:|build: V's|hit on NPC|punch:|Minecraft's player died" "/e/Cyberpunk2077/red4ext/logs/$L" | head -300
 ```
 Everything the steps above logged, for the results.
 
-- [ ] **Step 14: Record step 4's results in `docs/spikes/2026-10-05-npcs-and-combat-results.md`**
+- [ ] **Step 16: Record step 4's results in `docs/spikes/2026-10-05-npcs-and-combat-results.md`**
 
-A "Step 4" section: each check above with its outcome and numbers: V's punch against the game's number; the hit's
-health before and after; the hurt on V, its kind and share, and Minecraft's health; the fights (reactions, crits and
-sprint hits, return fire, deaths, XP); being shot at; the death and the load; and anything that surprised, and what it
-means for Part 3. Update the spike's answer at the top.
+A "Step 4" section: each check above with its outcome and numbers: what V punches with, against the game's unarmed
+slot; build mode's draw and what of V the user still saw; the hit's start, what the pipeline dealt and did to it, and
+V's own strike's number beside it; whether the NPC's health showed the change at once; the hurt on V, its kind and
+share, and Minecraft's health; the fights (flags, endings, reactions, crits and sprint hits, return fire, deaths, XP);
+being shot at; combat off in build mode; the death and the load; and anything that surprised, and what it means for
+Part 3. Update the spike's answer at the top.
 
-- [ ] **Step 15: Commit**
+- [ ] **Step 17: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add docs/spikes/2026-10-05-npcs-and-combat-results.md \
@@ -7291,17 +9465,18 @@ cd /d/Cyberpunk-Minecraft && git add docs/spikes/2026-10-05-npcs-and-combat-resu
 
 ---
 
-### Task 24: Close Part 2, and plan Part 3
+### Task 32: Close Part 2, and plan Part 3
 
 - [ ] **Step 1: Add "How Part 2 went" to this plan**
 
-At the end, after "Found while planning Part 2": what ran as written, what changed, and what steps 3 and 4 found.
+At the end, after "The deep review of Part 2": what ran as written, what changed, and what steps 3 and 4 found.
 
 - [ ] **Step 2: Plan Part 3**
 
-Use superpowers:writing-plans to add Part 3's tasks, from Task 25 on, to this plan: Minecraft's explosions in the game
+Use superpowers:writing-plans to add Part 3's tasks, from Task 33 on, to this plan: Minecraft's explosions in the game
 (the spec's "Part 3", and step 5). Verify them as Parts 1 and 2 were. Changes to the spec found while planning go in its
-"Changes while planning".
+"Changes while planning". A blast's hits now go through the whole damage pipeline too: Part 3's explosion hits start
+where `Hit` marks them, so the blast's own modifiers (`ExplosionResistance`, the distance curve) apply.
 
 - [ ] **Step 3: Commit**
 
@@ -7411,3 +9586,76 @@ The spec's "Changes while planning Part 2" records these too.
   for <damage> (<Minecraft damage> Minecraft): health <before> -> <after>`. Its script takes Minecraft's player out of
   the armour before the burst, so the burst's two sends are exactly 1 and 4.
 - **The module is version 3:** 8 functions, 13 fields, and six natives.
+
+## The deep review of Part 2
+
+On 2026-10-05, after Tasks 13 to 22 had run (to `eeef938`) and before step 4, the user asked for a deep review of Part
+2, naming one hole: V's damage is changed by much the plan didn't count. The spec's "Changes from the deep review of
+Part 2" says what was found and decided, and what was checked in the game's scripts; this records what it did to the
+plan.
+
+### What it found, most serious first
+
+1. **Task 18's `DealDamages` wrap threw away everything the game adds to V's punch.** It set our hit to exactly
+   Minecraft's damage × V's punch after the whole pipeline. Read in `damageSystem.swift` and `damageManager.swift`, that
+   pipeline gives V's punch its spread (× 0.9 to 1.1), V's crits (V's and the weapon's `CritChance` and `CritDamage`),
+   `AllDamageDonePercentBonus`, `MeleeDamagePercentBonus`, bonuses against enemies at full health, below half and
+   burning, against elites, rares, bosses and mechanicals, Berserk's melee bonus, the stealth bonus, story mode's
+   scaling, and every perk hooked in as a `ModifyDamageEffector`; and on the NPC's side `MeleeResistance`,
+   `DamageReductionMelee`, its `Armor`, mitigation, evasion, dodges, blocks and parries. All lost; a blocked hit, which
+   the game takes to 0, dealt it all; V's own crit roll still marked our hit critical. And `ApplyDamage`, after the wrap,
+   still capped bosses' hits, let an overshield take its part, and could leave an NPC at 1 health, so "exactly" didn't
+   hold either. (`ProcessLevelDifference` is never called in 2.31.) SkyCraft overwrites Skyrim's damage the same way,
+   which is where the design came from.
+2. **What V punches with:** step 2's open question, "Part 2 decides what V punches with when arm cyberware is
+   installed", never reached Part 2's tasks. The game's unarmed slot draws V's arm cyberware when V has it
+   (`GetMeleewareOrFistsItemID`), and holstering draws nothing: an attack while holstered draws the last weapon. With
+   V's Mantis Blades, Task 23's Step 4 (as it was) couldn't have found the fists drawn.
+3. **The hit's weapon object** was there only if the fists were drawn: never, for this V. The NPC's armour, the
+   weapon's crits, the stealth bonus, blocks, the skill XP from damage and weapon perks all skip a hit without one.
+4. **Task 18's `Process` wrap let dodged and evaded hits land:** `ProcessDodge`, `ProcessEvasion` and
+   `ProcessInstantKill` set `DealNoDamage` after `no_valid_damage`, and `AddFlag` keeps one entry a flag, so on our hits,
+   which had no damage of their own, their reason never went in, and the wrap's removal let the hit through. The spec had
+   said every other reason came first.
+5. **V's hurts:** a hit the game won't let kill V (`CannotKillPlayer`, a minimum health) could kill Minecraft's player,
+   and so V; V's overshield never took its part.
+6. **Step 4's checks:** the punch check compared the game's damage number, after every modifier, with the inventory's,
+   before any; the hit's check expected the NPC's health to fall by exactly the amount, at once.
+
+### What the user decided
+
+The game's whole pipeline for our hits, as for V's own punches; V's unarmed slot for what V punches with; V's unarmed
+weapon drawn automatically in build mode with combat on, and, at the user's request, V hidden in build mode, which the
+review found possible (Codeware's `GetComponents`, the game's `IComponent.Toggle`); and V's crit chance rolling on top
+of Minecraft's crits.
+
+### What changed in the plan
+
+- **New tasks, 23 to 30,** after Task 22, which had run: the plain C++ of what the pipeline did to our hits, V's
+  non-lethal hurts and V's switches (23); the inbox's endings and the natives (24); `check_reds.py` with Codeware's
+  scripts (25); the module, version 4 (26); `GameScript` (27); the status (28); the plugin's frame (29); the overlay
+  (30). They replace Task 18's `Process` wrap and exact amount; Tasks 13 to 22 stay as they ran.
+- **Step 4, now Task 31,** opens by checking what the review left to the game: what V punches with against the game's
+  slot; build mode drawing V's unarmed weapon and hiding V; `hit N 1` against V's own strike with the same weapon on the
+  same NPC; and whether the NPC's health shows the change at once. It gains a step for combat off in build mode.
+- **The close is Task 32,** and Part 3 starts at Task 33: its blast hits go through the whole pipeline too.
+- **BlockRender stays 0.18.0,** never deployed; the module is version 4.
+
+### What was checked
+
+- Every claim above was read in its source: the decompiled 2.31 scripts (`damageSystem.swift`, `damageManager.swift`,
+  `statPoolsManager.swift`, `attackData.swift`, `damageSystemHelper.swift`, `equipmentSystem.swift`,
+  `upperBodyTransitions.swift`, `statusEffectSystem.swift`, `rpgManager.swift`, `modifyDamageEffector.swift`,
+  `genericHitPrereq.swift` and its weapon conditions, `animationSystemForcedVisibilityManager.swift`, `orphans.swift`),
+  read from the raw files; the RED4ext SDK's mesh classes; Codeware's installed scripts; and SkyCraft's `ApplyHit`.
+- The installed redscript's `@if(ModuleExists("Codeware"))`, by compiling a probe both ways, with a broken line in its
+  Codeware branch.
+- Step 4 walked through with V as step 2 found it, and each expected log line checked against the code that writes it.
+- Tasks 23 to 30 as "Before you start" says: written and tested in a scratch clone, 22 mutations, then replayed from
+  this text in a fresh clone, every expectation met and the files identical.
+
+### Left to step 4
+
+Whether the start set at `ProcessPipeline`'s entry holds; whether the equipment system draws V's unarmed weapon while
+build mode places V; whether anything of V stays on screen when hidden, a shadow included; whether the Mantis Blades
+are what V's unarmed slot draws; and whether an NPC's health shows a hit's change at once.

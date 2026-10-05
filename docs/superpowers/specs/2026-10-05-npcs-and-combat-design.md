@@ -6,7 +6,8 @@ against its source and walked through each step as the user would play it: "Chan
 from the second deep review", at the end, list what changed and what was checked. The sections above them already include
 those changes. Planning Part 1 changed or settled more, which "Changes while planning" lists, as do step 2's first run
 ("Changes from step 2's first run") and planning Part 2 ("Changes while planning Part 2"); the sections above include
-those too.
+those too. A deep review of Part 2's plan, before step 4, changed how Minecraft's hits land, with the user's decisions:
+"Changes from the deep review of Part 2", at the very end, says what and why, and the sections above include it.
 
 ## Purpose
 
@@ -51,7 +52,9 @@ Each is tested against something real as soon as it's built (see "The steps").
 - **The numbers come from the game, not hand-tuned tables.** The user asked for research into what the game exposes,
   and for the NPC's real health and the damage V would really do:
   - a Minecraft hit does Minecraft's damage × V's punch, the damage per hit of what V punches with, and the NPC's real
-    health takes it;
+    health takes it. Since the deep review of Part 2, that's where the hit starts in the game's damage pipeline, which
+    then does to it all it does to V's own punches: V's crits, perks and cyberware, the NPC's armour, resistances,
+    blocks and dodges;
   - a hit on V costs Minecraft's player the same share of its 20 health as it would have cost V of V's max health.
 - **A redscript module for the game's side.** The user chose it over doing everything in C++ through RTTI, and over a
   CET Lua mod. The game's logic is written as the game's own scripts are, and checked against the game's declarations
@@ -199,12 +202,26 @@ From the decompiled 2.31 scripts; every function named here was read there.
   - `StatPoolsSystem.GetStatPoolValue(id, type, opt perc)` and `GetStatPoolMaxPointValue(id, type)`;
   - `GodModeSystem.HasGodMode(id, type)`, and `GameInstance.FindEntityByID(game, id) -> ref<Entity>`;
   - `EntityID.GetHash` gives 32 bits; an `EntityID` is a 64-bit hash.
-- **V's punch** (`cyberpunk/systems/equipmentSystem.swift`): what V punches with is the item in the `BaseFists`
-  equipment area. That's the base fists, `Items.w_melee_004__fists_a`, which the game gives V, or the Gorilla Arms while
-  they're installed: `HandleStrongArmsEquip` puts the arms' item there, and `EquipBaseFists` puts the fists back.
-  `EquipmentSystem.GetItemsInArea(owner, area) -> [ItemID]` (static) lists it. `TransactionSystem.GetItemData(obj,
-  itemID)` and `gameItemData.GetStatValueByType(gamedataStatType.EffectiveDamagePerHit)` read its damage per hit, the
-  number the inventory shows (`InventoryItem.swift`).
+- **V's punch** (`cyberpunk/systems/equipmentSystem.swift`): what V punches with is what V's unarmed slot draws,
+  weapon-wheel slot 4: `GetWeaponSlotItem(4)` is `GetMeleewareOrFistsItemID()`, V's arm cyberware weapon if V has one
+  (`EquipmentSystemPlayerData.GetActiveMeleeWare()`: the first item in the `ArmsCW` area whose category is a weapon),
+  otherwise the item in the `BaseFists` equipment area. That's the base fists, `Items.w_melee_004__fists_a`, which the
+  game gives V, or the Gorilla Arms while they're installed: `HandleStrongArmsEquip` puts the arms' item there, and
+  `EquipBaseFists` puts the fists back. Weapon cycling's bare-handed weapon is the same, and the fists alone are drawn
+  only under a quest's `Fists` restriction (`RequestFists`); holstered, an attack draws the last weapon used
+  (`upperBodyTransitions.swift`). `EquipmentSystem.GetItemsInArea(owner, area) -> [ItemID]` (static) lists an area, empty
+  slots included. `TransactionSystem.GetItemData(obj, itemID)` and
+  `gameItemData.GetStatValueByType(gamedataStatType.EffectiveDamagePerHit)` read its damage per hit, the number the
+  inventory shows (`InventoryItem.swift`): the item's own, before anything the damage pipeline adds.
+- **Drawing a weapon by script** (`statusEffectSystem.swift`'s `StatusEffectHelper.RequestFists` and its neighbours): an
+  `EquipmentSystemWeaponManipulationRequest`, with its `owner`, a `requestType` (`RequestWeaponSlot1` to `4`,
+  `UnequipWeapon`, …) and an `equipAnimType` (`Instant`), queued on `EquipmentSystem.GetInstance(owner)`; the equipment
+  system resolves the item (`GetItemIDfromEquipmentManipulationAction`) and asks the player's state machine to draw it.
+- **Hiding V:** `IComponent.Toggle(on)` and `IsEnabled()` are the game's own (`orphans.swift`), and every mesh V and its
+  items are drawn with (plain, skinned, garment and morph-target meshes) is an `IVisualComponent` (the RED4ext SDK's
+  classes). The game's scripts can't list an entity's components; Codeware's `Entity.GetComponents()` can (Codeware
+  1.19, installed). `TransactionSystem.GetItemList` and `GetItemInSlotByItemID` give the objects of what V wears and
+  holds.
 - **God mode and health:**
   - `GodModeSystem.AddGodMode(id, type, sourceInfo)` and `RemoveGodMode(id, type, sourceInfo)` keep each mode per
     source name: the game's menus add and remove `Invulnerable` on V under their own (`n"HubMenu"`, `n"WorldMap"`);
@@ -219,23 +236,42 @@ From the decompiled 2.31 scripts; every function named here was read there.
     `PreProcess`, `Process`, `ProcessHitReaction` (`target.ReactToHitProcess`) and `PostProcess`, with synchronous
     listener callbacks before each;
   - `PreProcess` runs `ConvertDPSToHitDamage`, `CalculateDamageVariants` (V's hits on NPCs × 0.9 to 1.1),
-    `CheckForQuickExit`, the god-mode checks and `DeathCheck`, then `ModifyHitData`, which marks a hit with no health
-    damage `DealNoDamage`, with the source name `n"no_valid_damage"`;
+    `CheckForQuickExit`, the god-mode checks and `DeathCheck`, then `ModifyHitData`. That runs
+    `DamageManager.ModifyHitData` (the NPC's block or parry, `ProcessDefensiveState`; the stealth flag when V isn't in
+    combat), then marks a hit with no health damage `DealNoDamage`, with the source name `n"no_valid_damage"`, and only
+    then `ProcessDamageReduction` (the NPC's `MeleeResistance`), `ProcessLocalizedDamage`, `ProcessInstantKill`,
+    `ProcessDodge`, `ProcessEvasion` and `ProcessMitigation`: the last three also give `DealNoDamage`, or cut the damage;
+  - **what the pipeline does to V's punch** (the deep review of Part 2): besides the spread, `Process` applies V's
+    bonuses against bosses, elites, rares and mechanicals, and Berserk's melee bonus
+    (`DamageManager.CalculateSourceModifiers`); V's crits, V's and the weapon's `CritChance` and `CritDamage` (`ProcessCriticalHit`,
+    `ProcessDamageMultipliers`); `AllDamageDonePercentBonus`, `MeleeDamagePercentBonus` and the bonuses against enemies
+    at full health, below half and burning (`ProcessCyberwareModifiers`); the stealth bonus (`ProcessStealthAttack`); the
+    NPC's `DamageReductionMelee` and `Armor`, at 1 ÷ (1 + armour × effectiveness) (`CalculateTargetModifiers`,
+    `ProcessArmor`); a block or parry, at × 0 (`ProcessBlockAndDeflect`); and story mode's scaling (`ScalePlayerDamage`).
+    Perks hook the pipeline too: `ModifyDamageEffector`s, behind hit prereqs registered as synchronous listeners at a
+    stage, `Process`'s by default (`genericHitPrereq.swift`). Armour, the weapon's crits, the stealth bonus, blocks, the
+    skill XP from damage (`RPGManager.AwardExperienceFromDamage`) and the prereqs that check a weapon all read the hit's
+    weapon object, and skip a hit without one. `ProcessLevelDifference` is never called in 2.31;
   - `CheckForQuickExit`: a hit on its own instigator without `CanDamageSelf` deals nothing and stops the pipeline
     there; a hit on someone friendly to its instigator deals nothing (`FriendlyFireIgnored`), unless it's flagged
     `FriendlyFire`;
   - `Process` returns at once for `DealNoDamage`. Otherwise it applies the modifiers, then special cases
     (`ProcessRagdollHit` sets an exact amount for ragdoll impacts), then `DealDamages`, the last step, which applies the
-    computed damage (`StatPoolsManager.ApplyDamage`) and sends the damage events;
+    computed damage (`StatPoolsManager.ApplyDamage`) and sends the damage events. `ApplyDamage` still changes it: bosses
+    and MaxTac take at most `MaxPercentDamageTakenPerHit` a hit; a target's overshield, then its armour pool, take
+    their part first; V's finisher perk can leave an NPC at 1 health for a finisher (`IsFinisherGrace`); a hit flagged
+    `CannotKillPlayer` leaves V 1 health; and a target's minimum health (`GetMinimumHealthPercent`, 1% when Immortal)
+    holds;
   - `gameHitEvent` holds `attackData`, `target`, `hitPosition`, `hitDirection`, `hitRepresentationResult` and
     `attackComputed`. `gameAttackComputed` has `GetTotalAttackValue(statPoolType)`, `SetAttackValue(value, opt
     damageType)` and `SetAttackValues`. `AttackData` has `SetAttackDefinition`, `SetInstigator`, `SetSource`,
     `SetWeapon`, `SetAttackType`, `SetHitReactionSeverityMin` and `Max`, `AddFlag(flag, sourceName)`,
     `RemoveFlag(flag, sourceName)` and `HasFlag`;
   - **one entry a flag:** `AddFlag` does nothing when the flag is already set (`attackData.swift`), so a flag keeps
-    its first source's name, and `RemoveFlag(flag, sourceName)` removes it only under that name. Every other reason
-    `PreProcess` gives `DealNoDamage` (friendly fire, an invulnerable target, a dead one) comes before `ModifyHitData`
-    sets `n"no_valid_damage"`;
+    its first source's name, and `RemoveFlag(flag, sourceName)` removes it only under that name. Friendly fire, an
+    invulnerable target and a dead one give `DealNoDamage` before `ModifyHitData` sets `n"no_valid_damage"`, but instant
+    kills, dodges and evasion give it after, so on a hit already marked `no_valid_damage` theirs never goes in (the
+    deep review of Part 2 found this; the spec first said every other reason came before);
   - **hits made by script:** `SendHitEvent` (`triggerAttackOnNearbyEnemiesEffector.swift`) builds one: an
     `AttackInitContext` (record, instigator, source, weapon), `IAttack.Create`, a `gameHitEvent` with a new
     `AttackData`, its target, and a hit shape at the hit's position, then `QueueHitEvent`.
@@ -329,8 +365,9 @@ docs/superpowers/specs/2026-10-05-npcs-and-combat-design.md   this file
 docs/superpowers/plans/2026-10-05-npcs-and-combat.md          the plan, written part by part
 docs/spikes/2026-10-05-npcs-and-combat-results.md             the results
 spikes/block-render/
-  scripts/BlockRender.reds   the redscript module: the NPC list, hits, V's damage, god mode, V's death, explosions
-  tools/check_reds.py        the module compiled offline against the game's own scripts
+  scripts/BlockRender.reds   the redscript module: the NPC list, hits, V's damage, god mode, V's death, V's weapon and
+                             look in build mode, explosions
+  tools/check_reds.py        the module compiled offline against the game's own scripts, with and without Codeware's
   src/GameScript.*           the module's calls from C++, each found and checked by name and type once
   src/Natives.*              BlockRender's natives, which the module's wraps and List call
   src/NpcRegistry.*          the NPCs the wraps report, in attach order, behind a lock (pure)
@@ -465,8 +502,10 @@ and name, Minecraft's damage, the flags and the weapon class.
 - **Which hits:** a `kEvHitActor` whose formId was listed in the last 2 s (a hit can trail its stand-in's removal), with
   damage that's finite and over 0. A hit with only knockback is skipped. The damage is capped at 1,000, since `/kill`
   on a stand-in sends 3.4 × 10³⁸.
-- **The amount:** Minecraft's damage × V's punch.
+- **Where it starts:** Minecraft's damage × V's punch.
 - **Strong:** a crit, or knockback over 0.45, as SkyCraft staggers; the rest are quick.
+- **What V punches with:** what V's unarmed slot draws: V's arm cyberware weapon if it has a melee attack to make hits
+  with, otherwise the fists or Gorilla Arms (`BaseFists`). V's punch is its damage per hit, the inventory's number.
 - **The hit** (the module's `Hit`):
   - the NPC is found again by `FindEntityByID`; if it's gone or dead, the hit is dropped and counted;
   - it's built as `SendHitEvent` builds one: an attack from V, as its instigator and source, with the attack record of
@@ -476,17 +515,25 @@ and name, Minecraft's damage, the flags and the weapon class.
     the NPC as its target; its position at the NPC's middle, with a hit shape there; its direction from V; then
     `QueueHitEvent`;
   - it's marked as ours on the hit itself, before it's queued: `hitFlag.None` under the source name `n"BlockRender
-    <amount>"`, as the game marks its environment's attacks with `hitFlag.None` and a source name. The pipeline's wraps
-    read the mark and the amount back from the hit, on whichever thread runs the pipeline, so nothing keeps the hit by
-    reference. BlockRender counts a hit the game hasn't dealt within 2 s as not dealt: friendly, invulnerable or dead by
-    then.
-- **Its amount, in the pipeline:**
-  - **`Process` is wrapped:** for our hits, a `DealNoDamage` marked `n"no_valid_damage"` (a hit with no damage of its
-    own) is taken off. Any other reason is kept: friendly fire, god mode, a dead target;
-  - **`DealDamages` is wrapped:** for our hits, every damage type is set to 0 and then physical damage to our amount,
-    after every modifier, and BlockRender hears the NPC's health before and after (`BlockRenderHitLanded`). The game's
-    own steps run around it: its hit reaction, death and ragdoll, the XP, the police.
-- **The status** keeps the last hit: the NPC, Minecraft's damage, the amount, and the NPC's health before and after.
+    <start>"`, as the game marks its environment's attacks with `hitFlag.None` and a source name. The pipeline's wraps
+    read the mark back from the hit, on whichever thread runs the pipeline, so nothing keeps the hit by reference.
+- **In the pipeline, as V's own punch:**
+  - **`ProcessPipeline` is wrapped,** the pipeline's entry, before even its first stage's callbacks: our hit's damage is
+    set to its start, split across damage types as the attack splits its own (all physical when it has none, as without
+    a weapon). Everything the pipeline does to V's punches then applies (the game's scripts' "what the pipeline does to
+    V's punch"): the spread, V's crits, perks, cyberware and Berserk, the stealth bonus, story mode; the NPC's
+    resistances, armour, mitigation, evasion, dodges, blocks and parries; and `ApplyDamage`'s caps, overshield and
+    finisher grace. A Minecraft crit is already in Minecraft's damage, and V's crit chance rolls on top: the user's
+    choice, since the one is the swing and the other V's build. After the pipeline, a hit it dealt nothing reports why
+    (`BlockRenderHitEnded`), from its `DealNoDamage` flag's source name: friendly to V, invulnerable, already dead,
+    dodged, evaded, killed at once;
+  - **`DealDamages` is wrapped:** for our hits it reports what the pipeline made of the hit, after every modifier, the
+    NPC's health before and after, and what the pipeline did to it: critical, blocked, parried, the NPC's armour,
+    mitigated, killed it (`BlockRenderHitLanded`). The game's own steps run around it: its hit reaction, death and
+    ragdoll, the XP, the police;
+  - BlockRender counts a hit the game neither dealt nor said anything about within 2 s as not dealt.
+- **The status** keeps the last hit: the NPC, Minecraft's damage, where it started, what was dealt and what the pipeline
+  did to it, and the NPC's health before and after; and the hits not applied by reason, ours and the pipeline's.
 
 ### The game's hits on V
 
@@ -496,6 +543,12 @@ and name, Minecraft's damage, the flags and the weapon class.
   (`BlockRenderVHurt`): the amount, the attack type and the instigator's `EntityID`. BlockRender takes it, behind a lock,
   while combat and build mode are on, V is found and V's max health is read; one it doesn't take is V's, so none is lost
   on its way.
+- **V's overshield and the game's non-lethal hits** (the deep review of Part 2): the part of a hit V's overshield would
+  take stays in the game, and drains the overshield, so only the rest, what V's health would have lost, is offered. A
+  hit the game won't let kill V (`CannotKillPlayer`, or a minimum health left) is offered as non-lethal, and stays V's:
+  sent to Minecraft, it could kill Minecraft's player, and so V. The status counts those apart.
+- **Two armours:** a hit's share is what it would cost V after V's armour, and Minecraft's armour then reduces it again
+  for melee and projectile hits from an attacker in range. SkyCraft does the same (it measures the health Skyrim took).
 - **Immortal**, under our own source name, stays on meanwhile, as SkyCraft's essential flag does: a backstop if a hit
   on V gets past the wrap. Health taken outside the pipeline isn't caught at all; the status shows V's health in build
   mode, so it would be seen.
@@ -537,12 +590,29 @@ and name, Minecraft's damage, the flags and the weapon class.
   it.
 - Only ever added and removed under our source name, `n"BlockRender"`, and never touched at unload.
 
+### V's weapon and look in build mode
+
+The deep review of Part 2 added these, at the user's choice.
+- **V's unarmed weapon, drawn:** while combat and build mode are both on, the module draws what V's unarmed slot draws
+  (`Arm`): the equipment system's request for weapon-wheel slot 4, at once (`Instant`), asked again each second until it's
+  drawn. So hits carry it as their weapon, as V's own punches do: the NPC's armour, the weapon's crits, the stealth
+  bonus, blocks, the skill XP and the perks that check the weapon all need it. When either ends, V's own weapon is put
+  back: the wheel slot it was in, or holstered if V held nothing, or something not on the wheel. A load starts V as its
+  save left it.
+- **V hidden:** while build mode is on, with `set hidev 1` (the default), every visual component of V's, and of each item
+  V wears and holds, that's on is switched off and remembered (`HideV`), again every quarter second so that what appears
+  meanwhile, the drawn weapon, goes too; when build mode ends, exactly those are switched on again, so what the game had
+  off stays off. Build mode then shows only Minecraft's view: no hands, no weapon, no legs, no shadow of V's. Codeware
+  lists the components; the module's parts that use it compile only where it's installed
+  (`@if(ModuleExists("Codeware"))`), and without it V just isn't hidden, and the status says why.
+
 ### Combat on and off
 
-- `set combat 0|1`, off until step 4 passes. Off, hits are logged and not applied, as in Part 1; V's damage is V's; and
-  there's no god mode.
+- `set combat 0|1`, off until step 4 passes. Off, hits are logged and not applied, as in Part 1; V's damage is V's;
+  there's no god mode; and V's unarmed weapon isn't drawn.
 - `hit <id> <damage> [strong]` acts as if Minecraft hit that NPC for `<damage>` of Minecraft's, for step 4's opening
-  check. `punch` logs V's punch and what it's read from.
+  check. `punch` logs V's punch, what it's read from, the attack records, and whether V has it drawn.
+- `set hidev 0|1` keeps V seen in build mode (0), or hides it (1).
 
 ## Part 3: explosions
 
@@ -622,13 +692,16 @@ Then:
 ### Step 4: in the game, combat (Part 2)
 
 BlockRender 0.18.0, with `set combat 1`, and Minecraft's player in survival. The opening check:
-- V's punch as read, against the damage number a real punch shows, with the game's damage numbers on;
-- `hit` on an NPC: its health before and after, the amount exact;
+- what V punches with, as the module reads it, against what the game's unarmed slot draws (V has Mantis Blades);
+- build mode draws V's unarmed weapon and hides V, and leaving it puts V's own weapon back and shows V;
+- `hit N 1` on an NPC lands as V's own strike with the same weapon does, on the same NPC, with the game's damage numbers
+  on: what the pipeline deals in the same range, and its health before and after (and whether the change shows at once);
 - one hit on V in build mode: V's health unchanged, Minecraft's down by the share.
 
 Then:
-- fights with a sword, an axe, a bow and fists: flinches, staggers on crits and sprint hits, NPCs fighting back,
-  deaths and XP;
+- fights with a sword, an axe, a bow and fists: flinches, staggers on crits and sprint hits, what the pipeline does
+  (V's crits, the NPC's armour, blocks, dodges), NPCs fighting back, deaths and XP;
+- combat off in build mode: V's own weapon back, V still hidden;
 - shot at in build mode: Minecraft's hearts drop in the HUD, and V's health bar doesn't move;
 - dying in Minecraft kills V, with `keep_inventory` as the user chose in step 3; after the load, V isn't Immortal: a
   hit outside build mode takes V's health.
@@ -654,22 +727,26 @@ plugin's folder or the overlay's. The new commands:
 |---|---|
 | `set npcs 0\|1` | NPCs into the actor table (1) |
 | `npcs` | Logs V's punch and max health; every listed NPC: ID, name, distance, size and where it came from, health, level, flags; and how many NPCs `GetTargetParts` finds within 80 m, with those the list lacks |
-| `set combat 0\|1` | Minecraft's hits on NPCs, the game's hits on V to Minecraft, V's god mode, deaths and blasts (0 until step 4 passes) |
+| `set combat 0\|1` | Minecraft's hits on NPCs, the game's hits on V to Minecraft, V's god mode and unarmed weapon, deaths and blasts (0 until step 4 passes) |
 | `hit <id> <damage> [strong]` | As if Minecraft hit NPC `<id>` for `<damage>` |
-| `punch` | Logs V's punch, and what it's read from |
+| `punch` | Logs V's punch, what it's read from, the attack records, and whether V has it drawn |
+| `set hidev 0\|1` | V's meshes hidden in build mode (1, the default) or seen (0) |
 | `explode <metres> <radius>` | A blast that far ahead of V, as if it were Minecraft's |
 
-The overlay gains the NPC and combat lines, and two buttons, NPCs and Combat; and, under "More controls", one that
-sends `npcs`.
+The overlay gains the NPC and combat lines, and two buttons, NPCs and Combat; and, under "More controls", ones that
+send `npcs` and `punch`, and one that switches `set hidev`. Its build line says whether V is hidden.
 
 ## Measurements and the status
 
 - **NPCs:** on or off; listed, of how many in the world; the nearest (distance, name); capsules found; IDs given; the
   module's time a frame, on average and at worst; and why not, if the module isn't found.
-- **Combat:** on or off; V's punch; hits queued, landed, and dropped by reason; the last hit (the NPC, Minecraft's
-  damage, the amount, its health before and after); V's hurts taken, sent, summed and left to V, and the last (amount,
-  share, Minecraft's damage, kind, attack type, attacker); Immortal on or off; deaths; Minecraft's player dead, and for
-  how long; and why combat can't do all it should, while it can't.
+- **Combat:** on or off; V's punch, what it's read from, and whether V has it drawn, or what hits skip without it; hits
+  queued, landed, and not applied by reason, ours and the pipeline's; the last hit (the NPC, Minecraft's damage, where
+  it started, what was dealt and what the pipeline did to it, its health before and after); V's hurts taken, sent,
+  summed, left to V and left to V as non-lethal, and the last (amount, share, Minecraft's damage, kind, attack type,
+  attacker); Immortal on or off; deaths; Minecraft's player dead, and for how long; and why combat can't do all it
+  should, while it can't.
+- **V's look:** hidden in build mode, with the meshes switched off; or seen, and why.
 - **Blasts:** how many; the last (centre, reach, NPCs within it, blast hits).
 - **Frame rates:** with NPCs and combat on and off.
 
@@ -689,7 +766,12 @@ sends `npcs`.
   `EntityID` is found again (`FindEntityByID`) before every use.
 - **V's god mode:** only under our source name, and removed whenever build mode ends, combat goes off, or V is found
   again.
-- **Off by default:** combat, until step 4 passes. NPCs are on, since listing them changes nothing in the game.
+- **V's weapon and meshes:** V's own weapon is put back when combat or build mode ends; only the meshes the module
+  switched off are switched on again; neither is saved, so a load starts V as its save left it.
+- **Codeware is optional:** the module's parts that use it compile only where it's installed, so a missing Codeware
+  can't fail the compile that every mod's scripts share (risk 9); `check_reds.py` compiles the module both ways.
+- **Off by default:** combat, until step 4 passes. NPCs are on, since listing them changes nothing in the game. Hiding V
+  is on, since it changes only what's drawn, and only in build mode.
 - **Builds:** a deploy runs only when `tasklist` shows no `Cyberpunk2077.exe`.
 
 ## Error handling
@@ -701,6 +783,9 @@ sends `npcs`.
 - **V's max health can't be read:** hurts aren't sent, and the status says why.
 - **V doesn't die on `kEvPlayerDied`,** say from another god mode or in a scene: logged.
 - **The input ring is full:** the hurt waits for the next frame, and is counted.
+- **V's unarmed weapon can't be drawn** (no unarmed weapon, a place where the game restricts weapons): logged, asked
+  again each second, and the status says the weapon isn't drawn, and what hits skip without it.
+- **Codeware isn't installed:** V isn't hidden, and the status says why.
 
 ## Testing
 
@@ -718,6 +803,9 @@ sends `npcs`.
   and attacker; death's 2-second window; god mode on and off, whichever of build mode and combat comes on first, and off
   once when V is found again; the combat inbox (taking only while told to, at most 256 waiting, and eight threads at
   once); the box's top from the tallest capsule; `mclink`'s `hurt`; `hit` and `punch`; and the status's combat line.
+  Since the deep review of Part 2: what the pipeline did to our hits and why it dealt some nothing, in words; the inbox's
+  endings and non-lethal hurts; V's switches for its weapon and meshes (on, off, refreshed, and lost with V); and the
+  status's v line.
 - **Part 3:** the blast window (0.15 s, the reach) and the centre in world axes.
 
 ### `mclink`
@@ -735,9 +823,10 @@ Steps 2, 4 and 5. The module's code runs only in the game.
 1. **BlockRender can't call the module, or read what it fills.** Step 2's opening check comes first. The fallback is a
    global script function, found as `Puppet` finds `GetMountedVehicle`.
 2. **The wraps miss NPCs,** such as ones attached before the module's system was made. `GetTargetParts` replaces them.
-3. **Our hit doesn't land with its amount:** it might not reach `DealDamages`, or might need V's fists drawn as its
-   weapon. Step 4's opening check tries it. The last resort is taking the amount off the NPC's health directly
-   (`RequestChangingStatPoolValue`), which loses the hit reaction.
+3. **Our hit doesn't land as V's own:** it might not reach `DealDamages`, or the start set at the pipeline's entry might
+   not hold, if the game filled the hit's damage in later. Step 4's opening check compares it with V's own strike on the
+   same NPC. The last resort is taking the amount off the NPC's health directly (`RequestChangingStatPoolValue`), which
+   loses the hit reaction and every modifier.
 4. **Scripted hits don't make NPCs react or fight back.** Accepted if the damage lands; the attack's hit reaction
    severity can be set (`SetHitReactionSeverityMin` and `Max`).
 5. **Something takes V's health outside the pipeline.** That damage stays on V, and isn't sent to Minecraft; the status
@@ -760,7 +849,15 @@ Steps 2, 4 and 5. The module's code runs only in the game.
 13. **A hit that deals no damage doesn't knock NPCs down** (Part 3): the fallback above.
 14. **Accepted limits:** Minecraft's armour doesn't reduce hits from attackers more than 24 blocks away, or blasts;
     Minecraft's player walks through NPCs, and can hit a driver through a car, since cars aren't solid for Minecraft;
-    NPCs walk through blocks.
+    NPCs walk through blocks. Minecraft's arrows land as V's melee hits, so an NPC's melee block and resistance apply to
+    them too, and its facing against V's decides a block, not Minecraft's player's.
+15. **V's unarmed weapon isn't drawn in build mode,** where V is placed by teleports every frame, or the game refuses it
+    there. Step 4's opening check sees it in `punch` and the status; without it, hits still land, but skip the NPC's
+    armour, the weapon's crits, stealth, blocks and the skill XP, and the status says so.
+16. **Hiding V misses something, or switching meshes off has a side effect** (V's shadow, a visual the game needs on).
+    Step 4's opening check looks around and down in build mode, and back out of it; `set hidev 0` turns it off.
+17. **The NPC's health shows a hit's change only later,** if the game applies the drain after `DealDamages`. Step 4
+    reads the health again with `npcs`.
 
 ## Found while writing
 
@@ -942,7 +1039,8 @@ sections above include the fixes.
 
 ## Changes while planning Part 2
 
-Part 2's plan (`docs/superpowers/plans/2026-10-05-npcs-and-combat.md`, Tasks 13 to 24) changed or settled these, with
+Part 2's plan (`docs/superpowers/plans/2026-10-05-npcs-and-combat.md`, Tasks 13 to 24 as first planned; the deep review
+of Part 2 later added Tasks 23 to 30, which made step 4 and the close Tasks 31 and 32) changed or settled these, with
 what steps 1 and 2 found. The sections above already include them.
 - **Our hits are marked on the hit itself,** `hitFlag.None` under `n"BlockRender <amount>"`, not recorded by reference:
   the game marks its environment's attacks the same way (`environmentDamageSystem.swift`), and `AttackData.GetFlags()`
@@ -964,3 +1062,93 @@ what steps 1 and 2 found. The sections above already include them.
 - **The module is version 3,** with `Hit`, `SetImmortal`, `KillV` and `Punch`, and BlockRender has six natives.
 - **Step 3's checks** read SkyCraft's own line for each hurt, `SkyCraft: Skyrim hit the player for <damage> (<Minecraft
   damage> Minecraft): health <before> -> <after>` (`SkyCombat.hurtPlayer`).
+
+## Changes from the deep review of Part 2
+
+After Part 2's Tasks 13 to 22 had run, and before step 4, the user asked for a deep review of Part 2's plan, naming one
+hole: V's damage is changed by much the plan didn't count. The review read the damage pipeline end to end in the
+decompiled 2.31 scripts, and the equipment and player state machine's code; walked step 4 through as the user would
+play it, with V as step 2 found V (Mantis Blades installed, a punch of 102 from the fists, 456 max health); and checked
+the plan's claims against their sources. The user then decided four questions. The sections above include the outcome;
+the plan's "The deep review of Part 2" lists what was checked, and its Tasks 23 to 30 make the changes.
+
+### What the review found
+
+1. **V's damage lost everything the game adds** (the user's hole). The `DealDamages` wrap set our hit to exactly
+   Minecraft's damage × V's punch after the whole pipeline, so the spread, V's crits, perks, cyberware and Berserk, the
+   stealth bonus and story mode were lost, and so were the NPC's resistances, armour, mitigation, evasion, dodges, blocks
+   and parries. V's crit roll still marked the hit critical, so its number showed as a crit with no crit damage; a
+   blocked hit, which the game takes to 0, dealt it all. It wasn't even exact: `ApplyDamage`, after the wrap, still caps
+   bosses' hits, lets an overshield take its part, and can leave an NPC at 1 health for a finisher. SkyCraft does the
+   same in Skyrim: it overwrites the damage with Minecraft's × (5 + 0.25 × the actor's level), with nothing resisted, so
+   the exact amount came from the reference, not from the game.
+2. **What V punches with was left open.** Step 2 said "Part 2 decides what V punches with when arm cyberware is
+   installed", and Part 2 didn't: the module read the fists in `BaseFists`, while the game's unarmed slot draws V's arm
+   cyberware when V has it. And holstering doesn't draw the fists: an attack while holstered draws the last weapon. So
+   step 4's punch check would have failed for this V.
+3. **Hits carried a weapon only by chance.** The hit carried V's weapon only if the fists were drawn, which for this V
+   never happens; armour, the weapon's crits, the stealth bonus, blocks, the skill XP and the perks that check the
+   weapon all skip a hit without one. Build mode never touched V's weapon.
+4. **The `Process` wrap let dodged and evaded hits land.** This spec said every other reason for `DealNoDamage` came
+   before `no_valid_damage`; instant kills, dodges and evasion come after it, and `AddFlag` keeps one entry a flag, so on
+   a hit without damage of its own (all of ours) their reason never went in, and the wrap's removal let the hit through.
+5. **V's hurts:** a hit the game won't let kill V could kill Minecraft's player, and so V; and V's overshield never took
+   its part. (Two armours, V's then Minecraft's, are kept: SkyCraft does the same.)
+6. **Step 4's checks:** the punch check compared the game's damage number, after every modifier, with the inventory's,
+   before any; and the health read after `DealDamages` assumed the change applies at once.
+
+### What the user decided
+
+- **The game's pipeline:** our hit starts at Minecraft's damage × V's punch, and the pipeline does the rest, as to V's
+  own punch.
+- **The game's unarmed slot:** V's arm cyberware weapon if it has a melee attack, otherwise the fists or Gorilla Arms.
+- **Drawn automatically:** V's unarmed weapon is drawn while combat and build mode are on, and V's own weapon put back
+  after; and, in the user's words, "look into if it's possible to hide the player model completely when in build mode,
+  so the HUD doesn't draw V's hands". It is (below), so V's meshes are hidden in build mode.
+- **Both crits:** Minecraft's crit is in Minecraft's damage, and V's crit chance rolls on top.
+
+### What changed
+
+- **The hit** starts at the pipeline's entry (`ProcessPipeline`'s wrap), split as the attack splits its own damage; the
+  `Process` wrap is gone; `DealDamages`' wrap reports what the pipeline made of it and did to it; a hit it dealt
+  nothing reports why. The status says where a hit started, what was dealt, and what the pipeline did.
+- **What V punches with** is what V's unarmed slot draws; `punch` and the status say whether V has it drawn.
+- **V's weapon and look in build mode,** a new section: `Arm` and `HideV`, `set hidev`.
+- **V's hurts:** the overshield's part stays in the game; non-lethal hits stay V's, counted apart.
+- **Three natives change** (`BlockRenderVHurt`, `BlockRenderHitLanded`) **or are new** (`BlockRenderHitEnded`): seven in
+  all. The module is version 4, with 10 functions and 14 fields.
+- **Risks** 3 and 14 are restated; 15 to 17 are new. Step 4's opening check follows.
+
+### What was checked
+
+- **The damage pipeline** (`damageSystem.swift`, read whole): `ProcessPipeline`, `PreProcess`, `ModifyHitData` and each
+  step it calls, `Process` and each modifier it calls (`CalculateSourceModifiers`, `CalculateTargetModifiers`,
+  `CalculateSourceVsTargetModifiers`, `CalculateGlobalModifiers`, `ProcessArmor`, `ProcessCriticalHit`,
+  `ProcessDamageMultipliers`, `ProcessCyberwareModifiers`, `ProcessStealthAttack`, `ProcessBlockAndDeflect`,
+  `ScalePlayerDamage`, `ProcessOneShotProtection`, `ProcessPlayerFixedPercentageOverride`), `DealDamages` and
+  `PostProcess`; `damageManager.swift` (whole); `statPoolsManager.swift`'s `ApplyDamage`, `ApplyDamageSingle`, the
+  overshield and armour pools, `IsFinisherGrace` and `DrainStatPool`; `attackData.swift`'s `AddFlag`, `RemoveFlag`,
+  `IsMelee`, `GetMinimumHealthPercent`; `modifyDamageEffector.swift` and `genericHitPrereq.swift`, with the hit prereq
+  conditions that read the hit's weapon; `RPGManager.AwardExperienceFromDamage`; and a search showing
+  `ProcessLevelDifference` is never called.
+- **The unarmed slot** (`equipmentSystem.swift`): `GetWeaponSlotItem`, `GetMeleewareOrFistsItemID`,
+  `GetActiveMeleeWare`, `CycleWeapon`, `GetItemsInArea`, `OnEquipmentSystemWeaponManipulationRequest` and
+  `GetItemIDfromEquipmentManipulationAction`; `upperBodyTransitions.swift`'s draw on an attack while holstered; and
+  `StatusEffectHelper`'s requests, the pattern `Arm` follows.
+- **Hiding V:** `IComponent.Toggle` and `IsEnabled`, `IVisualComponent.TemporaryHide` (no getter, so not used), the
+  SDK's mesh classes, all `IVisualComponent`s; `AnimationSystemForcedVisibilityManager`, which forces V to keep
+  animating off screen and hides nothing; Codeware 1.19's `Entity.GetComponents` in its installed scripts; and the
+  installed redscript's `@if(ModuleExists("Codeware"))`, both ways, by compiling a probe with a broken line in its
+  Codeware branch: compiled without Codeware's scripts, failed with them.
+- **SkyCraft's `ApplyHit`** (`skse/src/Combat.cpp`): `Populate`, then the damage overwritten.
+- **The code:** Tasks 23 to 30 written and run in a scratch clone: zero warnings, 439 tests, the module compiling with
+  and without Codeware, two slips failing it (one only with Codeware), the overlay under Lua with CET stubbed, and 22
+  mutations of the new code each failing its test (one by a crash: the inbox without its lock); then replayed from the
+  plan's text in a fresh clone.
+
+### Not settled by reading
+
+Left to step 4's opening check: whether the start set at `ProcessPipeline`'s entry holds (the hit's damage could be
+filled in later by the game); whether the equipment system draws V's unarmed weapon while build mode places V; whether
+hiding V's meshes leaves anything of V on screen, a shadow included; whether the arm cyberware is what V's unarmed slot
+draws (it depends on how the game files it); and whether an NPC's health shows a hit's change at once.
