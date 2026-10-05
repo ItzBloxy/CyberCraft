@@ -4,8 +4,9 @@ Date: 2026-10-05. Status: agreed with the user section by section in the brainst
 end, lists what writing it out added to what was agreed. Then revised after two deep self-reviews, which checked each claim
 against its source and walked through each step as the user would play it: "Changes from the deep review" and "Changes
 from the second deep review", at the end, list what changed and what was checked. The sections above them already include
-those changes. Planning Part 1 changed or settled more, which "Changes while planning", last, lists; the sections above
-include those too.
+those changes. Planning Part 1 changed or settled more, which "Changes while planning" lists, as do step 2's first run
+("Changes from step 2's first run") and planning Part 2 ("Changes while planning Part 2"); the sections above include
+those too.
 
 ## Purpose
 
@@ -333,6 +334,7 @@ spikes/block-render/
   src/GameScript.*           the module's calls from C++, each found and checked by name and type once
   src/Natives.*              BlockRender's natives, which the module's wraps and List call
   src/NpcRegistry.*          the NPCs the wraps report, in attach order, behind a lock (pure)
+  src/CombatInbox.*          hits on V offered and our hits landed, from the pipeline's wraps, behind a lock (pure)
   src/ScriptTypes.*          the type checks GameScript and Puppet share
   src/link/Actors.*          NPC IDs, the nearest 256, their records, and the actor table (pure)
   src/link/Combat.*          Minecraft's hits, V's hurts, deaths and blasts: amounts, encodings, sums, windows (pure)
@@ -428,9 +430,11 @@ After `UpdateLink`, in `OnUpdate`, while linked and V is found:
   radius 0.06, so the narrowest of all would be wrong.
   The retries are for an NPC the game gives a capsule only near V, or a little after it appears, since NPCs are first
   listed up to 80 m away. An NPC forgotten with its number is looked for afresh if it comes back.
-- **Its box:** twice the radius wide, from the lower of the NPC's position and the capsule's bottom, up to the capsule's
-  top. A controller's capsule doesn't reach the feet: V's, centred 1 m above V's feet with half-height 0.4 and radius
-  0.32, spans 0.28 to 1.72 m above them.
+- **Its box:** twice the controller's radius wide, from the lower of the NPC's position and the controller's bottom, up
+  to the top of the tallest capsule standing on the NPC's axis as its controller does (leaning at most 25 degrees, its
+  axis within 0.2 m of the feet), whatever its filters: the controller stops at the shoulders. A controller's capsule
+  doesn't reach the feet either: V's, centred 1 m above V's feet with half-height 0.4 and radius 0.32, spans 0.28 to
+  1.72 m above them.
 - **Which capsule is an NPC's,** by its filters, was step 2's opening question (spike 5's risk 4): `shapes` beside a
   vendor showed its controller (radius 0.30, 1.45 m tall) with the controller bit, and two other kinematic capsules
   without it.
@@ -465,25 +469,33 @@ and name, Minecraft's damage, the flags and the weapon class.
 - **Strong:** a crit, or knockback over 0.45, as SkyCraft staggers; the rest are quick.
 - **The hit** (the module's `Hit`):
   - the NPC is found again by `FindEntityByID`; if it's gone or dead, the hit is dropped and counted;
-  - it's built as `SendHitEvent` builds one: an attack from V, as its instigator and source, with the quick or strong
-    attack record of what V punches with (from its item's record in TweakDB, found in planning), and the weapon object
-    of what V punches with if V has it drawn, otherwise none; the NPC as its target; its position at the NPC's middle,
-    with a hit shape there; its direction from V; then `QueueHitEvent`;
-  - the module records each hit as its own, by reference, before it queues it, since the pipeline might run during
-    `QueueHitEvent`, and keeps it until it passes `DealDamages` or 2 s go by.
+  - it's built as `SendHitEvent` builds one: an attack from V, as its instigator and source, with the attack record of
+    what V punches with, from its item's `WeaponItem_Record.Attacks()`: its `StrongMelee` attack for a strong hit, its
+    light one, `Melee`, otherwise (`QuickMelee` is a gun's quick melee), of neither its first melee attack; and the
+    weapon object of what V punches with if V has it drawn (the item in `AttachmentSlots.WeaponRight`), otherwise none;
+    the NPC as its target; its position at the NPC's middle, with a hit shape there; its direction from V; then
+    `QueueHitEvent`;
+  - it's marked as ours on the hit itself, before it's queued: `hitFlag.None` under the source name `n"BlockRender
+    <amount>"`, as the game marks its environment's attacks with `hitFlag.None` and a source name. The pipeline's wraps
+    read the mark and the amount back from the hit, on whichever thread runs the pipeline, so nothing keeps the hit by
+    reference. BlockRender counts a hit the game hasn't dealt within 2 s as not dealt: friendly, invulnerable or dead by
+    then.
 - **Its amount, in the pipeline:**
   - **`Process` is wrapped:** for our hits, a `DealNoDamage` marked `n"no_valid_damage"` (a hit with no damage of its
     own) is taken off. Any other reason is kept: friendly fire, god mode, a dead target;
   - **`DealDamages` is wrapped:** for our hits, every damage type is set to 0 and then physical damage to our amount,
-    after every modifier. The game's own steps run around it: its hit reaction, death and ragdoll, the XP, the police.
+    after every modifier, and BlockRender hears the NPC's health before and after (`BlockRenderHitLanded`). The game's
+    own steps run around it: its hit reaction, death and ragdoll, the XP, the police.
 - **The status** keeps the last hit: the NPC, Minecraft's damage, the amount, and the NPC's health before and after.
 
 ### The game's hits on V
 
 - **Taken out before they're dealt:** in build mode, with combat on, `DealDamages`'s wrap takes a hit on V's total
   health damage (`GetTotalAttackValue`), after V's armour and the difficulty, and sets it to 0 before the game applies
-  it. V's health doesn't drop, so no low-health effect or perk fires. The module hands BlockRender each one: the amount,
-  the attack type, the instigator's `EntityID`, and whether it was strong.
+  it. V's health doesn't drop, so no low-health effect or perk fires. The wrap offers BlockRender each hit on V
+  (`BlockRenderVHurt`): the amount, the attack type and the instigator's `EntityID`. BlockRender takes it, behind a lock,
+  while combat and build mode are on, V is found and V's max health is read; one it doesn't take is V's, so none is lost
+  on its way.
 - **Immortal**, under our own source name, stays on meanwhile, as SkyCraft's essential flag does: a backstop if a hit
   on V gets past the wrap. Health taken outside the pipeline isn't caught at all; the status shows V's health in build
   mode, so it would be seen.
@@ -654,9 +666,10 @@ sends `npcs`.
 
 - **NPCs:** on or off; listed, of how many in the world; the nearest (distance, name); capsules found; IDs given; the
   module's time a frame, on average and at worst; and why not, if the module isn't found.
-- **Combat:** on or off; V's punch; hits applied, and dropped by reason; the last hit (the NPC, Minecraft's damage, the
-  amount, its health before and after); V's hurts caught, sent and summed, and the last (amount, share, Minecraft's
-  damage, kind, attacker); Immortal on or off; deaths; Minecraft's player dead, and for how long.
+- **Combat:** on or off; V's punch; hits queued, landed, and dropped by reason; the last hit (the NPC, Minecraft's
+  damage, the amount, its health before and after); V's hurts taken, sent, summed and left to V, and the last (amount,
+  share, Minecraft's damage, kind, attack type, attacker); Immortal on or off; deaths; Minecraft's player dead, and for
+  how long; and why combat can't do all it should, while it can't.
 - **Blasts:** how many; the last (centre, reach, NPCs within it, blast hits).
 - **Frame rates:** with NPCs and combat on and off.
 
@@ -669,8 +682,9 @@ sends `npcs`.
   - NPCs' capsules are read through the audited tables, under scene 0's read lock and the checks the exporter's reads
     use.
 - **Main thread:** every call is made in `OnUpdate`, as `Puppet`'s are, and none while V isn't found. The natives are
-  the exception: the wraps call them on whichever thread the game runs `NPCPuppet`'s callbacks on, and they only take
-  the registry's lock; the module's state is touched on the main thread alone.
+  the exception: the wraps call them on whichever thread the game runs `NPCPuppet`'s callbacks and the damage pipeline
+  on, and they only take a lock (the registry's, or the combat inbox's); the module's state is touched on the main
+  thread alone.
 - **Minecraft is untrusted:** a hit's formId must be one we listed, and its damage finite, over 0 and capped; an
   `EntityID` is found again (`FindEntityByID`) before every use.
 - **V's god mode:** only under our source name, and removed whenever build mode ends, combat goes off, or V is found
@@ -696,11 +710,14 @@ sends `npcs`.
   an NPC (the axes, the yaw, the size and its feet, health, level, flags, and a name cut at the start of a character);
   the table byte for byte, its sequence order, and emptied once when it stops; `kEvHitActor` and `kEvPlayerDied` reaching
   the sink; the wraps' list (attach order kept through detaches, repeats and strays counted, at most 1,024, a copy for
-  `List`, calls counted by thread, and eight threads at once while another copies it); a capsule's box (from the NPC's feet, or the capsule's bottom if lower, to its top; the smallest of
+  `List`, calls counted by thread, and eight threads at once while another copies it); a capsule's box (from the NPC's
+  feet, or the capsule's bottom if lower, to its top; the controller's, by its query filter bit, the narrowest of
   several); `mclink`'s new commands parsed.
 - **Part 2:** which hits count (listed, finite, over 0, capped); the amount; strong or quick; the kind and power flag
   from each attack type; the `kInHurt` encoding; the sums, 11 of Minecraft's ticks apart at `tickMs`, with their kind
-  and attacker; death's 2-second window; god mode on and off, whichever of build mode and combat comes on first.
+  and attacker; death's 2-second window; god mode on and off, whichever of build mode and combat comes on first, and off
+  once when V is found again; the combat inbox (taking only while told to, at most 256 waiting, and eight threads at
+  once); the box's top from the tallest capsule; `mclink`'s `hurt`; `hit` and `punch`; and the status's combat line.
 - **Part 3:** the blast window (0.15 s, the reach) and the centre in world axes.
 
 ### `mclink`
@@ -728,8 +745,9 @@ Steps 2, 4 and 5. The module's code runs only in the game.
 6. **Killing V doesn't bring the game's own death.** Step 4 tries it. The fallback is a hit flagged `Kill` from the
    killer, as the game kills a vehicle's driver.
 7. **A save keeps our Immortal.** It's removed whenever V is found again, so a load clears it.
-8. **The damage pipeline runs off the main thread,** racing BlockRender's calls into the module. Nothing read suggests
-   it does; step 4 watches for hits lost or doubled.
+8. **The damage pipeline runs off the main thread,** racing BlockRender's calls into the module. Since step 2, which
+   found the game's script callbacks running on worker threads, it's taken to: the pipeline's wraps read only the hit
+   and call BlockRender's natives, behind a lock. Step 4 watches for hits lost or doubled.
 9. **redscript fails to compile BlockRender's script** at the game's start, which may take the other mods' scripts with
    it. The plan compiles it against the game's own scripts before deploying, through redscript's compiler library
    (`tools/check_reds.py`), and the first deploy is still checked by starting the game to its menu and reading
@@ -921,3 +939,28 @@ sections above include the fixes.
   wraps now only pass `EntityID`s to BlockRender's natives, `NpcRegistry` keeps them behind a mutex, and `List` copies
   them on the main thread. The module is version 2, with a thirteenth field, `found`; the natives count their calls by
   thread, so the next run shows which threads the game uses.
+
+## Changes while planning Part 2
+
+Part 2's plan (`docs/superpowers/plans/2026-10-05-npcs-and-combat.md`, Tasks 13 to 24) changed or settled these, with
+what steps 1 and 2 found. The sections above already include them.
+- **Our hits are marked on the hit itself,** `hitFlag.None` under `n"BlockRender <amount>"`, not recorded by reference:
+  the game marks its environment's attacks the same way (`environmentDamageSystem.swift`), and `AttackData.GetFlags()`
+  gives each flag's source. The pipeline may run on any thread, and its wraps then need nothing of the module's.
+- **The attack record** is the `BaseFists` item's `StrongMelee` attack for a strong hit, and its `Melee` attack
+  otherwise: `QuickMelee` is a gun's quick melee (`attackData.swift`'s `IsLightMelee`). The player's own melee finds its
+  records by name on the drawn weapon object (`meleeTransitions.swift`).
+- **The pipeline's wrapped methods** are `damageSystem.swift`'s `private final func Process(hitEvent: ref<gameHitEvent>,
+  cache: ref<CacheData>)` and `private final func DealDamages(hitEvent: ref<gameHitEvent>)`; a wrap of a method that
+  isn't there fails the compile.
+- **V's hurts cross through a native,** `BlockRenderVHurt`, into a combat inbox behind a lock, which takes one only while
+  combat and build mode are on, V is found and V's max health is read, and keeps at most 256; one it doesn't take is V's.
+  Our hits' landings come back through `BlockRenderHitLanded`, with the NPC's health before and after.
+- **The box's top** comes from the tallest capsule on the NPC's axis: step 2 found the controller stops at the
+  shoulders.
+- **The knockback threshold** compares floats, `> 0.45f`, as SkyCraft's `push > 0.45f` does.
+- **`hit <id> <damage> [strong]`** makes an event as Minecraft's would: knockback 0.4, and a crit for strong.
+- **V's god mode** goes off once whenever V is found again, the first time included.
+- **The module is version 3,** with `Hit`, `SetImmortal`, `KillV` and `Punch`, and BlockRender has six natives.
+- **Step 3's checks** read SkyCraft's own line for each hurt, `SkyCraft: Skyrim hit the player for <damage> (<Minecraft
+  damage> Minecraft): health <before> -> <after>` (`SkyCombat.hurtPlayer`).

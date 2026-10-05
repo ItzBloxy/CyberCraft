@@ -1,4 +1,4 @@
-# NPCs and Combat Implementation Plan, Part 1 (steps 1 and 2)
+# NPCs and Combat Implementation Plan, Parts 1 and 2 (steps 1 to 4)
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 >
@@ -42,7 +42,9 @@ real Minecraft before anything goes into the game.
 
 **Spec:** [docs/superpowers/specs/2026-10-05-npcs-and-combat-design.md](../specs/2026-10-05-npcs-and-combat-design.md)
 
-**Parts 2 and 3:** each planned after the step before it, as the spec says. Task 12 closes Part 1 and plans Part 2.
+**Part 2** (Tasks 13 to 24) makes Minecraft's hits on NPCs land as V's, and in build mode gives the game's hits on V to
+Minecraft's player, whose death kills V; it was planned after step 2, and its own section below says how it's built.
+**Part 3** is planned after step 4, as the spec says: Task 24 closes Part 2 and plans it.
 
 ---
 
@@ -74,16 +76,23 @@ real Minecraft before anything goes into the game.
     Only the game can run them: Task 11's first check is that the module and its functions and fields are found.
 
   So a failure while following the plan most likely means a transcription slip: compare against the plan's code first.
+- **Part 2, verified the same way:** Tasks 13 to 15 and 17 to 22 were written in a scratch clone, then replayed in a
+  fresh clone from this plan's text, every build, test count, offline compile, slip check and overlay step checked:
+  zero warnings, 435 tests, and the files identical to the scratch clone's. Each new test was broken once: 34
+  mutations, all caught, one by a crash (the inbox's many-threads test without its lock). The module, its wraps
+  included, compiles against the game's own scripts, and three slips each fail it, a wrap of a method that isn't there
+  among them. The overlay ran under Lua with CET's functions stubbed, with combat off, on, and Minecraft's player dead.
 - **Test counts:** 396 at the start. Then 403, 406 and 408 after Tasks 1 to 3, 412 after Task 5, and 414 after Task 8.
   Tasks 6, 7, 9 and 10 add none.
 - **What only Minecraft and the game can test:** the actor table against SkyCraft's real mod in Task 4, and the module
-  and the NPCs in the game in Task 11, both with the user.
+  and the NPCs in the game in Task 11; in Part 2, the hurts against SkyCraft's mod in Task 16, and combat in the game in
+  Task 23. All with the user.
 - **The user:**
   - **does everything in Minecraft, the Modrinth App and the game:** starting and stopping them, loading, moving,
     keys, clicks and screenshots. Never drive their mouse or keyboard: ask, then wait for them to say they're done;
-  - **approves downloads first.** Nothing in Part 1 downloads anything.
-- **The game:** builds deploy only with `CP2077_DIR` set, which only Task 11's deploy step sets, with the game closed,
-  and clears straight after. `mclink` needs the game closed too, since the game would hold the mapping.
+  - **approves downloads first.** Nothing in Parts 1 and 2 downloads anything.
+- **The game:** builds deploy only with `CP2077_DIR` set, which only the deploy steps set (Tasks 11 and 23), with the
+  game closed, and clear straight after. `mclink` needs the game closed too, since the game would hold the mapping.
 - **redscript:** a script that doesn't compile at the game's start shows a message box, and that run the mods' scripts
   don't load, the other mods' included. Task 6's offline compile runs the game's own compiler library on the module,
   with its message box off, before anything is deployed. Don't run the game's `engine/tools/scc.exe` by hand: on a
@@ -3949,21 +3958,3356 @@ to it leaves writes in freed memory. The results record it.
 
 ### Task 12: Close Part 1, and plan Part 2
 
-- [ ] **Step 1: Add "How Part 1 went" to this plan**
+- [x] **Step 1: Add "How Part 1 went" to this plan**
 
 At the end, after "Found while planning": what ran as written, what changed, and what steps 1 and 2 found.
 
-- [ ] **Step 2: Plan Part 2**
+- [x] **Step 2: Plan Part 2**
 
 Use superpowers:writing-plans to add Part 2's tasks, from Task 13 on, to this plan: combat both ways (the spec's "Part
 2", and steps 3 and 4). Verify them as Part 1's were. Changes to the spec found while planning go in its "Changes while
 planning".
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add docs/superpowers \
   && git commit -q -m "npcs-and-combat plan: Part 1 closed, Part 2 planned" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+## Part 2: combat both ways (steps 3 and 4)
+
+Part 2 makes Minecraft's hits on NPCs land as V's, and in build mode gives the game's hits on V to Minecraft's player,
+whose death kills V (the spec's "Part 2: combat both ways"). It was planned after step 2 (Task 12), with what steps 1
+and 2 found: the boxes stop at the shoulders, and the game runs script callbacks on worker threads. So the damage
+pipeline is taken to run on any thread too, as the NPCs' callbacks do (the spec's risk 8): its wraps read the hit itself
+and call BlockRender's natives, and nothing in them touches the module's state.
+- **Task 13** gives an NPC's box the top of its tallest capsule.
+- **Tasks 14 and 15** make the plain C++ of combat, and `mclink`'s hurts; **Task 16** is step 3, against Minecraft,
+  without the game.
+- **Tasks 17 to 22** make the game's side: the natives' inbox, the module's combat, `GameScript`'s calls, the requests
+  and status, BlockRender 0.18.0's frame, and the overlay. **Task 23** is step 4, in the game.
+- **Task 24** closes Part 2, and plans Part 3.
+
+Test counts: 423 at the start of Part 2. Then 424 after Task 13, 429 after Task 14, 431 after Task 15, 434 after Task 17,
+and 435 after Task 20. Tasks 18, 19, 21 and 22 add none.
+
+## File map (Part 2)
+
+| File | Responsibility |
+|---|---|
+| `src/physx/Characters.*` | An NPC's box reaching the top of its tallest capsule |
+| `src/link/Combat.*` | Which hits count and their amounts; V's hurts as `kInHurt`, and their sums; the death window; V's god mode |
+| `src/link/Link.*` | McState's tick length in the status |
+| `tools/mclink/*` | The `hurt` action, through the sums, and step 3's script `hurts.txt` |
+| `src/CombatInbox.*` | Hits on V offered and our hits landed, from any thread, behind a lock |
+| `src/Natives.*` | `BlockRenderVHurt` and `BlockRenderHitLanded` |
+| `scripts/BlockRender.reds` | Version 3: `Hit`, `SetImmortal`, `KillV`, `Punch`, and the wraps of `Process` and `DealDamages` |
+| `src/GameScript.*` | The module's new calls, and six natives checked |
+| `src/Requests.*`, `src/Status.*` | `hit` and `punch`; the status's combat line |
+| `src/Plugin.cpp`, `CMakeLists.txt` | 0.18.0: `Fight`, `SendHurts`, `set combat`, `hit` and `punch`, and the combat line |
+| `tools/blockrender_hud/init.lua` | The combat line, the Combat button, and V's punch in the log |
+| `tests/TestCombat.cpp`, `tests/TestCombatInbox.cpp` | One test file per new unit; the others gain tests |
+
+---
+
+### Task 13: An NPC's box reaches the top of its tallest capsule
+
+Step 2 found an NPC's controller stops at the shoulders: beside the vendor it reached 1.62 m above its feet, while two
+other capsules on its axis reached 1.75 and 1.76 m (the results' "An NPC's capsule"). The box keeps the controller's
+width, and its bottom (the lower of the feet and the controller's bottom), and now reaches the top of the tallest
+capsule that stands on the NPC's axis as its controller does: leaning at most 25 degrees, its axis within 0.2 m of the
+feet, whatever its filters. `npcs` names that capsule when it isn't the controller.
+
+**Files:**
+- Modify: `src/physx/Characters.h`, `src/physx/Characters.cpp`, `src/Plugin.cpp`, `tests/TestCharacters.cpp`
+
+- [ ] **Step 1: Edit `tests/TestCharacters.cpp`: the vendor's capsules, and the new calls**
+
+```cpp
+TEST(CharactersBoxReachesFromTheFeetOrTheCapsulesBottomToItsTop)
+{
+	// V's controller spans 0.28 to 1.72 m above the feet, so the box starts at the feet.
+	const link::NpcBox v = BoxOf(Controller(), kFeet);
+```
+```cpp
+TEST(CharactersTakeTheBoxsTopFromTheTallestCapsuleOnTheAxis)
+{
+	// Step 2's vendor's capsules, as shapes showed them (2026-10-05), from its feet: the controller from 0.17 to 1.62 m
+	// above them; one of radius 0.40 from 0.05 to 1.75 m; and a thin one, radius 0.06, from 0.04 to 1.76 m.
+	const CapsuleSeen              controller = Filtered(Standing(kFeet.x, kFeet.y, 0.895, 0.30, 0.425), 0x10002000);
+	const CapsuleSeen              wide = Filtered(Standing(kFeet.x, kFeet.y, 0.90, 0.40, 0.45), 0x2000000);
+	const CapsuleSeen              thin = Filtered(Standing(kFeet.x, kFeet.y, 0.90, 0.06, 0.80), 0x24000002);
+	const std::vector<CapsuleSeen> seen{ controller, wide, thin };
+	const CapsuleSeen              tallest = TallestCapsule(seen, controller, kFeet);
+	CHECK_NEAR(tallest.radius, 0.06, 1e-9);
+	const link::NpcBox box = BoxOf(controller, tallest, kFeet);
+	CHECK_NEAR(box.width, 0.60, 1e-9);  // the controller's
+	CHECK_NEAR(box.below, 0.0, 1e-9);
+	CHECK_NEAR(box.above, 1.76, 1e-9);  // the thin one's top, not the controller's 1.62
+	// A taller capsule 0.3 m off, another NPC's, and one leaning 30 degrees: neither is this NPC's.
+	const CapsuleSeen beside = Filtered(Standing(kFeet.x + 0.3, kFeet.y, 1.0, 0.35, 0.8), 0x2000000);
+	const CapsuleSeen leaning = Leaning(Filtered(Standing(kFeet.x, kFeet.y, 1.0, 0.20, 1.0), 0x2000000), 30.0, true);
+	CHECK_NEAR(TallestCapsule(std::vector{ controller, beside, leaning }, controller, kFeet).radius, 0.30, 1e-9);
+	// None taller: the controller itself, and its own top.
+	CHECK_NEAR(TallestCapsule(std::vector<CapsuleSeen>{}, controller, kFeet).radius, 0.30, 1e-9);
+	CHECK_NEAR(BoxOf(controller, controller, kFeet).above, 1.62, 1e-9);
+}
+
+TEST(CharactersBoxReachesFromTheFeetOrTheCapsulesBottomToItsTop)
+{
+	// V's controller spans 0.28 to 1.72 m above the feet, so the box starts at the feet.
+	const link::NpcBox v = BoxOf(Controller(), Controller(), kFeet);
+```
+```cpp
+	const link::NpcBox low = BoxOf(Standing(kFeet.x, kFeet.y, 0.6, 0.32, 0.4), kFeet);
+	CHECK_NEAR(low.below, 0.12, 1e-9);
+	CHECK_NEAR(low.above, 1.32, 1e-9);
+	// Leaning 20 degrees: its top is lower by the lean.
+	const link::NpcBox leaning = BoxOf(Leaning(Controller(), 20.0, false), kFeet);
+```
+```cpp
+	const CapsuleSeen  lowCapsule = Standing(kFeet.x, kFeet.y, 0.6, 0.32, 0.4);
+	const link::NpcBox low = BoxOf(lowCapsule, lowCapsule, kFeet);
+	CHECK_NEAR(low.below, 0.12, 1e-9);
+	CHECK_NEAR(low.above, 1.32, 1e-9);
+	// Leaning 20 degrees: its top is lower by the lean.
+	const CapsuleSeen  leaningCapsule = Leaning(Controller(), 20.0, false);
+	const link::NpcBox leaning = BoxOf(leaningCapsule, leaningCapsule, kFeet);
+```
+```cpp
+	sizes.Found(101, Controller(), kFeet);
+```
+```cpp
+	sizes.Found(101, Controller(), Controller(), kFeet);
+```
+```cpp
+	sizes.Found(7, capsule, kFeet);
+	CHECK_STR(DescribeNpc(npc, 3, 4.3, sizes), "3 Ganger One, 4.3 m: 0.64 wide, from 0.00 below its position to 1.72 above, its "
+	                                            "capsule's: radius 0.32, half-height 0.40, leaning 0 degrees, query filter "
+	                                            "0:0:2000:0; health 80 of 100, level 12; hostile, in combat");
+```
+```cpp
+	sizes.Found(7, capsule, capsule, kFeet);
+	CHECK_STR(DescribeNpc(npc, 3, 4.3, sizes), "3 Ganger One, 4.3 m: 0.64 wide, from 0.00 below its position to 1.72 above, its "
+	                                            "capsule's: radius 0.32, half-height 0.40, leaning 0 degrees, query filter "
+	                                            "0:0:2000:0; health 80 of 100, level 12; hostile, in combat");
+	// Its top from a taller capsule on its axis: that one's said too.
+	sizes.Found(7, capsule, Filtered(Standing(kFeet.x, kFeet.y, 0.90, 0.06, 0.80), 0x24000002), kFeet);
+	CHECK_STR(DescribeNpc(npc, 3, 4.3, sizes), "3 Ganger One, 4.3 m: 0.64 wide, from 0.00 below its position to 1.76 above, its "
+	                                            "capsule's: radius 0.32, half-height 0.40, leaning 0 degrees, query filter "
+	                                            "0:0:2000:0, its top another's: radius 0.06, query filter 0:0:24000002:0; health 80 "
+	                                            "of 100, level 12; hostile, in combat");
+```
+
+- [ ] **Step 2: Build; it must fail**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C" | sort -u | head -3
+```
+Expected: `error C2660: 'cpmc::px::BoxOf': function does not take 3 arguments`, and
+`error C3861: 'TallestCapsule': identifier not found`.
+
+- [ ] **Step 3: Edit `src/physx/Characters.h`**
+
+```cpp
+// Its box: twice the radius wide, reaching from the lower of the feet and the capsule's bottom up to its top.
+link::NpcBox BoxOf(const CapsuleSeen& aCapsule, const Vec3d& aFeet);
+```
+```cpp
+// The capsule that reaches highest of those in aSeen standing as the NPC's controller aController does, whatever their
+// filters: leaning at most kCapsuleTilt from upright, their axes within kCapsuleAcross of aFeet. The controller stops at
+// the shoulders: step 2's vendor's reached 1.62 m above its feet, and two other capsules on its axis 1.75 and 1.76 m.
+// aController itself if none reaches higher.
+CapsuleSeen TallestCapsule(std::span<const CapsuleSeen> aSeen, const CapsuleSeen& aController, const Vec3d& aFeet);
+
+// Its box: twice the controller's radius wide, reaching from the lower of the feet and the controller's bottom up to the
+// tallest capsule's top.
+link::NpcBox BoxOf(const CapsuleSeen& aController, const CapsuleSeen& aTallest, const Vec3d& aFeet);
+```
+```cpp
+	// aEntity's capsule, found with its feet at aFeet: its box from now on.
+	void Found(uint64_t aEntity, const CapsuleSeen& aCapsule, const Vec3d& aFeet);
+```
+```cpp
+	// aEntity's controller and tallest capsule, found with its feet at aFeet: its box from now on.
+	void Found(uint64_t aEntity, const CapsuleSeen& aController, const CapsuleSeen& aTallest, const Vec3d& aFeet);
+```
+```cpp
+	// The capsule aEntity's box came from; null if it has none.
+	const CapsuleSeen* Capsule(uint64_t aEntity) const;
+```
+```cpp
+	// The controller aEntity's box came from, and the capsule its top came from; null if it has none.
+	const CapsuleSeen* Capsule(uint64_t aEntity) const;
+	const CapsuleSeen* Tallest(uint64_t aEntity) const;
+```
+```cpp
+	std::unordered_map<uint64_t, CapsuleSeen>  capsules_;
+```
+```cpp
+	std::unordered_map<uint64_t, CapsuleSeen>  capsules_;
+	std::unordered_map<uint64_t, CapsuleSeen>  tallest_;
+```
+
+- [ ] **Step 4: Edit `src/physx/Characters.cpp`**
+
+```cpp
+	return length > 0.0 ? std::fabs(aCapsule.axis.z) / length : 0.0;
+}
+}
+```
+```cpp
+	return length > 0.0 ? std::fabs(aCapsule.axis.z) / length : 0.0;
+}
+
+// Whether the capsule stands as an NPC's: leaning at most kCapsuleTilt from upright, its axis within kCapsuleAcross of
+// aFeet.
+bool StandsAt(const CapsuleSeen& aCapsule, const Vec3d& aFeet)
+{
+	if (Upright(aCapsule) < std::cos(kCapsuleTilt * std::numbers::pi / 180.0))
+	{
+		return false;
+	}
+	// The axis's distance from the feet: the length of (feet - centre) x axis, over the axis's length.
+	const Vec3d  to{ aFeet.x - aCapsule.centre.x, aFeet.y - aCapsule.centre.y, aFeet.z - aCapsule.centre.z };
+	const Vec3d& axis = aCapsule.axis;
+	const Vec3d  cross{ to.y * axis.z - to.z * axis.y, to.z * axis.x - to.x * axis.z, to.x * axis.y - to.y * axis.x };
+	return Length(cross) / Length(axis) <= kCapsuleAcross;
+}
+
+// How far the capsule reaches up and down from its centre.
+double Reach(const CapsuleSeen& aCapsule)
+{
+	return Upright(aCapsule) * aCapsule.halfHeight + aCapsule.radius;
+}
+}
+```
+```cpp
+	const double               upright = std::cos(kCapsuleTilt * std::numbers::pi / 180.0);
+	std::optional<CapsuleSeen> best;
+	for (const CapsuleSeen& capsule : aSeen)
+	{
+		if ((capsule.queryFilter[2] & kControllerQueryBit) == 0 || Upright(capsule) < upright)
+		{
+			continue;
+		}
+		// The axis's distance from the feet: the length of (feet - centre) x axis, over the axis's length.
+		const Vec3d  to{ aFeet.x - capsule.centre.x, aFeet.y - capsule.centre.y, aFeet.z - capsule.centre.z };
+		const Vec3d& axis = capsule.axis;
+		const Vec3d  cross{ to.y * axis.z - to.z * axis.y, to.z * axis.x - to.x * axis.z, to.x * axis.y - to.y * axis.x };
+		if (Length(cross) / Length(axis) > kCapsuleAcross)
+```
+```cpp
+	std::optional<CapsuleSeen> best;
+	for (const CapsuleSeen& capsule : aSeen)
+	{
+		if ((capsule.queryFilter[2] & kControllerQueryBit) == 0 || !StandsAt(capsule, aFeet))
+```
+```cpp
+link::NpcBox BoxOf(const CapsuleSeen& aCapsule, const Vec3d& aFeet)
+{
+	const double reach = Upright(aCapsule) * aCapsule.halfHeight + aCapsule.radius;  // up and down from its centre
+	const double bottom = aCapsule.centre.z - reach;
+	const double top = aCapsule.centre.z + reach;
+	return { 2.0 * aCapsule.radius, std::max(0.0, aFeet.z - bottom), top - aFeet.z };
+```
+```cpp
+CapsuleSeen TallestCapsule(std::span<const CapsuleSeen> aSeen, const CapsuleSeen& aController, const Vec3d& aFeet)
+{
+	CapsuleSeen tallest = aController;
+	for (const CapsuleSeen& capsule : aSeen)
+	{
+		if (StandsAt(capsule, aFeet) && capsule.centre.z + Reach(capsule) > tallest.centre.z + Reach(tallest))
+		{
+			tallest = capsule;
+		}
+	}
+	return tallest;
+}
+
+link::NpcBox BoxOf(const CapsuleSeen& aController, const CapsuleSeen& aTallest, const Vec3d& aFeet)
+{
+	const double bottom = aController.centre.z - Reach(aController);
+	const double top = std::max(aController.centre.z + Reach(aController), aTallest.centre.z + Reach(aTallest));
+	return { 2.0 * aController.radius, std::max(0.0, aFeet.z - bottom), top - aFeet.z };
+```
+```cpp
+void NpcSizes::Found(uint64_t aEntity, const CapsuleSeen& aCapsule, const Vec3d& aFeet)
+{
+	boxes_[aEntity] = BoxOf(aCapsule, aFeet);
+	capsules_[aEntity] = aCapsule;
+```
+```cpp
+void NpcSizes::Found(uint64_t aEntity, const CapsuleSeen& aController, const CapsuleSeen& aTallest, const Vec3d& aFeet)
+{
+	boxes_[aEntity] = BoxOf(aController, aTallest, aFeet);
+	capsules_[aEntity] = aController;
+	tallest_[aEntity] = aTallest;
+```
+```cpp
+	std::erase_if(capsules_, [&](const auto& aEntry) { return !aIds.IdOf(aEntry.first); });
+```
+```cpp
+	std::erase_if(capsules_, [&](const auto& aEntry) { return !aIds.IdOf(aEntry.first); });
+	std::erase_if(tallest_, [&](const auto& aEntry) { return !aIds.IdOf(aEntry.first); });
+```
+```cpp
+	return found != capsules_.end() ? &found->second : nullptr;
+```
+```cpp
+	return found != capsules_.end() ? &found->second : nullptr;
+}
+
+const CapsuleSeen* NpcSizes::Tallest(uint64_t aEntity) const
+{
+	const auto found = tallest_.find(aEntity);
+	return found != tallest_.end() ? &found->second : nullptr;
+```
+```cpp
+		                   capsule->queryFilter[0], capsule->queryFilter[1], capsule->queryFilter[2], capsule->queryFilter[3]);
+```
+```cpp
+		                   capsule->queryFilter[0], capsule->queryFilter[1], capsule->queryFilter[2], capsule->queryFilter[3]);
+		const CapsuleSeen* tallest = aSizes.Tallest(aNpc.entity);
+		if (tallest && tallest->centre.z + Reach(*tallest) > capsule->centre.z + Reach(*capsule))
+		{
+			from += std::format(", its top another's: radius {:.2f}, query filter {:x}:{:x}:{:x}:{:x}", tallest->radius,
+			                    tallest->queryFilter[0], tallest->queryFilter[1], tallest->queryFilter[2], tallest->queryFilter[3]);
+		}
+```
+
+- [ ] **Step 5: Edit `src/Plugin.cpp`: the tallest capsule, where capsules are looked for**
+
+```cpp
+				g_npcSizes.Found(entity, *capsule, feet);
+```
+```cpp
+				g_npcSizes.Found(entity, *capsule, cpmc::px::TallestCapsule(seen, *capsule, feet), feet);
+```
+
+- [ ] **Step 6: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `424 test(s), 0 failure(s)`.
+
+- [ ] **Step 7: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "npcs-and-combat: an NPC's box reaches the top of its tallest capsule, not its controller's" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 14: Which of Minecraft's hits count, V's hurts for Minecraft, their sums, deaths and god mode
+
+The spec's Part 2, the parts that don't need the game, in `render_core` as `link/Combat`:
+- **Which hits count** ("Minecraft's hits on NPCs"): a `kEvHitActor` for a stand-in listed in the last 2 s, with damage
+  that's finite and over 0, capped at 1,000 (`/kill` sends 3.4 × 10³⁸), and V's punch read. Its amount is Minecraft's
+  damage × V's punch; it's strong for a crit, or knockback over 0.45, as SkyCraft staggers. `HitDrop` says why one
+  doesn't count, and `HitResultName` what the module's `Hit` made of one.
+- **V's hurts** ("The game's hits on V"): the module's wrap hands BlockRender each one in the game's terms (`GameHurt`:
+  the health it would take, its `gamedataAttackType` as a number, its instigator). `HurtFrom` makes it Minecraft's: its
+  share of V's max health; its kind (melee for `QuickMelee`, `StrongMelee`, `Melee`, `GuardBreak`, `WhipAttack`,
+  `ChargedWhipAttack` and `Reflect`; projectile for `Ranged`, `Thrown` and `Direct`; magic for `Hack`; other for the
+  rest); a power attack for `StrongMelee`, `ChargedWhipAttack` and `GuardBreak`; and its attacker's number, or 0.
+  `HurtInput` encodes it as `kInHurt`: `a` = the share × 10,000, for SkyCraft's ÷ 100 and ÷ 5 of Minecraft's 20.
+- **The sums:** `HurtSums` sends a hurt at once when none went in the last 11 of Minecraft's ticks, at McState's
+  `tickMs`, and otherwise adds it to a sum that goes when those ticks are up, with its biggest part's kind and attacker
+  and a power attack if any part had one. Minecraft takes from a second hurt within 10 ticks only what's more than the
+  first, and applies each at its next tick.
+- **Deaths** ("Deaths"): Minecraft's death kills V with combat on, while build mode is on or within 2 s of its end.
+- **God mode** ("V's god mode"): on while combat and build mode are both on, whichever came first; off when either
+  ends; and off once whenever V is found again, in case a save kept it.
+
+The game's attack types are numbered as in 2.31's `gamedataAttackType` (the decompiled scripts' `orphans.swift`):
+`ChargedWhipAttack` 0, `Direct` 1, `Effect` 2, `Explosion` 3, `ForceKill` 4, `GuardBreak` 5, `Hack` 6, `Melee` 7,
+`PressureWave` 8, `QuickMelee` 9, `Ranged` 10, `Reflect` 11, `StrongMelee` 12, `Thrown` 13, `WhipAttack` 14.
+
+**Files:**
+- Create: `src/link/Combat.h`, `src/link/Combat.cpp`, `tests/TestCombat.cpp`
+- Modify: `CMakeLists.txt`
+
+- [ ] **Step 1: Write the failing test, `tests/TestCombat.cpp`**
+
+```cpp
+#include "Harness.h"
+
+#include "link/Combat.h"
+
+#include <cmath>
+#include <limits>
+
+using namespace cpmc;
+using namespace cpmc::link;
+
+namespace
+{
+// Minecraft's hit on stand-in aFormId: aDamage, with knockback aKnockback, and the crit flag if aCrit.
+proto::McEvent Hit(uint32_t aFormId, float aDamage, float aKnockback = 0.4f, bool aCrit = false)
+{
+	proto::McEvent event{};
+	event.type = proto::kEvHitActor;
+	event.formId = aFormId;
+	event.a = aDamage;
+	event.d = aKnockback;
+	event.flags = aCrit ? proto::kHitCritical : 0u;
+	event.weapon = proto::kWeaponBlade;
+	return event;
+}
+
+// gamedataAttackType's values in the game 2.31.
+constexpr int32_t kQuickMelee = 9;
+constexpr int32_t kStrongMelee = 12;
+constexpr int32_t kRanged = 10;
+constexpr int32_t kHack = 6;
+constexpr int32_t kExplosion = 3;
+}
+
+TEST(CombatCountsHitsOnListedNpcsWithDamage)
+{
+	ActorIds       ids;
+	const uint32_t id = ids.Id(0xABC, 10.0);
+	HitDrop        drop = HitDrop::Count;
+	// A diamond sword at full cooldown, and V's punch of 102: 714 of the NPC's health.
+	const std::optional<NpcHit> hit = AcceptHit(Hit(id, 7.0f), ids, 10.5, 102.0, drop);
+	CHECK(hit.has_value());
+	CHECK(hit && hit->entity == 0xABC && hit->formId == id && !hit->strong);
+	CHECK_NEAR(hit ? hit->amount : 0.0, 714.0, 1e-9);
+	// Strong: a crit, or knockback over 0.45 (a sprint hit); 0.45 itself isn't, compared as SkyCraft compares, in float.
+	CHECK(AcceptHit(Hit(id, 10.5f, 0.4f, true), ids, 10.5, 102.0, drop).value_or(NpcHit{}).strong);
+	CHECK(AcceptHit(Hit(id, 7.0f, 0.5f), ids, 10.5, 102.0, drop).value_or(NpcHit{}).strong);
+	CHECK(!AcceptHit(Hit(id, 7.0f, 0.45f), ids, 10.5, 102.0, drop).value_or(NpcHit{ 0, 0, 0.0, 0.0, true }).strong);
+	// /kill's 3.4e38 is capped at 1,000.
+	const std::optional<NpcHit> kill = AcceptHit(Hit(id, std::numeric_limits<float>::max()), ids, 10.5, 102.0, drop);
+	CHECK_NEAR(kill ? kill->damage : 0.0, 1000.0, 1e-9);
+	CHECK_NEAR(kill ? kill->amount : 0.0, 102000.0, 1e-6);
+	// A stand-in listed 2 s ago still counts; 2.5 s ago it doesn't, and nor does a number never given.
+	CHECK(AcceptHit(Hit(id, 7.0f), ids, 12.0, 102.0, drop).has_value());
+	CHECK(!AcceptHit(Hit(id, 7.0f), ids, 12.5, 102.0, drop).has_value());
+	CHECK(drop == HitDrop::NotListed);
+	CHECK(!AcceptHit(Hit(id + 1, 7.0f), ids, 10.5, 102.0, drop).has_value());
+	CHECK(drop == HitDrop::NotListed);
+	// Knockback only, or damage that isn't finite: skipped.
+	CHECK(!AcceptHit(Hit(id, 0.0f), ids, 10.5, 102.0, drop).has_value());
+	CHECK(drop == HitDrop::NoDamage);
+	CHECK(!AcceptHit(Hit(id, std::numeric_limits<float>::quiet_NaN()), ids, 10.5, 102.0, drop).has_value());
+	CHECK(drop == HitDrop::NoDamage);
+	CHECK(!AcceptHit(Hit(id, std::numeric_limits<float>::infinity()), ids, 10.5, 102.0, drop).has_value());
+	CHECK(drop == HitDrop::NoDamage);
+	// V's punch not read: no hit.
+	CHECK(!AcceptHit(Hit(id, 7.0f), ids, 10.5, 0.0, drop).has_value());
+	CHECK(drop == HitDrop::NoPunch);
+	CHECK_STR(HitDropName(HitDrop::NoPunch), "no punch");
+	CHECK_STR(HitResultName(-2), "the NPC is dead");
+	CHECK_STR(HitResultName(7), "result 7");
+}
+
+TEST(CombatMakesTheGamesHurtsIntoMinecraftsKinds)
+{
+	CHECK(HurtKindOf(kQuickMelee) == proto::kHurtMelee);
+	CHECK(HurtKindOf(kStrongMelee) == proto::kHurtMelee);
+	for (const int32_t melee : { 0, 5, 7, 11, 14 })  // ChargedWhipAttack, GuardBreak, Melee, Reflect, WhipAttack
+	{
+		CHECK(HurtKindOf(melee) == proto::kHurtMelee);
+	}
+	for (const int32_t projectile : { 1, 10, 13 })  // Direct, Ranged, Thrown
+	{
+		CHECK(HurtKindOf(projectile) == proto::kHurtProjectile);
+	}
+	CHECK(HurtKindOf(kHack) == proto::kHurtMagic);
+	for (const int32_t other : { 2, 3, 4, 8, 15, 16, -1 })  // Effect, Explosion, ForceKill, PressureWave, and none
+	{
+		CHECK(HurtKindOf(other) == proto::kHurtOther);
+	}
+	CHECK(PowerAttack(kStrongMelee) && PowerAttack(0) && PowerAttack(5));
+	CHECK(!PowerAttack(kQuickMelee) && !PowerAttack(kRanged));
+	CHECK_STR(AttackTypeName(kRanged), "Ranged");
+	CHECK_STR(AttackTypeName(14), "WhipAttack");
+	CHECK_STR(AttackTypeName(17), "attack type 17");
+	CHECK_STR(HurtKindName(proto::kHurtProjectile), "projectile");
+	// A gunshot of 45 on V, with 456 max health, from a listed ganger: about a tenth of Minecraft's 20.
+	ActorIds       ids;
+	const uint32_t ganger = ids.Id(0x51, 0.0);
+	const Hurt     shot = HurtFrom(GameHurt{ 45.0, kRanged, 0x51 }, 456.0, ids);
+	CHECK_NEAR(shot.share, 45.0 / 456.0, 1e-12);
+	CHECK(shot.kind == proto::kHurtProjectile && shot.attacker == ganger && !shot.power);
+	const proto::InputEvent input = HurtInput(shot);
+	CHECK_EQ(input.type, uint16_t(proto::kInHurt));
+	CHECK_EQ(input.code, uint16_t(proto::kHurtProjectile));
+	CHECK_EQ(input.a, int32_t(std::lround(45.0 / 456.0 * 10000.0)));  // 987: SkyCraft's 9.87, / 5 = 1.97 of Minecraft's 20
+	CHECK_EQ(input.b, int32_t(ganger));
+	CHECK_EQ(input.c, 0);
+	// From someone not listed, or nobody: no attacker. A power attack is flagged. More than V's max health is held to it.
+	const Hurt slam = HurtFrom(GameHurt{ 900.0, kStrongMelee, 0x99 }, 456.0, ids);
+	CHECK(slam.attacker == 0 && slam.power);
+	CHECK_NEAR(slam.share, 1.0, 1e-12);
+	CHECK_EQ(HurtInput(slam).a, 10000);
+	CHECK_EQ(HurtInput(slam).c, int32_t(proto::kHurtPowerAttack));
+	CHECK_EQ(HurtFrom(GameHurt{ 10.0, kExplosion, 0 }, 456.0, ids).attacker, 0u);
+	CHECK_NEAR(HurtFrom(GameHurt{ 10.0, kExplosion, 0 }, 0.0, ids).share, 0.0, 1e-12);  // no max health: nothing
+}
+
+TEST(CombatSumsHurtsElevenOfMinecraftsTicksApart)
+{
+	HurtSums   sums;
+	const Hurt small{ 0.05, proto::kHurtProjectile, 4, false };
+	const Hurt big{ 0.20, proto::kHurtMelee, 9, false };
+	const Hurt power{ 0.01, proto::kHurtMelee, 3, true };
+	const Hurt last{ 0.02, proto::kHurtMagic, 5, false };
+	// The first goes at once.
+	CHECK(sums.Add(small, 10.0, 50.0).has_value());
+	// Within 11 ticks (0.55 s at 50 ms), the rest wait in a sum, which takes its biggest part's kind and attacker, and a
+	// power attack if any part had one.
+	CHECK(!sums.Add(big, 10.1, 50.0).has_value());
+	CHECK(!sums.Add(power, 10.2, 50.0).has_value());
+	CHECK(!sums.Add(last, 10.3, 50.0).has_value());
+	CHECK(sums.Waiting());
+	CHECK_EQ(sums.Summed(), uint64_t(3));
+	CHECK(!sums.Due(10.54, 50.0).has_value());
+	const std::optional<Hurt> sum = sums.Due(10.56, 50.0);
+	CHECK(sum.has_value());
+	CHECK_NEAR(sum ? sum->share : 0.0, 0.23, 1e-12);
+	CHECK(sum && sum->kind == proto::kHurtMelee && sum->attacker == 9 && sum->power);
+	CHECK(!sums.Waiting());
+	CHECK(!sums.Due(20.0, 50.0).has_value());
+	// The sum's send counts as the last: a hurt 0.3 s after it waits again, until 11 ticks after the sum.
+	CHECK(!sums.Add(small, 10.85, 50.0).has_value());
+	CHECK(!sums.Due(11.10, 50.0).has_value());
+	CHECK(sums.Due(11.12, 50.0).has_value());
+	// Long after, at once again.
+	CHECK(sums.Add(small, 30.0, 50.0).has_value());
+	// At 100 ms a tick, the wait is 1.1 s; a tick length outside 1 to 1,000 ms counts as 50.
+	CHECK(!sums.Add(small, 31.0, 100.0).has_value());
+	CHECK(!sums.Due(31.09, 100.0).has_value());
+	CHECK(sums.Due(31.11, 100.0).has_value());
+	CHECK(sums.Add(small, 31.67, 0.0).has_value());
+}
+
+TEST(CombatLetsMinecraftsDeathKillVInBuildModeOrJustAfter)
+{
+	CHECK(DeathKillsV(true, true, std::nullopt, 5.0));
+	CHECK(!DeathKillsV(false, true, std::nullopt, 5.0));  // combat off
+	CHECK(!DeathKillsV(true, false, std::nullopt, 5.0));  // build mode never on
+	// Build mode ends as soon as Minecraft's player is dead, which can come before the event.
+	CHECK(DeathKillsV(true, false, 3.0, 5.0));
+	CHECK(!DeathKillsV(true, false, 2.9, 5.0));
+}
+
+TEST(CombatPutsVsGodModeOnWithBuildModeAndCombat)
+{
+	GodMode god;
+	CHECK(!god.Frame(true, true, false).has_value());  // V not found: nothing
+	// V found: off first, in case a save kept it; then on, since both are on.
+	CHECK(god.Frame(true, true, true) == std::optional<bool>(false));
+	CHECK(god.Frame(true, true, true) == std::optional<bool>(true));
+	CHECK(god.On());
+	CHECK(!god.Frame(true, true, true).has_value());
+	// Build mode ends: off. Combat on first, then build mode: on.
+	CHECK(god.Frame(true, false, true) == std::optional<bool>(false));
+	CHECK(!god.Frame(true, false, true).has_value());
+	CHECK(god.Frame(true, true, true) == std::optional<bool>(true));
+	// Combat off during build mode: off.
+	CHECK(god.Frame(false, true, true) == std::optional<bool>(false));
+	CHECK(god.Frame(true, true, true) == std::optional<bool>(true));
+	// V lost and found again, after a load: off once, then on again.
+	CHECK(!god.Frame(true, true, false).has_value());
+	CHECK(god.Frame(true, true, true) == std::optional<bool>(false));
+	CHECK(!god.On());
+	CHECK(god.Frame(true, true, true) == std::optional<bool>(true));
+}
+```
+
+- [ ] **Step 2: Edit `CMakeLists.txt` to add the test**
+
+```cmake
+	tests/TestNpcRegistry.cpp
+	tools/mclink/DumpObj.cpp
+```
+```cmake
+	tests/TestNpcRegistry.cpp
+	tests/TestCombat.cpp
+	tools/mclink/DumpObj.cpp
+```
+
+- [ ] **Step 3: Build; it must fail**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C" | sort -u | head -3
+```
+Expected: `error C1083: Cannot open include file: 'link/Combat.h'`.
+
+- [ ] **Step 4: Write `src/link/Combat.h`**
+
+```cpp
+#pragma once
+
+#include "link/Actors.h"
+#include "link/Rings.h"
+
+#include <cstdint>
+#include <optional>
+#include <string>
+
+// Combat both ways (spike 6's "Part 2"), the parts that don't need the game: which of Minecraft's hits on NPCs count and
+// how much each does; V's hurts as SkyCraft's kInHurt, summed so that Minecraft takes them all; when Minecraft's death
+// kills V; and when V's god mode goes on and off. Pure: the tests give it hits and hurts of their own.
+namespace cpmc::link
+{
+constexpr double kHitCap = 1000.0;         // Minecraft's damage, at most: /kill on a stand-in sends 3.4e38
+constexpr double kStrongKnockback = 0.45;  // SkyCraft staggers above this knockback, or on a crit, comparing floats
+constexpr double kDeathWindow = 2.0;       // seconds after build mode ends that Minecraft's death still kills V
+constexpr int    kHurtTicks = 11;          // Minecraft's ticks between kInHurts: within 10 it takes only the excess
+
+// A hit of Minecraft's on an NPC, as it's applied.
+struct NpcHit
+{
+	uint32_t formId = 0;
+	uint64_t entity = 0;    // the NPC, as listed
+	double   damage = 0.0;  // Minecraft's, capped
+	double   amount = 0.0;  // damage x V's punch
+	bool     strong = false;
+};
+
+// Why a hit doesn't count.
+enum class HitDrop
+{
+	NotListed,  // its formId wasn't listed in the last kHitTrail seconds
+	NoDamage,   // knockback only, or damage that isn't finite
+	NoPunch,    // V's punch isn't read, or isn't over 0
+	Count,
+};
+
+const char* HitDropName(HitDrop aDrop);
+
+// Whether a kEvHitActor counts: its NPC listed in the last kHitTrail seconds (aIds), its damage finite and over 0, capped
+// at kHitCap, and V's punch, aPunch, over 0. Strong: a crit, or knockback over kStrongKnockback. Nothing, with aDrop
+// saying why, if it doesn't count.
+std::optional<NpcHit> AcceptHit(const proto::McEvent& aEvent, const ActorIds& aIds, double aNow, double aPunch, HitDrop& aDrop);
+
+// What the module's Hit says about a hit it was given: 1 queued; 0 V isn't found; -1 the NPC is gone; -2 it's dead; -3
+// there's no attack record to make it with.
+std::string HitResultName(int32_t aResult);
+
+// A hit on V that the module's DealDamages wrap took, in the game's terms: the health it would have taken, after V's
+// armour and the difficulty; its gamedataAttackType, as a number; and its instigator's entity, or 0.
+struct GameHurt
+{
+	double   amount = 0.0;
+	int32_t  attackType = 0;
+	uint64_t instigator = 0;
+};
+
+// The same, for Minecraft: its share of V's max health, kind and attacker (its stand-in's formId, or 0), and whether it's
+// a power attack.
+struct Hurt
+{
+	double          share = 0.0;
+	proto::HurtKind kind = proto::kHurtOther;
+	uint32_t        attacker = 0;
+	bool            power = false;
+};
+
+// SkyCraft's kind for a gamedataAttackType: melee for QuickMelee, StrongMelee, Melee, GuardBreak, WhipAttack,
+// ChargedWhipAttack and Reflect; projectile for Ranged, Thrown and Direct; magic for Hack; other for the rest.
+proto::HurtKind HurtKindOf(int32_t aAttackType);
+// A power attack: StrongMelee, ChargedWhipAttack and GuardBreak.
+bool PowerAttack(int32_t aAttackType);
+// The gamedataAttackType's name, "QuickMelee"; or "attack type 17" for one the game 2.31 doesn't have.
+std::string AttackTypeName(int32_t aAttackType);
+const char* HurtKindName(proto::HurtKind aKind);  // "melee", "projectile", "magic", "other"
+
+// aHurt for Minecraft: its share of aMaxHealth, V's max health, held to 0 to 1; its kind and power from its attack type;
+// its attacker's number if aIds has the instigator listed, else 0.
+Hurt HurtFrom(const GameHurt& aHurt, double aMaxHealth, const ActorIds& aIds);
+
+// kInHurt: code = the kind, a = the share x 10,000 rounded (the same share of Minecraft's 20 health, x 5 and x 100 for
+// SkyCraft's / 5 and / 100), b = the attacker, c = the power attack flag. "Blocked" is never set: V can't block in build
+// mode.
+proto::InputEvent HurtInput(const Hurt& aHurt);
+
+// Hurts summed so that Minecraft takes them all: for 10 of its ticks after a hurt it takes from another only what's more
+// than the first, and it applies each at its next tick. A hurt goes at once when none went in the last kHurtTicks ticks;
+// otherwise it joins a sum, which goes when those ticks are up, with its biggest part's kind and attacker, and a power
+// attack if any part had one.
+class HurtSums
+{
+public:
+	// aHurt at aNow (seconds). aTickMs: Minecraft's milliseconds a tick (McState's tickMs; 50 if it isn't from 1 to 1,000).
+	// It, if it goes now.
+	std::optional<Hurt> Add(const Hurt& aHurt, double aNow, double aTickMs);
+	// The sum, once its ticks are up.
+	std::optional<Hurt> Due(double aNow, double aTickMs);
+
+	bool     Waiting() const { return sum_.has_value(); }
+	uint64_t Summed() const { return summed_; }  // hurts that joined a sum, since the start
+
+private:
+	struct Sum
+	{
+		Hurt   hurt;
+		double biggest = 0.0;  // its biggest part's share
+	};
+
+	std::optional<double> lastSent_;
+	std::optional<Sum>    sum_;
+	uint64_t              summed_ = 0;
+};
+
+// Whether Minecraft's player's death kills V: with combat on, while build mode is on, or within kDeathWindow seconds of
+// its end (aBuildEndedAt; build mode ends as soon as McState says Minecraft's player is dead, which can come first).
+bool DeathKillsV(bool aCombat, bool aBuildMode, std::optional<double> aBuildEndedAt, double aNow);
+
+// V's god mode, Immortal under BlockRender's own source name: on while combat and build mode are both on, whichever came
+// first; off when either ends; and off once whenever V is found again after not being found, as after a load, in case a
+// save kept it.
+class GodMode
+{
+public:
+	// The frame's state. The change to make now, through the module: on (true) or off (false). Nothing while V isn't found.
+	std::optional<bool> Frame(bool aCombat, bool aBuildMode, bool aVFound);
+	bool                On() const { return on_; }
+
+private:
+	bool on_ = false;
+	bool vFound_ = false;
+	bool clearDue_ = false;
+};
+}
+```
+
+- [ ] **Step 5: Write `src/link/Combat.cpp`**
+
+```cpp
+#include "link/Combat.h"
+
+#include <algorithm>
+#include <array>
+#include <cmath>
+#include <format>
+
+namespace cpmc::link
+{
+namespace
+{
+// gamedataAttackType in the game 2.31, by value (the decompiled scripts' orphans.swift).
+constexpr std::array<const char*, 15> kAttackTypes{ "ChargedWhipAttack", "Direct", "Effect",       "Explosion",  "ForceKill",
+	                                                 "GuardBreak",        "Hack",   "Melee",        "PressureWave", "QuickMelee",
+	                                                 "Ranged",            "Reflect", "StrongMelee", "Thrown",     "WhipAttack" };
+enum AttackType : int32_t
+{
+	kChargedWhipAttack = 0,
+	kDirect = 1,
+	kGuardBreak = 5,
+	kHack = 6,
+	kMelee = 7,
+	kQuickMelee = 9,
+	kRanged = 10,
+	kReflect = 11,
+	kStrongMelee = 12,
+	kThrown = 13,
+	kWhipAttack = 14,
+};
+
+// The sums' wait, in seconds: kHurtTicks of Minecraft's ticks.
+double Window(double aTickMs)
+{
+	const double tickMs = aTickMs >= 1.0 && aTickMs <= 1000.0 ? aTickMs : 50.0;
+	return kHurtTicks * tickMs / 1000.0;
+}
+}
+
+const char* HitDropName(HitDrop aDrop)
+{
+	switch (aDrop)
+	{
+	case HitDrop::NotListed:
+		return "not listed";
+	case HitDrop::NoDamage:
+		return "no damage";
+	case HitDrop::NoPunch:
+		return "no punch";
+	default:
+		return "?";
+	}
+}
+
+std::optional<NpcHit> AcceptHit(const proto::McEvent& aEvent, const ActorIds& aIds, double aNow, double aPunch, HitDrop& aDrop)
+{
+	const std::optional<uint64_t> entity = aIds.Entity(aEvent.formId, aNow);
+	if (!entity)
+	{
+		aDrop = HitDrop::NotListed;
+		return std::nullopt;
+	}
+	const double damage = aEvent.a;
+	if (!std::isfinite(damage) || damage <= 0.0)
+	{
+		aDrop = HitDrop::NoDamage;
+		return std::nullopt;
+	}
+	if (!std::isfinite(aPunch) || aPunch <= 0.0)
+	{
+		aDrop = HitDrop::NoPunch;
+		return std::nullopt;
+	}
+	NpcHit hit;
+	hit.formId = aEvent.formId;
+	hit.entity = *entity;
+	hit.damage = std::min(damage, kHitCap);
+	hit.amount = hit.damage * aPunch;
+	hit.strong = (aEvent.flags & proto::kHitCritical) != 0 || aEvent.d > float(kStrongKnockback);  // as SkyCraft's push > 0.45f
+	return hit;
+}
+
+std::string HitResultName(int32_t aResult)
+{
+	switch (aResult)
+	{
+	case 1:
+		return "queued";
+	case 0:
+		return "V isn't found";
+	case -1:
+		return "the NPC is gone";
+	case -2:
+		return "the NPC is dead";
+	case -3:
+		return "no attack record to make it with";
+	default:
+		return std::format("result {}", aResult);
+	}
+}
+
+proto::HurtKind HurtKindOf(int32_t aAttackType)
+{
+	switch (aAttackType)
+	{
+	case kQuickMelee:
+	case kStrongMelee:
+	case kMelee:
+	case kGuardBreak:
+	case kWhipAttack:
+	case kChargedWhipAttack:
+	case kReflect:
+		return proto::kHurtMelee;
+	case kRanged:
+	case kThrown:
+	case kDirect:
+		return proto::kHurtProjectile;
+	case kHack:
+		return proto::kHurtMagic;
+	default:
+		return proto::kHurtOther;
+	}
+}
+
+bool PowerAttack(int32_t aAttackType)
+{
+	return aAttackType == kStrongMelee || aAttackType == kChargedWhipAttack || aAttackType == kGuardBreak;
+}
+
+std::string AttackTypeName(int32_t aAttackType)
+{
+	return aAttackType >= 0 && size_t(aAttackType) < kAttackTypes.size() ? kAttackTypes[size_t(aAttackType)]
+	                                                                     : std::format("attack type {}", aAttackType);
+}
+
+const char* HurtKindName(proto::HurtKind aKind)
+{
+	switch (aKind)
+	{
+	case proto::kHurtMelee:
+		return "melee";
+	case proto::kHurtProjectile:
+		return "projectile";
+	case proto::kHurtMagic:
+		return "magic";
+	default:
+		return "other";
+	}
+}
+
+Hurt HurtFrom(const GameHurt& aHurt, double aMaxHealth, const ActorIds& aIds)
+{
+	Hurt hurt;
+	hurt.share = aMaxHealth > 0.0 && std::isfinite(aHurt.amount) ? std::clamp(aHurt.amount / aMaxHealth, 0.0, 1.0) : 0.0;
+	hurt.kind = HurtKindOf(aHurt.attackType);
+	hurt.power = PowerAttack(aHurt.attackType);
+	hurt.attacker = aHurt.instigator != 0 ? aIds.IdOf(aHurt.instigator).value_or(0) : 0;
+	return hurt;
+}
+
+proto::InputEvent HurtInput(const Hurt& aHurt)
+{
+	proto::InputEvent input{};
+	input.type = proto::kInHurt;
+	input.code = aHurt.kind;
+	input.a = int32_t(std::lround(std::clamp(aHurt.share, 0.0, 1.0) * 10000.0));
+	input.b = int32_t(aHurt.attacker);
+	input.c = aHurt.power ? int32_t(proto::kHurtPowerAttack) : 0;
+	return input;
+}
+
+std::optional<Hurt> HurtSums::Add(const Hurt& aHurt, double aNow, double aTickMs)
+{
+	if (!sum_ && (!lastSent_ || aNow - *lastSent_ >= Window(aTickMs)))
+	{
+		lastSent_ = aNow;
+		return aHurt;
+	}
+	++summed_;
+	if (!sum_)
+	{
+		sum_ = Sum{ aHurt, aHurt.share };
+		return std::nullopt;
+	}
+	Sum& sum = *sum_;
+	if (aHurt.share > sum.biggest)
+	{
+		sum.biggest = aHurt.share;
+		sum.hurt.kind = aHurt.kind;
+		sum.hurt.attacker = aHurt.attacker;
+	}
+	sum.hurt.share += aHurt.share;
+	sum.hurt.power = sum.hurt.power || aHurt.power;
+	return std::nullopt;
+}
+
+std::optional<Hurt> HurtSums::Due(double aNow, double aTickMs)
+{
+	if (!sum_ || (lastSent_ && aNow - *lastSent_ < Window(aTickMs)))
+	{
+		return std::nullopt;
+	}
+	const Hurt hurt = sum_->hurt;
+	sum_.reset();
+	lastSent_ = aNow;
+	return hurt;
+}
+
+bool DeathKillsV(bool aCombat, bool aBuildMode, std::optional<double> aBuildEndedAt, double aNow)
+{
+	return aCombat && (aBuildMode || (aBuildEndedAt && aNow - *aBuildEndedAt <= kDeathWindow));
+}
+
+std::optional<bool> GodMode::Frame(bool aCombat, bool aBuildMode, bool aVFound)
+{
+	if (!aVFound)
+	{
+		vFound_ = false;
+		return std::nullopt;
+	}
+	if (!vFound_)
+	{
+		vFound_ = true;
+		clearDue_ = true;
+	}
+	if (clearDue_)
+	{
+		clearDue_ = false;
+		on_ = false;
+		return false;
+	}
+	const bool wanted = aCombat && aBuildMode;
+	if (wanted == on_)
+	{
+		return std::nullopt;
+	}
+	on_ = wanted;
+	return wanted;
+}
+}
+```
+
+- [ ] **Step 6: Edit `CMakeLists.txt` to add the source**
+
+```cmake
+	src/link/Actors.cpp
+	src/physx/GameAbi.cpp
+```
+```cmake
+	src/link/Actors.cpp
+	src/link/Combat.cpp
+	src/physx/GameAbi.cpp
+```
+
+- [ ] **Step 7: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `429 test(s), 0 failure(s)`.
+
+- [ ] **Step 8: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "npcs-and-combat: which of Minecraft's hits count, V's hurts for Minecraft, their sums, deaths and god mode" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 15: `mclink` hurts Minecraft's player as the plugin will, through its sums
+
+Step 3 sends V's hurts to Minecraft from `mclink`, without the game, as BlockRender will send them:
+- **The link** reports McState's `tickMs`, Minecraft's milliseconds a tick, which the sums wait in.
+- **`hurt <kind> <share> [<attacker>] [power]`,** a new script action: melee, projectile, magic or other; a share of V's
+  health, over 0 and up to 1; the made-up NPC behind it, or 0; and `power` for a power attack. It goes through
+  `HurtSums` and `HurtInput`, and `mclink` says whether it went at once or joined a sum, and each sum as it goes.
+- **`tools/mclink/hurts.txt`,** step 3's script, at step 1's spot in survival, from full health each time: a quarter,
+  melee, from nobody; a tenth, other; in diamond armour, a quarter, melee, from a stand-in 2 blocks away, and a quarter,
+  other; out of the armour, a burst of five of 0.05 a tenth of a second apart, from that stand-in, the last a power
+  attack; and `/kill`. It turns `immediate_respawn` on, which stays, and `keep_inventory` on for the death and off at the
+  end.
+
+**Files:**
+- Create: `tools/mclink/hurts.txt`
+- Modify: `src/link/Link.h`, `src/link/Link.cpp`, `tests/TestLink.cpp`, `tools/mclink/McLinkScript.h`,
+  `tools/mclink/McLinkScript.cpp`, `tools/mclink/Main.cpp`, `tests/TestMcLinkScript.cpp`
+
+- [ ] **Step 1: Edit `tests/TestLink.cpp`: the tick length**
+
+```cpp
+	CHECK(link.State().drainMs >= 0.0);
+```
+```cpp
+	CHECK(link.State().drainMs >= 0.0);
+}
+
+TEST(LinkReportsMinecraftsTickLength)
+{
+	FakeMinecraft minecraft;
+	Link          link(minecraft.base);
+	Sink          sink;
+	minecraft.Beat(77, 1000);
+	minecraft.Ticked(0, { -119.5, 6.14, 2007.5 }, 1.0);
+	link.Update(At(1.0), kSettings, sink);
+	CHECK_NEAR(link.State().minecraftTickMs, 50.0, 1e-9);
+```
+
+- [ ] **Step 2: Edit `tests/TestMcLinkScript.cpp`: the hurt action, and step 3's script**
+
+```cpp
+	for (const char* name : { "step1.txt", "again.txt", "eye.txt", "drive.txt", "relink.txt", "city.txt", "npcs.txt" })
+```
+```cpp
+	for (const char* name : { "step1.txt", "again.txt", "eye.txt", "drive.txt", "relink.txt", "city.txt", "npcs.txt", "hurts.txt" })
+```
+```cpp
+TEST(ScriptParsesMadeUpNpcs)
+```
+```cpp
+TEST(ScriptParsesHurts)
+{
+	std::string error;
+	const auto  actions = ParseScript("hurt melee 0.25\nhurt projectile 0.05 3 power\nhurt other 1 0\nhurt magic 0.1 power\n", error);
+	CHECK(actions.has_value());
+	CHECK_EQ(actions ? actions->size() : 0, size_t(4));
+	if (actions && actions->size() == 4)
+	{
+		const auto& a = *actions;
+		CHECK(a[0].kind == Kind::Hurt);
+		CHECK_EQ(a[0].numbers[0], 0.0);  // melee
+		CHECK_EQ(a[0].numbers[1], 0.25);
+		CHECK_EQ(a[0].numbers[2], 0.0);  // no attacker
+		CHECK(!a[0].on);
+		CHECK_EQ(a[1].numbers[0], 1.0);  // projectile
+		CHECK_EQ(a[1].numbers[2], 3.0);
+		CHECK(a[1].on);  // a power attack
+		CHECK_EQ(a[2].numbers[0], 3.0);  // other
+		CHECK_EQ(a[2].numbers[1], 1.0);
+		CHECK_EQ(a[3].numbers[0], 2.0);  // magic
+		CHECK(a[3].on);
+	}
+	CHECK(!ParseScript("hurt fire 0.1", error).has_value());
+	CHECK(!ParseScript("hurt melee 0", error).has_value());
+	CHECK(!ParseScript("hurt melee 1.5", error).has_value());
+	CHECK(!ParseScript("hurt melee 0.1 1.5", error).has_value());
+	CHECK(!ParseScript("hurt melee 0.1 3 hard", error).has_value());
+	CHECK(!ParseScript("hurt melee", error).has_value());
+	CHECK(!ParseScript("hurt melee 0.1 3 power extra", error).has_value());
+}
+
+TEST(ScriptParsesMadeUpNpcs)
+```
+
+- [ ] **Step 3: Build; it must fail**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C" | sort -u | head -3
+```
+Expected: `error C2039: 'minecraftTickMs': is not a member of 'cpmc::link::Link::Status'`, and
+`error C2065: 'Hurt': undeclared identifier`.
+
+- [ ] **Step 4: Edit `src/link/Link.h`**
+
+```cpp
+		uint32_t              minecraftFlags = 0;  // McState's: on ground, sneaking, sprinting, flying and the rest
+```
+```cpp
+		uint32_t              minecraftFlags = 0;  // McState's: on ground, sneaking, sprinting, flying and the rest
+		float                 minecraftTickMs = 0.0f;  // McState's: Minecraft's milliseconds a tick (spike 6's sums)
+```
+
+- [ ] **Step 5: Edit `src/link/Link.cpp`**
+
+```cpp
+		status_.minecraftFlags = mc->flags;
+```
+```cpp
+		status_.minecraftFlags = mc->flags;
+		status_.minecraftTickMs = mc->tickMs;
+```
+
+- [ ] **Step 6: Edit `tools/mclink/McLinkScript.h`**
+
+```cpp
+//   actor-remove <id>|all          one made-up NPC out of the table, or all of them
+```
+```cpp
+//   actor-remove <id>|all          one made-up NPC out of the table, or all of them
+//   hurt <kind> <share> [<attacker>] [power]
+//                                  V hurt, as the plugin sends it (spike 6's Part 2): melee, projectile, magic or other;
+//                                  its share of V's health, over 0 and up to 1; the made-up NPC that did it, or 0; and
+//                                  power for a power attack. It goes through the plugin's sums: at once, or in a sum
+```
+```cpp
+		ActorRemove,
+```
+```cpp
+		ActorRemove,
+		Hurt,
+```
+```cpp
+	                      // actor's number, x, y, z, yaw, width and height; the actor to remove, or 0 for all
+	bool        on = false;  // link, build and hud
+```
+```cpp
+	                      // actor's number, x, y, z, yaw, width and height; the actor to remove, or 0 for all; a hurt's
+	                      // kind (proto::HurtKind), share and attacker
+	bool        on = false;  // link, build and hud; a hurt's power attack
+```
+
+- [ ] **Step 7: Edit `tools/mclink/McLinkScript.cpp`**
+
+```cpp
+#include <charconv>
+```
+```cpp
+#include <algorithm>
+#include <array>
+#include <charconv>
+```
+```cpp
+		}
+		else if (verb == "floor" || verb == "status" || verb == "quit")
+```
+```cpp
+		}
+		else if (verb == "hurt")
+		{
+			action.kind = Action::Kind::Hurt;
+			size_t given = words.size();
+			action.on = given > 3 && words[given - 1] == "power";
+			given -= action.on ? 1 : 0;
+			const std::array<std::string_view, 4> kinds{ "melee", "projectile", "magic", "other" };
+			const auto kind = given >= 2 ? std::find(kinds.begin(), kinds.end(), words[1]) : kinds.end();
+			bool       ok = kind != kinds.end() && (given == 3 || given == 4) && Number(words[2], action.numbers[1]) &&
+			          action.numbers[1] > 0.0 && action.numbers[1] <= 1.0;
+			if (ok && given == 4)
+			{
+				ok = Number(words[3], action.numbers[2]) && (action.numbers[2] == 0.0 || WholeId(action.numbers[2]));
+			}
+			if (!ok)
+			{
+				return fail("hurt takes melee, projectile, magic or other; a share over 0 and up to 1; then an actor's number, or 0; "
+				            "then power");
+			}
+			action.numbers[0] = double(kind - kinds.begin());
+		}
+		else if (verb == "floor" || verb == "status" || verb == "quit")
+```
+
+- [ ] **Step 8: Edit `tools/mclink/Main.cpp`: hurts through the sums**
+
+```cpp
+#include "link/Actors.h"
+```
+```cpp
+#include "link/Actors.h"
+#include "link/Combat.h"
+```
+```cpp
+	std::map<uint32_t, proto::ActorRecord> actors;  // the made-up NPCs, by number
+```
+```cpp
+	std::map<uint32_t, proto::ActorRecord> actors;  // the made-up NPCs, by number
+	HurtSums                               sums;    // V's hurts, as the plugin sums them
+	const auto send = [&](const Hurt& aHurt, const char* aHow) {
+		const proto::InputEvent input = HurtInput(aHurt);
+		const bool              sent = link.Push(input);
+		Say("hurt {}: {} {:.4f} of V's health, a = {}, attacker {}{}{}", aHow, HurtKindName(aHurt.kind), aHurt.share, input.a, aHurt.attacker,
+		    aHurt.power ? ", power attack" : "", sent ? "" : "; DROPPED, the input ring is full");
+	};
+```
+```cpp
+		const auto& state = link.State();
+```
+```cpp
+		const auto& state = link.State();
+		if (const std::optional<Hurt> due = sums.Due(now, state.minecraftTickMs))
+		{
+			send(*due, "sent, summed");
+		}
+```
+```cpp
+				break;
+			case Action::Kind::Status: PrintStatus(link, report, feet); break;
+```
+```cpp
+				break;
+			case Action::Kind::Hurt:
+			{
+				Hurt hurt;
+				hurt.kind = proto::HurtKind(action.numbers[0]);
+				hurt.share = action.numbers[1];
+				hurt.attacker = uint32_t(action.numbers[2]);
+				hurt.power = action.on;
+				if (const std::optional<Hurt> now_ = sums.Add(hurt, now, link.State().minecraftTickMs))
+				{
+					send(*now_, "sent at once");
+				}
+				else
+				{
+					Say("hurt joins a sum: {} {:.4f} of V's health, attacker {}{}", HurtKindName(hurt.kind), hurt.share, hurt.attacker,
+					    hurt.power ? ", power attack" : "");
+				}
+				break;
+			}
+			case Action::Kind::Status: PrintStatus(link, report, feet); break;
+```
+
+- [ ] **Step 9: Write step 3's script, `tools/mclink/hurts.txt`**
+
+```text
+# Spike 6's step 3: Minecraft's player hurt as the plugin will hurt it for V, through its sums, without the game. At step
+# 1's spot, in survival, each from full health: a quarter of V's health, melee, from nobody, then a tenth, other; then in
+# diamond armour, a quarter, melee, from a stand-in 2 blocks away (the armour takes some) and a quarter, other (it takes
+# none); out of the armour, a burst of five, summed; and /kill, which comes back as Minecraft's player's death. Start
+# Minecraft first; this waits for its world. immediate_respawn stays on in the world; keep_inventory is on for the death,
+# and off at the end.
+status
+wait-world 180
+at 520.5 6.14 2007.5
+look 180 0
+link on
+wait 3
+type /gamerule immediate_respawn true
+type /gamerule keep_inventory true
+type /gamemode survival
+# Full health, then a quarter of V's health, melee, from nobody: 5 of Minecraft's 20.
+type /effect give @s minecraft:instant_health 1 10
+wait 2
+hurt melee 0.25
+wait 2
+# A tenth, other: 2.
+type /effect give @s minecraft:instant_health 1 10
+wait 2
+hurt other 0.1
+wait 2
+# Diamond armour, and a stand-in 2 blocks north: a quarter, melee, from it, which the armour reduces; then a quarter,
+# other, which passes the armour.
+actor 1 520.5 6.14 2005.5 0 0.6 1.8 Ganger One
+type /item replace entity @s armor.chest with minecraft:diamond_chestplate
+type /item replace entity @s armor.legs with minecraft:diamond_leggings
+type /effect give @s minecraft:instant_health 1 10
+wait 2
+hurt melee 0.25 1
+wait 2
+type /effect give @s minecraft:instant_health 1 10
+wait 2
+hurt other 0.25
+wait 2
+# Out of the armour, a burst of five, 0.05 each, a tenth of a second apart, from the stand-in, the last a power attack:
+# the first at once, the other four in one sum 11 ticks later.
+type /item replace entity @s armor.chest with minecraft:air
+type /item replace entity @s armor.legs with minecraft:air
+type /effect give @s minecraft:instant_health 1 10
+wait 2
+hurt projectile 0.05 1
+wait 0.1
+hurt projectile 0.05 1
+wait 0.1
+hurt projectile 0.05 1
+wait 0.1
+hurt projectile 0.05 1
+wait 0.1
+hurt projectile 0.05 1 power
+wait 2
+# Death: /kill comes back as the event, killed by none of the actors, and Minecraft's player respawns at once.
+type /kill @s
+wait 3
+actor-remove all
+type /gamerule keep_inventory false
+type /gamemode creative
+status
+quit
+```
+
+- [ ] **Step 10: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `431 test(s), 0 failure(s)`.
+
+- [ ] **Step 11: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "npcs-and-combat: mclink hurts Minecraft's player as the plugin will, through its sums" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 16: In Minecraft: step 3
+
+Step 3 of the spec's "The steps", with the user: Minecraft's player hurt as BlockRender will hurt it for V, from
+`mclink`, against SkyCraft's unchanged mod, without the game.
+- **What SkyCraft logs** for each hurt (its `SkyCombat.hurtPlayer`, at 0.1.2): `SkyCraft: Skyrim hit the player for
+  <Skyrim damage> (<Minecraft damage> Minecraft): health <before> -> <after>`, with ` (blocked/immune)` after it when
+  nothing was taken. The Skyrim damage is `a` ÷ 100, the share × 100; Minecraft's is that ÷ 5. Armour and a shield
+  reduce only melee and projectile hurts whose attacker has a stand-in within 24 blocks (the spec's "Minecraft 26.3").
+- **The death** comes back as `kEvPlayerDied`, which `mclink` prints.
+- **If a check fails,** stop and find the cause with superpowers:systematic-debugging before going on. Fixes become new
+  tasks.
+
+**Files:**
+- Modify: `docs/spikes/2026-10-05-npcs-and-combat-results.md`
+
+- [ ] **Step 1: Check that the game isn't running**
+
+```bash
+tasklist | grep -i -c "cyberpunk2077.exe"
+```
+Expected: `0`. If it's `1`, ask the user to quit the game: it would hold the mapping.
+
+- [ ] **Step 2: Ask the user about `keep_inventory`, then to start Minecraft**
+
+The script kills Minecraft's player once. Ask the user whether `keep_inventory` may be on for that death and off at the
+end, as `hurts.txt` does, so nothing is dropped; if their world keeps it on already, delete the script's line `type
+/gamerule keep_inventory false` first. Then the user starts the `CyberCraft` instance from the Modrinth App, and says
+when its title screen shows.
+
+- [ ] **Step 3: Run step 3's script**
+
+```bash
+L="/c/Users/BLOXY/AppData/Roaming/ModrinthApp/profiles/CyberCraft/logs/latest.log"; before=$(wc -l < "$L"); \
+  cd /d/Cyberpunk-Minecraft/spikes/block-render && mkdir -p build/step3 && cd build/step3 \
+  && ../RelWithDebInfo/mclink.exe ../../tools/mclink/hurts.txt | tee hurts.log; echo "exit: ${PIPESTATUS[0]}"; \
+  tail -n +$((before + 1)) "$L" | grep -E "SkyCraft: Skyrim hit|\[CHAT\]" | tee minecraft.log
+```
+Give the command 6 minutes. Expected, against the spec's "Step 3":
+- **Each hurt's share:** `hurt sent at once: melee 0.2500 of V's health, a = 2500, attacker 0` and `SkyCraft: Skyrim hit
+  the player for 25.0 (5.0 Minecraft): health 20.0 -> 15.0`; then `hurt sent at once: other 0.1000 of V's health, a =
+  1000, attacker 0` and `… for 10.0 (2.0 Minecraft): health 20.0 -> 18.0`.
+- **Armour:** in diamond armour, the melee hurt from actor 1, `… for 25.0 (5.0 Minecraft): health 20.0 -> …`,
+  takes less than 5 (about 17.5 is left); the other hurt, `… for 25.0 (5.0 Minecraft): health 20.0 -> 15.0`, takes
+  all 5.
+- **The burst:** `hurt sent at once: projectile 0.0500 …`, four `hurt joins a sum: …`, then `hurt sent, summed:
+  projectile 0.2000 of V's health, a = 2000, attacker 1, power attack`; SkyCraft's `… for 5.0 (1.0 Minecraft): health
+  20.0 -> 19.0` and `… for 20.0 (4.0 Minecraft): health 19.0 -> 15.0`: all five landed.
+- **The death:** `Minecraft's player died, killed by none of the actors`.
+- **The status:** `events: 0 explosions, 0 hits on actors, 1 deaths, …` (the others are SkyCraft's armour skill
+  events, drained and counted), `0 inputs dropped`, and `exit: 0`.
+
+- [ ] **Step 4: Ask the user to stop Minecraft**
+
+Its window is hidden while `mclink` drives it, so the user stops it from the Modrinth App.
+
+- [ ] **Step 5: Write step 3's results in `docs/spikes/2026-10-05-npcs-and-combat-results.md`**
+
+A "Step 3" section, from `build/step3/hurts.log` and `build/step3/minecraft.log`: the versions; each check above with
+its numbers (each hurt's share, what Minecraft took, the armour's part, the burst's two sends); anything that
+surprised, and what it means for step 4.
+
+- [ ] **Step 6: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add docs/spikes/2026-10-05-npcs-and-combat-results.md \
+  && git commit -q -m "npcs-and-combat: step 3's results" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 17: The combat inbox, and the natives the damage pipeline's wraps call
+
+The damage pipeline may run on any thread, so what its wraps report comes to BlockRender through natives, behind a
+lock, as the NPC list does:
+- **`CombatInbox`** keeps the hits on V the wrap offers, taken only while the main thread says so (combat and build
+  mode on, V found, V's max health read), and at most 256 waiting; a hit it doesn't take stays V's. It keeps our hits
+  as they land, with the NPC's health before and after, for the status. The main thread takes both each frame.
+- **Two more natives:** `BlockRenderVHurt(amount, attackType, instigator) -> Bool`, true when taken, and
+  `BlockRenderHitLanded(target, amount, before, after)`. `GameScript` checks all six natives are there.
+
+**Files:**
+- Create: `src/CombatInbox.h`, `src/CombatInbox.cpp`, `tests/TestCombatInbox.cpp`
+- Modify: `CMakeLists.txt`, `src/Natives.h`, `src/Natives.cpp`, `src/GameScript.cpp`
+
+- [ ] **Step 1: Write the failing test, `tests/TestCombatInbox.cpp`**
+
+```cpp
+#include "Harness.h"
+
+#include "CombatInbox.h"
+
+#include <thread>
+
+using namespace cpmc;
+
+TEST(CombatInboxTakesHurtsOnlyWhileTaking)
+{
+	CombatInbox inbox;
+	// Not taking: the hit is left to V.
+	CHECK(!inbox.Offer({ 45.0, 10, 0x51 }));
+	CHECK(inbox.TakeHurts().empty());
+	inbox.SetTaking(true);
+	CHECK(inbox.Taking());
+	CHECK(inbox.Offer({ 45.0, 10, 0x51 }));
+	CHECK(inbox.Offer({ 12.0, 9, 0 }));
+	const std::vector<link::GameHurt> hurts = inbox.TakeHurts();
+	CHECK_EQ(hurts.size(), size_t(2));
+	CHECK(hurts.size() == 2 && hurts[0].amount == 45.0 && hurts[0].attackType == 10 && hurts[0].instigator == 0x51);
+	CHECK(hurts.size() == 2 && hurts[1].amount == 12.0);
+	CHECK(inbox.TakeHurts().empty());
+	// With kMaxWaiting waiting, the next is left to V rather than lost.
+	for (size_t i = 0; i < CombatInbox::kMaxWaiting; ++i)
+	{
+		CHECK(inbox.Offer({ 1.0, 9, 0 }));
+	}
+	CHECK(!inbox.Offer({ 1.0, 9, 0 }));
+	inbox.SetTaking(false);
+	CHECK(!inbox.Offer({ 1.0, 9, 0 }));
+	const CombatInbox::Counts counts = inbox.Count();
+	CHECK_EQ(counts.taken, uint64_t(2 + CombatInbox::kMaxWaiting));
+	CHECK_EQ(counts.refused, uint64_t(3));
+	CHECK_EQ(inbox.TakeHurts().size(), CombatInbox::kMaxWaiting);
+}
+
+TEST(CombatInboxKeepsLandingsUntilTaken)
+{
+	CombatInbox inbox;
+	inbox.Land({ 7, 714.0, 1514.0, 800.0 });
+	inbox.Land({ 8, 102.0, 48.0, 0.0 });
+	const std::vector<CombatInbox::Landed> landed = inbox.TakeLanded();
+	CHECK_EQ(landed.size(), size_t(2));
+	CHECK(landed.size() == 2 && landed[0].target == 7 && landed[0].amount == 714.0 && landed[0].before == 1514.0 &&
+	      landed[0].after == 800.0);
+	CHECK(landed.size() == 2 && landed[1].target == 8);
+	CHECK(inbox.TakeLanded().empty());
+	for (size_t i = 0; i <= CombatInbox::kMaxWaiting; ++i)
+	{
+		inbox.Land({ 9, 1.0, 2.0, 1.0 });
+	}
+	CHECK_EQ(inbox.TakeLanded().size(), CombatInbox::kMaxWaiting);
+	CHECK_EQ(inbox.Count().landed, uint64_t(2 + CombatInbox::kMaxWaiting));
+	CHECK_EQ(inbox.Count().dropped, uint64_t(1));
+}
+
+// As the game does: the pipeline on several threads at once, while the main thread takes what they report.
+TEST(CombatInboxTakesReportsFromManyThreadsAtOnce)
+{
+	constexpr int            kThreads = 8;
+	constexpr int            kEach = 2000;
+	CombatInbox              inbox;
+	std::vector<std::thread> threads;
+	std::atomic<int>         taken{ 0 };
+	inbox.SetTaking(true);
+	for (int t = 0; t < kThreads; ++t)
+	{
+		threads.emplace_back([&inbox, &taken, t] {
+			for (int i = 0; i < kEach; ++i)
+			{
+				if (inbox.Offer({ 1.0, 9, uint64_t(t + 1) }))
+				{
+					++taken;
+				}
+				inbox.Land({ uint64_t(t + 1), 1.0, 2.0, 1.0 });
+			}
+		});
+	}
+	size_t hurts = 0;
+	size_t landed = 0;
+	for (int read = 0; read < 2000; ++read)
+	{
+		hurts += inbox.TakeHurts().size();
+		landed += inbox.TakeLanded().size();
+	}
+	for (std::thread& thread : threads)
+	{
+		thread.join();
+	}
+	hurts += inbox.TakeHurts().size();
+	landed += inbox.TakeLanded().size();
+	const CombatInbox::Counts counts = inbox.Count();
+	CHECK_EQ(hurts, size_t(taken.load()));
+	CHECK_EQ(counts.taken + counts.refused, uint64_t(kThreads * kEach));
+	CHECK_EQ(counts.taken, uint64_t(taken.load()));
+	CHECK_EQ(uint64_t(landed), counts.landed);
+	CHECK_EQ(counts.landed + counts.dropped, uint64_t(kThreads * kEach));
+}
+```
+
+- [ ] **Step 2: Edit `CMakeLists.txt` to add the test**
+
+```cmake
+	tests/TestCombat.cpp
+	tools/mclink/DumpObj.cpp
+```
+```cmake
+	tests/TestCombat.cpp
+	tests/TestCombatInbox.cpp
+	tools/mclink/DumpObj.cpp
+```
+
+- [ ] **Step 3: Build; it must fail**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C" | sort -u | head -3
+```
+Expected: `error C1083: Cannot open include file: 'CombatInbox.h'`.
+
+- [ ] **Step 4: Write `src/CombatInbox.h`**
+
+```cpp
+#pragma once
+
+#include "link/Combat.h"
+
+#include <atomic>
+#include <cstddef>
+#include <cstdint>
+#include <mutex>
+#include <vector>
+
+namespace cpmc
+{
+// What the module's damage-pipeline wraps report through BlockRender's natives (spike 6's "Part 2"), on whichever thread
+// the game runs its damage pipeline on: hits on V, taken only while the main thread says so, so that V's health stays
+// V's otherwise; and our hits on NPCs as they land, with the NPC's health before and after. The main thread takes both
+// each frame.
+class CombatInbox
+{
+public:
+	static constexpr size_t kMaxWaiting = 256;  // of each: a hurt past it is left to V, a landing is only counted
+
+	// One of our hits, as DealDamages dealt it.
+	struct Landed
+	{
+		uint64_t target = 0;
+		double   amount = 0.0;
+		double   before = 0.0;  // the NPC's health
+		double   after = 0.0;
+	};
+
+	struct Counts
+	{
+		uint64_t taken = 0;    // hits on V taken from the game
+		uint64_t refused = 0;  // offered while not taking, or with kMaxWaiting waiting: left to V
+		uint64_t landed = 0;   // our hits reported as dealt
+		uint64_t dropped = 0;  // landings past kMaxWaiting
+	};
+
+	void SetTaking(bool aTaking);  // main thread: with combat and build mode on
+	bool Taking() const;
+	// Any thread: a hit on V, taken (true), so the wrap deals none of it, or left to V.
+	bool Offer(const link::GameHurt& aHurt);
+	void Land(const Landed& aLanded);  // any thread
+
+	std::vector<link::GameHurt> TakeHurts();  // main thread, oldest first
+	std::vector<Landed>         TakeLanded();
+	Counts                      Count() const;
+
+private:
+	std::atomic<bool>           taking_{ false };
+	mutable std::mutex          mutex_;
+	std::vector<link::GameHurt> hurts_;
+	std::vector<Landed>         landed_;
+	Counts                      counts_;
+};
+}
+```
+
+- [ ] **Step 5: Write `src/CombatInbox.cpp`**
+
+```cpp
+#include "CombatInbox.h"
+
+#include <utility>
+
+namespace cpmc
+{
+void CombatInbox::SetTaking(bool aTaking)
+{
+	taking_.store(aTaking, std::memory_order_release);
+}
+
+bool CombatInbox::Taking() const
+{
+	return taking_.load(std::memory_order_acquire);
+}
+
+bool CombatInbox::Offer(const link::GameHurt& aHurt)
+{
+	const std::lock_guard lock(mutex_);
+	if (!Taking() || hurts_.size() >= kMaxWaiting)
+	{
+		++counts_.refused;
+		return false;
+	}
+	hurts_.push_back(aHurt);
+	++counts_.taken;
+	return true;
+}
+
+void CombatInbox::Land(const Landed& aLanded)
+{
+	const std::lock_guard lock(mutex_);
+	if (landed_.size() >= kMaxWaiting)
+	{
+		++counts_.dropped;
+		return;
+	}
+	landed_.push_back(aLanded);
+	++counts_.landed;
+}
+
+std::vector<link::GameHurt> CombatInbox::TakeHurts()
+{
+	const std::lock_guard lock(mutex_);
+	return std::exchange(hurts_, {});
+}
+
+std::vector<CombatInbox::Landed> CombatInbox::TakeLanded()
+{
+	const std::lock_guard lock(mutex_);
+	return std::exchange(landed_, {});
+}
+
+CombatInbox::Counts CombatInbox::Count() const
+{
+	const std::lock_guard lock(mutex_);
+	return counts_;
+}
+}
+```
+
+- [ ] **Step 6: Edit `CMakeLists.txt` to add the source**
+
+```cmake
+	src/NpcRegistry.cpp
+)
+```
+```cmake
+	src/NpcRegistry.cpp
+	src/CombatInbox.cpp
+)
+```
+
+- [ ] **Step 7: Edit `src/Natives.h`**
+
+```cpp
+#include "LogQueue.h"
+```
+```cpp
+#include "CombatInbox.h"
+#include "LogQueue.h"
+```
+```cpp
+// those on, and its List reads the list back on the main thread (spike 6's "The module's list"). They're added once the
+// game has registered its own types, which is before it loads its scripts.
+```
+```cpp
+// those on, and its List reads the list back on the main thread (spike 6's "The module's list"). Its wraps of the damage
+// pipeline offer hits on V and report our hits landing through them, on whichever thread runs the pipeline (Part 2).
+// They're added once the game has registered its own types, which is before it loads its scripts.
+```
+```cpp
+NpcRegistry& NpcsReported();
+```
+```cpp
+NpcRegistry& NpcsReported();
+// The hits on V the pipeline's wraps offer, and our hits as they land.
+CombatInbox& CombatReported();
+```
+
+- [ ] **Step 8: Edit `src/Natives.cpp`: the two natives**
+
+```cpp
+NpcRegistry g_reported;
+```
+```cpp
+NpcRegistry g_reported;
+CombatInbox g_combat;
+```
+```cpp
+		aOut->hash = g_reported.At(index);
+	}
+}
+```
+```cpp
+		aOut->hash = g_reported.At(index);
+	}
+}
+
+// BlockRenderVHurt(amount: Float, attackType: Int32, instigator: EntityID) -> Bool, from the wrap of DealDamages, on any
+// thread: a hit on V, taken (true) while combat and build mode are on, so the wrap deals none of it.
+void VHurt(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, bool* aOut, int64_t)
+{
+	float                  amount = 0.0f;
+	int32_t                attackType = 0;
+	RED4ext::ent::EntityID instigator;
+	RED4ext::GetParameter(aFrame, &amount);
+	RED4ext::GetParameter(aFrame, &attackType);
+	RED4ext::GetParameter(aFrame, &instigator);
+	++aFrame->code;
+	const bool taken = g_combat.Offer({ double(amount), attackType, instigator.hash });
+	if (aOut)
+	{
+		*aOut = taken;
+	}
+}
+
+// BlockRenderHitLanded(target: EntityID, amount: Float, before: Float, after: Float), from the wrap of DealDamages, on any
+// thread: one of our hits, dealt, with the NPC's health before and after.
+void HitLanded(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, void*, int64_t)
+{
+	RED4ext::ent::EntityID target;
+	float                  amount = 0.0f;
+	float                  before = 0.0f;
+	float                  after = 0.0f;
+	RED4ext::GetParameter(aFrame, &target);
+	RED4ext::GetParameter(aFrame, &amount);
+	RED4ext::GetParameter(aFrame, &before);
+	RED4ext::GetParameter(aFrame, &after);
+	++aFrame->code;
+	g_combat.Land({ target.hash, double(amount), double(before), double(after) });
+}
+```
+```cpp
+	typed = Add<RED4ext::ent::EntityID*>(*rtti, "BlockRenderNpcAt", &NpcAt, { { "Int32", "i" } }, "entEntityID") && typed;
+	if (g_nativesLog)
+	{
+		g_nativesLog->Push(typed ? "natives: BlockRenderNpcAttached, BlockRenderNpcDetached, BlockRenderNpcCount and BlockRenderNpcAt added"
+```
+```cpp
+	typed = Add<RED4ext::ent::EntityID*>(*rtti, "BlockRenderNpcAt", &NpcAt, { { "Int32", "i" } }, "entEntityID") && typed;
+	typed = Add<bool*>(*rtti, "BlockRenderVHurt", &VHurt, { { "Float", "amount" }, { "Int32", "attackType" }, { "entEntityID", "instigator" } },
+	                   "Bool") &&
+	        typed;
+	typed = Add<void*>(*rtti, "BlockRenderHitLanded", &HitLanded,
+	                   { { "entEntityID", "target" }, { "Float", "amount" }, { "Float", "before" }, { "Float", "after" } }, nullptr) &&
+	        typed;
+	if (g_nativesLog)
+	{
+		g_nativesLog->Push(typed ? "natives: BlockRenderNpcAttached, BlockRenderNpcDetached, BlockRenderNpcCount, BlockRenderNpcAt, "
+		                           "BlockRenderVHurt and BlockRenderHitLanded added"
+```
+```cpp
+	return g_reported;
+}
+}
+```
+```cpp
+	return g_reported;
+}
+
+CombatInbox& CombatReported()
+{
+	return g_combat;
+}
+}
+```
+
+- [ ] **Step 9: Edit `src/GameScript.cpp`: six natives to check for**
+
+```cpp
+constexpr std::array<const char*, 4> kNatives{ "BlockRenderNpcAttached", "BlockRenderNpcDetached", "BlockRenderNpcCount",
+	                                           "BlockRenderNpcAt" };
+```
+```cpp
+constexpr std::array<const char*, 6> kNatives{ "BlockRenderNpcAttached", "BlockRenderNpcDetached", "BlockRenderNpcCount",
+	                                           "BlockRenderNpcAt",       "BlockRenderVHurt",       "BlockRenderHitLanded" };
+```
+
+- [ ] **Step 10: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `434 test(s), 0 failure(s)`.
+
+- [ ] **Step 11: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "npcs-and-combat: the combat inbox, and the natives the damage pipeline's wraps call" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 18: The module makes Minecraft's hits V's, takes V's hurts, and keeps V's god mode and death
+
+The module's side of Part 2, in `scripts/BlockRender.reds`, version 3:
+- **`Hit(id, amount, strong)`** builds a hit as the game's `SendHitEvent` does (`triggerAttackOnNearbyEnemiesEffector`):
+  an `AttackInitContext` from V, as instigator and source, with the attack record of what V punches with and its
+  weapon object if V has it drawn; `IAttack.Create`; a `gameHitEvent` with a new `AttackData`, the NPC as its target,
+  its position at the NPC's middle and a hit shape there, its direction from V; then `QueueHitEvent`. The record is from
+  the item in the `BaseFists` area, its `WeaponItem_Record.Attacks()`: its `StrongMelee` attack for a strong hit, its
+  light one, `Melee`, otherwise (`QuickMelee` is a gun's quick melee: `attackData.swift`'s `IsLightMelee`); of neither,
+  its first melee attack. 1: queued; 0: V isn't found; -1: the NPC is gone; -2: dead; -3: no attack record.
+- **Ours, on the hit itself:** the game marks its environment's attacks with `hitFlag.None` and a source name
+  (`environmentDamageSystem.swift`); the module marks ours `hitFlag.None` under `n"BlockRender <amount>"`, and
+  `AmountOf` reads the amount back. The pipeline's wraps read only the hit, on whichever thread runs it.
+- **`Process` is wrapped:** for ours, `DealNoDamage` under `n"no_valid_damage"` comes off; any other reason stays.
+- **`DealDamages` is wrapped:** ours deals exactly its amount, as physical damage, and `BlockRenderHitLanded` reports
+  the NPC's health before and after. A hit on V with health damage is offered to `BlockRenderVHurt`; taken, it deals
+  nothing.
+- **`SetImmortal(on)`** adds or removes Immortal on V under `n"BlockRender"` only; **`KillV(killer)`** removes ours and
+  sets V's health to its least with the killer as instigator, as the pipeline's `ProcessInstantKill` does; **`Punch()`**
+  says V's punch, its item, and the attack records hits are made with.
+
+`Process`'s and `DealDamages`'s signatures are `damageSystem.swift`'s; a wrap of a method that isn't there fails the
+compile, which Step 3 checks.
+
+**Files:**
+- Modify: `scripts/BlockRender.reds`
+
+- [ ] **Step 1: Edit `scripts/BlockRender.reds`**
+
+```swift
+// BlockRender, and keeps no reference to an NPC from one call to the next: each is found again by its EntityID.
+```
+```swift
+// BlockRender, and keeps no reference to an NPC from one call to the next: each is found again by its EntityID.
+//
+// Combat (spike 6's Part 2): Hit makes one of Minecraft's hits into a hit of V's on an NPC, marked as ours with its
+// amount on the hit itself, and the wraps of the damage pipeline's Process and DealDamages, at the end of this file, deal
+// it exactly; the same DealDamages wrap offers the game's hits on V to BlockRender, which takes them for Minecraft in
+// build mode. The pipeline may run on any thread, so those wraps too touch nothing of the module's: they read the hit
+// itself, and call BlockRender's natives.
+```
+```swift
+public native func BlockRenderNpcAt(i: Int32) -> EntityID
+```
+```swift
+public native func BlockRenderNpcAt(i: Int32) -> EntityID
+// For the DealDamages wrap: a hit on V, which BlockRender takes (true) for Minecraft while combat and build mode are on;
+// and one of our hits, dealt, with the NPC's health before and after.
+public native func BlockRenderVHurt(amount: Float, attackType: Int32, instigator: EntityID) -> Bool
+public native func BlockRenderHitLanded(target: EntityID, amount: Float, before: Float, after: Float)
+```
+```swift
+  // The module's version, which BlockRender checks: 2 since the list moved into BlockRender.
+  public final static func Version() -> Int32 {
+    return 2;
+```
+```swift
+  // The module's version, which BlockRender checks: 2 since the list moved into BlockRender, 3 with combat.
+  public final static func Version() -> Int32 {
+    return 3;
+```
+```swift
+  private final func Know(id: EntityID) -> Void {
+```
+```swift
+  // One of Minecraft's hits on an NPC, as V's: amount is what it takes off the NPC's health, and strong picks the strong
+  // attack. Built as the game's SendHitEvent builds one, from V, with the attack record of what V punches with, and the
+  // weapon object of it if V has it drawn. 1: queued; 0: V isn't found; -1: the NPC is gone; -2: it's dead; -3: there's no
+  // attack record to make it with.
+  public final func Hit(id: EntityID, amount: Float, strong: Bool) -> Int32 {
+    let game: GameInstance = this.GetGameInstance();
+    let player: ref<GameObject> = GameInstance.GetPlayerSystem(game).GetLocalPlayerMainGameObject();
+    if !IsDefined(player) {
+      return 0;
+    };
+    let npc: ref<NPCPuppet> = GameInstance.FindEntityByID(game, id) as NPCPuppet;
+    if !IsDefined(npc) {
+      return -1;
+    };
+    if npc.IsDead() {
+      return -2;
+    };
+    let record: ref<Attack_Record> = this.PunchAttack(player, strong);
+    if !IsDefined(record) {
+      return -3;
+    };
+    let weapon: ref<WeaponObject> = this.PunchWeapon(player, game);
+    let context: AttackInitContext;
+    context.record = record;
+    context.instigator = player;
+    context.source = player;
+    context.weapon = weapon;
+    let hit: ref<gameHitEvent> = new gameHitEvent();
+    hit.attackData = new AttackData();
+    hit.target = npc;
+    hit.attackData.SetAttackDefinition(IAttack.Create(context));
+    hit.attackData.SetInstigator(player);
+    hit.attackData.SetSource(player);
+    hit.attackData.SetWeapon(weapon);
+    hit.attackData.SetAttackType(record.AttackType().Type());
+    // Ours, with its amount, on the hit itself, as the game marks its environment's attacks with hitFlag.None and a
+    // source name: the pipeline's wraps read it back on whichever thread runs it.
+    let mark: String = "BlockRender " + FloatToStringPrec(amount, 2);
+    hit.attackData.AddFlag(hitFlag.None, StringToName(mark));
+    let middle: Vector4 = npc.GetWorldPosition() + new Vector4(0.00, 0.00, 1.00, 0.00);
+    hit.hitPosition = middle;
+    hit.hitDirection = Vector4.Normalize(middle - player.GetWorldPosition());
+    let shape: HitShapeData;
+    shape.result.hitPositionEnter = middle;
+    shape.result.hitPositionExit = middle;
+    ArrayPush(hit.hitRepresentationResult.hitShapes, shape);
+    GameInstance.GetDamageSystem(game).QueueHitEvent(hit, npc);
+    return 1;
+  }
+
+  // V's god mode for build mode: Immortal on V, added or removed under BlockRender's own source name only. Whether the
+  // game says it changed.
+  public final func SetImmortal(on: Bool) -> Bool {
+    let game: GameInstance = this.GetGameInstance();
+    let player: ref<GameObject> = GameInstance.GetPlayerSystem(game).GetLocalPlayerMainGameObject();
+    if !IsDefined(player) {
+      return false;
+    };
+    let gods: ref<GodModeSystem> = GameInstance.GetGodModeSystem(game);
+    if on {
+      return gods.AddGodMode(player.GetEntityID(), gameGodModeType.Immortal, n"BlockRender");
+    };
+    return gods.RemoveGodMode(player.GetEntityID(), gameGodModeType.Immortal, n"BlockRender");
+  }
+
+  // Minecraft's death, as V's: our Immortal off, then V's health to its least, as the pipeline's own instant kill does,
+  // killer as the instigator if it's still there. False if V isn't found, or another god mode keeps V alive.
+  public final func KillV(killer: EntityID) -> Bool {
+    let game: GameInstance = this.GetGameInstance();
+    let player: ref<GameObject> = GameInstance.GetPlayerSystem(game).GetLocalPlayerMainGameObject();
+    if !IsDefined(player) {
+      return false;
+    };
+    let id: EntityID = player.GetEntityID();
+    let gods: ref<GodModeSystem> = GameInstance.GetGodModeSystem(game);
+    gods.RemoveGodMode(id, gameGodModeType.Immortal, n"BlockRender");
+    let instigator: ref<GameObject>;
+    if EntityID.IsDefined(killer) {
+      instigator = GameInstance.FindEntityByID(game, killer) as GameObject;
+    };
+    GameInstance.GetStatPoolsSystem(game).RequestSettingStatPoolMinValue(Cast<StatsObjectID>(id), gamedataStatPoolType.Health, instigator);
+    return !gods.HasGodMode(id, gameGodModeType.Immortal) && !gods.HasGodMode(id, gameGodModeType.Invulnerable);
+  }
+
+  // For the punch request: V's punch, what it's read from, and what Hit makes hits with.
+  public final func Punch() -> String {
+    let game: GameInstance = this.GetGameInstance();
+    let player: ref<GameObject> = GameInstance.GetPlayerSystem(game).GetLocalPlayerMainGameObject();
+    if !IsDefined(player) {
+      return "V isn't found";
+    };
+    this.ReadV(player, game);
+    let drawn: ref<WeaponObject> = this.PunchWeapon(player, game);
+    return "V's punch " + FloatToStringPrec(this.punch, 2) + ", read from " + this.punchItem + "; quick hits with "
+      + this.AttackName(this.PunchAttack(player, false)) + ", strong ones with " + this.AttackName(this.PunchAttack(player, true))
+      + "; " + (IsDefined(drawn) ? "drawn, so hits carry it as their weapon" : "not drawn, so hits carry no weapon");
+  }
+
+  // A hit's amount, if it's ours: from its hitFlag.None marked "BlockRender <amount>". -1 if it isn't. Any thread: it
+  // reads only the hit.
+  public final static func AmountOf(data: ref<AttackData>) -> Float {
+    if !IsDefined(data) {
+      return -1.00;
+    };
+    let flags: array<SHitFlag> = data.GetFlags();
+    let i: Int32 = 0;
+    while i < ArraySize(flags) {
+      if Equals(flags[i].flag, hitFlag.None) {
+        let source: String = NameToString(flags[i].source);
+        if StrBeginsWith(source, "BlockRender ") {
+          return StringToFloat(StrAfterFirst(source, " "), -1.00);
+        };
+      };
+      i += 1;
+    };
+    return -1.00;
+  }
+
+  // Every damage type to 0, then physical damage to amount, if it's over 0.
+  public final static func SetDamage(computed: ref<gameAttackComputed>, amount: Float) -> Void {
+    let values: array<Float> = computed.GetAttackValues();
+    let i: Int32 = 0;
+    while i < ArraySize(values) {
+      values[i] = 0.00;
+      i += 1;
+    };
+    computed.SetAttackValues(values);
+    if amount > 0.00 {
+      computed.SetAttackValue(amount, gamedataDamageType.Physical);
+    };
+  }
+
+  // The attack record of what V punches with, from its item's record: its strong melee attack for a strong hit, its light
+  // one otherwise (gamedataAttackType.Melee: QuickMelee is a gun's quick melee); of neither, its first melee attack.
+  private final func PunchAttack(player: ref<GameObject>, strong: Bool) -> ref<Attack_Record> {
+    let items: array<ItemID> = EquipmentSystem.GetItemsInArea(player, gamedataEquipmentArea.BaseFists);
+    if ArraySize(items) == 0 {
+      return null;
+    };
+    let weapon: ref<WeaponItem_Record> = TweakDBInterface.GetWeaponItemRecord(ItemID.GetTDBID(items[0]));
+    if !IsDefined(weapon) {
+      return null;
+    };
+    let attacks: array<wref<Attack_Record>>;
+    weapon.Attacks(attacks);
+    let wanted: gamedataAttackType = strong ? gamedataAttackType.StrongMelee : gamedataAttackType.Melee;
+    let fallback: ref<Attack_Record>;
+    let i: Int32 = 0;
+    while i < ArraySize(attacks) {
+      let attack: ref<Attack_Record> = attacks[i];
+      if IsDefined(attack) && IsDefined(attack.AttackType()) {
+        let type: gamedataAttackType = attack.AttackType().Type();
+        if Equals(type, wanted) {
+          return attack;
+        };
+        if !IsDefined(fallback) && AttackData.IsMelee(type) {
+          fallback = attack;
+        };
+      };
+      i += 1;
+    };
+    return fallback;
+  }
+
+  // What V punches with, as the weapon object V holds, if V has it drawn; none otherwise.
+  private final func PunchWeapon(player: ref<GameObject>, game: GameInstance) -> ref<WeaponObject> {
+    let items: array<ItemID> = EquipmentSystem.GetItemsInArea(player, gamedataEquipmentArea.BaseFists);
+    let held: ref<WeaponObject> = GameInstance.GetTransactionSystem(game).GetItemInSlot(player, t"AttachmentSlots.WeaponRight") as WeaponObject;
+    if ArraySize(items) == 0 || !IsDefined(held) {
+      return null;
+    };
+    if ItemID.GetTDBID(held.GetItemID()) == ItemID.GetTDBID(items[0]) {
+      return held;
+    };
+    return null;
+  }
+
+  private final func AttackName(record: ref<Attack_Record>) -> String {
+    if !IsDefined(record) {
+      return "none";
+    };
+    let type: String = IsDefined(record.AttackType()) ? EnumValueToString("gamedataAttackType", Cast<Int64>(EnumInt(record.AttackType().Type()))) : "no type";
+    return TDBID.ToStringDEBUG(record.GetID()) + " (" + type + ")";
+  }
+
+  private final func Know(id: EntityID) -> Void {
+```
+```swift
+  return wrappedMethod();
+}
+```
+```swift
+  return wrappedMethod();
+}
+
+// Our hits: a hit with no damage of its own from the attack record is marked DealNoDamage under n"no_valid_damage" before
+// Process, which would then skip DealDamages; that mark comes off. Any other reason stays: friendly fire, god mode, a dead
+// target. Any thread.
+@wrapMethod(DamageSystem)
+private final func Process(hitEvent: ref<gameHitEvent>, cache: ref<CacheData>) -> Void {
+  if BlockRenderNpcs.AmountOf(hitEvent.attackData) >= 0.00 {
+    hitEvent.attackData.RemoveFlag(hitFlag.DealNoDamage, n"no_valid_damage");
+  };
+  wrappedMethod(hitEvent, cache);
+}
+
+// The last step before the damage is applied, after every modifier. Our hit deals exactly its amount, as physical
+// damage, and BlockRender hears what it took off. A hit on V that BlockRender takes for Minecraft deals nothing. Any
+// thread.
+@wrapMethod(DamageSystem)
+private final func DealDamages(hitEvent: ref<gameHitEvent>) -> Void {
+  let target: ref<GameObject> = hitEvent.target;
+  let amount: Float = BlockRenderNpcs.AmountOf(hitEvent.attackData);
+  if amount >= 0.00 && IsDefined(target) && IsDefined(hitEvent.attackComputed) {
+    let stats: StatsObjectID = Cast<StatsObjectID>(target.GetEntityID());
+    let pools: ref<StatPoolsSystem> = GameInstance.GetStatPoolsSystem(target.GetGame());
+    let before: Float = pools.GetStatPoolValue(stats, gamedataStatPoolType.Health, false);
+    BlockRenderNpcs.SetDamage(hitEvent.attackComputed, amount);
+    wrappedMethod(hitEvent);
+    BlockRenderHitLanded(target.GetEntityID(), amount, before, pools.GetStatPoolValue(stats, gamedataStatPoolType.Health, false));
+    return;
+  };
+  if IsDefined(target) && target.IsPlayer() && IsDefined(hitEvent.attackComputed) && IsDefined(hitEvent.attackData) {
+    let total: Float = hitEvent.attackComputed.GetTotalAttackValue(gamedataStatPoolType.Health);
+    if total > 0.00 {
+      let from: EntityID;
+      let instigator: ref<GameObject> = hitEvent.attackData.GetInstigator();
+      if IsDefined(instigator) {
+        from = instigator.GetEntityID();
+      };
+      if BlockRenderVHurt(total, EnumInt(hitEvent.attackData.GetAttackType()), from) {
+        BlockRenderNpcs.SetDamage(hitEvent.attackComputed, 0.00);
+      };
+    };
+  };
+  wrappedMethod(hitEvent);
+}
+```
+
+- [ ] **Step 2: Compile the module against the game's scripts**
+
+```bash
+cd /d/Cyberpunk-Minecraft/spikes/block-render && uv run --no-project python tools/check_reds.py E:/Cyberpunk2077 scripts; \
+  echo "exit: $?"
+```
+Expected: redscript's `Compilation complete`, then `compiled` and `exit: 0`.
+
+- [ ] **Step 3: Check that the compile catches a slip: a wrap of a method that isn't there**
+
+```bash
+cd /d/Cyberpunk-Minecraft/spikes/block-render && mkdir -p build/reds-slip \
+  && sed 's/private final func DealDamages(hitEvent/private final func DealDamagesX(hitEvent/' scripts/BlockRender.reds > build/reds-slip/BlockRender.reds \
+  && uv run --no-project python tools/check_reds.py E:/Cyberpunk2077 build/reds-slip; echo "exit: $?"
+```
+Expected: `[UNRESOLVED_METHOD]` at the wrap's line, then `failed` and `exit: 1`.
+
+- [ ] **Step 4: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "npcs-and-combat: the module makes Minecraft's hits V's, takes V's hurts, and keeps V's god mode and death" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 19: `GameScript` calls the module's `Hit`, `SetImmortal`, `KillV` and `Punch`
+
+Each is found by its types once, with the others, as Part 1's are: `Hit(EntityID, Float, Bool) -> Int32`,
+`SetImmortal(Bool) -> Bool`, `KillV(EntityID) -> Bool` and `Punch() -> String`, members of the session's system, which
+`Current()` finds on every call. The module must now be version 3.
+
+**Files:**
+- Modify: `src/GameScript.h`, `src/GameScript.cpp`
+
+- [ ] **Step 1: Edit `src/GameScript.h`**
+
+```cpp
+constexpr int32_t kModuleVersion = 2;  // BlockRenderNpcs.Version(), as this BlockRender needs it
+```
+```cpp
+constexpr int32_t kModuleVersion = 3;  // BlockRenderNpcs.Version(), as this BlockRender needs it
+```
+```cpp
+	std::string Compare(double aRange);
+```
+```cpp
+	std::string Compare(double aRange);
+	// Combat (spike 6's "Part 2"). One of Minecraft's hits on the NPC aEntity, as V's: aAmount off its health, the strong
+	// attack if aStrong. The module's Hit says what became of it (link::HitResultName). Nothing, with aWhy saying why, if
+	// the module can't be called.
+	std::optional<int32_t> Hit(uint64_t aEntity, double aAmount, bool aStrong, std::string& aWhy);
+	// V's Immortal, under BlockRender's own source name: on or off. Whether the game says it changed.
+	std::optional<bool> SetImmortal(bool aOn, std::string& aWhy);
+	// Minecraft's death, as V's, killed by aKiller (an entity, or 0). False if V isn't found or another god mode keeps V
+	// alive.
+	std::optional<bool> KillV(uint64_t aKiller, std::string& aWhy);
+	// V's punch, what it's read from, and what hits are made with: for the punch request.
+	std::string Punch();
+```
+```cpp
+		kCompare,
+```
+```cpp
+		kCompare,
+		kHit,
+		kSetImmortal,
+		kKillV,
+		kPunchReport,
+```
+
+- [ ] **Step 2: Edit `src/GameScript.cpp`**
+
+```cpp
+		{ "Compare", nullptr, { { "Float" } }, { "String" } },
+```
+```cpp
+		{ "Compare", nullptr, { { "Float" } }, { "String" } },
+		{ "Hit", nullptr, { { "entEntityID" }, { "Float" }, { "Bool" } }, { "Int32" } },
+		{ "SetImmortal", nullptr, { { "Bool" } }, { "Bool" } },
+		{ "KillV", nullptr, { { "entEntityID" } }, { "Bool" } },
+		{ "Punch", nullptr, {}, { "String" } },
+```
+```cpp
+	return result.c_str();
+}
+}
+```
+```cpp
+	return result.c_str();
+}
+
+std::optional<int32_t> GameScript::Hit(uint64_t aEntity, double aAmount, bool aStrong, std::string& aWhy)
+{
+	if (const std::string& missing = Check(); !missing.empty())
+	{
+		aWhy = missing;
+		return std::nullopt;
+	}
+	const Strong system = SessionSystem(*functions_[kCurrent], *class_, aWhy);
+	if (!system)
+	{
+		return std::nullopt;
+	}
+	RED4ext::ent::EntityID npc(aEntity);
+	float                  amount = float(aAmount);
+	bool                   strong = aStrong;
+	int32_t                result = 0;
+	RED4ext::StackArgs_t   args{ { nullptr, &npc }, { nullptr, &amount }, { nullptr, &strong } };
+	if (!RED4ext::ExecuteFunction(system.GetPtr(), functions_[kHit], &result, args))
+	{
+		aWhy = "BlockRenderNpcs.Hit failed";
+		return std::nullopt;
+	}
+	return result;
+}
+
+std::optional<bool> GameScript::SetImmortal(bool aOn, std::string& aWhy)
+{
+	if (const std::string& missing = Check(); !missing.empty())
+	{
+		aWhy = missing;
+		return std::nullopt;
+	}
+	const Strong system = SessionSystem(*functions_[kCurrent], *class_, aWhy);
+	if (!system)
+	{
+		return std::nullopt;
+	}
+	bool                 on = aOn;
+	bool                 changed = false;
+	RED4ext::StackArgs_t args{ { nullptr, &on } };
+	if (!RED4ext::ExecuteFunction(system.GetPtr(), functions_[kSetImmortal], &changed, args))
+	{
+		aWhy = "BlockRenderNpcs.SetImmortal failed";
+		return std::nullopt;
+	}
+	return changed;
+}
+
+std::optional<bool> GameScript::KillV(uint64_t aKiller, std::string& aWhy)
+{
+	if (const std::string& missing = Check(); !missing.empty())
+	{
+		aWhy = missing;
+		return std::nullopt;
+	}
+	const Strong system = SessionSystem(*functions_[kCurrent], *class_, aWhy);
+	if (!system)
+	{
+		return std::nullopt;
+	}
+	RED4ext::ent::EntityID killer(aKiller);
+	bool                   killed = false;
+	RED4ext::StackArgs_t   args{ { nullptr, &killer } };
+	if (!RED4ext::ExecuteFunction(system.GetPtr(), functions_[kKillV], &killed, args))
+	{
+		aWhy = "BlockRenderNpcs.KillV failed";
+		return std::nullopt;
+	}
+	return killed;
+}
+
+std::string GameScript::Punch()
+{
+	if (const std::string& missing = Check(); !missing.empty())
+	{
+		return missing;
+	}
+	std::string  why;
+	const Strong system = SessionSystem(*functions_[kCurrent], *class_, why);
+	if (!system)
+	{
+		return why;
+	}
+	RED4ext::CString result;
+	if (!RED4ext::ExecuteFunction(system.GetPtr(), functions_[kPunchReport], &result))
+	{
+		return "BlockRenderNpcs.Punch failed";
+	}
+	return result.c_str();
+}
+}
+```
+
+- [ ] **Step 3: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `434 test(s), 0 failure(s)`.
+
+- [ ] **Step 4: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "npcs-and-combat: GameScript calls the module's Hit, SetImmortal, KillV and Punch, checked by their types" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 20: The hit and punch requests, and the status's combat line
+
+The spec's "Requests" and "Measurements and the status", for Part 2:
+- **`hit <id> <damage> [strong]`:** as if Minecraft hit NPC `<id>` for `<damage>`; its number from 1, its damage over 0.
+- **`punch`:** V's punch, what it's read from, and the attack records hits are made with, into the log.
+- **The combat line:** on or off; V's punch; hits queued, landed and dropped by reason, and the last; V's hurts taken,
+  sent, summed and left to V, and the last; Immortal; deaths; Minecraft's player dead and for how long; and why combat
+  can't do all it should, while it can't. `set combat` needs no parsing of its own.
+
+**Files:**
+- Modify: `src/Requests.h`, `src/Requests.cpp`, `src/Status.h`, `src/Status.cpp`, `tests/TestRequests.cpp`,
+  `tests/TestStatus.cpp`
+
+- [ ] **Step 1: Edit `tests/TestRequests.cpp`: hit and punch**
+
+```cpp
+	CHECK_STR(error, "npcs takes nothing after it");
+```
+```cpp
+	CHECK_STR(error, "npcs takes nothing after it");
+	const auto hit = cpmc::ParseRequest("hit 3 7", error);
+	CHECK(hit && hit->kind == cpmc::Request::Kind::Hit && hit->id == 3 && hit->number == 7.0 && hit->what == "quick");
+	const auto strong = cpmc::ParseRequest("hit 4294967295 10.5 strong", error);
+	CHECK(strong && strong->id == 4294967295u && strong->number == 10.5 && strong->what == "strong");
+	for (const char* bad : { "hit", "hit 3", "hit 0 7", "hit 1.5 7", "hit 4294967296 7", "hit 3 0", "hit 3 -1", "hit 3 7 hard",
+	                         "hit 3 7 strong more", "hit x 7" })
+	{
+		CHECK(!cpmc::ParseRequest(bad, error));
+	}
+	CHECK_STR(error, "hit takes an NPC's number from 1, a damage over 0, and strong if it's a strong hit");
+	const auto punch = cpmc::ParseRequest("punch", error);
+	CHECK(punch && punch->kind == cpmc::Request::Kind::Punch);
+	CHECK(!cpmc::ParseRequest("punch now", error));
+```
+
+- [ ] **Step 2: Edit `tests/TestStatus.cpp`: the combat line**
+
+```cpp
+	CHECK(Has(cpmc::FormatStatus(report), "npcs=off"));
+}
+```
+```cpp
+	CHECK(Has(cpmc::FormatStatus(report), "npcs=off"));
+}
+
+TEST(StatusWritesCombat)
+{
+	cpmc::StatusReport report;
+	cpmc::LinkReport   link;
+	report.link = link;
+	const std::string status = cpmc::FormatStatus(report);
+	CHECK(Has(status, "combat=off: Minecraft's hits are logged, not applied; V's health is V's"));
+	CHECK(status.find("npcs=") < status.find("combat=") && status.find("combat=") < status.find("ring="));
+	link.combatOn = true;
+	link.punch = 102.0;
+	report.link = link;
+	CHECK(Has(cpmc::FormatStatus(report), "combat=on: V's punch 102.00; hits 0 queued, 0 landed; V's hurts: 0 taken, 0 sent, 0 summed, 0 "
+	                                      "left to V; Immortal off; 0 deaths; Minecraft's player alive"));
+	link.hitsQueued = 5;
+	link.hitsLanded = 4;
+	link.hitsDropped = "1 not listed";
+	link.lastHit = "NPC 35 (NC Resident): 7.00 of Minecraft's damage, 714.00 of its health; landed, 1514 -> 800";
+	link.hurtsTaken = 3;
+	link.hurtsSent = 2;
+	link.hurtsSummed = 1;
+	link.hurtsLeft = 7;
+	link.lastHurt = "45.0 of V's health (0.0987), 1.97 of Minecraft's 20, projectile (Ranged), from NPC 12";
+	link.immortal = true;
+	link.deaths = 1;
+	link.minecraftDeadFor = 0.84;
+	link.combatWhy = "V's max health isn't read, so V's hurts aren't taken";
+	report.link = link;
+	CHECK(Has(cpmc::FormatStatus(report), "combat=on: V's punch 102.00; hits 5 queued, 4 landed, dropped: 1 not listed; the last NPC 35 "
+	                                      "(NC Resident): 7.00 of Minecraft's damage, 714.00 of its health; landed, 1514 -> 800; V's "
+	                                      "hurts: 3 taken, 2 sent, 1 summed, 7 left to V; the last 45.0 of V's health (0.0987), 1.97 of "
+	                                      "Minecraft's 20, projectile (Ranged), from NPC 12; Immortal on; 1 deaths; Minecraft's player "
+	                                      "dead for 0.8 s; V's max health isn't read, so V's hurts aren't taken"));
+}
+```
+
+- [ ] **Step 3: Build; it must fail**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C" | sort -u | head -3
+```
+Expected: `error C2039: 'id': is not a member of 'cpmc::Request'`, and `error C2065: 'Hit': undeclared identifier`.
+
+- [ ] **Step 4: Edit `src/Requests.h`**
+
+```cpp
+#include <optional>
+```
+```cpp
+#include <cstdint>
+#include <optional>
+```
+```cpp
+//   npcs                       (spike 6: every NPC listed, into the log, and what the game's targeting finds)
+```
+```cpp
+//   npcs                       (spike 6: every NPC listed, into the log, and what the game's targeting finds)
+//   hit <id> <damage> [strong] (spike 6: as if Minecraft hit NPC <id>, from 1, for <damage>, over 0, of its damage)
+//   punch                      (spike 6: V's punch, what it's read from, and what hits are made with, into the log)
+```
+```cpp
+		Npcs,
+	};
+
+	Kind        kind = Kind::Log;
+	std::string what;          // the dump target, mode, structure, setting name, on or off, or what to type
+	double      number = 0.0;  // the field's block count, the setting's value, or the drive log's seconds
+```
+```cpp
+		Npcs,
+		Hit,
+		Punch,
+	};
+
+	Kind        kind = Kind::Log;
+	std::string what;          // the dump target, mode, structure, setting name, on or off, what to type, or a hit's
+	                           // strong or quick
+	double      number = 0.0;  // the field's block count, the setting's value, the drive log's seconds, or a hit's damage
+	uint32_t    id = 0;        // a hit's NPC: its number in SkyCraft's actor table
+```
+
+- [ ] **Step 5: Edit `src/Requests.cpp`**
+
+```cpp
+	if (command == "log" || command == "clear" || command == "reload" || command == "floor" || command == "shapes" || command == "npcs")
+```
+```cpp
+	if (command == "log" || command == "clear" || command == "reload" || command == "floor" || command == "shapes" || command == "npcs" ||
+	    command == "punch")
+```
+```cpp
+		                           : command == "npcs"   ? Request::Kind::Npcs
+```
+```cpp
+		                           : command == "npcs"   ? Request::Kind::Npcs
+		                           : command == "punch"  ? Request::Kind::Punch
+```
+```cpp
+		return Request{ kind, std::string(words[1]) };
+```
+```cpp
+		return Request{ kind, std::string(words[1]) };
+	}
+	if (command == "hit")
+	{
+		const std::optional<double> id = arguments >= 2 ? Number(words[1]) : std::nullopt;
+		const std::optional<double> damage = arguments >= 2 ? Number(words[2]) : std::nullopt;
+		if (arguments < 2 || arguments > 3 || !id || *id < 1.0 || *id > 4294967295.0 || *id != std::floor(*id) || !damage || *damage <= 0.0 ||
+		    (arguments == 3 && words[3] != "strong"))
+		{
+			return Fail(aError, "hit takes an NPC's number from 1, a damage over 0, and strong if it's a strong hit");
+		}
+		Request request{ Request::Kind::Hit, arguments == 3 ? "strong" : "quick", *damage };
+		request.id = uint32_t(*id);
+		return request;
+```
+
+- [ ] **Step 6: Edit `src/Status.h`**
+
+```cpp
+	uint64_t              npcHits = 0;  // Minecraft's hits on them, logged
+```
+```cpp
+	uint64_t              npcHits = 0;  // Minecraft's hits on them, logged
+	// Combat both ways (spike 6's "Part 2"): the counts are since the start
+	bool                  combatOn = false;  // set combat 1
+	double                punch = 0.0;       // V's punch, as last read
+	uint64_t              hitsQueued = 0;    // Minecraft's hits made V's, and queued in the game
+	uint64_t              hitsLanded = 0;    // and dealt by its damage pipeline
+	std::string           hitsDropped;       // by reason: "2 not listed, 1 the NPC is dead"; empty: none
+	std::string           lastHit;           // the NPC, Minecraft's damage, the amount, and how it went
+	uint64_t              hurtsTaken = 0;    // the game's hits on V, taken for Minecraft
+	uint64_t              hurtsSent = 0;     // kInHurts sent
+	uint64_t              hurtsSummed = 0;   // hurts that went in a sum
+	uint64_t              hurtsLeft = 0;     // offered while not taken: left to V
+	std::string           lastHurt;          // its amount and share, Minecraft's damage, kind, attack type and attacker
+	bool                  immortal = false;  // our Immortal on V
+	uint64_t              deaths = 0;        // Minecraft's deaths that killed V
+	std::optional<double> minecraftDeadFor;  // seconds; none: alive
+	std::string           combatWhy;         // why combat can't do all it should, while it can't
+```
+
+- [ ] **Step 7: Edit `src/Status.cpp`**
+
+```cpp
+std::string FormatLink(const LinkReport& aLink)
+```
+```cpp
+std::string FormatCombat(const LinkReport& aLink)
+{
+	if (!aLink.combatOn)
+	{
+		return "combat=off: Minecraft's hits are logged, not applied; V's health is V's\n";
+	}
+	std::string out = std::format("combat=on: V's punch {:.2f}; hits {} queued, {} landed{}", aLink.punch, aLink.hitsQueued, aLink.hitsLanded,
+	                              aLink.hitsDropped.empty() ? "" : ", dropped: " + OneLine(aLink.hitsDropped));
+	if (!aLink.lastHit.empty())
+	{
+		out += "; the last " + OneLine(aLink.lastHit);
+	}
+	out += std::format("; V's hurts: {} taken, {} sent, {} summed, {} left to V", aLink.hurtsTaken, aLink.hurtsSent, aLink.hurtsSummed,
+	                   aLink.hurtsLeft);
+	if (!aLink.lastHurt.empty())
+	{
+		out += "; the last " + OneLine(aLink.lastHurt);
+	}
+	out += std::format("; Immortal {}; {} deaths; Minecraft's player {}", aLink.immortal ? "on" : "off", aLink.deaths,
+	                   aLink.minecraftDeadFor ? std::format("dead for {:.1f} s", *aLink.minecraftDeadFor) : std::string("alive"));
+	if (!aLink.combatWhy.empty())
+	{
+		out += "; " + OneLine(aLink.combatWhy);
+	}
+	return out + "\n";
+}
+
+std::string FormatLink(const LinkReport& aLink)
+```
+```cpp
+	out += FormatNpcs(aLink);
+```
+```cpp
+	out += FormatNpcs(aLink);
+	out += FormatCombat(aLink);
+```
+
+- [ ] **Step 8: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `435 test(s), 0 failure(s)`.
+
+- [ ] **Step 9: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "npcs-and-combat: the hit and punch requests, and the status's combat line" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 21: BlockRender 0.18.0 lands Minecraft's hits on NPCs as V's, and gives V's hurts to Minecraft in build mode
+
+The spec's "The frame", "Minecraft's hits on NPCs", "The game's hits on V", "Deaths", "V's god mode" and "Combat on
+and off", in the plugin:
+- **The sink keeps** Minecraft's hits and deaths in the ring's order; after the link's update, **`Fight`** takes them:
+  every hit is logged; with combat on, one that counts (`AcceptHit`) goes to the module's `Hit` while V is found and
+  linked, and one that doesn't is counted by why. A death kills V through `KillV`, with combat on, in build mode or
+  within 2 s of its end. Then our hits the game has dealt (the inbox's landings, with the NPC's health before and
+  after), and those it hasn't within 2 s, counted as not dealt: friendly, invulnerable or dead by then. Then V's god
+  mode (`GodMode`), and whether the inbox takes V's hurts: combat and build mode on, V found, V's max health read.
+- **After the list,** **`SendHurts`** makes the hurts the inbox took Minecraft's, through the sums, and sends them;
+  one the input ring has no room for waits for the next frame.
+- **V's punch and max health** are kept from each list, for the hits and the hurts.
+- **`set combat 0|1`** (off by default), **`hit`** (an event like Minecraft's, strong as a crit is) and **`punch`**.
+- **The status's combat line** from all that, and the version: 0.18.0.
+
+**Files:**
+- Modify: `src/Plugin.cpp`, `CMakeLists.txt`
+
+- [ ] **Step 1: Edit `src/Plugin.cpp`**
+
+```cpp
+// (scripts/BlockRender.reds), so that Minecraft's weapons hit them and they press its pressure plates.
+```
+```cpp
+// (scripts/BlockRender.reds), so that Minecraft's weapons hit them and they press its pressure plates; with combat on,
+// Minecraft's hits land on them as V's, and in build mode the game's hits on V go to Minecraft's player, whose death
+// kills V.
+```
+```cpp
+#include "link/Actors.h"
+```
+```cpp
+#include "link/Actors.h"
+#include "link/Combat.h"
+```
+```cpp
+#include <initializer_list>
+```
+```cpp
+#include <initializer_list>
+#include <map>
+```
+```cpp
+constexpr const char* kVersion = "0.17.0";
+```
+```cpp
+constexpr const char* kVersion = "0.18.0";
+```
+```cpp
+size_t                                    g_wrapThreads = 0;      // the wraps' threads, as last logged
+```
+```cpp
+size_t                                    g_wrapThreads = 0;      // the wraps' threads, as last logged
+
+// Spike 6's combat both ways (its spec's "Part 2"). Main thread only: the natives' inbox takes what the damage
+// pipeline's wraps report, on whichever thread runs it.
+bool                                  g_combat = false;      // set combat 0|1: off until step 4 passes
+std::vector<skycraft::proto::McEvent> g_events;              // Minecraft's hits and deaths this frame, in the ring's order
+double                                g_punch = 0.0;         // V's punch and max health, as the module last read them
+double                                g_vHealthMax = 0.0;
+cpmc::link::HurtSums                  g_hurtSums;            // V's hurts, summed for Minecraft
+std::vector<cpmc::link::Hurt>         g_hurtsOut;            // waiting for room in the input ring
+cpmc::link::GodMode                   g_godMode;             // V's Immortal, under our own source name
+bool                                  g_immortal = false;    // as the game last said
+bool                                  g_wasBuild = false;
+std::optional<double>                 g_buildEndedAt;        // when build mode last ended, for Minecraft's death
+std::optional<double>                 g_minecraftDiedAt;     // since when McState has said Minecraft's player is dead
+// One of our hits, queued and not yet dealt by the game.
+struct PendingHit
+{
+	uint64_t entity = 0;
+	uint32_t formId = 0;
+	double   damage = 0.0;
+	double   amount = 0.0;
+	double   at = 0.0;
+};
+std::vector<PendingHit>         g_pendingHits;
+std::map<std::string, uint64_t> g_hitDrops;  // hits not applied, by reason
+uint64_t                        g_hitsQueued = 0;
+uint64_t                        g_hitsLanded = 0;
+uint64_t                        g_hurtsSent = 0;
+uint64_t                        g_deaths = 0;
+std::string                     g_lastHit;
+std::string                     g_lastHurt;
+```
+```cpp
+	// Spike 6's Part 1 only logs Minecraft's hits on NPCs (its spec's "The link"), and Minecraft's player's death.
+	void HitActor(const skycraft::proto::McEvent& aEvent) override
+	{
+		++g_npcHits;
+		const auto record = std::find_if(g_actorRecords.begin(), g_actorRecords.end(),
+		                                 [&](const skycraft::proto::ActorRecord& aRecord) { return aRecord.formId == aEvent.formId; });
+		::Log("hit on NPC {} ({}) for {:.2f} of Minecraft's damage, knockback {:.2f}; {}; not applied in Part 1", aEvent.formId,
+		      record != g_actorRecords.end() ? std::string(record->name) : std::string("not listed now"), aEvent.a, aEvent.d,
+		      cpmc::link::HitWords(aEvent));
+	}
+
+	void PlayerDied(const skycraft::proto::McEvent& aEvent) override
+	{
+		::Log("Minecraft's player died{}", aEvent.formId != 0 ? std::format(", killed by NPC {}", aEvent.formId) : std::string());
+	}
+```
+```cpp
+	// Spike 6: Minecraft's hits on NPCs and its player's death, kept in the ring's order for Fight, after the link's update.
+	void HitActor(const skycraft::proto::McEvent& aEvent) override { g_events.push_back(aEvent); }
+	void PlayerDied(const skycraft::proto::McEvent& aEvent) override { g_events.push_back(aEvent); }
+```
+```cpp
+	}
+	g_actorRecords = cpmc::link::ActorRecords(g_npcList->npcs, *aFeet, g_npcSizes.Boxes(), g_actorIds, aNow);
+```
+```cpp
+	}
+	g_punch = g_npcList->punch;
+	g_vHealthMax = g_npcList->vHealthMax;
+	g_actorRecords = cpmc::link::ActorRecords(g_npcList->npcs, *aFeet, g_npcSizes.Boxes(), g_actorIds, aNow);
+```
+```cpp
+		g_npcSizes.Forget(g_actorIds);
+	}
+}
+```
+```cpp
+		g_npcSizes.Forget(g_actorIds);
+	}
+}
+
+// The name SkyCraft's actor table last had for stand-in aFormId.
+std::string NpcName(uint32_t aFormId)
+{
+	const auto record = std::find_if(g_actorRecords.begin(), g_actorRecords.end(),
+	                                 [&](const skycraft::proto::ActorRecord& aRecord) { return aRecord.formId == aFormId; });
+	return record != g_actorRecords.end() ? std::string(record->name) : std::string("not listed now");
+}
+
+void DropHit(const std::string& aHit, const std::string& aWhy)
+{
+	++g_hitDrops[aWhy];
+	Log("{}; not applied: {}", aHit, aWhy);
+}
+
+// One of Minecraft's hits on an NPC (spike 6's "Minecraft's hits on NPCs"): logged, and with combat on, made V's through
+// the module: Minecraft's damage x V's punch off the NPC's health.
+void HitOnNpc(const skycraft::proto::McEvent& aEvent, double aNow, bool aVFound)
+{
+	++g_npcHits;
+	const std::string hit = std::format("hit on NPC {} ({}) for {:.2f} of Minecraft's damage, knockback {:.2f}; {}", aEvent.formId,
+	                                    NpcName(aEvent.formId), aEvent.a, aEvent.d, cpmc::link::HitWords(aEvent));
+	if (!g_combat)
+	{
+		return Log("{}; not applied: combat is off", hit);
+	}
+	cpmc::link::HitDrop                     drop = cpmc::link::HitDrop::Count;
+	const std::optional<cpmc::link::NpcHit> accepted = cpmc::link::AcceptHit(aEvent, g_actorIds, aNow, g_punch, drop);
+	if (!accepted)
+	{
+		return DropHit(hit, cpmc::link::HitDropName(drop));
+	}
+	if (!aVFound)
+	{
+		return DropHit(hit, "V isn't found");
+	}
+	std::string                  why;
+	const std::optional<int32_t> result = g_script.Hit(accepted->entity, accepted->amount, accepted->strong, why);
+	if (!result || *result != 1)
+	{
+		return DropHit(hit, result ? cpmc::link::HitResultName(*result) : "the module can't be called: " + why);
+	}
+	++g_hitsQueued;
+	g_pendingHits.push_back({ accepted->entity, accepted->formId, accepted->damage, accepted->amount, aNow });
+	g_lastHit = std::format("NPC {} ({}): {:.2f} of Minecraft's damage, {:.2f} of its health{}; queued", accepted->formId,
+	                        NpcName(accepted->formId), accepted->damage, accepted->amount, accepted->strong ? ", strong" : "");
+	Log("{}: {:.2f} of its health, {:.2f} x V's punch {:.2f}{}; queued", hit, accepted->amount, accepted->damage, g_punch,
+	    accepted->strong ? ", strong" : "");
+}
+
+// Minecraft's player's death (spike 6's "Deaths"): with combat on, in build mode or just after it, V's death too.
+void MinecraftDied(const skycraft::proto::McEvent& aEvent, double aNow, bool aVFound)
+{
+	const std::string died =
+	    std::format("Minecraft's player died{}", aEvent.formId != 0 ? std::format(", killed by NPC {}", aEvent.formId) : std::string());
+	if (!cpmc::link::DeathKillsV(g_combat, g_router->On(), g_buildEndedAt, aNow))
+	{
+		return Log("{}; V lives: {}", died, g_combat ? "build mode wasn't on" : "combat is off");
+	}
+	if (!aVFound)
+	{
+		return Log("{}; V lives: V isn't found", died);
+	}
+	const uint64_t            killer = aEvent.formId != 0 ? g_actorIds.Entity(aEvent.formId, aNow).value_or(0) : 0;
+	std::string               why;
+	const std::optional<bool> killed = g_script.KillV(killer, why);
+	++g_deaths;
+	g_immortal = false;
+	Log("{}; so V dies: {}", died, killed ? (*killed ? "V's health set to its least" : "but another god mode keeps V alive") : "not done: " + why);
+}
+
+// Spike 6's combat, after the link's update and before the NPCs are listed (its spec's "The frame"): Minecraft's hits and
+// deaths in the ring's order; our hits the game has dealt, and those it hasn't within kHitTrail; V's god mode; and
+// whether V's hurts are taken.
+void Fight(double aNow, const std::optional<cpmc::Vec3d>& aFeet)
+{
+	const bool build = g_router->On();
+	if (g_wasBuild && !build)
+	{
+		g_buildEndedAt = aNow;
+	}
+	g_wasBuild = build;
+	const bool vFound = aFeet.has_value();
+	for (const skycraft::proto::McEvent& event : std::exchange(g_events, {}))
+	{
+		if (event.type == skycraft::proto::kEvHitActor)
+		{
+			HitOnNpc(event, aNow, vFound && g_linked);
+		}
+		else if (event.type == skycraft::proto::kEvPlayerDied)
+		{
+			MinecraftDied(event, aNow, vFound);
+		}
+	}
+	for (const cpmc::CombatInbox::Landed& landed : cpmc::CombatReported().TakeLanded())
+	{
+		++g_hitsLanded;
+		const auto pending = std::find_if(g_pendingHits.begin(), g_pendingHits.end(),
+		                                  [&](const PendingHit& aHit) { return aHit.entity == landed.target; });
+		const uint32_t formId = pending != g_pendingHits.end() ? pending->formId : g_actorIds.IdOf(landed.target).value_or(0);
+		const double   damage = pending != g_pendingHits.end() ? pending->damage : 0.0;
+		if (pending != g_pendingHits.end())
+		{
+			g_pendingHits.erase(pending);
+		}
+		g_lastHit = std::format("NPC {} ({}): {:.2f} of Minecraft's damage, {:.2f} of its health; landed, {:.0f} -> {:.0f}", formId,
+		                        NpcName(formId), damage, landed.amount, landed.before, landed.after);
+		Log("hit on NPC {} landed: {:.2f} of its health, {:.0f} -> {:.0f}", formId, landed.amount, landed.before, landed.after);
+	}
+	std::erase_if(g_pendingHits, [&](const PendingHit& aHit) {
+		if (aNow - aHit.at <= cpmc::link::kHitTrail)
+		{
+			return false;
+		}
+		++g_hitDrops["not dealt by the game"];
+		Log("hit on NPC {} ({:.2f} of its health) wasn't dealt by the game within {:.0f} s: friendly, invulnerable or dead by then",
+		    aHit.formId, aHit.amount, cpmc::link::kHitTrail);
+		return true;
+	});
+	if (const std::optional<bool> change = g_godMode.Frame(g_combat, build, vFound))
+	{
+		std::string               why;
+		const std::optional<bool> changed = g_script.SetImmortal(*change, why);
+		if (changed)
+		{
+			g_immortal = *change;
+		}
+		Log("combat: V's Immortal {}{}", *change ? "on" : "off",
+		    changed ? (*changed ? std::string() : std::string(" (the game says it already was)")) : ": not done: " + why);
+	}
+	cpmc::CombatReported().SetTaking(g_combat && build && vFound && g_vHealthMax > 0.0);
+	const bool dead = g_link && (g_link->State().minecraftFlags & skycraft::proto::kMcDead) != 0;
+	if (!dead)
+	{
+		g_minecraftDiedAt.reset();
+	}
+	else if (!g_minecraftDiedAt)
+	{
+		g_minecraftDiedAt = aNow;
+	}
+}
+
+// V's hurts the pipeline's wrap took since the last frame (spike 6's "The game's hits on V"), to Minecraft as kInHurt,
+// through the sums. What the input ring has no room for waits for the next frame.
+void SendHurts(double aNow)
+{
+	if (!g_link)
+	{
+		return;
+	}
+	const double tickMs = g_link->State().minecraftTickMs;
+	for (const cpmc::link::GameHurt& taken : cpmc::CombatReported().TakeHurts())
+	{
+		const cpmc::link::Hurt hurt = cpmc::link::HurtFrom(taken, g_vHealthMax, g_actorIds);
+		g_lastHurt = std::format("{:.1f} of V's health ({:.4f}), {:.2f} of Minecraft's 20, {} ({}){}{}", taken.amount, hurt.share,
+		                         hurt.share * 20.0, cpmc::link::HurtKindName(hurt.kind), cpmc::link::AttackTypeName(taken.attackType),
+		                         hurt.attacker != 0 ? std::format(", from NPC {}", hurt.attacker) : std::string(),
+		                         hurt.power ? ", a power attack" : "");
+		Log("combat: V hurt, taken for Minecraft: {}", g_lastHurt);
+		if (const std::optional<cpmc::link::Hurt> now = g_hurtSums.Add(hurt, aNow, tickMs))
+		{
+			g_hurtsOut.push_back(*now);
+		}
+	}
+	if (const std::optional<cpmc::link::Hurt> due = g_hurtSums.Due(aNow, tickMs))
+	{
+		g_hurtsOut.push_back(*due);
+	}
+	size_t sent = 0;
+	while (sent < g_hurtsOut.size() && g_link->Push(cpmc::link::HurtInput(g_hurtsOut[sent])))
+	{
+		++sent;
+	}
+	g_hurtsSent += sent;
+	g_hurtsOut.erase(g_hurtsOut.begin(), g_hurtsOut.begin() + ptrdiff_t(sent));
+}
+
+// The hits not applied, by reason: "2 not listed, 1 the NPC is dead".
+std::string HitDrops()
+{
+	std::string text;
+	for (const auto& [why, count] : g_hitDrops)
+	{
+		text += std::format("{}{} {}", text.empty() ? "" : ", ", count, why);
+	}
+	return text;
+}
+
+// Why combat can't do all it should, while combat is on.
+std::string CombatWhy()
+{
+	if (!g_combat)
+	{
+		return {};
+	}
+	if (g_punch <= 0.0)
+	{
+		return "V's punch isn't read yet, so hits aren't applied";
+	}
+	if (g_vHealthMax <= 0.0)
+	{
+		return "V's max health isn't read yet, so V's hurts aren't taken";
+	}
+	return {};
+}
+```
+```cpp
+		return Report(std::format("set ao {}", g_meshOptions.ambientOcclusion ? 1 : 0));
+```
+```cpp
+		return Report(std::format("set ao {}", g_meshOptions.ambientOcclusion ? 1 : 0));
+	}
+	if (aRequest.what == "combat")
+	{
+		if (aRequest.number != 0.0 && aRequest.number != 1.0)
+		{
+			return Report("set combat: 1 lands Minecraft's hits on NPCs as V's, and in build mode gives the game's hits on V to Minecraft; "
+			              "0 only logs hits");
+		}
+		g_combat = aRequest.number == 1.0;
+		return Report(g_combat ? "set combat 1: Minecraft's hits land on NPCs as V's; in build mode V is Immortal, the game's hits on V go "
+		                         "to Minecraft's player, and its death kills V"
+		                       : "set combat 0: Minecraft's hits are only logged, and V's health is V's");
+```
+```cpp
+// box on|off (spike 5's step 4): a test box 3 m ahead of V, made as the bodies for blocks are, before any block is.
+```
+```cpp
+// hit <id> <damage> [strong] (spike 6's step 4): as if Minecraft hit NPC <id> for <damage>, through all its hits go
+// through; strong as a crit is.
+void HitRequest(const cpmc::Request& aRequest)
+{
+	skycraft::proto::McEvent event{};
+	event.type = skycraft::proto::kEvHitActor;
+	event.formId = aRequest.id;
+	event.a = float(aRequest.number);
+	event.d = 0.4f;  // Minecraft's own knockback
+	event.flags = aRequest.what == "strong" ? skycraft::proto::kHitCritical : 0u;
+	event.weapon = skycraft::proto::kWeaponUnarmed;
+	g_events.push_back(event);
+	Report(std::format("hit: as if Minecraft hit NPC {} for {:.2f}{}; the log says how it went", aRequest.id, aRequest.number,
+	                   aRequest.what == "strong" ? ", strong" : ""));
+}
+
+// box on|off (spike 5's step 4): a test box 3 m ahead of V, made as the bodies for blocks are, before any block is.
+```
+```cpp
+	case cpmc::Request::Kind::Npcs: NpcsRequest(); break;
+```
+```cpp
+	case cpmc::Request::Kind::Npcs: NpcsRequest(); break;
+	case cpmc::Request::Kind::Hit: HitRequest(*request); break;
+	case cpmc::Request::Kind::Punch:
+		Log("punch: {}", g_script.Punch());
+		Report("punch: V's punch, what it's read from, and what hits are made with, in the log");
+		break;
+```
+```cpp
+	report.npcHits = g_npcHits;
+```
+```cpp
+	report.npcHits = g_npcHits;
+	report.combatOn = g_combat;
+	report.punch = g_punch;
+	report.hitsQueued = g_hitsQueued;
+	report.hitsLanded = g_hitsLanded;
+	report.hitsDropped = HitDrops();
+	report.lastHit = g_lastHit;
+	const cpmc::CombatInbox::Counts combat = cpmc::CombatReported().Count();
+	report.hurtsTaken = combat.taken;
+	report.hurtsSent = g_hurtsSent;
+	report.hurtsSummed = g_hurtSums.Summed();
+	report.hurtsLeft = combat.refused;
+	report.lastHurt = g_lastHurt;
+	report.immortal = g_immortal;
+	report.deaths = g_deaths;
+	report.minecraftDeadFor = g_minecraftDiedAt ? std::optional<double>(aNow - *g_minecraftDiedAt) : std::nullopt;
+	report.combatWhy = CombatWhy();
+```
+```cpp
+	const std::optional<cpmc::Vec3d> feet = UpdateLink(seconds, frameMs);
+	ListNpcs(seconds, feet);
+```
+```cpp
+	const std::optional<cpmc::Vec3d> feet = UpdateLink(seconds, frameMs);
+	Fight(seconds, feet);
+	ListNpcs(seconds, feet);
+	SendHurts(seconds);
+```
+
+- [ ] **Step 2: Edit `CMakeLists.txt`: version 0.18.0**
+
+```cmake
+project(BlockRender VERSION 0.17.0 LANGUAGES C CXX)
+```
+```cmake
+project(BlockRender VERSION 0.18.0 LANGUAGES C CXX)
+```
+
+- [ ] **Step 3: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `435 test(s), 0 failure(s)`.
+
+- [ ] **Step 4: Check that BlockRender imports nothing from PhysX**
+
+```bash
+DUMPBIN="$(ls "/c/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/"*/bin/Hostx64/x64/dumpbin.exe | head -1)"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && MSYS_NO_PATHCONV=1 "$DUMPBIN" -imports -nologo build\\RelWithDebInfo\\BlockRender.dll \
+  | grep -ci "physx"
+```
+Expected: `0`.
+
+- [ ] **Step 5: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "npcs-and-combat: BlockRender 0.18.0 lands Minecraft's hits on NPCs as V's and gives V's hurts to Minecraft in build mode" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 22: The overlay's combat line, its Combat button, and V's punch in the log
+
+The overlay shows the status's combat line in short: on or off, hits queued and landed, V's hurts taken and sent,
+Immortal, and Minecraft's player dead and for how long. A Combat button in the top row switches `set combat`; "Punch in
+the log", under "More controls", sends `punch`.
+
+**Files:**
+- Modify: `tools/blockrender_hud/init.lua`
+
+- [ ] **Step 1: Edit `tools/blockrender_hud/init.lua`**
+
+```lua
+-- Kept small: one row of buttons (link, Minecraft's blocks as bodies, step 4's test box, the turn, NPCs in Minecraft),
+-- and a line each for the last request's reply, build mode (F8) and its drive, the bodies, the NPCs, and V. Two folded
+-- sections hold the rest: "More controls" (the drawing mode, Minecraft's HUD, commands typed into Minecraft, the drive
+-- log, the ground and its shapes, and the NPCs' list) and "Full status" (every status line, and the frame time).
+```
+```lua
+-- Kept small: one row of buttons (link, Minecraft's blocks as bodies, step 4's test box, the turn, NPCs in Minecraft,
+-- combat), and a line each for the last request's reply, build mode (F8) and its drive, the bodies, the NPCs, combat,
+-- and V. Two folded sections hold the rest: "More controls" (the drawing mode, Minecraft's HUD, commands typed into
+-- Minecraft, the drive log, the ground and its shapes, the NPCs' list and V's punch) and "Full status" (every status
+-- line, and the frame time).
+```
+```lua
+local npcsOn = nil       -- whether NPCs go into SkyCraft's actor table: "on" or "off"
+```
+```lua
+local npcsOn = nil       -- whether NPCs go into SkyCraft's actor table: "on" or "off"
+local combat = nil       -- the combat line: on or off; hits queued and landed; V's hurts; Immortal; Minecraft's death
+local combatOn = nil     -- whether Minecraft's hits land as V's and V's hurts go to Minecraft: "on" or "off"
+```
+```lua
+    npcsOn = nil
+```
+```lua
+    npcsOn = nil
+    combat = nil
+    combatOn = nil
+```
+```lua
+                .. (why and (", none listed: " .. why) or "")
+```
+```lua
+                .. (why and (", none listed: " .. why) or "")
+        end
+        local combatState = line:match("^combat=(%a+)")
+        if combatState ~= nil then
+            combatOn = combatState
+            local hits = line:match("; hits (%d+ queued, %d+ landed)")
+            local hurts = line:match("; V's hurts: (%d+ taken, %d+ sent)")
+            local immortal = line:match("; Immortal (%a+);")
+            local dead = line:match("; Minecraft's player (dead for [%d.]+ s)")
+            combat = combatState .. (hits and (", hits " .. hits) or "") .. (hurts and (", V's hurts " .. hurts) or "")
+                .. (immortal and (", Immortal " .. immortal) or "") .. (dead and (", Minecraft's player " .. dead) or "")
+```
+```lua
+        end
+        if status == nil then
+```
+```lua
+        end
+        if combatOn ~= nil then
+            ImGui.SameLine()
+            if ImGui.Button("Combat: " .. combatOn .. "###combat") then
+                request("set combat " .. (combatOn == "on" and 0 or 1))
+            end
+        end
+        if status == nil then
+```
+```lua
+            ImGui.Text("NPCs: " .. npcs)
+```
+```lua
+            ImGui.Text("NPCs: " .. npcs)
+        end
+        if combat ~= nil then
+            ImGui.Text("Combat: " .. combat)
+```
+```lua
+                    request("npcs")
+                end
+            end
+        end
+```
+```lua
+                    request("npcs")
+                end
+            end
+            if combatOn ~= nil then
+                ImGui.Text("Combat:")
+                ImGui.SameLine()
+                if ImGui.Button("Punch in the log") then
+                    request("punch")
+                end
+            end
+        end
+```
+
+- [ ] **Step 2: Check the overlay's syntax**
+
+```bash
+cd /d/Cyberpunk-Minecraft/spikes/block-render && luac -p tools/blockrender_hud/init.lua && echo ok
+```
+Expected: `ok`.
+
+- [ ] **Step 3: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "npcs-and-combat: the overlay's combat line, its Combat button, and V's punch in the log" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 23: In the game: step 4
+
+Step 4 of the spec's "The steps", with the user, on BlockRender 0.18.0 with `set combat 1`, linked to SkyCraft's
+Minecraft in the `CyberCraft` instance, its player in survival. The opening check comes first, with the least code: V's
+punch against the game's own number, one `hit` on an NPC with its health before and after, and one hit on V in build
+mode. Then fights, being shot at in build mode, and dying in Minecraft.
+
+FreeFly (F7) stays off. Note what you see as you go: Step 14 records it. If the game freezes, read the logs and the
+newest folder in `%LOCALAPPDATA%\REDEngine\ReportQueue`, and force-close it only when the user asks. If a check fails,
+stop and find the cause with superpowers:systematic-debugging before going on. Fixes become new tasks.
+
+From Step 6 on, the hits V takes in build mode go to Minecraft's player, in survival: if its hearts run out, V dies
+too, and the game wants a load. Watch its hearts; if it dies early, that's Step 9's check, done early: note it, load the
+save on the pavement, link, and go on.
+
+These commands come back, as in step 2:
+- **Send a request,** atomically: the plugin runs it within a second. Replace `punch` with the command, and send the next
+  only once the status's `request=` line shows the last.
+  ```bash
+  P=/e/Cyberpunk2077/red4ext/plugins/BlockRender; printf '%s\n' "punch" > "$P/request.tmp" && mv "$P/request.tmp" "$P/blockrender.request"
+  ```
+- **The log's newest lines:**
+  ```bash
+  L=$(ls -t /e/Cyberpunk2077/red4ext/logs | grep -i blockrender | head -1); tail -30 "/e/Cyberpunk2077/red4ext/logs/$L"
+  ```
+- **The status:**
+  ```bash
+  cat /e/Cyberpunk2077/bin/x64/plugins/cyber_engine_tweaks/mods/blockrender_hud/status.txt
+  ```
+- **Minecraft's log, for SkyCraft's lines and the chat's replies:**
+  ```bash
+  grep -E "SkyCraft: (Skyrim hit|hit|[0-9]+ Skyrim)|\[CHAT\]" "/c/Users/BLOXY/AppData/Roaming/ModrinthApp/profiles/CyberCraft/logs/latest.log" | tail -10
+  ```
+
+**Files:**
+- Modify: `docs/spikes/2026-10-05-npcs-and-combat-results.md`
+
+- [ ] **Step 1: Deploy (the game must not be running)**
+
+```bash
+tasklist | grep -i -c "cyberpunk2077.exe"
+```
+Expected: `0`. If it's `1`, ask the user to quit the game first, because a running game locks the DLL.
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+P=/e/Cyberpunk2077/red4ext/plugins/BlockRender
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default -DCP2077_DIR=E:/Cyberpunk2077 > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C|error MSB"; \
+  "$CMAKE" --preset default -DCP2077_DIR= > /dev/null; \
+  cmp build/RelWithDebInfo/BlockRender.dll "$P/BlockRender.dll" && cmp scripts/BlockRender.reds "$P/Scripts/BlockRender.reds" \
+  && echo installed
+```
+Expected: `installed`. The second configure clears `CP2077_DIR` again.
+
+- [ ] **Step 2: In the game: the module and its natives**
+
+Ask the user to start the `CyberCraft` instance, then the game, and to wait at the game's main menu. If a "REDScript
+compilation has failed" message box shows instead, ask the user to click OK and quit the game, and read redscript's log
+for why. Otherwise:
+```bash
+grep -E "BlockRender|Compilation complete|ERROR" /e/Cyberpunk2077/r6/logs/redscript_rCURRENT.log; \
+  L=$(ls -t /e/Cyberpunk2077/red4ext/logs | grep -i blockrender | head -1); grep -E "loaded|natives:" "/e/Cyberpunk2077/red4ext/logs/$L"
+```
+Expected: the module's path among the files compiled, `Compilation complete`, and no `ERROR` line; in BlockRender's log,
+`BlockRender 0.18.0 loaded` and `natives: BlockRenderNpcAttached, BlockRenderNpcDetached, BlockRenderNpcCount,
+BlockRenderNpcAt, BlockRenderVHurt and BlockRenderHitLanded added`.
+
+- [ ] **Step 3: In the game: load, link, and combat on**
+
+Ask the user to load the save on the busy pavement and click Link. Then send `mc /gamemode survival`, and `set combat
+1` (or ask the user to click the overlay's `Combat: off`). Expected:
+- in the log, `module: found BlockRenderNpcs version 3, its 8 functions, the 13 fields List fills, and BlockRender's 6
+  natives`, and `combat: V's Immortal off (the game says it already was)` once V is found;
+- in the status, `combat=on: V's punch 102.00; hits 0 queued, 0 landed; V's hurts: 0 taken, 0 sent, 0 summed, … left to
+  V; Immortal off; 0 deaths; Minecraft's player alive`, and in the overlay its `Combat:` line;
+- send `npcs`: an NPC with a capsule now reaches about 1.75 m above its position, `its top another's: radius …`
+  (Task 13).
+
+- [ ] **Step 4: In the game: the opening check, V's punch**
+
+Send `punch`. Expected: `punch: V's punch 102.00, read from Items.w_melee_004__fists_a; quick hits with Attacks.…
+(Melee), strong ones with Attacks.… (StrongMelee); not drawn, so hits carry no weapon` (V's numbers as V has them). If
+either attack says `none`, `Hit` can't make hits (`-3`): stop, and a new task finds the attack another way. Then ask the
+user to turn the game's damage numbers on if they're off, holster V's weapon so V's fists are drawn, and, outside build
+mode, punch a ganger once (a civilian may call the police), and read the number the game shows. Send `punch` again.
+Expected: the game's number about V's punch (a hit varies by up to a tenth either way, and a crit is more), and now
+`drawn, so hits carry it as their weapon`.
+
+- [ ] **Step 5: In the game: the opening check, one hit on an NPC**
+
+Send `npcs`, and pick a listed NPC near V who isn't a vendor, by its number `N` (a ganger is best: civilians and vendors
+may be friendly to V, and the game deals friendly hits nothing). Send `hit N 1`. Expected, in the log:
+- `hit on NPC N (…) for 1.00 of Minecraft's damage, knockback 0.40; unarmed: 102.00 of its health, 1.00 x V's punch
+  102.00; queued`;
+- then `hit on NPC N landed: 102.00 of its health, H -> H-102`: its health after is exactly its health before less the
+  amount, or 0;
+- the status's combat line `hits 1 queued, 1 landed`, the last `…; landed, H -> …`; and in the game, the NPC reacts.
+
+If the log says `wasn't dealt by the game within 2 s` instead, the hit didn't get through the damage pipeline: try a
+ganger; if none land, stop (the spec's risk 3). Then send `hit N 3 strong`, and note how the NPC reacts.
+
+- [ ] **Step 6: In the game: the opening check, one hit on V in build mode**
+
+Ask the user to find something that hits V (a ganger after a hit, or the hostile drone from step 2), press F8 near it,
+let it hit V once or twice, and press F8 again. Expected:
+- in the log, `combat: V's Immortal on` as build mode starts, then `combat: V hurt, taken for Minecraft: <amount> of
+  V's health (<share>), <x> of Minecraft's 20, <kind> (<attack type>), from NPC N`, and `combat: V's Immortal off` as it
+  ends;
+- in Minecraft's log, `SkyCraft: Skyrim hit the player for … (<x> Minecraft): health 20.0 -> …`;
+- V's health unchanged (the status's drive line, `V's health …%`), and Minecraft's hearts down in its HUD;
+- the attack type names what hit V: check the kind against it (the spec's "To Minecraft, as `kInHurt`").
+
+- [ ] **Step 7: In the game: fights**
+
+Send `mc /item replace entity @s hotbar.0 with minecraft:diamond_sword`, `mc /item replace entity @s hotbar.1 with
+minecraft:diamond_axe`, `mc /item replace entity @s hotbar.2 with minecraft:bow` and `mc /item replace entity @s
+hotbar.3 with minecraft:arrow 64`, each once the last shows in the status's `request=` line; slot 5 stays empty, for
+fists. Ask the user to fight NPCs in build mode, gangers best, with the sword, the axe, the bow and fists, with jump
+attacks (crits) and sprint hits. Expected: `landed` lines for each hit; NPCs flinch, stagger on crits and sprint hits,
+fight back, and die; the game's XP comes; Minecraft's hearts drop as they hit back. Note how they react, and anything
+that doesn't land.
+
+- [ ] **Step 8: In the game: shot at in build mode**
+
+Ask the user to stay in build mode in a gunfight a while. Expected: Minecraft's hearts drop in its HUD with each hit,
+V's health bar doesn't move, and the status's hurts count up, some summed.
+
+- [ ] **Step 9: In the game: dying in Minecraft kills V**
+
+Ask the user whether V may die now (it ends in the game's death screen, and a load), with `keep_inventory` as they chose
+in step 3; and if so, to let Minecraft's player die in build mode (or send `mc /kill @s`). Expected: `Minecraft's player
+died…; so V dies: V's health set to its least`; V dies in the game; Minecraft's player respawns at once. Then ask the
+user to load the last save and link again. Expected: `combat: V's Immortal off …` once V is found; outside build mode,
+a hit on V takes V's health.
+
+- [ ] **Step 10: In the game: the overlay, build mode and the bodies**
+
+Ask the user to place a few blocks of stone in build mode and walk onto them, then leave build mode. Expected: as in
+step 2: the bodies line counts them, and V stands on them.
+
+- [ ] **Step 11: In the game: combat off, and unlinking**
+
+Send `set combat 0`, then ask the user to click Unlink. Expected: `combat=off: Minecraft's hits are logged, not applied;
+V's health is V's`; then `none listed: not linked`.
+
+- [ ] **Step 12: Ask the user to quit the game and stop Minecraft**
+
+- [ ] **Step 13: Read the log once more**
+
+```bash
+L=$(ls -t /e/Cyberpunk2077/red4ext/logs | grep -i blockrender | head -1); grep -E "module:|combat:|hit on NPC|punch:|Minecraft's player died" "/e/Cyberpunk2077/red4ext/logs/$L" | head -300
+```
+Everything the steps above logged, for the results.
+
+- [ ] **Step 14: Record step 4's results in `docs/spikes/2026-10-05-npcs-and-combat-results.md`**
+
+A "Step 4" section: each check above with its outcome and numbers: V's punch against the game's number; the hit's
+health before and after; the hurt on V, its kind and share, and Minecraft's health; the fights (reactions, crits and
+sprint hits, return fire, deaths, XP); being shot at; the death and the load; and anything that surprised, and what it
+means for Part 3. Update the spike's answer at the top.
+
+- [ ] **Step 15: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add docs/spikes/2026-10-05-npcs-and-combat-results.md \
+  && git commit -q -m "npcs-and-combat: step 4's results" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 24: Close Part 2, and plan Part 3
+
+- [ ] **Step 1: Add "How Part 2 went" to this plan**
+
+At the end, after "Found while planning Part 2": what ran as written, what changed, and what steps 3 and 4 found.
+
+- [ ] **Step 2: Plan Part 3**
+
+Use superpowers:writing-plans to add Part 3's tasks, from Task 25 on, to this plan: Minecraft's explosions in the game
+(the spec's "Part 3", and step 5). Verify them as Parts 1 and 2 were. Changes to the spec found while planning go in its
+"Changes while planning".
+
+- [ ] **Step 3: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add docs/superpowers \
+  && git commit -q -m "npcs-and-combat plan: Part 2 closed, Part 3 planned" \
        -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
 ```
 
@@ -4002,3 +7346,68 @@ The spec's "Changes while planning" records these too.
 - **`npcs`** also logs where each box came from, with the capsule's lean and query filter, for step 2's opening check;
   the overlay gains a button for it.
 - **`Query`'s version** is parsed from `kVersion` at compile time, with a `static_assert` on the parser.
+
+## How Part 1 went
+
+Part 1 ran from 10:58 to 17:01 on 2026-10-05. The results:
+[2026-10-05-npcs-and-combat-results.md](../../spikes/2026-10-05-npcs-and-combat-results.md).
+- **As written:** Tasks 1 to 3 and 5 to 10 ran as the plan has them, each build without a warning, and the test counts
+  as listed (396 to 414).
+- **Step 1 (Task 4) passed,** against SkyCraft's real mod, with two expected lines in the wrong words: Minecraft 26.3
+  replies `Test passed. Count: 3`, and SkyCraft logs its stand-in count only when it adds stand-ins. Task 11 then
+  counted stand-ins with `/execute` (`edf0743`).
+- **Step 2 (Task 11) passed on its second run.** Its first run found three faults, each fixed as its own commit:
+  - the module's static functions are global functions in the game, named `BlockRenderNpcs::Version;`, so `GameScript`
+    looks them up there (`da1be78`);
+  - an NPC's capsule is its controller's, found by the query filter's controller bit `0x2000`, not the narrowest
+    kinematic capsule around it, which beside a vendor was a 0.06 m one (`1fa17f4`; 415 tests);
+  - the game crashed when Link first called `List`: the wraps had pushed onto and erased from the module's own arrays,
+    and the game calls `NPCPuppet`'s `OnGameAttached` and `OnDetach` on many threads. The list moved into BlockRender:
+    the wraps pass `EntityID`s to its natives, `NpcRegistry` keeps them behind a mutex, and `List` copies them on the
+    main thread. Module version 2, with a thirteenth field, `found` (`b68fe3b`; 423 tests). The first load's crash in
+    the engine's allocator was most likely the same race.
+- **What step 2 measured:** the wraps ran on 16 threads, 15 of them workers; the game's targeting never found an NPC the
+  list lacked; the module costs 0.08 ms a frame; the plate lit for everyone who crossed it; and 20 hits from Minecraft
+  came back, crits included.
+- **Not as expected:** the boxes stop at the controller's top, 1.63 m, a head short (the plan expected 1.7 to 1.9 m);
+  the NPC's two other upright capsules reach 1.75 and 1.76 m. Drones have no capsule, so they're person-sized from
+  their position.
+- **For Part 2:**
+  - the box's top from the tallest upright capsule on the NPC's axis comes first, with the vendor's capsules as its
+    test;
+  - script callbacks run on worker threads, so the spec's risk 8 (the damage pipeline off the main thread) is likely,
+    not unlikely: wraps in the pipeline hand their hits to BlockRender through natives, behind a lock, as the list's
+    wraps do, and keep nothing of the module's;
+  - nothing guards V's health yet: a drone took V to 63% in step 2.
+
+## Found while planning Part 2
+
+The spec's "Changes while planning Part 2" records these too.
+- **Our hits are marked on the hit itself:** the game marks its environment's attacks with `hitFlag.None` and a source
+  name (`environmentDamageSystem.swift`), and `AttackData.GetFlags()` gives every flag with its source. The module marks
+  ours `hitFlag.None` under `n"BlockRender <amount>"`, and the pipeline's wraps, on whichever thread runs it, read the
+  mark and the amount from the hit. So no hit is recorded by reference, as the spec first had it; BlockRender keeps its
+  own list of hits queued, only to count those the game hasn't dealt within 2 s.
+- **The attack record:** the `BaseFists` item's `WeaponItem_Record.Attacks()`, its `StrongMelee` attack for a strong hit
+  and its `Melee` attack for the rest: `QuickMelee` is a gun's quick melee (`attackData.swift`: `IsLightMelee` is
+  `Melee`). The player's own melee finds its records by name on the drawn weapon object (`meleeTransitions.swift`'s
+  `GetAttackRecord`). With neither, the first melee attack; with none, `Hit` says so (-3), and `punch` names the records.
+- **The weapon object:** the item in `AttachmentSlots.WeaponRight`, if it's the `BaseFists` item.
+- **The wrapped methods:** `damageSystem.swift`'s `private final func Process(hitEvent: ref<gameHitEvent>, cache:
+  ref<CacheData>)` and `private final func DealDamages(hitEvent: ref<gameHitEvent>)`. A wrap of a method that isn't
+  there fails the compile, which Task 18 checks.
+- **The damage set exactly:** `gameAttackComputed.GetAttackValues()`, each set to 0 and put back with `SetAttackValues`,
+  then `SetAttackValue(amount, gamedataDamageType.Physical)`.
+- **V's hurts through a native into an inbox behind a lock,** taken only while combat and build mode are on, V is found
+  and V's max health is read, at most 256 waiting: one it doesn't take stays V's, so none is lost on its way. Our hits'
+  landings come back the same way, with the NPC's health before and after.
+- **The knockback threshold compares floats,** `> 0.45f`, as SkyCraft's own `push > 0.45f`: a float knockback is never
+  the double 0.45 exactly, so a double comparison couldn't tell `>` from `>=`, and its test couldn't either (a mutation
+  found it).
+- **`hit <id> <damage> [strong]`** is an event as Minecraft's would be: knockback 0.4, and the crit flag for strong.
+- **V's god mode** goes off once whenever V is found again, the first time too, when the game says there was nothing to
+  remove.
+- **Step 3's checks** read SkyCraft's own line for each hurt (`SkyCombat.hurtPlayer`): `SkyCraft: Skyrim hit the player
+  for <damage> (<Minecraft damage> Minecraft): health <before> -> <after>`. Its script takes Minecraft's player out of
+  the armour before the burst, so the burst's two sends are exactly 1 and 4.
+- **The module is version 3:** 8 functions, 13 fields, and six natives.
