@@ -7,8 +7,9 @@
 // City's shape for Minecraft from the game's PhysX; and it makes Minecraft's solid blocks around V into PhysX bodies,
 // for V to stand on. Spike 6 lists Night City's NPCs into SkyCraft's actor table, through its redscript module
 // (scripts/BlockRender.reds), so that Minecraft's weapons hit them and they press its pressure plates; with combat on,
-// Minecraft's hits land on them as V's, and in build mode the game's hits on V go to Minecraft's player, whose death
-// kills V.
+// Minecraft's hits land on them as V's, through the game's whole damage pipeline, and in build mode the game's hits on V
+// go to Minecraft's player, whose death kills V. In build mode V's meshes are hidden, and with combat on V's unarmed
+// weapon is drawn, so that hits carry it.
 // Commands come through blockrender.request, in its folder or the overlay's, and status.txt in the overlay's folder says
 // what it's doing. See docs/superpowers/specs/2026-10-01-block-render-design.md, 2026-10-02-minecraft-link-design.md,
 // 2026-10-03-collision-and-movement-design.md and 2026-10-05-npcs-and-combat-design.md.
@@ -184,6 +185,14 @@ bool                                  g_combat = false;      // set combat 0|1: 
 std::vector<skycraft::proto::McEvent> g_events;              // Minecraft's hits and deaths this frame, in the ring's order
 double                                g_punch = 0.0;         // V's punch and max health, as the module last read them
 double                                g_vHealthMax = 0.0;
+std::string                           g_punchItem;           // what V's unarmed slot draws, which the punch is read from
+bool                                  g_punchDrawn = false;  // V has it drawn, so hits carry it as their weapon
+cpmc::link::VSwitch                   g_armed{ 1.0 };        // V's unarmed weapon, drawn while combat and build mode are on
+cpmc::link::VSwitch                   g_hidden{ 0.25 };      // V's meshes, hidden while build mode is on and hidev is 1
+bool                                  g_hideV = true;        // set hidev 0|1
+std::optional<int32_t>                g_lastArm;             // what Arm and HideV last said, so that a refresh logs a change
+std::optional<int32_t>                g_lastHide;
+int32_t                               g_vMeshes = 0;         // the meshes HideV has switched off
 cpmc::link::HurtSums                  g_hurtSums;            // V's hurts, summed for Minecraft
 std::vector<cpmc::link::Hurt>         g_hurtsOut;            // waiting for room in the input ring
 cpmc::link::GodMode                   g_godMode;             // V's Immortal, under our own source name
@@ -197,7 +206,7 @@ struct PendingHit
 	uint64_t entity = 0;
 	uint32_t formId = 0;
 	double   damage = 0.0;
-	double   amount = 0.0;
+	double   amount = 0.0;  // where the pipeline starts it
 	double   at = 0.0;
 };
 std::vector<PendingHit>         g_pendingHits;
@@ -639,6 +648,8 @@ void ListNpcs(double aNow, const std::optional<cpmc::Vec3d>& aFeet)
 		return;
 	}
 	g_punch = g_npcList->punch;
+	g_punchItem = g_npcList->punchItem;
+	g_punchDrawn = g_npcList->punchDrawn;
 	g_vHealthMax = g_npcList->vHealthMax;
 	g_actorRecords = cpmc::link::ActorRecords(g_npcList->npcs, *aFeet, g_npcSizes.Boxes(), g_actorIds, aNow);
 	g_link->WriteActors(g_actorRecords);
@@ -691,7 +702,7 @@ void DropHit(const std::string& aHit, const std::string& aWhy)
 }
 
 // One of Minecraft's hits on an NPC (spike 6's "Minecraft's hits on NPCs"): logged, and with combat on, made V's through
-// the module: Minecraft's damage x V's punch off the NPC's health.
+// the module, starting the game's damage pipeline at Minecraft's damage x V's punch.
 void HitOnNpc(const skycraft::proto::McEvent& aEvent, double aNow, bool aVFound)
 {
 	++g_npcHits;
@@ -719,10 +730,10 @@ void HitOnNpc(const skycraft::proto::McEvent& aEvent, double aNow, bool aVFound)
 	}
 	++g_hitsQueued;
 	g_pendingHits.push_back({ accepted->entity, accepted->formId, accepted->damage, accepted->amount, aNow });
-	g_lastHit = std::format("NPC {} ({}): {:.2f} of Minecraft's damage, {:.2f} of its health{}; queued", accepted->formId,
+	g_lastHit = std::format("NPC {} ({}): {:.2f} of Minecraft's damage, starting at {:.2f}{}; queued", accepted->formId,
 	                        NpcName(accepted->formId), accepted->damage, accepted->amount, accepted->strong ? ", strong" : "");
-	Log("{}: {:.2f} of its health, {:.2f} x V's punch {:.2f}{}; queued", hit, accepted->amount, accepted->damage, g_punch,
-	    accepted->strong ? ", strong" : "");
+	Log("{}: starting at {:.2f}, {:.2f} x V's punch {:.2f}{}{}; queued", hit, accepted->amount, accepted->damage, g_punch,
+	    accepted->strong ? ", strong" : "", g_punchDrawn ? "" : ", without V's weapon drawn");
 }
 
 // Minecraft's player's death (spike 6's "Deaths"): with combat on, in build mode or just after it, V's death too.
@@ -746,9 +757,77 @@ void MinecraftDied(const skycraft::proto::McEvent& aEvent, double aNow, bool aVF
 	Log("{}; so V dies: {}", died, killed ? (*killed ? "V's health set to its least" : "but another god mode keeps V alive") : "not done: " + why);
 }
 
+// What the module's Arm said, in words.
+std::string ArmWords(int32_t aResult, bool aOn)
+{
+	switch (aResult)
+	{
+	case 1:
+		return aOn ? "asked the game to draw V's unarmed weapon" : "asked the game for V's own weapon back";
+	case 2:
+		return aOn ? "V has it drawn" : "nothing to put back";
+	case 0:
+		return "V isn't found";
+	case -1:
+		return "V has no unarmed weapon";
+	case -2:
+		return "there's no equipment system";
+	default:
+		return std::format("result {}", aResult);
+	}
+}
+
+// What the module's HideV said, in words.
+std::string HideWords(int32_t aResult, bool aOn)
+{
+	switch (aResult)
+	{
+	case -1:
+		return "not done: hiding V's meshes needs Codeware, which isn't installed";
+	case -2:
+		return "not done: V isn't found";
+	default:
+		return std::format("{} meshes {}", aResult, aOn ? "switched off" : "switched on again");
+	}
+}
+
+// V's unarmed weapon, drawn while combat and build mode are on (spike 6's "V's weapon in build mode"), and V's meshes,
+// hidden while build mode is on (its "V unseen in build mode"): each through the module, logged when what it says changes.
+void SwitchV(bool aBuild, bool aVFound, double aNow)
+{
+	if (const std::optional<bool> arm = g_armed.Frame(g_combat && aBuild, aVFound, aNow))
+	{
+		std::string                  why;
+		const std::optional<int32_t> result = g_script.Arm(*arm, why);
+		if (!*arm || result != g_lastArm)
+		{
+			Log("combat: V's unarmed weapon {}: {}", *arm ? "drawn" : "put away", result ? ArmWords(*result, *arm) : "not done: " + why);
+		}
+		g_lastArm = *arm ? result : std::nullopt;
+	}
+	if (const std::optional<bool> hide = g_hidden.Frame(g_hideV && aBuild, aVFound, aNow))
+	{
+		std::string                  why;
+		const double                 start = cpmc::SteadySeconds();
+		const std::optional<int32_t> result = g_script.HideV(*hide, why);
+		const double                 ms = (cpmc::SteadySeconds() - start) * 1000.0;
+		if (!*hide || result != g_lastHide)
+		{
+			Log("build: V's meshes {}: {} ({:.2f} ms)", *hide ? "hidden" : "shown", result ? HideWords(*result, *hide) : "not done: " + why,
+			    ms);
+		}
+		g_lastHide = *hide ? result : std::nullopt;
+		g_vMeshes = *hide ? result.value_or(0) : 0;
+	}
+	else if (!g_hidden.On())
+	{
+		g_vMeshes = 0;
+	}
+}
+
 // Spike 6's combat, after the link's update and before the NPCs are listed (its spec's "The frame"): Minecraft's hits and
-// deaths in the ring's order; our hits the game has dealt, and those it hasn't within kHitTrail; V's god mode; and
-// whether V's hurts are taken.
+// deaths in the ring's order; our hits the game has dealt, those it dealt nothing and why, and those it hasn't said
+// within kHitTrail; V's god mode, V's unarmed weapon and V's meshes; and whether V's hurts are taken.
 void Fight(double aNow, const std::optional<cpmc::Vec3d>& aFeet)
 {
 	const bool build = g_router->On();
@@ -776,13 +855,30 @@ void Fight(double aNow, const std::optional<cpmc::Vec3d>& aFeet)
 		                                  [&](const PendingHit& aHit) { return aHit.entity == landed.target; });
 		const uint32_t formId = pending != g_pendingHits.end() ? pending->formId : g_actorIds.IdOf(landed.target).value_or(0);
 		const double   damage = pending != g_pendingHits.end() ? pending->damage : 0.0;
+		const double   start = pending != g_pendingHits.end() ? pending->amount : 0.0;
 		if (pending != g_pendingHits.end())
 		{
 			g_pendingHits.erase(pending);
 		}
-		g_lastHit = std::format("NPC {} ({}): {:.2f} of Minecraft's damage, {:.2f} of its health; landed, {:.0f} -> {:.0f}", formId,
-		                        NpcName(formId), damage, landed.amount, landed.before, landed.after);
-		Log("hit on NPC {} landed: {:.2f} of its health, {:.0f} -> {:.0f}", formId, landed.amount, landed.before, landed.after);
+		const std::string how = cpmc::link::LandedWords(landed.flags);
+		g_lastHit = std::format("NPC {} ({}): {:.2f} of Minecraft's damage, started at {:.2f}, {:.2f} dealt{}; {:.0f} -> {:.0f}", formId,
+		                        NpcName(formId), damage, start, landed.amount, how.empty() ? "" : " (" + how + ")", landed.before,
+		                        landed.after);
+		Log("hit on NPC {} landed: started at {:.2f}, {:.2f} dealt{}; its health {:.0f} -> {:.0f}", formId, start, landed.amount,
+		    how.empty() ? "" : " (" + how + ")", landed.before, landed.after);
+	}
+	for (const cpmc::CombatInbox::Ended& ended : cpmc::CombatReported().TakeEnded())
+	{
+		const auto pending = std::find_if(g_pendingHits.begin(), g_pendingHits.end(),
+		                                  [&](const PendingHit& aHit) { return aHit.entity == ended.target; });
+		const uint32_t formId = pending != g_pendingHits.end() ? pending->formId : g_actorIds.IdOf(ended.target).value_or(0);
+		if (pending != g_pendingHits.end())
+		{
+			g_pendingHits.erase(pending);
+		}
+		const std::string why = cpmc::link::HitEndedName(ended.why);
+		++g_hitDrops[why];
+		Log("hit on NPC {} dealt nothing: {}", formId, why);
 	}
 	std::erase_if(g_pendingHits, [&](const PendingHit& aHit) {
 		if (aNow - aHit.at <= cpmc::link::kHitTrail)
@@ -790,8 +886,8 @@ void Fight(double aNow, const std::optional<cpmc::Vec3d>& aFeet)
 			return false;
 		}
 		++g_hitDrops["not dealt by the game"];
-		Log("hit on NPC {} ({:.2f} of its health) wasn't dealt by the game within {:.0f} s: friendly, invulnerable or dead by then",
-		    aHit.formId, aHit.amount, cpmc::link::kHitTrail);
+		Log("hit on NPC {} (starting at {:.2f}) wasn't dealt by the game within {:.0f} s, nor said why", aHit.formId, aHit.amount,
+		    cpmc::link::kHitTrail);
 		return true;
 	});
 	if (const std::optional<bool> change = g_godMode.Frame(g_combat, build, vFound))
@@ -805,6 +901,7 @@ void Fight(double aNow, const std::optional<cpmc::Vec3d>& aFeet)
 		Log("combat: V's Immortal {}{}", *change ? "on" : "off",
 		    changed ? (*changed ? std::string() : std::string(" (the game says it already was)")) : ": not done: " + why);
 	}
+	SwitchV(build, vFound, aNow);
 	cpmc::CombatReported().SetTaking(g_combat && build && vFound && g_vHealthMax > 0.0);
 	const bool dead = g_link && (g_link->State().minecraftFlags & skycraft::proto::kMcDead) != 0;
 	if (!dead)
@@ -1053,9 +1150,18 @@ void Set(const cpmc::Request& aRequest)
 			              "0 only logs hits");
 		}
 		g_combat = aRequest.number == 1.0;
-		return Report(g_combat ? "set combat 1: Minecraft's hits land on NPCs as V's; in build mode V is Immortal, the game's hits on V go "
-		                         "to Minecraft's player, and its death kills V"
+		return Report(g_combat ? "set combat 1: Minecraft's hits land on NPCs as V's; in build mode V is Immortal with its unarmed weapon "
+		                         "drawn, the game's hits on V go to Minecraft's player, and its death kills V"
 		                       : "set combat 0: Minecraft's hits are only logged, and V's health is V's");
+	}
+	if (aRequest.what == "hidev")
+	{
+		if (aRequest.number != 0.0 && aRequest.number != 1.0)
+		{
+			return Report("set hidev: 1 hides V's meshes while build mode is on, so only Minecraft's view shows; 0 leaves V seen");
+		}
+		g_hideV = aRequest.number == 1.0;
+		return Report(g_hideV ? "set hidev 1: V's meshes are hidden while build mode is on" : "set hidev 0: V stays seen in build mode");
 	}
 	if (aRequest.what == "npcs")
 	{
@@ -1221,8 +1327,8 @@ void NpcsRequest()
 	{
 		return Report("npcs: none listed: " + (g_npcsWhy.empty() ? std::string("set npcs is 0") : g_npcsWhy));
 	}
-	Log("npcs: {} listed of {} in the world; V's punch {:.2f}, read from {}; V's max health {:.0f}", g_actorRecords.size(),
-	    g_npcList->attached, g_npcList->punch, g_npcList->punchItem, g_npcList->vHealthMax);
+	Log("npcs: {} listed of {} in the world; V's punch {:.2f}, read from {}, {}; V's max health {:.0f}", g_actorRecords.size(),
+	    g_npcList->attached, g_npcList->punch, g_npcList->punchItem, g_npcList->punchDrawn ? "drawn" : "not drawn", g_npcList->vHealthMax);
 	for (size_t i = 0; i < g_actorRecords.size(); ++i)
 	{
 		if (const cpmc::link::NpcSample* npc = ListedNpc(i))
@@ -1572,6 +1678,8 @@ cpmc::LinkReport LinkLines(const cpmc::Renderer::Stats& aStats, double aNow)
 	report.npcHits = g_npcHits;
 	report.combatOn = g_combat;
 	report.punch = g_punch;
+	report.punchItem = g_punchItem;
+	report.punchDrawn = g_punchDrawn;
 	report.hitsQueued = g_hitsQueued;
 	report.hitsLanded = g_hitsLanded;
 	report.hitsDropped = HitDrops();
@@ -1581,12 +1689,16 @@ cpmc::LinkReport LinkLines(const cpmc::Renderer::Stats& aStats, double aNow)
 	report.hurtsSent = g_hurtsSent;
 	report.hurtsSummed = g_hurtSums.Summed();
 	report.hurtsLeft = combat.refused;
+	report.hurtsNonLethal = combat.nonLethal;
 	report.lastHurt = g_lastHurt;
 	report.immortal = g_immortal;
 	report.deaths = g_deaths;
 	report.minecraftDeadFor = g_minecraftDiedAt ? std::optional<double>(aNow - *g_minecraftDiedAt) : std::nullopt;
 	report.combatWhy = CombatWhy();
 	report.health = g_linked ? g_puppet.Health() : std::nullopt;  // once a second, so fall damage shows
+	report.hideV = g_hideV;
+	report.vHidden = g_hidden.On();
+	report.vMeshes = g_vMeshes;
 	report.turn = g_turn;
 	report.turnRatio = g_turnRatio.Ratio();
 	report.turnRemembered = g_turnRatio.Remembered();
