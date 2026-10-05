@@ -56,8 +56,8 @@ const std::vector<std::pair<const char*, const char*>>& Fields()
 }
 
 // BlockRender's natives (Natives.cpp), as the module declares them: added when the game registered its types.
-constexpr std::array<const char*, 4> kNatives{ "BlockRenderNpcAttached", "BlockRenderNpcDetached", "BlockRenderNpcCount",
-	                                           "BlockRenderNpcAt" };
+constexpr std::array<const char*, 6> kNatives{ "BlockRenderNpcAttached", "BlockRenderNpcDetached", "BlockRenderNpcCount",
+	                                           "BlockRenderNpcAt",       "BlockRenderVHurt",       "BlockRenderHitLanded" };
 
 // A static function's call: no instance.
 constexpr void* kNoInstance = nullptr;

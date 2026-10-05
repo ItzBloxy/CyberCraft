@@ -86,6 +86,7 @@ add_library(render_core STATIC
 	src/input/FocusWatch.cpp
 	src/input/Router.cpp
 	src/NpcRegistry.cpp
+	src/CombatInbox.cpp
 )
 target_link_libraries(render_core PUBLIC render_settings d3dcompiler dxguid advapi32)
 
@@ -212,6 +213,7 @@ add_executable(render_tests
 	tests/TestCharacters.cpp
 	tests/TestNpcRegistry.cpp
 	tests/TestCombat.cpp
+	tests/TestCombatInbox.cpp
 	tools/mclink/DumpObj.cpp
 	tools/mclink/McLinkScript.cpp
 )

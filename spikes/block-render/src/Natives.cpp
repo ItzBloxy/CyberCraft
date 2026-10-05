@@ -13,6 +13,7 @@ namespace cpmc
 namespace
 {
 NpcRegistry g_reported;
+CombatInbox g_combat;
 LogQueue*   g_nativesLog = nullptr;
 
 // BlockRenderNpcAttached(id: EntityID), from the wrap of NPCPuppet.OnGameAttached, on any thread.
@@ -54,6 +55,40 @@ void NpcAt(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, RED4ext::ent::En
 	{
 		aOut->hash = g_reported.At(index);
 	}
+}
+
+// BlockRenderVHurt(amount: Float, attackType: Int32, instigator: EntityID) -> Bool, from the wrap of DealDamages, on any
+// thread: a hit on V, taken (true) while combat and build mode are on, so the wrap deals none of it.
+void VHurt(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, bool* aOut, int64_t)
+{
+	float                  amount = 0.0f;
+	int32_t                attackType = 0;
+	RED4ext::ent::EntityID instigator;
+	RED4ext::GetParameter(aFrame, &amount);
+	RED4ext::GetParameter(aFrame, &attackType);
+	RED4ext::GetParameter(aFrame, &instigator);
+	++aFrame->code;
+	const bool taken = g_combat.Offer({ double(amount), attackType, instigator.hash });
+	if (aOut)
+	{
+		*aOut = taken;
+	}
+}
+
+// BlockRenderHitLanded(target: EntityID, amount: Float, before: Float, after: Float), from the wrap of DealDamages, on any
+// thread: one of our hits, dealt, with the NPC's health before and after.
+void HitLanded(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, void*, int64_t)
+{
+	RED4ext::ent::EntityID target;
+	float                  amount = 0.0f;
+	float                  before = 0.0f;
+	float                  after = 0.0f;
+	RED4ext::GetParameter(aFrame, &target);
+	RED4ext::GetParameter(aFrame, &amount);
+	RED4ext::GetParameter(aFrame, &before);
+	RED4ext::GetParameter(aFrame, &after);
+	++aFrame->code;
+	g_combat.Land({ target.hash, double(amount), double(before), double(after) });
 }
 
 // A global native function, with its parameters' and return types as the module declares them; false if a type isn't
@@ -103,9 +138,16 @@ void PostRegisterTypes()
 	typed = Add<void*>(*rtti, "BlockRenderNpcDetached", &NpcDetached, { { "entEntityID", "id" } }, nullptr) && typed;
 	typed = Add<int32_t*>(*rtti, "BlockRenderNpcCount", &NpcCount, {}, "Int32") && typed;
 	typed = Add<RED4ext::ent::EntityID*>(*rtti, "BlockRenderNpcAt", &NpcAt, { { "Int32", "i" } }, "entEntityID") && typed;
+	typed = Add<bool*>(*rtti, "BlockRenderVHurt", &VHurt, { { "Float", "amount" }, { "Int32", "attackType" }, { "entEntityID", "instigator" } },
+	                   "Bool") &&
+	        typed;
+	typed = Add<void*>(*rtti, "BlockRenderHitLanded", &HitLanded,
+	                   { { "entEntityID", "target" }, { "Float", "amount" }, { "Float", "before" }, { "Float", "after" } }, nullptr) &&
+	        typed;
 	if (g_nativesLog)
 	{
-		g_nativesLog->Push(typed ? "natives: BlockRenderNpcAttached, BlockRenderNpcDetached, BlockRenderNpcCount and BlockRenderNpcAt added"
+		g_nativesLog->Push(typed ? "natives: BlockRenderNpcAttached, BlockRenderNpcDetached, BlockRenderNpcCount, BlockRenderNpcAt, "
+		                           "BlockRenderVHurt and BlockRenderHitLanded added"
 		                         : "natives: added, but some of their types weren't found");
 	}
 }
@@ -127,5 +169,10 @@ bool RegisterNatives(LogQueue& aLog)
 NpcRegistry& NpcsReported()
 {
 	return g_reported;
+}
+
+CombatInbox& CombatReported()
+{
+	return g_combat;
 }
 }
