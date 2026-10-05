@@ -67,3 +67,38 @@ with no resyncs and nothing rejected.
   Task 11, steps 3, 6 and 11, now says so.
 - **A plate in a stand-in's block lights its lamp:** on the pavement, a plate placed in build mode sits in the block the
   pavement's surface is in, which a stand-in's box overlaps from the NPC's feet up.
+
+## Step 2: the game's NPCs in Minecraft
+
+Date: 2026-10-05. BlockRender 0.17.0 in the game (2.31), linked to the same Minecraft as step 1, on a pavement near
+spike 3's corner. Plan: Task 11. This section is written as the step runs.
+
+### The first run: two faults, fixed
+
+- **redscript compiled the module** at the game's start, with the other mods' scripts (ArchiveXL, TweakXL, Codeware,
+  mod_settings and those in `r6/scripts`): `…\BlockRender\Scripts\BlockRender.reds` was among the files, then
+  `Compilation complete`. BlockRender's log said `the redscript module …: added to redscript's compile`.
+- **A crash on the first load,** before any link: an access violation in the engine's allocator
+  (`red::memory::DefaultAllocator::AllocateAligned`, reached from `red::DynamicBuffer::ResizeBuffer` while the game ticked
+  its `DelaySystem`), 95 s after the game started, with 76 NPCs attached. The allocator's free list held data where a
+  pointer belonged (`0x3f400000000c0002`), so something had written over freed memory earlier, off this stack. The
+  second load of the same save didn't crash. BlockRender's C++ calls nothing new while unlinked; the module's wraps did
+  run for each NPC attached. Read from the crash dump with a small script (no debugger is installed) and the game's
+  `cyberpunk2077_addresses.json`. If it happens again, the same load without the module settles whether it's ours.
+- **The module wasn't found:** `module: BlockRenderNpcs.Version isn't there with the types BlockRender passes`. A
+  throwaway CET mod listed the class through Codeware's `Reflection`: its static list is empty, and its static
+  functions are global functions, `BlockRenderNpcs::Version;`, `BlockRenderNpcs::Get;GameInstance` and
+  `BlockRenderNpcs::Current;`. Its member functions and all twelve fields were as `GameScript` expects. Fixed: static
+  functions are looked up among the global functions (`da1be78`).
+- **The module itself works,** called from that CET mod: the session's system exists (the spec's risk 1), `Version()`
+  is 1, and `List(80)` gave 12 NPCs, 33 attached in all, every array 12 long: "NC Resident"s at 6 to 63 m, most at level
+  47 with 449 to 1,514 health, some at level 1 with 48 or 78, none hostile. `Compare(80)` said `GetTargetParts finds 11
+  NPCs within 80 m; the list lacks 0`: the wraps miss none here (risk 2).
+- **V's punch** reads 102 from `Items.w_melee_004__fists_a`, and V's max health 455.6. V has Mantis Blades installed,
+  which the inventory shows at 105; the fists' own number isn't shown there, so the two aren't the same item. Part 2
+  decides what V punches with when arm cyberware is installed.
+- **An NPC's capsule:** `shapes` beside a vendor showed three kinematic capsules standing around it: the controller,
+  radius 0.30 and 1.45 m tall, query filter `0:0:10002000:0`, not a simulation shape; one of radius 0.40, `0:0:2000000:0`;
+  and a thin one of radius 0.06, `0:0:24000002:0`, a simulation shape; and a kinematic sphere of radius 1.2. V's
+  controller's filter, `0:0:2000:0`, shares the `0x2000` bit with the vendor's. The narrowest-first rule would have
+  taken the 0.06 m capsule; the rule now takes the one with that bit (`1fa17f4`).

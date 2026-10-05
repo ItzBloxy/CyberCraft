@@ -1431,7 +1431,7 @@ command 6 minutes. Expected, against the spec's "Step 1":
 - **The status:** `events: 0 explosions, 2 hits on actors, 0 deaths, 0 others; 0 actors in the table; …`.
 - **No `[CHAT] Test failed`,** and `exit: 0`.
 
-- [ ] **Step 4: Ask the user to stop Minecraft**
+- [x] **Step 4: Ask the user to stop Minecraft**
 
 Its window is hidden while `mclink` drives it, so the user stops it from the Modrinth App.
 
@@ -1477,7 +1477,7 @@ filters, and `npcs` says which capsule each box came from.
 - Create: `src/physx/Characters.h`, `src/physx/Characters.cpp`, `tests/TestCharacters.cpp`
 - Modify: `src/link/Actors.h`, `src/link/Actors.cpp`, `src/physx/Export.h`, `src/physx/Export.cpp`, `CMakeLists.txt`
 
-- [ ] **Step 1: Write the failing test, `tests/TestCharacters.cpp`**
+- [x] **Step 1: Write the failing test, `tests/TestCharacters.cpp`**
 
 ```cpp
 #include "Harness.h"
@@ -1630,7 +1630,7 @@ TEST(CharactersDescribeAnNpcForTheNpcsRequest)
 }
 ```
 
-- [ ] **Step 2: Edit `CMakeLists.txt` to add the test**
+- [x] **Step 2: Edit `CMakeLists.txt` to add the test**
 
 ```cmake
 	tests/TestActors.cpp
@@ -1642,7 +1642,7 @@ TEST(CharactersDescribeAnNpcForTheNpcsRequest)
 	tools/mclink/DumpObj.cpp
 ```
 
-- [ ] **Step 3: Build; it must fail**
+- [x] **Step 3: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -1651,7 +1651,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `error C1083: Cannot open include file: 'physx/Characters.h'`.
 
-- [ ] **Step 4: Write `src/physx/Characters.h`**
+- [x] **Step 4: Write `src/physx/Characters.h`**
 
 ```cpp
 #pragma once
@@ -1731,7 +1731,7 @@ std::string DescribeNpc(const link::NpcSample& aNpc, uint32_t aId, double aDista
 }
 ```
 
-- [ ] **Step 5: Write `src/physx/Characters.cpp`**
+- [x] **Step 5: Write `src/physx/Characters.cpp`**
 
 ```cpp
 #include "physx/Characters.h"
@@ -1874,7 +1874,7 @@ std::string DescribeNpc(const link::NpcSample& aNpc, uint32_t aId, double aDista
 }
 ```
 
-- [ ] **Step 6: Edit `src/link/Actors.h`**
+- [x] **Step 6: Edit `src/link/Actors.h`**
 
 ```cpp
 	void Forget(double aNow);
@@ -1885,7 +1885,7 @@ std::string DescribeNpc(const link::NpcSample& aNpc, uint32_t aId, double aDista
 	std::optional<uint32_t> IdOf(uint64_t aEntity) const;
 ```
 
-- [ ] **Step 7: Edit `src/link/Actors.cpp`**
+- [x] **Step 7: Edit `src/link/Actors.cpp`**
 
 ```cpp
 			++entry;
@@ -1910,7 +1910,7 @@ std::optional<uint32_t> ActorIds::IdOf(uint64_t aEntity) const
 std::string CutName(std::string_view aName, size_t aBytes)
 ```
 
-- [ ] **Step 8: Edit `src/physx/Export.h`**
+- [x] **Step 8: Edit `src/physx/Export.h`**
 
 ```cpp
 #include "link/Ground.h"
@@ -1930,7 +1930,7 @@ std::string CutName(std::string_view aName, size_t aBytes)
 	// Scene 0 and PhysX's origin this frame, as the reads have them, for part 3's bodies: read once a frame, whoever asks
 ```
 
-- [ ] **Step 9: Edit `src/physx/Export.cpp`**
+- [x] **Step 9: Edit `src/physx/Export.cpp`**
 
 `Capsules` reads as `Describe` and `Origin` do: under scene 0's read lock, each actor and shape checked against the
 audit before anything is called on it, and only the calls the audit lists (the overlap, the actor's global pose and
@@ -1984,7 +1984,7 @@ std::vector<CapsuleSeen> PhysxGround::Capsules(const Vec3d& aWorld, double aRadi
 }
 ```
 
-- [ ] **Step 10: Edit `CMakeLists.txt` to add the source**
+- [x] **Step 10: Edit `CMakeLists.txt` to add the source**
 
 ```cmake
 	src/physx/BodyPlan.cpp
@@ -1996,7 +1996,7 @@ std::vector<CapsuleSeen> PhysxGround::Capsules(const Vec3d& aWorld, double aRadi
 	src/link/Drive.cpp
 ```
 
-- [ ] **Step 11: Build and run the tests; they must pass**
+- [x] **Step 11: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -2006,7 +2006,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `412 test(s), 0 failure(s)`.
 
-- [ ] **Step 12: Commit**
+- [x] **Step 12: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -2048,7 +2048,7 @@ message box at the game's start. It reads the game's files and changes none; its
 **Files:**
 - Create: `scripts/BlockRender.reds`, `tools/check_reds.py`
 
-- [ ] **Step 1: Write `tools/check_reds.py`**
+- [x] **Step 1: Write `tools/check_reds.py`**
 
 ```python
 """Compiles BlockRender's redscript module against the game's own scripts, without starting the game.
@@ -2109,7 +2109,7 @@ else:
 sys.exit(0 if ok else 1)
 ```
 
-- [ ] **Step 2: Write `scripts/BlockRender.reds`**
+- [x] **Step 2: Write `scripts/BlockRender.reds`**
 
 ```swift
 // BlockRender's redscript module (spike 6, docs/superpowers/specs/2026-10-05-npcs-and-combat-design.md): the game's side
@@ -2364,7 +2364,7 @@ protected cb func OnDetach() -> Bool {
 }
 ```
 
-- [ ] **Step 3: Compile the module**
+- [x] **Step 3: Compile the module**
 
 The game must be installed at `E:\Cyberpunk2077`; it needn't run.
 ```bash
@@ -2373,7 +2373,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && uv run --no-project python tool
 ```
 Expected: redscript's `Compilation complete`, then `compiled` and `exit: 0`.
 
-- [ ] **Step 4: Check that the compile catches a slip**
+- [x] **Step 4: Check that the compile catches a slip**
 
 A copy of the module calling a function `StatPoolsSystem` doesn't have:
 ```bash
@@ -2383,7 +2383,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && mkdir -p build/reds-slip \
 ```
 Expected: `method 'GetStatPoolMaxPointValueX' not found on 'StatPoolsSystem'`, then `failed` and `exit: 1`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -2412,7 +2412,7 @@ Only the game can run this: Task 11's first check is the log's `module: found Bl
 - Create: `src/ScriptTypes.h`, `src/ScriptTypes.cpp`, `src/GameScript.h`, `src/GameScript.cpp`
 - Modify: `src/Puppet.cpp`, `CMakeLists.txt`
 
-- [ ] **Step 1: Write `src/ScriptTypes.h`**
+- [x] **Step 1: Write `src/ScriptTypes.h`**
 
 ```cpp
 #pragma once
@@ -2447,7 +2447,7 @@ std::string Describe(const RED4ext::CBaseFunction& aFunction);
 }
 ```
 
-- [ ] **Step 2: Write `src/ScriptTypes.cpp`**
+- [x] **Step 2: Write `src/ScriptTypes.cpp`**
 
 ```cpp
 #include "ScriptTypes.h"
@@ -2517,7 +2517,7 @@ std::string Describe(const RED4ext::CBaseFunction& aFunction)
 }
 ```
 
-- [ ] **Step 3: Edit `src/Puppet.cpp`: the checks move to `ScriptTypes`**
+- [x] **Step 3: Edit `src/Puppet.cpp`: the checks move to `ScriptTypes`**
 
 ```cpp
 #include "Puppet.h"
@@ -2605,7 +2605,7 @@ std::string Describe(const RED4ext::CBaseFunction& aFunction)
 		if (Matches(*aCandidate, signature.params, signature.returns))
 ```
 
-- [ ] **Step 4: Write `src/GameScript.h`**
+- [x] **Step 4: Write `src/GameScript.h`**
 
 ```cpp
 #pragma once
@@ -2695,7 +2695,7 @@ private:
 }
 ```
 
-- [ ] **Step 5: Write `src/GameScript.cpp`**
+- [x] **Step 5: Write `src/GameScript.cpp`**
 
 ```cpp
 #include "GameScript.h"
@@ -2961,7 +2961,7 @@ std::string GameScript::Compare(double aRange)
 }
 ```
 
-- [ ] **Step 6: Edit `CMakeLists.txt` to add the sources to the plugin**
+- [x] **Step 6: Edit `CMakeLists.txt` to add the sources to the plugin**
 
 ```cmake
 	src/Puppet.cpp
@@ -2974,7 +2974,7 @@ std::string GameScript::Compare(double aRange)
 )
 ```
 
-- [ ] **Step 7: Build and run the tests; they must pass**
+- [x] **Step 7: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -2984,7 +2984,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `412 test(s), 0 failure(s)`.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -3007,7 +3007,7 @@ The spec's "Requests and status":
 - Modify: `src/Requests.h`, `src/Requests.cpp`, `src/Status.h`, `src/Status.cpp`, `tests/TestRequests.cpp`,
   `tests/TestStatus.cpp`
 
-- [ ] **Step 1: Edit `tests/TestRequests.cpp`: the failing test**
+- [x] **Step 1: Edit `tests/TestRequests.cpp`: the failing test**
 
 ```cpp
 	CHECK(!cpmc::ParseRequest("shapes all", error));
@@ -3029,7 +3029,7 @@ TEST(RequestsForTheNpcs)
 }
 ```
 
-- [ ] **Step 2: Edit `tests/TestStatus.cpp`: the failing test**
+- [x] **Step 2: Edit `tests/TestStatus.cpp`: the failing test**
 
 ```cpp
 	          "0 unreadable"));
@@ -3073,7 +3073,7 @@ TEST(StatusWritesTheNpcs)
 }
 ```
 
-- [ ] **Step 3: Build; it must fail**
+- [x] **Step 3: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -3082,7 +3082,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `error C2065: 'Npcs': undeclared identifier`.
 
-- [ ] **Step 4: Edit `src/Requests.h`**
+- [x] **Step 4: Edit `src/Requests.h`**
 
 ```cpp
 //   box on|off                 (spike 5's step 4: a test box 3 m ahead of V, made as the bodies for blocks are)
@@ -3103,7 +3103,7 @@ Expected: `error C2065: 'Npcs': undeclared identifier`.
 	};
 ```
 
-- [ ] **Step 5: Edit `src/Requests.cpp`**
+- [x] **Step 5: Edit `src/Requests.cpp`**
 
 ```cpp
 	if (command == "log" || command == "clear" || command == "reload" || command == "floor" || command == "shapes")
@@ -3119,7 +3119,7 @@ Expected: `error C2065: 'Npcs': undeclared identifier`.
 		                           : command == "npcs"   ? Request::Kind::Npcs
 ```
 
-- [ ] **Step 6: Edit `src/Status.h`**
+- [x] **Step 6: Edit `src/Status.h`**
 
 ```cpp
 	std::optional<Vec3d> box;               // the test box's centre, world axes, while it stands
@@ -3149,7 +3149,7 @@ Expected: `error C2065: 'Npcs': undeclared identifier`.
 // per structure:
 ```
 
-- [ ] **Step 7: Edit `src/Status.cpp`**
+- [x] **Step 7: Edit `src/Status.cpp`**
 
 ```cpp
 std::string FormatLink(const LinkReport& aLink)
@@ -3189,7 +3189,7 @@ std::string FormatLink(const LinkReport& aLink)
 	out += FormatNpcs(aLink);
 ```
 
-- [ ] **Step 8: Build and run the tests; they must pass**
+- [x] **Step 8: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -3199,7 +3199,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `414 test(s), 0 failure(s)`.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -3231,7 +3231,7 @@ The spec's "The frame", "The table", "The link" and "Requests and status", in th
 **Files:**
 - Modify: `src/Plugin.cpp`, `CMakeLists.txt`
 
-- [ ] **Step 1: Edit `src/Plugin.cpp`**
+- [x] **Step 1: Edit `src/Plugin.cpp`**
 
 ```cpp
 // for V to stand on.
@@ -3573,7 +3573,7 @@ void NpcsRequest()
 	aInfo->version = RED4EXT_V1_SEMVER(uint8_t(VersionNumber(kVersion, 0)), uint16_t(VersionNumber(kVersion, 1)), VersionNumber(kVersion, 2));
 ```
 
-- [ ] **Step 2: Edit `CMakeLists.txt`: version 0.17.0, and the module installed**
+- [x] **Step 2: Edit `CMakeLists.txt`: version 0.17.0, and the module installed**
 
 ```cmake
 project(BlockRender VERSION 0.16.0 LANGUAGES C CXX)
@@ -3593,7 +3593,7 @@ project(BlockRender VERSION 0.17.0 LANGUAGES C CXX)
 		COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/scripts/BlockRender.reds" "${PLUGIN_OUT}/Scripts/"
 ```
 
-- [ ] **Step 3: Build and run the tests; they must pass**
+- [x] **Step 3: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -3603,7 +3603,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `414 test(s), 0 failure(s)`.
 
-- [ ] **Step 4: Check that BlockRender imports nothing from PhysX**
+- [x] **Step 4: Check that BlockRender imports nothing from PhysX**
 
 ```bash
 DUMPBIN="$(ls "/c/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/"*/bin/Hostx64/x64/dumpbin.exe | head -1)"
@@ -3612,7 +3612,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && MSYS_NO_PATHCONV=1 "$DUMPBIN" -
 ```
 Expected: `0`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -3631,7 +3631,7 @@ controls", sends `npcs`.
 **Files:**
 - Modify: `tools/blockrender_hud/init.lua`
 
-- [ ] **Step 1: Edit `tools/blockrender_hud/init.lua`**
+- [x] **Step 1: Edit `tools/blockrender_hud/init.lua`**
 
 ```lua
 -- Kept small: one row of buttons (link, Minecraft's blocks as bodies, step 4's test box, the turn), and a line each for
@@ -3720,14 +3720,14 @@ local npcsOn = nil       -- whether NPCs go into SkyCraft's actor table: "on" or
         end
 ```
 
-- [ ] **Step 2: Check the overlay's syntax**
+- [x] **Step 2: Check the overlay's syntax**
 
 ```bash
 cd /d/Cyberpunk-Minecraft/spikes/block-render && luac -p tools/blockrender_hud/init.lua && echo ok
 ```
 Expected: `ok`.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -3774,7 +3774,7 @@ These commands come back, as in spike 5's in-game steps:
 **Files:**
 - Modify: `docs/spikes/2026-10-05-npcs-and-combat-results.md`
 
-- [ ] **Step 1: Deploy (the game must not be running)**
+- [x] **Step 1: Deploy (the game must not be running)**
 
 ```bash
 tasklist | grep -i -c "cyberpunk2077.exe"
@@ -3791,7 +3791,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default -DCP2
 ```
 Expected: `installed`. The second configure clears `CP2077_DIR` again.
 
-- [ ] **Step 2: In the game: the module compiles**
+- [x] **Step 2: In the game: the module compiles**
 
 Ask the user to start the `CyberCraft` instance, then the game, and to wait at the game's main menu. If a "REDScript
 compilation has failed" message box shows instead, ask the user to click OK and quit the game, and read redscript's log
@@ -3835,7 +3835,9 @@ to say when they're there. Send `shapes`, then `npcs`. Expected:
 - `shapes:` lines for every shape within 2 m of V's middle: V's two kinematic capsules (radius 0.32, query filter
   `0:0:2000:0`, and radius 1), and the NPC's, a kinematic capsule with its own filters and bounds;
 - that NPC's `npcs:` line: its box `from its capsule's: radius …, half-height …, leaning 0 degrees, query filter …`,
-  about 0.6 to 0.8 wide, from 0.00 below its position to about 1.7 to 1.9 above.
+  about 0.6 to 0.8 wide, from 0.00 below its position to about 1.7 to 1.9 above. Since the first run (below), the
+  capsule taken is the one whose query filter's third word has the controller bit `0x2000`: the vendor's radius 0.30,
+  `0:0:10002000:0`.
 
 If most NPCs say `a person's: no capsule found`, or the capsule taken isn't the one `shapes` shows around the NPC, the
 rule changes to what `shapes` shows (its filter, its kind, its size), as a new task.
@@ -3907,6 +3909,22 @@ cd /d/Cyberpunk-Minecraft && git add docs/spikes/2026-10-05-npcs-and-combat-resu
   && git commit -q -m "npcs-and-combat: step 2's results" \
        -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
 ```
+
+**Step 2's first run (2026-10-05)** stopped at Step 3, and found two faults, each fixed as its own commit before going
+on, with a redeploy (Step 1 again):
+- **The module wasn't found:** `module: BlockRenderNpcs.Version isn't there with the types BlockRender passes`. A
+  throwaway CET mod, using Codeware's `Reflection`, showed the game keeps a script class's static functions among the
+  global functions, as `BlockRenderNpcs::Version;` and `BlockRenderNpcs::Current;`, not in the class's static list.
+  `GameScript` now looks them up there (`da1be78`). The rest checked out from Lua: the session's system exists,
+  `Version()` is 1, `List(80)` gave 12 NPCs with all twelve fields filled, and `Compare(80)` said `GetTargetParts finds
+  11 NPCs within 80 m; the list lacks 0`.
+- **The capsule rule took the wrong capsule:** `shapes` beside a vendor showed three kinematic capsules around it, the
+  controller (radius 0.30, query filter `0:0:10002000:0`), one of radius 0.40 and one of 0.06; narrowest-first took the
+  0.06 m one. The rule now takes the capsule with the controller's query filter bit `0x2000`, which V's controller has
+  too (`1fa17f4`, with the vendor's capsules as a test).
+
+The first load also crashed once, in the engine's allocator during the load, before any link; the second load didn't.
+The results record it.
 
 ---
 
