@@ -2,10 +2,10 @@
 -- into this folder once a second, plus V's position, heading and Minecraft block, and the nearest structure, and the
 -- frame time as CET sees it, which works without BlockRender too and goes into frames.txt here as well. It asks
 -- BlockRender for things through blockrender.request in this folder.
--- Kept small: one row of buttons (link, Minecraft's blocks as bodies, step 4's test box, the turn), and a line each for
--- the last request's reply, build mode (F8) and its drive, the bodies, and V. Two folded sections hold the rest: "More
--- controls" (the drawing mode, Minecraft's HUD, commands typed into Minecraft, the drive log, the ground and its
--- shapes) and "Full status" (every status line, and the frame time).
+-- Kept small: one row of buttons (link, Minecraft's blocks as bodies, step 4's test box, the turn, NPCs in Minecraft),
+-- and a line each for the last request's reply, build mode (F8) and its drive, the bodies, the NPCs, and V. Two folded
+-- sections hold the rest: "More controls" (the drawing mode, Minecraft's HUD, commands typed into Minecraft, the drive
+-- log, the ground and its shapes, and the NPCs' list) and "Full status" (every status line, and the frame time).
 -- Delete this folder to remove it.
 local status = nil       -- status.txt's lines, except the structures
 local structures = {}    -- { name, min = { x, y, z }, max = { x, y, z } }, in world coordinates
@@ -19,6 +19,8 @@ local groundName = nil   -- "floor" or "city"
 local bodies = nil       -- the bodies line: on or off, and how many, or why they wait; and the test box
 local blocksOn = nil     -- whether bodies are on: "on" or "off"
 local boxOn = false      -- whether the test box stands
+local npcs = nil         -- the npcs line: on or off, how many are listed and the nearest, or why none are
+local npcsOn = nil       -- whether NPCs go into SkyCraft's actor table: "on" or "off"
 local reply = nil        -- the request line: what BlockRender made of the last request, cut short
 local player = nil       -- the lines about V
 local sinceRead = 1.0
@@ -86,6 +88,8 @@ local function readStatus()
     bodies = nil
     blocksOn = nil
     boxOn = false
+    npcs = nil
+    npcsOn = nil
     reply = nil
     for line in file:lines() do
         local said = line:match("^request=(.*)$")
@@ -122,6 +126,16 @@ local function readStatus()
             local waiting = line:match("; waiting: (.*)$")
             bodies = state .. (counts and (", " .. counts) or "") .. (waiting and (", waiting: " .. waiting) or "")
                 .. (boxOn and ", the test box standing" or "")
+        end
+        local npcState = line:match("^npcs=(%a+)")
+        if npcState ~= nil then
+            npcsOn = npcState
+            local listed = line:match("^npcs=on: (%d+ listed of %-?%d+ in the world)")
+            local nearest, distance = line:match(", the nearest (.-) at ([%d.]+ m);")
+            local why = line:match("; none listed: (.*)$")
+            npcs = npcState .. (listed and (", " .. listed) or "")
+                .. (nearest and (", the nearest " .. nearest .. " at " .. distance) or "")
+                .. (why and (", none listed: " .. why) or "")
         end
         if name ~= nil then
             table.insert(structures, {
@@ -221,6 +235,12 @@ registerForEvent("onDraw", function()
                 request("set turn " .. (turn == "on" and 0 or 1))
             end
         end
+        if npcsOn ~= nil then
+            ImGui.SameLine()
+            if ImGui.Button("NPCs: " .. npcsOn .. "###npcs") then
+                request("set npcs " .. (npcsOn == "on" and 0 or 1))
+            end
+        end
         if status == nil then
             ImGui.Text("no status.txt yet: is BlockRender loaded?")
         end
@@ -232,6 +252,9 @@ registerForEvent("onDraw", function()
         end
         if bodies ~= nil then
             ImGui.Text("Bodies: " .. bodies)
+        end
+        if npcs ~= nil then
+            ImGui.Text("NPCs: " .. npcs)
         end
         if player ~= nil then
             ImGui.Text(player)
@@ -275,6 +298,13 @@ registerForEvent("onDraw", function()
                 ImGui.SameLine()
                 if ImGui.Button("Shapes") then
                     request("shapes")
+                end
+            end
+            if npcsOn ~= nil then
+                ImGui.Text("NPCs:")
+                ImGui.SameLine()
+                if ImGui.Button("List them in the log") then
+                    request("npcs")
                 end
             end
         end
