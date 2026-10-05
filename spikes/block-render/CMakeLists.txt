@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.25)
 
-project(BlockRender VERSION 0.16.0 LANGUAGES C CXX)
+project(BlockRender VERSION 0.17.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -120,9 +120,10 @@ if(CP2077_DIR)
 	set(PLUGIN_OUT "${CP2077_DIR}/red4ext/plugins/BlockRender")
 	set(HUD_OUT "${CP2077_DIR}/bin/x64/plugins/cyber_engine_tweaks/mods/blockrender_hud")
 	add_custom_command(TARGET BlockRender POST_BUILD
-		COMMAND ${CMAKE_COMMAND} -E make_directory "${PLUGIN_OUT}/shaders" "${HUD_OUT}"
+		COMMAND ${CMAKE_COMMAND} -E make_directory "${PLUGIN_OUT}/shaders" "${PLUGIN_OUT}/Scripts" "${HUD_OUT}"
 		COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:BlockRender>" "$<TARGET_PDB_FILE:BlockRender>" "${PLUGIN_OUT}/"
 		COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/shaders/blocks.hlsl" "${PLUGIN_OUT}/shaders/"
+		COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/scripts/BlockRender.reds" "${PLUGIN_OUT}/Scripts/"
 		COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/tools/blockrender_hud/init.lua" "${HUD_OUT}/"
 		VERBATIM)
 endif()

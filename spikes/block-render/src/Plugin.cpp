@@ -5,12 +5,14 @@
 // in build mode (F8) the mouse buttons, the wheel and the keys 1 to 9 are Minecraft's. Spike 5 has Minecraft drive in
 // build mode: the movement keys are Minecraft's too, and V is teleported to its player's eye every frame; it reads Night
 // City's shape for Minecraft from the game's PhysX; and it makes Minecraft's solid blocks around V into PhysX bodies,
-// for V to stand on.
+// for V to stand on. Spike 6 lists Night City's NPCs into SkyCraft's actor table, through its redscript module
+// (scripts/BlockRender.reds), so that Minecraft's weapons hit them and they press its pressure plates.
 // Commands come through blockrender.request, in its folder or the overlay's, and status.txt in the overlay's folder says
-// what it's doing. See docs/superpowers/specs/2026-10-01-block-render-design.md, 2026-10-02-minecraft-link-design.md and
-// 2026-10-03-collision-and-movement-design.md.
+// what it's doing. See docs/superpowers/specs/2026-10-01-block-render-design.md, 2026-10-02-minecraft-link-design.md,
+// 2026-10-03-collision-and-movement-design.md and 2026-10-05-npcs-and-combat-design.md.
 #include <RED4ext/RED4ext.hpp>
 
+#include "GameScript.h"
 #include "LogQueue.h"
 #include "Measurements.h"
 #include "PlayerLocator.h"
@@ -23,6 +25,7 @@
 #include "hooks/StreamlineHooks.h"
 #include "input/RawInputHook.h"
 #include "input/Router.h"
+#include "link/Actors.h"
 #include "link/Link.h"
 #include "link/Mapping.h"
 #include "link/Turn.h"
@@ -31,6 +34,7 @@
 #include "log/FrameLog.h"
 #include "log/FrameLogData.h"
 #include "physx/Bodies.h"
+#include "physx/Characters.h"
 #include "physx/Export.h"
 #include "physx/SceneHooks.h"
 #include "physx/Session.h"
@@ -62,7 +66,32 @@ namespace
 using Clock = std::chrono::steady_clock;
 using namespace std::chrono_literals;
 
-constexpr const char* kVersion = "0.16.0";
+constexpr const char* kVersion = "0.17.0";
+
+// A number of a version "major.minor.patch", aIndex 0 being the major, so that Query reports kVersion, as the log does.
+constexpr uint32_t VersionNumber(std::string_view aVersion, size_t aIndex)
+{
+	uint32_t number = 0;
+	size_t   index = 0;
+	for (const char ch : aVersion)
+	{
+		if (ch == '.')
+		{
+			if (index == aIndex)
+			{
+				return number;
+			}
+			++index;
+			number = 0;
+		}
+		else
+		{
+			number = number * 10 + uint32_t(ch - '0');
+		}
+	}
+	return index == aIndex ? number : 0;
+}
+static_assert(VersionNumber("1.23.456", 0) == 1 && VersionNumber("1.23.456", 1) == 23 && VersionNumber("1.23.456", 2) == 456);
 
 RED4ext::v1::PluginHandle g_handle = nullptr;
 const RED4ext::v1::Sdk*   g_sdk = nullptr;
@@ -130,6 +159,19 @@ DWORD                 g_mainThread = 0;   // OnUpdate's
 cpmc::px::Bodies g_bodies{ g_physx, g_ground };  // PhysX bodies for Minecraft's blocks around V, and step 4's test box
 bool             g_blocks = true;                // set blocks 0|1: the bodies, while drawing is on; on since step 4 passed
 
+// Spike 6's NPCs in Minecraft (its spec's "Part 1"). Main thread only.
+cpmc::GameScript                          g_script{ g_log };      // the redscript module's calls
+bool                                      g_npcs = true;          // set npcs 0|1: on, since listing NPCs changes nothing in the game
+cpmc::link::ActorIds                      g_actorIds;             // the NPCs' numbers in SkyCraft's actor table
+cpmc::px::NpcSizes                        g_npcSizes;             // their boxes, from their capsules
+std::optional<cpmc::NpcList>              g_npcList;              // the module's last list
+std::optional<cpmc::Vec3d>                g_npcsFeet;             // V's feet when it was made
+std::vector<skycraft::proto::ActorRecord> g_actorRecords;         // the table as last written, nearest first
+std::vector<uint64_t>                     g_listedEntities;       // the NPC behind each of those records
+std::string                               g_npcsWhy;              // why none are listed, while none can be
+uint64_t                                  g_npcHits = 0;          // Minecraft's hits on them, logged
+double                                    g_npcsForgotten = 0.0;  // when NPCs unlisted for a minute were last forgotten
+
 // This frame's figures, for bursts.
 struct FrameFigures
 {
@@ -172,6 +214,10 @@ struct SecondFigures
 	uint64_t workerCyclesAtStart = 0;
 	uint64_t workerTicksAtStart = 0;
 	uint64_t collisionBytesAtStart = 0;
+	// The module's
+	double   moduleMsSum = 0.0;
+	double   moduleMsWorst = 0.0;
+	uint64_t moduleCalls = 0;
 };
 SecondFigures g_second;
 
@@ -286,6 +332,22 @@ public:
 		g_burst.Start(cpmc::SteadySeconds(), "explosion");
 	}
 
+	// Spike 6's Part 1 only logs Minecraft's hits on NPCs (its spec's "The link"), and Minecraft's player's death.
+	void HitActor(const skycraft::proto::McEvent& aEvent) override
+	{
+		++g_npcHits;
+		const auto record = std::find_if(g_actorRecords.begin(), g_actorRecords.end(),
+		                                 [&](const skycraft::proto::ActorRecord& aRecord) { return aRecord.formId == aEvent.formId; });
+		::Log("hit on NPC {} ({}) for {:.2f} of Minecraft's damage, knockback {:.2f}; {}; not applied in Part 1", aEvent.formId,
+		      record != g_actorRecords.end() ? std::string(record->name) : std::string("not listed now"), aEvent.a, aEvent.d,
+		      cpmc::link::HitWords(aEvent));
+	}
+
+	void PlayerDied(const skycraft::proto::McEvent& aEvent) override
+	{
+		::Log("Minecraft's player died{}", aEvent.formId != 0 ? std::format(", killed by NPC {}", aEvent.formId) : std::string());
+	}
+
 	void Hud(const cpmc::link::HudFrame& aFrame) override
 	{
 		g_renderer->SetHudImage(aFrame.width, aFrame.height, aFrame.bottomUp, aFrame.pixels);
@@ -386,14 +448,14 @@ Placed PlaceV(const cpmc::link::Link::Status& aState, const std::optional<double
 }
 
 // The link, once a frame (the spec's "The link"): V's pose and the HUD's size, then Link::Update, which hands what
-// Minecraft sends to the sink. In build mode, V then goes where the link puts it (spike 5).
-void UpdateLink(double aNow, double aFrameMs)
+// Minecraft sends to the sink. In build mode, V then goes where the link puts it (spike 5). V's feet, if V is found.
+std::optional<cpmc::Vec3d> UpdateLink(double aNow, double aFrameMs)
 {
 	g_frame = {};
 	const int64_t mouseX = g_router->TakeMouseX();  // every frame, so a frame's turn is only its own
 	if (!g_link)
 	{
-		return;
+		return std::nullopt;
 	}
 	const cpmc::link::Link::Status&     state = g_link->State();
 	if (std::string why; g_linkSettings.ground == cpmc::link::Ground::City && !g_physx.Audited(why))
@@ -513,6 +575,95 @@ void UpdateLink(double aNow, double aFrameMs)
 			Log("latency: Minecraft {:.0f} ms, ours {:.1f} ms ({:.0f} frames)", sample->minecraftMs, sample->oursMs, sample->oursFrames);
 		}
 	}
+	return feet;
+}
+
+// Spike 6's NPCs in Minecraft (its spec's "The frame", "The table" and "Sizes"), after the link's update: while linked
+// with V found and npcs on, the module lists the NPCs within 80 m, the nearest 256 go into SkyCraft's actor table, and
+// up to eight NPCs listed for the first time have their capsules looked for. When any of that stops, the table is
+// emptied, once.
+void ListNpcs(double aNow, const std::optional<cpmc::Vec3d>& aFeet)
+{
+	g_npcList.reset();
+	g_npcsFeet = aFeet;
+	if (!g_npcs || !g_link || !g_linked || !aFeet)
+	{
+		g_npcsWhy = !g_npcs ? "" : !g_link ? "the mapping isn't open" : !g_linked ? "not linked" : "V isn't found";
+	}
+	else
+	{
+		std::string  why;
+		const double start = cpmc::SteadySeconds();
+		g_npcList = g_script.List(cpmc::link::kActorRange, why);
+		const double ms = (cpmc::SteadySeconds() - start) * 1000.0;
+		g_npcsWhy = why;
+		g_second.moduleMsSum += ms;
+		g_second.moduleMsWorst = std::max(g_second.moduleMsWorst, ms);
+		++g_second.moduleCalls;
+	}
+	if (!g_npcList)
+	{
+		g_actorRecords.clear();
+		g_listedEntities.clear();
+		if (g_link)
+		{
+			g_link->ClearActors();  // once: an empty table isn't written again
+		}
+		return;
+	}
+	g_actorRecords = cpmc::link::ActorRecords(g_npcList->npcs, *aFeet, g_npcSizes.Boxes(), g_actorIds, aNow);
+	g_link->WriteActors(g_actorRecords);
+	g_listedEntities.clear();
+	for (const skycraft::proto::ActorRecord& record : g_actorRecords)
+	{
+		g_listedEntities.push_back(g_actorIds.Entity(record.formId, aNow).value_or(0));
+	}
+	// Capsules only while scene 0 and PhysX's origin can be read: an NPC looked for waits 2 s before it's looked for again.
+	cpmc::Vec3d origin;
+	if (g_ground.Prepared(origin))
+	{
+		for (const uint64_t entity : g_npcSizes.ToLookFor(g_listedEntities, aNow))
+		{
+			const auto npc = std::find_if(g_npcList->npcs.begin(), g_npcList->npcs.end(),
+			                              [&](const cpmc::link::NpcSample& aNpc) { return aNpc.entity == entity; });
+			if (npc == g_npcList->npcs.end())
+			{
+				continue;
+			}
+			const cpmc::Vec3d&                       feet = npc->position;
+			const std::vector<cpmc::px::CapsuleSeen> seen =
+			    g_ground.Capsules({ feet.x, feet.y, feet.z + cpmc::px::kCapsuleSearchHeight }, cpmc::px::kCapsuleSearchRadius);
+			if (const std::optional<cpmc::px::CapsuleSeen> capsule = cpmc::px::PickCapsule(seen, feet))
+			{
+				g_npcSizes.Found(entity, *capsule, feet);
+			}
+		}
+	}
+	if (aNow - g_npcsForgotten >= 1.0)
+	{
+		g_npcsForgotten = aNow;
+		g_actorIds.Forget(aNow);
+		g_npcSizes.Forget(g_actorIds);
+	}
+}
+
+// The NPC behind the table's record aIndex, as the module last listed it; null if there's none.
+const cpmc::link::NpcSample* ListedNpc(size_t aIndex)
+{
+	if (!g_npcList || aIndex >= g_listedEntities.size())
+	{
+		return nullptr;
+	}
+	const auto npc = std::find_if(g_npcList->npcs.begin(), g_npcList->npcs.end(),
+	                              [&](const cpmc::link::NpcSample& aNpc) { return aNpc.entity == g_listedEntities[aIndex]; });
+	return npc != g_npcList->npcs.end() ? &*npc : nullptr;
+}
+
+// An NPC's distance from V's feet, straight-line, when it was listed.
+double DistanceFromV(const cpmc::link::NpcSample& aNpc)
+{
+	const cpmc::Vec3d feet = g_npcsFeet.value_or(aNpc.position);
+	return std::hypot(aNpc.position.x - feet.x, aNpc.position.y - feet.y, aNpc.position.z - feet.z);
 }
 
 void Place(const cpmc::Request& aRequest)
@@ -646,6 +797,16 @@ void Set(const cpmc::Request& aRequest)
 		g_meshOptions.ambientOcclusion = aRequest.number != 0.0;
 		g_world.MarkAllDirty();
 		return Report(std::format("set ao {}", g_meshOptions.ambientOcclusion ? 1 : 0));
+	}
+	if (aRequest.what == "npcs")
+	{
+		if (aRequest.number != 0.0 && aRequest.number != 1.0)
+		{
+			return Report("set npcs: 0 empties SkyCraft's actor table, and 1 lists the NPCs around V into it");
+		}
+		g_npcs = aRequest.number == 1.0;
+		return Report(g_npcs ? "set npcs 1: the NPCs around V go into SkyCraft's actor table while linked"
+		                     : "set npcs 0: SkyCraft's actor table is emptied, and Minecraft's stand-ins go");
 	}
 	if (aRequest.what == "blocks")
 	{
@@ -792,6 +953,28 @@ void Shapes()
 	Report(std::format("shapes: {} lines in the log, of the shapes within 2 m of V's middle", lines.size()));
 }
 
+// npcs (spike 6's "Requests and status"): every NPC listed, into the log, with its number, name, distance, box and where
+// the box came from, health, level and flags; V's punch and max health as the module reads them; and how many NPCs the
+// game's targeting finds within 80 m, with those the list lacks.
+void NpcsRequest()
+{
+	if (!g_npcList)
+	{
+		return Report("npcs: none listed: " + (g_npcsWhy.empty() ? std::string("set npcs is 0") : g_npcsWhy));
+	}
+	Log("npcs: {} listed of {} in the world; V's punch {:.2f}, read from {}; V's max health {:.0f}", g_actorRecords.size(),
+	    g_npcList->attached, g_npcList->punch, g_npcList->punchItem, g_npcList->vHealthMax);
+	for (size_t i = 0; i < g_actorRecords.size(); ++i)
+	{
+		if (const cpmc::link::NpcSample* npc = ListedNpc(i))
+		{
+			Log("npcs: {}", cpmc::px::DescribeNpc(*npc, g_actorRecords[i].formId, DistanceFromV(*npc), g_npcSizes));
+		}
+	}
+	Log("npcs: {}", g_script.Compare(cpmc::link::kActorRange));
+	Report(std::format("npcs: {} NPCs in the log, and what the game's targeting finds", g_actorRecords.size()));
+}
+
 // box on|off (spike 5's step 4): a test box 3 m ahead of V, made as the bodies for blocks are, before any block is.
 void BoxRequest(bool aOn)
 {
@@ -864,6 +1047,7 @@ void RunRequest(const std::filesystem::path& aFolder, bool aWholeLine)
 	case cpmc::Request::Kind::SceneWatch: SceneWatch(request->what == "on"); break;
 	case cpmc::Request::Kind::Shapes: Shapes(); break;
 	case cpmc::Request::Kind::Box: BoxRequest(request->what == "on"); break;
+	case cpmc::Request::Kind::Npcs: NpcsRequest(); break;
 	}
 }
 
@@ -1085,6 +1269,21 @@ cpmc::LinkReport LinkLines(const cpmc::Renderer::Stats& aStats, double aNow)
 	report.originChanges = bodies.originChanges;
 	report.bodiesReposed = bodies.reposed;
 	report.box = bodies.box;
+	report.npcsOn = g_npcs;
+	report.npcsWhy = g_npcsWhy;
+	report.npcsListed = g_actorRecords.size();
+	report.npcsInWorld = g_npcList ? g_npcList->attached : 0;
+	if (const cpmc::link::NpcSample* nearest = ListedNpc(0))
+	{
+		report.nearestNpc = DistanceFromV(*nearest);
+		report.nearestNpcName = nearest->name;
+	}
+	report.capsulesFound = g_npcSizes.FoundCount();
+	report.capsulesLookedFor = g_npcSizes.LookedForCount();
+	report.npcIdsGiven = g_actorIds.Given();
+	report.moduleMsAverage = g_second.moduleCalls ? g_second.moduleMsSum / double(g_second.moduleCalls) : -1.0;
+	report.moduleMsWorst = g_second.moduleCalls ? g_second.moduleMsWorst : -1.0;
+	report.npcHits = g_npcHits;
 	report.health = g_linked ? g_puppet.Health() : std::nullopt;  // once a second, so fall damage shows
 	report.turn = g_turn;
 	report.turnRatio = g_turnRatio.Ratio();
@@ -1245,7 +1444,8 @@ bool OnUpdate(RED4ext::CGameApplication*)
 		LinkRequest(true, "F8: ");  // F8 while unlinked: the link, then build mode once the link has seen V
 		g_buildWanted = true;
 	}
-	UpdateLink(seconds, frameMs);
+	const std::optional<cpmc::Vec3d> feet = UpdateLink(seconds, frameMs);
+	ListNpcs(seconds, feet);
 	const auto [time, folderName] = Timestamps();
 	if (g_frameLog->Capturing())
 	{
@@ -1341,6 +1541,11 @@ RED4EXT_C_EXPORT bool RED4EXT_CALL Main(RED4ext::v1::PluginHandle aHandle, RED4e
 		}
 		static RED4ext::v1::GameState running{ &OnEnter, &OnUpdate, &OnExit };
 		aSdk->gameStates->Add(aHandle, RED4ext::EGameStateType::Running, &running);
+		// Spike 6's redscript module, which redscript compiles with the game's scripts: the install puts it in Scripts.
+		const std::filesystem::path module = g_pluginDir / "Scripts" / "BlockRender.reds";
+		std::error_code             error;
+		const bool                  present = std::filesystem::exists(module, error);
+		const bool                  added = present && aSdk->scripts && aSdk->scripts->Add(aHandle, module.parent_path().c_str());
 		DrainLog();
 		Log("BlockRender {} loaded (game {}.{}.{}), {}; dred {}, debug layer {}; requests go in {}", kVersion,
 		    unsigned(aSdk->runtime->major), aSdk->runtime->minor, aSdk->runtime->patch, g_hooked ? "hooked" : "NOT hooked",
@@ -1348,6 +1553,8 @@ RED4EXT_C_EXPORT bool RED4EXT_CALL Main(RED4ext::v1::PluginHandle aHandle, RED4e
 		Log("the turn: {}", g_savedTurn ? std::format("{:.4f} degrees a count, remembered from the last session, until this one has "
 		                                              "measured its own", *g_savedTurn)
 		                                : std::string("nothing remembered, so build mode turns once V has turned 5 times"));
+		Log("the redscript module {}: {}", module.string(),
+		    added ? "added to redscript's compile" : present ? "NOT added to redscript's compile" : "missing, so NPCs can't be listed");
 		break;
 	}
 	case RED4ext::v1::EMainReason::Unload:
@@ -1377,7 +1584,7 @@ RED4EXT_C_EXPORT void RED4EXT_CALL Query(RED4ext::v1::PluginInfo* aInfo)
 {
 	aInfo->name = L"BlockRender";
 	aInfo->author = L"Cyberpunk-Minecraft";
-	aInfo->version = RED4EXT_V1_SEMVER(0, 15, 0);
+	aInfo->version = RED4EXT_V1_SEMVER(uint8_t(VersionNumber(kVersion, 0)), uint16_t(VersionNumber(kVersion, 1)), VersionNumber(kVersion, 2));
 	aInfo->runtime = RED4EXT_V1_RUNTIME_VERSION_LATEST;
 	aInfo->sdk = RED4EXT_V1_SDK_VERSION_CURRENT;
 }
