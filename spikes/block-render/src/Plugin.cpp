@@ -8,8 +8,8 @@
 // for V to stand on. Spike 6 lists Night City's NPCs into SkyCraft's actor table, through its redscript module
 // (scripts/BlockRender.reds), so that Minecraft's weapons hit them and they press its pressure plates; with combat on,
 // Minecraft's hits land on them as V's, through the game's whole damage pipeline, and in build mode the game's hits on V
-// go to Minecraft's player, whose death kills V. In build mode V's meshes are hidden, and with combat on V's unarmed
-// weapon is drawn, so that hits carry it.
+// go to Minecraft's player, whose death kills V. In build mode V's meshes and effects and the game's crosshair are
+// hidden, and with combat on V's unarmed weapon is drawn, so that hits carry it.
 // Commands come through blockrender.request, in its folder or the overlay's, and status.txt in the overlay's folder says
 // what it's doing. See docs/superpowers/specs/2026-10-01-block-render-design.md, 2026-10-02-minecraft-link-design.md,
 // 2026-10-03-collision-and-movement-design.md and 2026-10-05-npcs-and-combat-design.md.
@@ -72,7 +72,7 @@ namespace
 using Clock = std::chrono::steady_clock;
 using namespace std::chrono_literals;
 
-constexpr const char* kVersion = "0.18.0";
+constexpr const char* kVersion = "0.18.1";
 
 // A number of a version "major.minor.patch", aIndex 0 being the major, so that Query reports kVersion, as the log does.
 constexpr uint32_t VersionNumber(std::string_view aVersion, size_t aIndex)
@@ -187,12 +187,13 @@ double                                g_punch = 0.0;         // V's punch and ma
 double                                g_vHealthMax = 0.0;
 std::string                           g_punchItem;           // what V's unarmed slot draws, which the punch is read from
 bool                                  g_punchDrawn = false;  // V has it drawn, so hits carry it as their weapon
+double                                g_hitPower = cpmc::link::kHitPower;  // set hitpower: hits start at the punch x damage^this
 cpmc::link::VSwitch                   g_armed{ 1.0 };        // V's unarmed weapon, drawn while combat and build mode are on
 cpmc::link::VSwitch                   g_hidden{ 0.25 };      // V's meshes, hidden while build mode is on and hidev is 1
 bool                                  g_hideV = true;        // set hidev 0|1
 std::optional<int32_t>                g_lastArm;             // what Arm and HideV last said, so that a refresh logs a change
-std::optional<int32_t>                g_lastHide;
-int32_t                               g_vMeshes = 0;         // the meshes HideV has switched off
+std::optional<cpmc::VLook>            g_lastHide;
+cpmc::VLook                           g_vLook;               // what HideV has done while V is hidden: meshes, effects, crosshair
 cpmc::link::HurtSums                  g_hurtSums;            // V's hurts, summed for Minecraft
 std::vector<cpmc::link::Hurt>         g_hurtsOut;            // waiting for room in the input ring
 cpmc::link::GodMode                   g_godMode;             // V's Immortal, under our own source name
@@ -702,7 +703,7 @@ void DropHit(const std::string& aHit, const std::string& aWhy)
 }
 
 // One of Minecraft's hits on an NPC (spike 6's "Minecraft's hits on NPCs"): logged, and with combat on, made V's through
-// the module, starting the game's damage pipeline at Minecraft's damage x V's punch.
+// the module, starting the game's damage pipeline at V's punch x Minecraft's damage to the hit power.
 void HitOnNpc(const skycraft::proto::McEvent& aEvent, double aNow, bool aVFound)
 {
 	++g_npcHits;
@@ -713,7 +714,7 @@ void HitOnNpc(const skycraft::proto::McEvent& aEvent, double aNow, bool aVFound)
 		return Log("{}; not applied: combat is off", hit);
 	}
 	cpmc::link::HitDrop                     drop = cpmc::link::HitDrop::Count;
-	const std::optional<cpmc::link::NpcHit> accepted = cpmc::link::AcceptHit(aEvent, g_actorIds, aNow, g_punch, cpmc::link::kHitPower, drop);
+	const std::optional<cpmc::link::NpcHit> accepted = cpmc::link::AcceptHit(aEvent, g_actorIds, aNow, g_punch, g_hitPower, drop);
 	if (!accepted)
 	{
 		return DropHit(hit, cpmc::link::HitDropName(drop));
@@ -732,8 +733,8 @@ void HitOnNpc(const skycraft::proto::McEvent& aEvent, double aNow, bool aVFound)
 	g_pendingHits.push_back({ accepted->entity, accepted->formId, accepted->damage, accepted->amount, aNow });
 	g_lastHit = std::format("NPC {} ({}): {:.2f} of Minecraft's damage, starting at {:.2f}{}; queued", accepted->formId,
 	                        NpcName(accepted->formId), accepted->damage, accepted->amount, accepted->strong ? ", strong" : "");
-	Log("{}: starting at {:.2f}, {:.2f} x V's punch {:.2f}{}{}; queued", hit, accepted->amount, accepted->damage, g_punch,
-	    accepted->strong ? ", strong" : "", g_punchDrawn ? "" : ", without V's weapon drawn");
+	Log("{}: starting at {:.2f} = V's punch {:.2f} x {:.2f}^{:.2f}{}{}; queued", hit, accepted->amount, g_punch, accepted->damage,
+	    g_hitPower, accepted->strong ? ", strong" : "", g_punchDrawn ? "" : ", without V's weapon drawn");
 }
 
 // Minecraft's player's death (spike 6's "Deaths"): with combat on, in build mode or just after it, V's death too.
@@ -777,18 +778,35 @@ std::string ArmWords(int32_t aResult, bool aOn)
 	}
 }
 
-// What the module's HideV said, in words.
-std::string HideWords(int32_t aResult, bool aOn)
+// What the module's HideV did, in words.
+std::string HideWords(const cpmc::VLook& aLook, bool aOn)
 {
-	switch (aResult)
+	switch (aLook.meshes)
 	{
 	case -1:
 		return "not done: hiding V's meshes needs Codeware, which isn't installed";
 	case -2:
 		return "not done: V isn't found";
 	default:
-		return std::format("{} meshes {}", aResult, aOn ? "switched off" : "switched on again");
+		break;
 	}
+	if (aOn)
+	{
+		return std::format("{} meshes switched off, {} effects stopped, the crosshair {}", aLook.meshes, aLook.effects,
+		                   aLook.crosshair > 0 ? "hidden" : "not found among the HUD layer's game controllers");
+	}
+	return std::format("{} meshes switched on again, {} effects started again{}", aLook.meshes, aLook.effects,
+	                   aLook.crosshair > 0 ? ", the crosshair shown again" : "");
+}
+
+// What the game says of V's Immortal after the module's SetImmortal, in words.
+std::string ImmortalWords(bool aOn, bool aImmortal)
+{
+	if (aOn)
+	{
+		return aImmortal ? "the game says V is Immortal" : "but the game says V isn't Immortal";
+	}
+	return aImmortal ? "but the game says V is still Immortal, from another source such as Second Heart" : "the game says V isn't Immortal";
 }
 
 // V's unarmed weapon, drawn while combat and build mode are on (spike 6's "V's weapon in build mode"), and V's meshes,
@@ -807,21 +825,20 @@ void SwitchV(bool aBuild, bool aVFound, double aNow)
 	}
 	if (const std::optional<bool> hide = g_hidden.Frame(g_hideV && aBuild, aVFound, aNow))
 	{
-		std::string                  why;
-		const double                 start = cpmc::SteadySeconds();
-		const std::optional<int32_t> result = g_script.HideV(*hide, why);
-		const double                 ms = (cpmc::SteadySeconds() - start) * 1000.0;
-		if (!*hide || result != g_lastHide)
+		std::string                      why;
+		const double                     start = cpmc::SteadySeconds();
+		const std::optional<cpmc::VLook> look = g_script.HideV(*hide, why);
+		const double                     ms = (cpmc::SteadySeconds() - start) * 1000.0;
+		if (!*hide || look != g_lastHide)
 		{
-			Log("build: V's meshes {}: {} ({:.2f} ms)", *hide ? "hidden" : "shown", result ? HideWords(*result, *hide) : "not done: " + why,
-			    ms);
+			Log("build: V's meshes {}: {} ({:.2f} ms)", *hide ? "hidden" : "shown", look ? HideWords(*look, *hide) : "not done: " + why, ms);
 		}
-		g_lastHide = *hide ? result : std::nullopt;
-		g_vMeshes = *hide ? result.value_or(0) : 0;
+		g_lastHide = *hide ? look : std::nullopt;
+		g_vLook = *hide ? look.value_or(cpmc::VLook{}) : cpmc::VLook{};
 	}
 	else if (!g_hidden.On())
 	{
-		g_vMeshes = 0;
+		g_vLook = {};
 	}
 }
 
@@ -893,13 +910,12 @@ void Fight(double aNow, const std::optional<cpmc::Vec3d>& aFeet)
 	if (const std::optional<bool> change = g_godMode.Frame(g_combat, build, vFound))
 	{
 		std::string               why;
-		const std::optional<bool> changed = g_script.SetImmortal(*change, why);
-		if (changed)
+		const std::optional<bool> immortal = g_script.SetImmortal(*change, why);
+		if (immortal)
 		{
-			g_immortal = *change;
+			g_immortal = *immortal;
 		}
-		Log("combat: V's Immortal {}{}", *change ? "on" : "off",
-		    changed ? (*changed ? std::string() : std::string(" (the game says it already was)")) : ": not done: " + why);
+		Log("combat: V's Immortal {}: {}", *change ? "on" : "off", immortal ? ImmortalWords(*change, *immortal) : "not done: " + why);
 	}
 	SwitchV(build, vFound, aNow);
 	cpmc::CombatReported().SetTaking(g_combat && build && vFound && g_vHealthMax > 0.0);
@@ -1162,6 +1178,18 @@ void Set(const cpmc::Request& aRequest)
 		}
 		g_hideV = aRequest.number == 1.0;
 		return Report(g_hideV ? "set hidev 1: V's meshes are hidden while build mode is on" : "set hidev 0: V stays seen in build mode");
+	}
+	if (aRequest.what == "hitpower")
+	{
+		if (aRequest.number < 0.0 || aRequest.number > 1.0)
+		{
+			return Report("set hitpower: from 0 to 1, the power of Minecraft's damage that V's punch is multiplied by: 0.5, the default, is "
+			              "the square root; 1 makes each point of damage a whole punch, 0 every hit one punch");
+		}
+		g_hitPower = aRequest.number;
+		return Report(std::format("set hitpower {:.2f}: a hit starts at V's punch x Minecraft's damage^{:.2f}: a fist (1) one punch, a "
+		                          "diamond sword (7) {:.2f} punches",
+		                          g_hitPower, g_hitPower, std::pow(7.0, g_hitPower)));
 	}
 	if (aRequest.what == "npcs")
 	{
@@ -1680,6 +1708,7 @@ cpmc::LinkReport LinkLines(const cpmc::Renderer::Stats& aStats, double aNow)
 	report.punch = g_punch;
 	report.punchItem = g_punchItem;
 	report.punchDrawn = g_punchDrawn;
+	report.hitPower = g_hitPower;
 	report.hitsQueued = g_hitsQueued;
 	report.hitsLanded = g_hitsLanded;
 	report.hitsDropped = HitDrops();
@@ -1698,7 +1727,9 @@ cpmc::LinkReport LinkLines(const cpmc::Renderer::Stats& aStats, double aNow)
 	report.health = g_linked ? g_puppet.Health() : std::nullopt;  // once a second, so fall damage shows
 	report.hideV = g_hideV;
 	report.vHidden = g_hidden.On();
-	report.vMeshes = g_vMeshes;
+	report.vMeshes = g_vLook.meshes;
+	report.vEffects = g_vLook.effects;
+	report.vCrosshair = g_vLook.crosshair;
 	report.turn = g_turn;
 	report.turnRatio = g_turnRatio.Ratio();
 	report.turnRemembered = g_turnRatio.Remembered();

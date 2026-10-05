@@ -23,7 +23,7 @@ struct CProperty;
 // Current() on every call, since a load makes a new one. Main thread only, while V is found.
 namespace cpmc
 {
-constexpr int32_t kModuleVersion = 4;  // BlockRenderNpcs.Version(), as this BlockRender needs it
+constexpr int32_t kModuleVersion = 5;  // BlockRenderNpcs.Version(), as this BlockRender needs it
 
 // What the module's List gives.
 struct NpcList
@@ -35,6 +35,18 @@ struct NpcList
 	std::string                  punchItem;
 	bool                         punchDrawn = false;  // V has it drawn, so hits carry it as their weapon
 	float                        vHealthMax = 0.0f;
+};
+
+// What the module's HideV did: the meshes hidden, or shown again (-1 without Codeware, -2 V isn't found). Hiding: the
+// effects stopped since V was hidden, and the game's crosshair (1 hidden, -1 not found among the HUD layer's game
+// controllers). Showing: the effects started again, and the crosshair (1 shown again, 0 HideV hadn't hidden it).
+struct VLook
+{
+	int32_t meshes = 0;
+	int32_t effects = 0;
+	int32_t crosshair = 0;
+
+	bool operator==(const VLook&) const = default;
 };
 
 class GameScript
@@ -53,9 +65,10 @@ public:
 	// V's unarmed weapon drawn (aOn), or V's own weapon put back: the module's Arm says how it went (1 asked, 2 nothing to
 	// ask, 0 V isn't found, -1 no unarmed weapon, -2 no equipment system).
 	std::optional<int32_t> Arm(bool aOn, std::string& aWhy);
-	// V's meshes hidden (aOn), or shown again: the module's HideV gives how many (-1 without Codeware, -2 V isn't found).
-	std::optional<int32_t> HideV(bool aOn, std::string& aWhy);
-	// V's Immortal, under BlockRender's own source name: on or off. Whether the game says it changed.
+	// V hidden (aOn), or shown again: what the module's HideV did, with its meshes, effects and the game's crosshair.
+	std::optional<VLook> HideV(bool aOn, std::string& aWhy);
+	// V's Immortal, the game's override under BlockRender's own source name: on or off. Whether the game then says V is
+	// Immortal.
 	std::optional<bool> SetImmortal(bool aOn, std::string& aWhy);
 	// Minecraft's death, as V's, killed by aKiller (an entity, or 0). False if V isn't found or another god mode keeps V
 	// alive.
@@ -99,6 +112,8 @@ private:
 		kPunchItem,
 		kPunchDrawn,
 		kVHealthMax,
+		kVEffects,
+		kVCrosshair,
 		kFields,
 	};
 

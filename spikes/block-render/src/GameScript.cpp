@@ -48,7 +48,7 @@ const std::vector<FunctionTypes>& Functions()
 	return kFunctionTypes;
 }
 
-// In GameScript::Field's order: the fields List fills, and their types.
+// In GameScript::Field's order: the fields List fills, and those HideV fills, and their types.
 const std::vector<std::pair<const char*, const char*>>& Fields()
 {
 	static const std::vector<std::pair<const char*, const char*>> kFieldTypes{
@@ -56,7 +56,8 @@ const std::vector<std::pair<const char*, const char*>>& Fields()
 		{ "npcHealth", "array:Float" },    { "npcHealthMax", "array:Float" },   { "npcLevels", "array:Float" },
 		{ "npcNames", "array:String" },    { "npcFlags", "array:Int32" },       { "attached", "Int32" },
 		{ "found", "Int32" },              { "punch", "Float" },                { "punchItem", "String" },
-		{ "punchDrawn", "Bool" },          { "vHealthMax", "Float" },
+		{ "punchDrawn", "Bool" },          { "vHealthMax", "Float" },           { "vEffects", "Int32" },
+		{ "vCrosshair", "Int32" },
 	};
 	return kFieldTypes;
 }
@@ -377,9 +378,20 @@ std::optional<int32_t> GameScript::Arm(bool aOn, std::string& aWhy)
 	return Switch(kArm, "Arm", aOn, aWhy);
 }
 
-std::optional<int32_t> GameScript::HideV(bool aOn, std::string& aWhy)
+std::optional<VLook> GameScript::HideV(bool aOn, std::string& aWhy)
 {
-	return Switch(kHideV, "HideV", aOn, aWhy);
+	const std::optional<int32_t> meshes = Switch(kHideV, "HideV", aOn, aWhy);
+	if (!meshes)
+	{
+		return std::nullopt;
+	}
+	const Strong system = SessionSystem(*functions_[kCurrent], *class_, aWhy);
+	if (!system)
+	{
+		return std::nullopt;
+	}
+	RED4ext::IScriptable& instance = *system.GetPtr();
+	return VLook{ *meshes, FieldOf<int32_t>(*fields_[kVEffects], instance), FieldOf<int32_t>(*fields_[kVCrosshair], instance) };
 }
 
 std::optional<int32_t> GameScript::Switch(Function aFunction, const char* aName, bool aOn, std::string& aWhy)
