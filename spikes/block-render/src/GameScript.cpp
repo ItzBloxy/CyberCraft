@@ -38,6 +38,10 @@ const std::vector<FunctionTypes>& Functions()
 		{ "Current", "BlockRenderNpcs::Current;", {}, { "handle:BlockRenderNpcs" } },
 		{ "List", nullptr, { { "Float" } }, { "Int32" } },
 		{ "Compare", nullptr, { { "Float" } }, { "String" } },
+		{ "Hit", nullptr, { { "entEntityID" }, { "Float" }, { "Bool" } }, { "Int32" } },
+		{ "SetImmortal", nullptr, { { "Bool" } }, { "Bool" } },
+		{ "KillV", nullptr, { { "entEntityID" } }, { "Bool" } },
+		{ "Punch", nullptr, {}, { "String" } },
 	};
 	return kFunctionTypes;
 }
@@ -269,6 +273,97 @@ std::string GameScript::Compare(double aRange)
 	if (!RED4ext::ExecuteFunction(system.GetPtr(), functions_[kCompare], &result, args))
 	{
 		return "BlockRenderNpcs.Compare failed";
+	}
+	return result.c_str();
+}
+
+std::optional<int32_t> GameScript::Hit(uint64_t aEntity, double aAmount, bool aStrong, std::string& aWhy)
+{
+	if (const std::string& missing = Check(); !missing.empty())
+	{
+		aWhy = missing;
+		return std::nullopt;
+	}
+	const Strong system = SessionSystem(*functions_[kCurrent], *class_, aWhy);
+	if (!system)
+	{
+		return std::nullopt;
+	}
+	RED4ext::ent::EntityID npc(aEntity);
+	float                  amount = float(aAmount);
+	bool                   strong = aStrong;
+	int32_t                result = 0;
+	RED4ext::StackArgs_t   args{ { nullptr, &npc }, { nullptr, &amount }, { nullptr, &strong } };
+	if (!RED4ext::ExecuteFunction(system.GetPtr(), functions_[kHit], &result, args))
+	{
+		aWhy = "BlockRenderNpcs.Hit failed";
+		return std::nullopt;
+	}
+	return result;
+}
+
+std::optional<bool> GameScript::SetImmortal(bool aOn, std::string& aWhy)
+{
+	if (const std::string& missing = Check(); !missing.empty())
+	{
+		aWhy = missing;
+		return std::nullopt;
+	}
+	const Strong system = SessionSystem(*functions_[kCurrent], *class_, aWhy);
+	if (!system)
+	{
+		return std::nullopt;
+	}
+	bool                 on = aOn;
+	bool                 changed = false;
+	RED4ext::StackArgs_t args{ { nullptr, &on } };
+	if (!RED4ext::ExecuteFunction(system.GetPtr(), functions_[kSetImmortal], &changed, args))
+	{
+		aWhy = "BlockRenderNpcs.SetImmortal failed";
+		return std::nullopt;
+	}
+	return changed;
+}
+
+std::optional<bool> GameScript::KillV(uint64_t aKiller, std::string& aWhy)
+{
+	if (const std::string& missing = Check(); !missing.empty())
+	{
+		aWhy = missing;
+		return std::nullopt;
+	}
+	const Strong system = SessionSystem(*functions_[kCurrent], *class_, aWhy);
+	if (!system)
+	{
+		return std::nullopt;
+	}
+	RED4ext::ent::EntityID killer(aKiller);
+	bool                   killed = false;
+	RED4ext::StackArgs_t   args{ { nullptr, &killer } };
+	if (!RED4ext::ExecuteFunction(system.GetPtr(), functions_[kKillV], &killed, args))
+	{
+		aWhy = "BlockRenderNpcs.KillV failed";
+		return std::nullopt;
+	}
+	return killed;
+}
+
+std::string GameScript::Punch()
+{
+	if (const std::string& missing = Check(); !missing.empty())
+	{
+		return missing;
+	}
+	std::string  why;
+	const Strong system = SessionSystem(*functions_[kCurrent], *class_, why);
+	if (!system)
+	{
+		return why;
+	}
+	RED4ext::CString result;
+	if (!RED4ext::ExecuteFunction(system.GetPtr(), functions_[kPunchReport], &result))
+	{
+		return "BlockRenderNpcs.Punch failed";
 	}
 	return result.c_str();
 }

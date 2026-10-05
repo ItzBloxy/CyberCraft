@@ -23,7 +23,7 @@ struct CProperty;
 // Current() on every call, since a load makes a new one. Main thread only, while V is found.
 namespace cpmc
 {
-constexpr int32_t kModuleVersion = 2;  // BlockRenderNpcs.Version(), as this BlockRender needs it
+constexpr int32_t kModuleVersion = 3;  // BlockRenderNpcs.Version(), as this BlockRender needs it
 
 // What the module's List gives.
 struct NpcList
@@ -45,6 +45,17 @@ public:
 	std::optional<NpcList> List(double aRange, std::string& aWhy);
 	// What the game's targeting finds within aRange metres of V, and which of those the list lacks: for the npcs request.
 	std::string Compare(double aRange);
+	// Combat (spike 6's "Part 2"). One of Minecraft's hits on the NPC aEntity, as V's: aAmount off its health, the strong
+	// attack if aStrong. The module's Hit says what became of it (link::HitResultName). Nothing, with aWhy saying why, if
+	// the module can't be called.
+	std::optional<int32_t> Hit(uint64_t aEntity, double aAmount, bool aStrong, std::string& aWhy);
+	// V's Immortal, under BlockRender's own source name: on or off. Whether the game says it changed.
+	std::optional<bool> SetImmortal(bool aOn, std::string& aWhy);
+	// Minecraft's death, as V's, killed by aKiller (an entity, or 0). False if V isn't found or another god mode keeps V
+	// alive.
+	std::optional<bool> KillV(uint64_t aKiller, std::string& aWhy);
+	// V's punch, what it's read from, and what hits are made with: for the punch request.
+	std::string Punch();
 	// Checks the class, its version, functions and fields, and BlockRender's natives, the first time, and logs what it
 	// found. Empty: all there. List and Compare check first; BlockRender checks before its first List too, and writes the
 	// log, so a fault in the module's first call still leaves the check's line.
@@ -57,6 +68,10 @@ private:
 		kCurrent,
 		kList,
 		kCompare,
+		kHit,
+		kSetImmortal,
+		kKillV,
+		kPunchReport,
 		kFunctions,
 	};
 
