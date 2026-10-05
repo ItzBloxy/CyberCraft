@@ -14,8 +14,8 @@
 // reports what it took off, and the ProcessPipeline wrap why it took nothing, if it didn't. The same DealDamages wrap
 // offers the game's hits on V to BlockRender, which takes them for Minecraft in build mode. The pipeline may run on any
 // thread, so those wraps too touch nothing of the module's: they read the hit itself, and call BlockRender's natives.
-// For build mode, Arm draws V's unarmed weapon, so that hits carry it, and HideV hides V's meshes, through Codeware where
-// it's installed.
+// For build mode, Arm draws V's unarmed weapon, so that hits carry it, and HideV hides V's meshes, stops V's effects and
+// hides the game's crosshair, through Codeware where it's installed.
 
 // BlockRender's natives, added before the game loads its scripts; any thread may call them.
 public native func BlockRenderNpcAttached(id: EntityID)
@@ -49,6 +49,11 @@ public class BlockRenderNpcs extends ScriptableSystem {
   private let armedFrom: ItemID;
   private let hiding: Bool;
   private let hidden: array<wref<IComponent>>;
+  // HideV's too: the effects it stopped that start by themselves, and what each is on, to start again; and whether it
+  // hid the game's crosshair.
+  private let restartOn: array<wref<Entity>>;
+  private let restartNames: array<CName>;
+  private let crosshairHidden: Bool;
 
   // What List fills, one entry for each NPC listed, for BlockRender to read by name.
   public let npcIds: array<EntityID>;
@@ -68,11 +73,17 @@ public class BlockRenderNpcs extends ScriptableSystem {
   public let punchItem: String;
   public let punchDrawn: Bool;
   public let vHealthMax: Float;
+  // What HideV last did, besides the meshes it gives, for BlockRender to read after it. Hiding: the effects it has
+  // stopped since V was hidden, and the crosshair (1 hidden, -1 not found among the HUD layer's game controllers).
+  // Showing: the effects it started again, and the crosshair (1 shown again, 0 it hadn't hidden it).
+  public let vEffects: Int32;
+  public let vCrosshair: Int32;
 
   // The module's version, which BlockRender checks: 2 since the list moved into BlockRender, 3 with combat, 4 since hits
-  // go through the whole damage pipeline, with what V's unarmed slot draws.
+  // go through the whole damage pipeline, with what V's unarmed slot draws, 5 since V's Immortal is the game's override,
+  // and HideV stops V's effects and hides the game's crosshair.
   public final static func Version() -> Int32 {
-    return 4;
+    return 5;
   }
 
   public final static func Get(game: GameInstance) -> ref<BlockRenderNpcs> {
@@ -249,19 +260,25 @@ public class BlockRenderNpcs extends ScriptableSystem {
     return 1;
   }
 
-  // V's god mode for build mode: Immortal on V, added or removed under BlockRender's own source name only. Whether the
-  // game says it changed.
+  // V's god mode for build mode: Immortal forced on V by the game's override, enabled or disabled under BlockRender's own
+  // source name only, as Second Heart forces it. An Immortal added as a god mode does nothing on V, whose Mortal god
+  // modes outrank it (step 4). Off also removes an Immortal that module version 4 added. Whether the game then says V is
+  // Immortal.
   public final func SetImmortal(on: Bool) -> Bool {
     let game: GameInstance = this.GetGameInstance();
     let player: ref<GameObject> = GameInstance.GetPlayerSystem(game).GetLocalPlayerMainGameObject();
     if !IsDefined(player) {
       return false;
     };
+    let id: EntityID = player.GetEntityID();
     let gods: ref<GodModeSystem> = GameInstance.GetGodModeSystem(game);
     if on {
-      return gods.AddGodMode(player.GetEntityID(), gameGodModeType.Immortal, n"BlockRender");
+      gods.EnableOverride(id, gameGodModeType.Immortal, n"BlockRender");
+    } else {
+      gods.DisableOverride(id, n"BlockRender");
+      gods.RemoveGodMode(id, gameGodModeType.Immortal, n"BlockRender");
     };
-    return gods.RemoveGodMode(player.GetEntityID(), gameGodModeType.Immortal, n"BlockRender");
+    return gods.HasGodMode(id, gameGodModeType.Immortal);
   }
 
   // Minecraft's death, as V's: our Immortal off, then V's health to its least, as the pipeline's own instant kill does,
@@ -274,6 +291,7 @@ public class BlockRenderNpcs extends ScriptableSystem {
     };
     let id: EntityID = player.GetEntityID();
     let gods: ref<GodModeSystem> = GameInstance.GetGodModeSystem(game);
+    gods.DisableOverride(id, n"BlockRender");
     gods.RemoveGodMode(id, gameGodModeType.Immortal, n"BlockRender");
     let instigator: ref<GameObject>;
     if EntityID.IsDefined(killer) {
@@ -334,11 +352,14 @@ public class BlockRenderNpcs extends ScriptableSystem {
     return 1;
   }
 
-  // V's meshes for build mode: V's own, and those of everything V wears and holds, hidden (on), each switched off if it
-  // was on, and remembered, so that showing V again (off) switches on exactly those and leaves off what the game had off.
-  // Called again while on, it hides what has appeared since on V and in V's hands, such as the weapon Arm drew, without
-  // looking through V's whole inventory again. The meshes hidden, or shown again; -1 without Codeware, which lists an
-  // entity's components; -2 if V isn't found.
+  // V for build mode: V's meshes, and those of everything V wears and holds, hidden (on), each switched off if it was on,
+  // and remembered, so that showing V again (off) switches on exactly those and leaves off what the game had off. An
+  // effect spawner's effects are stopped by name before it goes off, since switching it off leaves them running (step 4:
+  // the Thermal blades' heat), and those that start by themselves are started again when V is shown. And the game's
+  // crosshair, hidden with V and shown again if HideV hid it. Called again while on, it hides what has appeared since on
+  // V and in V's hands, such as the weapon Arm drew, without looking through V's whole inventory again, and the crosshair
+  // again if the game showed it. The meshes hidden, or shown again; -1 without Codeware, which lists an entity's
+  // components; -2 if V isn't found. vEffects and vCrosshair say the rest.
   public final func HideV(on: Bool) -> Int32 {
     let i: Int32 = 0;
     if !on {
@@ -351,8 +372,24 @@ public class BlockRenderNpcs extends ScriptableSystem {
         };
         i += 1;
       };
+      this.vEffects = 0;
+      i = 0;
+      while i < ArraySize(this.restartOn) {
+        let entity: ref<Entity> = this.restartOn[i];
+        if IsDefined(entity) {
+          let start: ref<entSpawnEffectEvent> = new entSpawnEffectEvent();
+          start.effectName = this.restartNames[i];
+          entity.QueueEvent(start);
+          this.vEffects += 1;
+        };
+        i += 1;
+      };
+      this.vCrosshair = this.crosshairHidden ? BlockRenderShowCrosshair(true) : 0;
       ArrayClear(this.hidden);
+      ArrayClear(this.restartOn);
+      ArrayClear(this.restartNames);
       this.hiding = false;
+      this.crosshairHidden = false;
       return shown;
     };
     if !BlockRenderCanHideV() {
@@ -362,12 +399,29 @@ public class BlockRenderNpcs extends ScriptableSystem {
     if !IsDefined(player) {
       return -2;
     };
-    let off: array<wref<IComponent>> = BlockRenderSwitchOffMeshes(player, !this.hiding);
+    if !this.hiding {
+      this.vEffects = 0;
+    };
+    let off: array<wref<IComponent>>;
+    let startOn: array<wref<Entity>>;
+    let startNames: array<CName>;
+    this.vEffects += BlockRenderSwitchOffMeshes(player, !this.hiding, off, startOn, startNames);
     this.hiding = true;
     while i < ArraySize(off) {
       ArrayPush(this.hidden, off[i]);
       i += 1;
     };
+    i = 0;
+    while i < ArraySize(startOn) {
+      ArrayPush(this.restartOn, startOn[i]);
+      ArrayPush(this.restartNames, startNames[i]);
+      i += 1;
+    };
+    let crosshair: Int32 = BlockRenderShowCrosshair(false);
+    if crosshair == 1 {
+      this.crosshairHidden = true;
+    };
+    this.vCrosshair = crosshair < 0 ? -1 : 1;
     return ArraySize(this.hidden);
   }
 
@@ -668,19 +722,20 @@ public func BlockRenderCanHideV() -> Bool {
   return false;
 }
 
-// V's meshes, and those of the items V wears and holds: each visual component that's on, switched off; those it switched
-// off. With everything, every item V wears and holds, found among V's whole inventory; otherwise only what's in V's
-// hands and arm slot, which is all that changes in build mode. Main thread, from HideV.
+// V's meshes, and those of the items V wears and holds: each visual component that's on, switched off, into off; an
+// effect spawner's effects stopped by name first, those that start by themselves into restartOn and restartNames. With
+// everything, every item V wears and holds, found among V's whole inventory; otherwise only what's in V's hands and arm
+// slot, which is all that changes in build mode. The effects stopped. Main thread, from HideV.
 @if(ModuleExists("Codeware"))
-public func BlockRenderSwitchOffMeshes(player: ref<GameObject>, everything: Bool) -> array<wref<IComponent>> {
-  let off: array<wref<IComponent>>;
-  BlockRenderSwitchOffEntity(player, off);
+public func BlockRenderSwitchOffMeshes(player: ref<GameObject>, everything: Bool, out off: array<wref<IComponent>>,
+  out restartOn: array<wref<Entity>>, out restartNames: array<CName>) -> Int32 {
+  let stopped: Int32 = BlockRenderSwitchOffEntity(player, off, restartOn, restartNames);
   let transactions: ref<TransactionSystem> = GameInstance.GetTransactionSystem(player.GetGame());
   if !everything {
-    BlockRenderSwitchOffEntity(transactions.GetItemInSlot(player, t"AttachmentSlots.WeaponRight"), off);
-    BlockRenderSwitchOffEntity(transactions.GetItemInSlot(player, t"AttachmentSlots.WeaponLeft"), off);
-    BlockRenderSwitchOffEntity(transactions.GetItemInSlot(player, t"AttachmentSlots.RightArm"), off);
-    return off;
+    stopped += BlockRenderSwitchOffEntity(transactions.GetItemInSlot(player, t"AttachmentSlots.WeaponRight"), off, restartOn, restartNames);
+    stopped += BlockRenderSwitchOffEntity(transactions.GetItemInSlot(player, t"AttachmentSlots.WeaponLeft"), off, restartOn, restartNames);
+    stopped += BlockRenderSwitchOffEntity(transactions.GetItemInSlot(player, t"AttachmentSlots.RightArm"), off, restartOn, restartNames);
+    return stopped;
   };
   let items: array<wref<gameItemData>>;
   transactions.GetItemList(player, items);
@@ -689,35 +744,98 @@ public func BlockRenderSwitchOffMeshes(player: ref<GameObject>, everything: Bool
     if IsDefined(items[i]) {
       let item: ref<ItemObject> = transactions.GetItemInSlotByItemID(player, items[i].GetID());
       if IsDefined(item) {
-        BlockRenderSwitchOffEntity(item, off);
+        stopped += BlockRenderSwitchOffEntity(item, off, restartOn, restartNames);
       };
     };
     i += 1;
   };
-  return off;
+  return stopped;
 }
 
+// One entity's visual components that are on: each switched off, into off. An effect spawner's effects are stopped
+// first, each by name with all its loops (switching the spawner off leaves them running), and those that start by
+// themselves go into restartOn and restartNames. The effects stopped.
 @if(ModuleExists("Codeware"))
-public func BlockRenderSwitchOffEntity(entity: ref<Entity>, out off: array<wref<IComponent>>) -> Void {
+public func BlockRenderSwitchOffEntity(entity: ref<Entity>, out off: array<wref<IComponent>>,
+  out restartOn: array<wref<Entity>>, out restartNames: array<CName>) -> Int32 {
   if !IsDefined(entity) {
-    return;
+    return 0;
   };
+  let stopped: Int32 = 0;
   let components: array<ref<IComponent>> = entity.GetComponents();
   let i: Int32 = 0;
   while i < ArraySize(components) {
     let component: ref<IComponent> = components[i];
     if IsDefined(component as IVisualComponent) && component.IsEnabled() {
+      let spawner: ref<entEffectSpawnerComponent> = component as entEffectSpawnerComponent;
+      if IsDefined(spawner) {
+        let k: Int32 = 0;
+        while k < ArraySize(spawner.effectDescs) {
+          let effect: ref<entEffectDesc> = spawner.effectDescs[k];
+          if IsDefined(effect) && IsNameValid(effect.effectName) {
+            let stop: ref<entKillEffectEvent> = new entKillEffectEvent();
+            stop.effectName = effect.effectName;
+            stop.breakAllLoops = true;
+            entity.QueueEvent(stop);
+            stopped += 1;
+            if effect.isAutoSpawn {
+              ArrayPush(restartOn, entity);
+              ArrayPush(restartNames, effect.effectName);
+            };
+          };
+          k += 1;
+        };
+      };
       component.Toggle(false);
       ArrayPush(off, component);
     };
     i += 1;
   };
+  return stopped;
+}
+
+// The game's crosshair, hidden with V (show false) or shown again (true), as the game hides it for the scanner: the
+// HUD's crosshair container, its root widget switched off or on. 1: switched; 0: it already was as asked; -1: the
+// container isn't among the HUD layer's game controllers. Main thread, from HideV.
+@if(ModuleExists("Codeware"))
+public func BlockRenderShowCrosshair(show: Bool) -> Int32 {
+  let ink: ref<inkSystem> = GameInstance.GetInkSystem();
+  if !IsDefined(ink) {
+    return -1;
+  };
+  let layer: ref<inkLayerWrapper> = ink.GetLayer(n"inkHUDLayer");
+  if !IsDefined(layer) {
+    return -1;
+  };
+  let controllers: array<wref<inkIGameController>> = layer.GetGameControllers();
+  let i: Int32 = 0;
+  while i < ArraySize(controllers) {
+    let crosshair: ref<gameuiCrosshairContainerController> = controllers[i] as gameuiCrosshairContainerController;
+    if IsDefined(crosshair) {
+      let root: ref<inkWidget> = crosshair.GetRootWidget();
+      if !IsDefined(root) {
+        return -1;
+      };
+      if Equals(root.IsVisible(), show) {
+        return 0;
+      };
+      root.SetVisible(show);
+      return 1;
+    };
+    i += 1;
+  };
+  return -1;
 }
 
 @if(!ModuleExists("Codeware"))
-public func BlockRenderSwitchOffMeshes(player: ref<GameObject>, everything: Bool) -> array<wref<IComponent>> {
-  let off: array<wref<IComponent>>;
-  return off;
+public func BlockRenderSwitchOffMeshes(player: ref<GameObject>, everything: Bool, out off: array<wref<IComponent>>,
+  out restartOn: array<wref<Entity>>, out restartNames: array<CName>) -> Int32 {
+  return 0;
+}
+
+@if(!ModuleExists("Codeware"))
+public func BlockRenderShowCrosshair(show: Bool) -> Int32 {
+  return -1;
 }
 
 // Every NPC the game puts in the world, people, drones, mechs and animals alike, crowds included: NPCPuppet has no
