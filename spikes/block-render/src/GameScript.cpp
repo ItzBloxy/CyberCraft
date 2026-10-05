@@ -42,6 +42,8 @@ const std::vector<FunctionTypes>& Functions()
 		{ "SetImmortal", nullptr, { { "Bool" } }, { "Bool" } },
 		{ "KillV", nullptr, { { "entEntityID" } }, { "Bool" } },
 		{ "Punch", nullptr, {}, { "String" } },
+		{ "Arm", nullptr, { { "Bool" } }, { "Int32" } },
+		{ "HideV", nullptr, { { "Bool" } }, { "Int32" } },
 	};
 	return kFunctionTypes;
 }
@@ -54,7 +56,7 @@ const std::vector<std::pair<const char*, const char*>>& Fields()
 		{ "npcHealth", "array:Float" },    { "npcHealthMax", "array:Float" },   { "npcLevels", "array:Float" },
 		{ "npcNames", "array:String" },    { "npcFlags", "array:Int32" },       { "attached", "Int32" },
 		{ "found", "Int32" },              { "punch", "Float" },                { "punchItem", "String" },
-		{ "vHealthMax", "Float" },
+		{ "punchDrawn", "Bool" },          { "vHealthMax", "Float" },
 	};
 	return kFieldTypes;
 }
@@ -252,6 +254,7 @@ std::optional<NpcList> GameScript::List(double aRange, std::string& aWhy)
 	list.found = FieldOf<int32_t>(*fields_[kFound], instance);
 	list.punch = FieldOf<float>(*fields_[kPunch], instance);
 	list.punchItem = FieldOf<RED4ext::CString>(*fields_[kPunchItem], instance).c_str();
+	list.punchDrawn = FieldOf<bool>(*fields_[kPunchDrawn], instance);
 	list.vHealthMax = FieldOf<float>(*fields_[kVHealthMax], instance);
 	return list;
 }
@@ -367,5 +370,38 @@ std::string GameScript::Punch()
 		return "BlockRenderNpcs.Punch failed";
 	}
 	return result.c_str();
+}
+
+std::optional<int32_t> GameScript::Arm(bool aOn, std::string& aWhy)
+{
+	return Switch(kArm, "Arm", aOn, aWhy);
+}
+
+std::optional<int32_t> GameScript::HideV(bool aOn, std::string& aWhy)
+{
+	return Switch(kHideV, "HideV", aOn, aWhy);
+}
+
+std::optional<int32_t> GameScript::Switch(Function aFunction, const char* aName, bool aOn, std::string& aWhy)
+{
+	if (const std::string& missing = Check(); !missing.empty())
+	{
+		aWhy = missing;
+		return std::nullopt;
+	}
+	const Strong system = SessionSystem(*functions_[kCurrent], *class_, aWhy);
+	if (!system)
+	{
+		return std::nullopt;
+	}
+	bool                 on = aOn;
+	int32_t              result = 0;
+	RED4ext::StackArgs_t args{ { nullptr, &on } };
+	if (!RED4ext::ExecuteFunction(system.GetPtr(), functions_[aFunction], &result, args))
+	{
+		aWhy = std::format("BlockRenderNpcs.{} failed", aName);
+		return std::nullopt;
+	}
+	return result;
 }
 }

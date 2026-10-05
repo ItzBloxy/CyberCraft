@@ -23,7 +23,7 @@ struct CProperty;
 // Current() on every call, since a load makes a new one. Main thread only, while V is found.
 namespace cpmc
 {
-constexpr int32_t kModuleVersion = 3;  // BlockRenderNpcs.Version(), as this BlockRender needs it
+constexpr int32_t kModuleVersion = 4;  // BlockRenderNpcs.Version(), as this BlockRender needs it
 
 // What the module's List gives.
 struct NpcList
@@ -31,8 +31,9 @@ struct NpcList
 	std::vector<link::NpcSample> npcs;          // within the range asked for, and not dead
 	int32_t                      attached = 0;  // NPCs in the world: on the list the wraps report
 	int32_t                      found = 0;     // of those, found by their EntityIDs
-	float                        punch = 0.0f;  // V's punch, read from punchItem
+	float                        punch = 0.0f;  // V's punch, read from punchItem, what V's unarmed slot draws
 	std::string                  punchItem;
+	bool                         punchDrawn = false;  // V has it drawn, so hits carry it as their weapon
 	float                        vHealthMax = 0.0f;
 };
 
@@ -45,10 +46,15 @@ public:
 	std::optional<NpcList> List(double aRange, std::string& aWhy);
 	// What the game's targeting finds within aRange metres of V, and which of those the list lacks: for the npcs request.
 	std::string Compare(double aRange);
-	// Combat (spike 6's "Part 2"). One of Minecraft's hits on the NPC aEntity, as V's: aAmount off its health, the strong
-	// attack if aStrong. The module's Hit says what became of it (link::HitResultName). Nothing, with aWhy saying why, if
-	// the module can't be called.
+	// Combat (spike 6's "Part 2"). One of Minecraft's hits on the NPC aEntity, as V's: aAmount where the game's damage
+	// pipeline starts it, the strong attack if aStrong. The module's Hit says what became of it (link::HitResultName).
+	// Nothing, with aWhy saying why, if the module can't be called.
 	std::optional<int32_t> Hit(uint64_t aEntity, double aAmount, bool aStrong, std::string& aWhy);
+	// V's unarmed weapon drawn (aOn), or V's own weapon put back: the module's Arm says how it went (1 asked, 2 nothing to
+	// ask, 0 V isn't found, -1 no unarmed weapon, -2 no equipment system).
+	std::optional<int32_t> Arm(bool aOn, std::string& aWhy);
+	// V's meshes hidden (aOn), or shown again: the module's HideV gives how many (-1 without Codeware, -2 V isn't found).
+	std::optional<int32_t> HideV(bool aOn, std::string& aWhy);
 	// V's Immortal, under BlockRender's own source name: on or off. Whether the game says it changed.
 	std::optional<bool> SetImmortal(bool aOn, std::string& aWhy);
 	// Minecraft's death, as V's, killed by aKiller (an entity, or 0). False if V isn't found or another god mode keeps V
@@ -72,6 +78,8 @@ private:
 		kSetImmortal,
 		kKillV,
 		kPunchReport,
+		kArm,
+		kHideV,
 		kFunctions,
 	};
 
@@ -89,9 +97,13 @@ private:
 		kFound,
 		kPunch,
 		kPunchItem,
+		kPunchDrawn,
 		kVHealthMax,
 		kFields,
 	};
+
+	// A member function of the module's taking a Bool and giving an Int32: Arm and HideV.
+	std::optional<int32_t> Switch(Function aFunction, const char* aName, bool aOn, std::string& aWhy);
 
 	LogQueue&                                       log_;
 	bool                                            checked_ = false;
