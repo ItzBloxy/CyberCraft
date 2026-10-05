@@ -3806,7 +3806,7 @@ link crash's fix (below), that line ends `its natives are added once the game ha
 menu is up the log has `natives: BlockRenderNpcAttached, BlockRenderNpcDetached, BlockRenderNpcCount and
 BlockRenderNpcAt added`, then `npcs: the wraps have run on … threads: …` lines as the game attaches NPCs.
 
-- [ ] **Step 3: In the game: load, link, and the module found**
+- [x] **Step 3: In the game: load, link, and the module found**
 
 Ask the user to load the free-roam save, go to a pavement where many people walk, stand still at its edge, make a new
 save there, and click the overlay's Link button. Expected:
@@ -3822,7 +3822,7 @@ A `module: …` line saying something is missing stops the step: the class missi
 module (Step 2); `the game session has no BlockRenderNpcs system` means the game doesn't make a mod's scriptable system
 (the spec's risk 1), and a new task moves the list to a global function, found as `Puppet` finds `GetMountedVehicle`.
 
-- [ ] **Step 4: In the game: the opening check, the list against the game's targeting**
+- [x] **Step 4: In the game: the opening check, the list against the game's targeting**
 
 Still in the crowd, send `npcs`, or ask the user to click "List them in the log" under "More controls". Expected, in the
 log:
@@ -3835,7 +3835,7 @@ log:
   game started, … already there, … not there, 0 past the list's 1024`: found close to the list's size (NPCs not found
   are ones the game dropped without a detach), and `npcs: the wraps ran on …`, the threads.
 
-- [ ] **Step 5: In the game: the opening check, which capsule is an NPC's**
+- [x] **Step 5: In the game: the opening check, which capsule is an NPC's**
 
 Ask the user to walk up to an NPC standing still (a vendor, or someone waiting), to stand about a metre from them, and
 to say when they're there. Send `shapes`, then `npcs`. Expected:
@@ -3849,7 +3849,7 @@ to say when they're there. Send `shapes`, then `npcs`. Expected:
 If most NPCs say `a person's: no capsule found`, or the capsule taken isn't the one `shapes` shows around the NPC, the
 rule changes to what `shapes` shows (its filter, its kind, its size), as a new task.
 
-- [ ] **Step 6: In the game: the opening check, what the list costs**
+- [x] **Step 6: In the game: the opening check, what the list costs**
 
 In the crowd, read the status's NPC line for 10 s: the module's time a frame, on average and at worst. Then ask the user
 to click the overlay's `NPCs: on` button, so it reads `NPCs: off`, for 10 s, then on again. Read the status's `frame=`
@@ -3857,7 +3857,7 @@ line and the overlay's CET frame time each time, and count the stand-ins (above)
 Expected: the NPC line says `npcs=off` while off, and the count says `[CHAT] Test failed`; once it's on again, the count
 is back.
 
-- [ ] **Step 7: In the game: a plate on the pavement**
+- [x] **Step 7: In the game: a plate on the pavement**
 
 Send `mc creative`, `mc /item replace entity @s hotbar.0 with minecraft:stone_pressure_plate 4`, `mc /item replace
 entity @s hotbar.1 with minecraft:redstone_lamp 4`, `mc /item replace entity @s hotbar.2 with minecraft:diamond_sword`
@@ -3868,48 +3868,48 @@ F8 again and step back a few metres, so Minecraft's player, at V, isn't on the p
 Expected: the lamp lights while someone is on the plate, and goes out after they've left it. Note how often it misses
 someone crossing, and anyone it lights for who isn't on it.
 
-- [ ] **Step 8: In the game: hits, logged**
+- [x] **Step 8: In the game: hits, logged**
 
 Ask the user to walk up to an NPC who is standing still, press F8, press 3 for the sword, and hit the NPC two or three
 times, a second or more apart, aiming at their body, then press F8 again. Expected: in the log, `hit on NPC … (…) for
 7.00 of Minecraft's damage, knockback …; blade; not applied in Part 1` for each, with the NPC's name; the NPC doesn't
 react in the game; the status's hits count goes up by as many; and Minecraft's log says `SkyCraft: hit … for 7.0 …`.
 
-- [ ] **Step 9: In the game: sizes beside a drone, or a mech**
+- [x] **Step 9: In the game: sizes beside a drone, or a mech**
 
 If a drone or a mech can be reached without a fight (some corporations' and gangs' grounds keep one standing), ask the
 user to stand near it, then send `npcs`. Note its line: its box and where it came from. If none can be, skip this step
 and say so in the results: Part 2's fights will meet them.
 
-- [ ] **Step 10: In the game: the overlay, build mode and the bodies**
+- [x] **Step 10: In the game: the overlay, build mode and the bodies**
 
 Ask the user to press F8, press 4 for stone and place a few blocks of it on the pavement, walk onto them in build mode,
 then leave build mode. Expected: build mode, the drive and the bodies work as in spike 5: the bodies line counts them,
 and V stands on them.
 
-- [ ] **Step 11: In the game: unlinking empties the table**
+- [x] **Step 11: In the game: unlinking empties the table**
 
 Ask the user to click the overlay's Unlink button, then count the stand-ins (above). Expected: the NPC line says `none
 listed: not linked`, and the count says `[CHAT] Test failed`: the heartbeat goes on while unlinked, so SkyCraft reads
 the emptied table, and the typed command too.
 
-- [ ] **Step 12: Ask the user to quit the game and stop Minecraft**
+- [x] **Step 12: Ask the user to quit the game and stop Minecraft**
 
-- [ ] **Step 13: Read the log once more**
+- [x] **Step 13: Read the log once more**
 
 ```bash
 L=$(ls -t /e/Cyberpunk2077/red4ext/logs | grep -i blockrender | head -1); grep -E "module:|npcs:|hit on NPC|shapes:" "/e/Cyberpunk2077/red4ext/logs/$L" | head -200
 ```
 Everything the steps above logged, for the results.
 
-- [ ] **Step 14: Record step 2's results in `docs/spikes/2026-10-05-npcs-and-combat-results.md`**
+- [x] **Step 14: Record step 2's results in `docs/spikes/2026-10-05-npcs-and-combat-results.md`**
 
 A "Step 2" section: each check above with its outcome and numbers: redscript's compile and the module's checks; the
 list against the targeting; which capsule is an NPC's, with its filters and box; V's punch against the inventory; the
 module's time and the frame rates with NPCs on and off; the plate; the hits; the drone or mech, if any; and anything that
 surprised, and what it means for Part 2. Put the spike's answer so far at the top.
 
-- [ ] **Step 15: Commit**
+- [x] **Step 15: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add docs/spikes/2026-10-05-npcs-and-combat-results.md \

@@ -4,6 +4,16 @@ Spike 6 brings Night City's NPCs into Minecraft as SkyCraft's stand-ins (Part 1)
 Minecraft's explosions in the game (Part 3). Step 1 ran SkyCraft's actor table with `mclink`, without Cyberpunk; later
 steps add their sections as they run, and the spike's answer goes at the top once step 2 is in.
 
+## The answer so far (Part 1, after step 2)
+
+**Yes: Night City's NPCs are in Minecraft as SkyCraft's stand-ins, where the game puts them.** On a busy pavement, every
+NPC within 80 m was listed, and the game's own targeting never found one the list lacked. A stone pressure plate on the
+pavement lit its lamp whenever people crossed it, and missed none. Minecraft's sword hits on a vendor and on a Militech
+drone came back to the game with the NPC's name and Minecraft's damage, criticals included. The list costs the game 0.08
+ms a frame. It took three fixes; the last was a crash, because the game calls NPCs' attach and detach callbacks on many
+threads (16 in this run), so the list now lives in BlockRender behind a lock. Open for Part 2: the boxes stop at the
+shoulders (1.63 m), drones have no capsule and stay person-sized, and nothing guards V's health yet.
+
 ## Step 1: made-up NPCs in SkyCraft's actor table, with `mclink`, without Cyberpunk
 
 Date: 2026-10-05. No Cyberpunk: `mclink`, BlockRender's link code in a console program, ran against the user's
@@ -130,3 +140,70 @@ spike 3's corner. Plan: Task 11. This section is written as the step runs.
     threads attaching and detaching while another copies the list; without the lock, that test crashes. The merge that
     keeps the module's reads in step with the list was ported to Python and checked against 2,000 random runs of
     attaches, detaches and re-attaches. The next run's log says which threads the game calls the wraps on.
+
+### The second run: every check passed
+
+Date: 2026-10-05, 16:41 to 16:58. BlockRender 0.17.0 at `b68fe3b` (module version 2), the same Minecraft and SkyCraft as
+step 1, the game 2.31. The user ran the game; the agent sent the requests and read the logs and the status.
+- **The module and its natives (Step 2):** redscript compiled the module with the other mods' scripts (`Compilation
+  complete`), and BlockRender added its four natives once the game had registered its types. No message box.
+- **Which threads call the wraps:** at the main menu the wraps had already run twice, on two threads, neither the main
+  thread. As the save loaded, within a second they had run on 16 threads, 15 workers and the main thread, one to four
+  attaches each. By the last `npcs` request: 209 attaches and 166 detaches, all but 4 attaches and every detach on a
+  worker. That
+  settles the link crash's cause; this run crashed neither at the load nor at Link.
+- **Found at Link (Step 3):** `module: found BlockRenderNpcs version 2, its 4 functions, the 13 fields List fills, and
+  BlockRender's 4 natives`. The status listed 17 of the 37 NPCs in the world, and Minecraft counted 15 stand-ins
+  (`Test passed. Count: 15`): people walk in and out of 80 m.
+- **The list against the targeting (Step 4):** on the pavement, 15 listed of 35, and `GetTargetParts finds 13 NPCs
+  within 80 m; the list lacks 0`. Each of the three times `npcs` ran (13, 27 and 25 found), the list lacked none. The
+  module found every NPC on the wraps' list by its ID (35 of 35, later 42 of 42 and 43 of 43), and the list had no
+  repeat, stray or overflow. All were "NC Resident"s: level 1 with 48 or 78 health on the pavement, level 47 with 449 to
+  1,514 health a few streets on. V's punch read 102 from `Items.w_melee_004__fists_a`, and V's max health 456, as in the
+  first run.
+- **An NPC's capsule (Step 5):** beside the vendor (NPC 35, which the game names "NC Resident"), its box came from its
+  controller: radius 0.30, half-height 0.43, query filter `0:0:10002000:0`, so 0.60 wide, from its position to 1.63 m
+  above. `shapes` showed what stands on it, its feet at height 6.31:
+  - the controller, a kinematic capsule from 0.17 to 1.62 m above the feet;
+  - a kinematic capsule of radius 0.40, `0:0:2000000:0`, not a simulation shape, from 0.05 to 1.75 m;
+  - a thin capsule of radius 0.06, `0:0:24000002:0`, a simulation shape, from 0.04 to 1.76 m;
+  - a kinematic sphere of radius 1.2, `0:0:2:0`.
+
+  A second NPC beside it had the same controller and the 0.40 capsule. So the controller stops at the shoulders, and
+  the box is a head short of the 1.7 to 1.9 m the plan expected. Every one of the 27 NPCs listed there had its
+  controller found. On the pavement, five of the first fifteen had none at first, one of them 1.7 m away; by the
+  vendor's, 40 of the 42 looked for had been found.
+- **The cost (Step 6):** with 27 listed of 42, the module took 0.08 ms a frame on average, 0.2 to 0.4 ms at worst (once
+  0.79). Frames averaged 15.6 to 16.2 ms with NPCs on, off and on again, no difference beyond the crowd's own, and a
+  worst frame of about 30 ms each second came with NPCs off too, so it isn't the module's. While off, the status said
+  `npcs=off` and the count said `Test failed`; on again, the count was 27, as listed.
+- **The plate (Step 7):** a stone pressure plate on the pavement and a redstone lamp beside it. The lamp lit whenever
+  people crossed the plate, and the user saw it miss none. It also lit for people on the lamp's block, beside the plate:
+  a stand-in is 0.6 m wide, so one standing within about 0.24 m of the plate's block presses it, as a Minecraft player
+  would, and a stone plate stays down for a second after it's left.
+- **Hits (Step 8, and the drone):** three sword hits on the vendor came back as `hit on NPC 35 (NC Resident) for 7.00 of
+  Minecraft's damage, knockback 0.40; blade; not applied in Part 1`, and SkyCraft logged `hit NC Resident for 7.0
+  (knockback 0.4)` for each. The vendor didn't react, as Part 1 applies nothing, and the module read no god mode on him.
+  Then 17 hits on a Militech Wyvern drone: four of 7.00, with knockback 0.40 or 0.50; eleven of 10.50 `blade, critical`
+  for jump attacks at full cooldown; and two of 9.21, critical with the cooldown not quite full. Twenty hits in all,
+  each logged once.
+- **A drone (Step 9):** NPC 130, a Militech Wyvern, level 47, 297 health, hostile and in combat. No capsule was found,
+  so it got a person's box, 0.60 by 1.80, from its position up; the two other Wyverns listed had none either. The hits
+  landed, so the box overlaps the drone, but its own shape wasn't seen: `shapes` said `V's controller isn't found`
+  while V was in the air in build mode. Meanwhile the drone shot V down to 63% health: nothing guards V in Part 1.
+- **Build mode and the bodies (Step 10):** blocks of stone on the pavement, and V walked onto them in build mode, as in
+  spike 5 (154 bodies made and removed over the run).
+- **Unlinking (Step 11):** `none listed: not linked`, the module not called, and the count said `Test failed`.
+- **No crash:** the game quit normally; BlockRender's last line was `25 vtable entries restored`.
+
+### What it means for Part 2
+
+- **The list, the stand-ins and the hits work in the game,** so Part 2 starts from them: a hit's damage on the NPC
+  (Minecraft's damage times V's punch), and the game's hits on V back to Minecraft.
+- **The box's top:** take it from the tallest upright capsule on the NPC's axis, which beside the vendor reached 1.76 m,
+  not the controller's 1.63 m, and keep the controller's width. A small change in `Characters`, with the vendor's
+  capsules as its test: Part 2's first task, checked in its first run.
+- **Drones have no capsule,** so they stay person-sized from their position (the spec's risk 11). Their own shape is
+  still to be seen, with V standing still beside one.
+- **V needs Part 2's guard:** the drone took V to 63% while V fought it in build mode.
+- **Whether the vendor can be hurt** shows with Part 2's first applied hit: the module read no god mode on him.
