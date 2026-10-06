@@ -50,14 +50,16 @@ hide V in build mode; "The deep review of Part 2", at the end, says why. Step 4 
 to make, which Tasks 32 to 35 make and Task 36 checks in the game: hits start at V's punch × the square root of
 Minecraft's damage, V's Immortal is the game's override, and hiding V hides V's effects and the game's crosshair too;
 "Step 4's fixes", at the end, says why.
-**Part 3** (Tasks 38 to 53) makes Minecraft's blasts knock down and throw NPCs, and push cars and props, through the
+**Part 3** (Tasks 38 to 54) makes Minecraft's blasts knock down and throw NPCs, and push cars and props, through the
 game's own explosion code, with the game's knockdown grenade's attack; and takes the follow-ups Part 2 left:
 Minecraft's health from V's as build mode starts, bushes out of Minecraft's ground, and the blades' heat after build
 mode. It was planned after step 4's fixes, from Task 37's handoff
 (`docs/superpowers/handoffs/2026-10-06-spike-6-part-3-planning.md`), and its own section below says how it's built.
 Step 5b (Task 48) passed but for living NPCs' knockdowns, which the knockdown's status effect alone doesn't make on a
 crowd NPC: Tasks 49 to 51 knock them down with the game's forced reaction instead, and tell the crowd with the game's
-explosion stimulus, and Task 52 checks it in the game; "Step 5b's fix", at the end, says why.
+explosion stimulus, and Task 52 checks it in the game; "Step 5b's fix", at the end, says why. During Task 52 the user
+asked for the overlay's Fun controls, which Task 53 makes and installs with the game running; "The Fun controls",
+at the end, says why.
 
 ---
 
@@ -115,12 +117,16 @@ explosion stimulus, and Task 52 checks it in the game; "Step 5b's fix", at the e
   commit, then replayed in a fresh clone from this plan's text: zero warnings, 450 tests, the files identical to the
   scratch clone's. The changed test was broken once per change: 3 mutations, all caught. The module compiles against
   the game's own scripts both without and with Codeware's, and a slip in `Explode` fails it both ways.
+- **The Fun controls, verified the same way:** Task 53 was written in the scratch clone on top of Task 51's commit: the
+  overlay's syntax checked, and the overlay run under Lua with CET's functions stubbed (`tools/plans/fun_check.lua`),
+  every Fun button clicked and each request checked, with the request file read, and left unread. Its file step,
+  applied from this plan's text to a clone of Task 51's commit, gave the file identical to the scratch clone's.
 - **Test counts:** 396 at the start. Then 403, 406 and 408 after Tasks 1 to 3, 412 after Task 5, and 414 after Task 8.
   Tasks 6, 7, 9 and 10 add none.
 - **What only Minecraft and the game can test:** the actor table against SkyCraft's real mod in Task 4, and the module
   and the NPCs in the game in Task 11; in Part 2, the hurts against SkyCraft's mod in Task 16, and combat in the game in
   Tasks 31 and 36; in Part 3, a real blast's hits and the health against SkyCraft's mod and CyberCraft Tweaks in Task
-  42, and blasts in the game in Tasks 48 and 52. All with the user.
+  42, blasts in the game in Tasks 48 and 52, and the Fun controls in Task 53. All with the user.
 - **The user:**
   - **does everything in Minecraft, the Modrinth App and the game:** starting and stopping them, loading, moving,
     keys, clicks and screenshots. Never drive their mouse or keyboard: ask, then wait for them to say they're done;
@@ -128,7 +134,8 @@ explosion stimulus, and Task 52 checks it in the game; "Step 5b's fix", at the e
   - **approves changes to their Minecraft instance:** Task 42 installs CyberCraft Tweaks 1.3.0 in place of 1.2.0.
 - **The game:** builds deploy only with `CP2077_DIR` set, which only the deploy steps set (Tasks 11, 31, 36, 48 and 52),
   with the game closed, and clear straight after. `mclink` needs the game closed too, since the game would hold the
-  mapping.
+  mapping. Task 53 alone installs with the game running, as the user chose: the overlay's file, copied, which nothing
+  holds.
 - **redscript:** a script that doesn't compile at the game's start shows a message box, and that run the mods' scripts
   don't load, the other mods' included. Task 6's offline compile runs the game's own compiler library on the module,
   with its message box off, before anything is deployed. Don't run the game's `engine/tools/scc.exe` by hand: on a
@@ -10656,7 +10663,7 @@ what and why.
   frame and settings; and the overlay.
 - **Task 48** is step 5b, in the game. It passed but for living NPCs' knockdowns, and found that the crowd doesn't
   panic: **Tasks 49 to 51** make step 5b's fix, and **Task 52** checks it in the game.
-- **Task 53** closes the spike.
+- **Task 53** makes the overlay's Fun controls, asked for during Task 52. **Task 54** closes the spike.
 
 Test counts: 440 at the start of Part 3. Then 444 after Task 38, 447 after Task 39, 448 after Task 40, and 450 after
 Task 45. Tasks 41, 43, 44, 46 and 47 add none, nor do step 5b's fix's Tasks 49 to 51: Task 49 changes a test.
@@ -10674,7 +10681,7 @@ Task 45. Tasks 41, 43, 44, 46 and 47 add none, nor do step 5b's fix's Tasks 49 t
 | `src/GameScript.*` | The module's three new calls, and V's health share and what `Push` found; then what `Explode` did |
 | `src/Requests.*`, `src/Status.*` | `explode`; the blasts line, Minecraft's health in the combat line, the bush rule in the ground line; then whether the forced knockdowns are off |
 | `src/Plugin.cpp`, `CMakeLists.txt` | 0.19.0: blasts, their hits and pushes in `Fight`, V's health share as build mode starts, `explode`, `set blastpower`, `set blastknock` and `set bushrule`. 0.19.1: the forced knockdowns on by default, and what each blast did in the log |
-| `tools/blockrender_hud/init.lua` | The blasts line, and "TNT 5 m ahead" |
+| `tools/blockrender_hud/init.lua` | The blasts line, and "TNT 5 m ahead"; then the Fun controls, and a queue for the requests |
 | `tests/` | `TestCombat`, `TestExport`, `TestLink`, `TestMcLinkScript`, `TestRequests` and `TestStatus` gain tests |
 
 ---
@@ -13612,7 +13619,7 @@ says `, the forced knockdowns off` when they're off, and nothing while they're o
 **Files:**
 - Modify: `src/Status.h`, `src/Status.cpp`, `tests/TestStatus.cpp`
 
-- [ ] **Step 1: Edit `tests/TestStatus.cpp`: the blasts line with the forced knockdowns off**
+- [x] **Step 1: Edit `tests/TestStatus.cpp`: the blasts line with the forced knockdowns off**
 
 ```cpp
 	link.blastKnock = true;
@@ -13632,7 +13639,7 @@ says `, the forced knockdowns off` when they're off, and nothing while they're o
 	report.link = link;
 	CHECK(Has(cpmc::FormatStatus(report), "blasts=on: 2 taken, blast power 1.00, the forced knockdowns off; the last at world "
 ```
-- [ ] **Step 2: Build and run the tests; the new one must fail**
+- [x] **Step 2: Build and run the tests; the new one must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -13642,7 +13649,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `FAIL StatusWritesBlasts`, then `450 test(s), 1 failure(s)`: the line still says nothing with them off.
 
-- [ ] **Step 3: Edit `src/Status.h`**
+- [x] **Step 3: Edit `src/Status.h`**
 
 ```cpp
 	bool        blastKnock = false;  // set blastknock 1: each NPC within reach gets the knockdown directly too
@@ -13650,7 +13657,7 @@ Expected: `FAIL StatusWritesBlasts`, then `450 test(s), 1 failure(s)`: the line 
 ```cpp
 	bool        blastKnock = true;   // set blastknock: each living NPC within reach knocked down by the game's forced reaction
 ```
-- [ ] **Step 4: Edit `src/Status.cpp`**
+- [x] **Step 4: Edit `src/Status.cpp`**
 
 ```cpp
 	                   aLink.blastKnock ? ", knockdowns applied directly too" : "",
@@ -13658,7 +13665,7 @@ Expected: `FAIL StatusWritesBlasts`, then `450 test(s), 1 failure(s)`: the line 
 ```cpp
 	                   aLink.blastKnock ? "" : ", the forced knockdowns off",
 ```
-- [ ] **Step 5: Build and run the tests; they must pass**
+- [x] **Step 5: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -13668,7 +13675,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `450 test(s), 0 failure(s)`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -13703,7 +13710,7 @@ game's forced reaction knocked a resident down. So `Explode`, after the attack a
 **Files:**
 - Modify: `scripts/BlockRender.reds`
 
-- [ ] **Step 1: Edit `scripts/BlockRender.reds`**
+- [x] **Step 1: Edit `scripts/BlockRender.reds`**
 
 ```swift
 // Minecraft's blasts (spike 6's Part 3): Explode knocks down what is within a blast's reach, as the game's knockdown
@@ -13835,7 +13842,7 @@ game's forced reaction knocked a resident down. So `Explode`, after the attack a
     return npc.IsMassive() || StatusEffectSystem.ObjectHasStatusEffectWithTag(npc, n"DismemberedLeg");
   }
 ```
-- [ ] **Step 2: Compile the module against the game's scripts, without and with Codeware**
+- [x] **Step 2: Compile the module against the game's scripts, without and with Codeware**
 
 ```bash
 cd /d/Cyberpunk-Minecraft/spikes/block-render && uv run --no-project python tools/check_reds.py E:/Cyberpunk2077 scripts | tail -1; \
@@ -13845,7 +13852,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && uv run --no-project python tool
 ```
 Expected: `compiled`, `without Codeware: exit 0` and `with Codeware: exit 0`.
 
-- [ ] **Step 3: Check that the compile catches a slip in `Explode`, without and with Codeware**
+- [x] **Step 3: Check that the compile catches a slip in `Explode`, without and with Codeware**
 
 ```bash
 cd /d/Cyberpunk-Minecraft/spikes/block-render && mkdir -p build/reds-slip \
@@ -13858,7 +13865,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && mkdir -p build/reds-slip \
 Expected: redscript's `[UNRESOLVED_METHOD]` at the slip's line, `BlockRender.reds:356:13`, then `failed` and
 `without Codeware: exit 1`; the same again, and `with Codeware: exit 1`.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -13880,7 +13887,7 @@ cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
 **Files:**
 - Modify: `src/GameScript.h`, `src/GameScript.cpp`, `src/Plugin.cpp`, `CMakeLists.txt`
 
-- [ ] **Step 1: Edit `src/GameScript.h`**
+- [x] **Step 1: Edit `src/GameScript.h`**
 
 ```cpp
 constexpr int32_t kModuleVersion = 6;  // BlockRenderNpcs.Version(), as this BlockRender needs it
@@ -13926,7 +13933,7 @@ struct BlastStart
 		kBlastImmune,
 		kBlastPanic,
 ```
-- [ ] **Step 2: Edit `src/GameScript.cpp`**
+- [x] **Step 2: Edit `src/GameScript.cpp`**
 
 ```cpp
 // In GameScript::Field's order: the fields List fills, those HideV fills and those Push fills, and their types.
@@ -13964,7 +13971,7 @@ std::optional<BlastStart> GameScript::Explode(const Vec3d& aCentre, double aReac
 		               FieldOf<bool>(*fields_[kBlastPanic], instance) };
 }
 ```
-- [ ] **Step 3: Edit `src/Plugin.cpp`**
+- [x] **Step 3: Edit `src/Plugin.cpp`**
 
 ```cpp
 // share as build mode starts. Minecraft's blasts knock down what they reach as the game's knockdown grenade does, their own
@@ -14044,7 +14051,7 @@ bool               g_blastKnock = true;  // set blastknock: each living NPC with
 		return Report(g_blastKnock ? "set blastknock 1: each living NPC within a blast's reach is knocked down by the game's forced reaction"
 		                           : "set blastknock 0: a blast knocks no NPC down; its attack, sound, own hits and push stay");
 ```
-- [ ] **Step 4: Edit `CMakeLists.txt`: version 0.19.1**
+- [x] **Step 4: Edit `CMakeLists.txt`: version 0.19.1**
 
 ```cmake
 project(BlockRender VERSION 0.19.0 LANGUAGES C CXX)
@@ -14052,7 +14059,7 @@ project(BlockRender VERSION 0.19.0 LANGUAGES C CXX)
 ```cmake
 project(BlockRender VERSION 0.19.1 LANGUAGES C CXX)
 ```
-- [ ] **Step 5: Build and run the tests; they must pass**
+- [x] **Step 5: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -14062,7 +14069,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `450 test(s), 0 failure(s)`.
 
-- [ ] **Step 6: Check that BlockRender imports nothing from PhysX**
+- [x] **Step 6: Check that BlockRender imports nothing from PhysX**
 
 ```bash
 DUMPBIN="$(ls "/c/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/"*/bin/Hostx64/x64/dumpbin.exe | head -1)"
@@ -14071,7 +14078,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && MSYS_NO_PATHCONV=1 "$DUMPBIN" -
 ```
 Expected: `0`.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -14101,7 +14108,7 @@ saves.
 **Files:**
 - Modify: `docs/spikes/2026-10-05-npcs-and-combat-results.md`
 
-- [ ] **Step 1: Deploy (the game must not be running)**
+- [x] **Step 1: Deploy (the game must not be running)**
 
 ```bash
 tasklist | grep -i -c "cyberpunk2077.exe"
@@ -14118,7 +14125,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default -DCP2
 ```
 Expected: `installed`. The second configure clears `CP2077_DIR` again.
 
-- [ ] **Step 2: In the game: the module and its natives**
+- [x] **Step 2: In the game: the module and its natives**
 
 Ask the user to start the `CyberCraft` instance, then the game, and to wait at the game's main menu. If a "REDScript
 compilation has failed" message box shows instead, ask the user to click OK and quit the game, and read redscript's log
@@ -14130,13 +14137,13 @@ grep -E "BlockRender|Codeware.Global|Compilation complete|ERROR" /e/Cyberpunk207
 Expected: the module's path and Codeware's among the files compiled, `Compilation complete`, and no `ERROR` line; in
 BlockRender's log, `BlockRender 0.19.1 loaded` and the seven natives added.
 
-- [ ] **Step 3: In the game: load, link, and combat on**
+- [x] **Step 3: In the game: load, link, and combat on**
 
 Ask the user to load the save on the busy pavement, and click Link. Then send `set combat 1`.
 Expected: in the log, `module: found BlockRenderNpcs version 7, its 13 functions, the 22 fields List fills, and
 BlockRender's 7 natives`; in the status, `blasts=on: 0 taken, blast power 0.50; none yet`.
 
-- [ ] **Step 4: In the game: the forced knockdowns**
+- [x] **Step 4: In the game: the forced knockdowns**
 
 Outside build mode, ask the user to face a few residents 4 to 6 m away, and click "TNT 5 m ahead". Expected:
 - in the log, `explosion at Minecraft …: a blast at world (…), reaching 8.0 m, N listed NPCs within it; its knockdown
@@ -14149,13 +14156,13 @@ Then send `set blastknock 0` (`set blastknock 0: a blast knocks no NPC down; its
 stay`) and again: `…; the forced knockdowns off; the crowd told, …`, nobody falls, and the status's blasts line says
 `the forced knockdowns off`. Then `set blastknock 1`.
 
-- [ ] **Step 5: In the game: TNT among residents**
+- [x] **Step 5: In the game: TNT among residents**
 
 Ask the user to set off TNT among residents in build mode, from slots 8 and 9 as in step 5b, standing back more than 8
 blocks. Expected: the log's blast hits and landings as in step 5b, the dead thrown, residents within reach who live
 knocked down, and the crowd fleeing. Ask the user what they saw.
 
-- [ ] **Step 6: In the game: other NPCs, if any are about**
+- [x] **Step 6: In the game: other NPCs, if any are about**
 
 If gangers, police or a drone are within reach of a blast, from TNT or "TNT 5 m ahead", note whether they fall, or the
 log counts them immune. Otherwise skip this step, and say so in the results.
@@ -14175,8 +14182,9 @@ Everything the steps above logged, for the results.
 - [ ] **Step 9: Record the results in `docs/spikes/2026-10-05-npcs-and-combat-results.md`**
 
 A "Step 5b's fix" section: each check above with its outcome and numbers: the forced knockdowns, with the log's counts
-and what the user saw; `set blastknock 0`; the crowd, and any police; the TNT; other NPCs, or that none were about; and
-anything that surprised. Update the spike's answer at the top.
+and what the user saw; `set blastknock 0`; the crowd, and any police; the TNT; other NPCs, or that none were about; the
+Fun controls, from Task 53; and anything that surprised. Update the spike's answer at the top, and add Minecraft's
+inventory and its game mode switcher under "Asked for, after Part 3" (the spec's "Asked for during step 5b's fix").
 
 - [ ] **Step 10: Commit**
 
@@ -14188,12 +14196,217 @@ cd /d/Cyberpunk-Minecraft && git add docs/spikes/2026-10-05-npcs-and-combat-resu
 
 ---
 
-### Task 53: Close the spike
+### Task 53: The overlay's Fun controls
+
+The spec's "The overlay's Fun controls", asked for during Task 52, after its Step 6, with the game running. The overlay
+(`tools/blockrender_hud/init.lua`) gains a "Fun" header after "More controls", whose buttons type commands into
+Minecraft's chat, one `mc` request each: Creative and Survival; golden apples, golden carrots, TNT and a flint and steel
+into the user's slots 6 to 9; blocks, tools and weapons into the selected slot, the crossbow and the bow with 64 arrows
+given; diamond armor on or off; and a heal. Every request of the overlay's now goes through a queue (`sendQueued`, each
+frame): the next is written only once BlockRender has read the last and deleted the file, so a button's commands go in
+order, about one a second, and quick clicks no longer replace each other; a line under the last request says how many
+wait.
+
+While planning, `fun_check.lua` (`tools/plans`) ran the overlay under Lua with CET's functions stubbed, clicking
+buttons and reading the request file as BlockRender does. Every Fun button, with Link and the NPCs' list button among
+them, gave its requests exactly and in order: 32 for 24 buttons. With the file left unread, only the first was written,
+and the line said 3 waited. Against the game's own status the overlay showed as before, and "TNT 5 m ahead" and Unlink
+went through the queue.
+
+Only the overlay changes, so Step 4 installs it with the game running, as the user chose: the one install that does,
+since nothing holds the overlay's file, as the game holds BlockRender's DLL. Task 52 then goes on from its Step 7, and
+its record takes this task's outcome.
+
+**Files:**
+- Modify: `tools/blockrender_hud/init.lua`
+
+- [ ] **Step 1: Edit `tools/blockrender_hud/init.lua`**
+
+```lua
+-- combat), and a line each for the last request's reply, build mode (F8) with its drive and whether V is hidden, the
+-- bodies, the NPCs, combat, Minecraft's blasts, and V. Two folded sections hold the rest: "More controls" (the drawing
+-- mode, Minecraft's HUD, commands typed into Minecraft, the drive log, the ground and its shapes, the NPCs' list, V's
+-- punch, V hidden or seen in build mode, and a blast ahead of V) and "Full status" (every status line, and the frame
+-- time).
+```
+```lua
+-- combat), and a line each for the last request's reply and the requests waiting to be sent, build mode (F8) with its
+-- drive and whether V is hidden, the bodies, the NPCs, combat, Minecraft's blasts, and V. Three folded sections hold the
+-- rest: "More controls" (the drawing mode, Minecraft's HUD, commands typed into Minecraft, the drive log, the ground and
+-- its shapes, the NPCs' list, V's punch, V hidden or seen in build mode, and a blast ahead of V), "Fun" (Minecraft's game
+-- mode, items for the hotbar and the hand, armor, and a heal, typed into Minecraft's chat) and "Full status" (every status
+-- line, and the frame time).
+```
+```lua
+-- Sends BlockRender a command. It reads blockrender.request in this folder once a second, once the line is whole.
+local function request(command)
+    local file = io.open("blockrender.request", "w")
+    if file ~= nil then
+        file:write(command, "\n")
+```
+```lua
+-- The Fun header's rows (spike 6's "The overlay's Fun controls"): each button's commands are typed into Minecraft's chat,
+-- one `mc` request each, in order. "In hand" is the hotbar slot Minecraft's player has selected, and "Your slots" those
+-- the user keeps these in: both replace what is there, since without Minecraft's inventory screen an item given past the
+-- hotbar is out of reach. Arrows are given, as a bow or a crossbow takes them from anywhere.
+local hand = "/item replace entity @s weapon.mainhand with minecraft:"
+
+local function wear(head, chest, legs, feet)
+    return {
+        "/item replace entity @s armor.head with minecraft:" .. head,
+        "/item replace entity @s armor.chest with minecraft:" .. chest,
+        "/item replace entity @s armor.legs with minecraft:" .. legs,
+        "/item replace entity @s armor.feet with minecraft:" .. feet,
+    }
+end
+
+local fun = {
+    { label = "Mode:", buttons = {
+        { label = "Creative", commands = { "/gamemode creative" } },
+        { label = "Survival", commands = { "/gamemode survival" } },
+    } },
+    { label = "Your slots:", buttons = {
+        { label = "Golden apples (6)", commands = { "/item replace entity @s hotbar.5 with minecraft:golden_apple 64" } },
+        { label = "Golden carrots (7)", commands = { "/item replace entity @s hotbar.6 with minecraft:golden_carrot 64" } },
+        { label = "TNT (8)", commands = { "/item replace entity @s hotbar.7 with minecraft:tnt 64" } },
+        { label = "Flint and steel (9)", commands = { "/item replace entity @s hotbar.8 with minecraft:flint_and_steel" } },
+    } },
+    { label = "Blocks in hand:", buttons = {
+        { label = "Stone bricks", commands = { hand .. "stone_bricks 64" } },
+        { label = "Oak planks", commands = { hand .. "oak_planks 64" } },
+        { label = "Bricks", commands = { hand .. "bricks 64" } },
+        { label = "White concrete", commands = { hand .. "white_concrete 64" } },
+        { label = "Glass", commands = { hand .. "glass 64" } },
+    } },
+    { label = "Tools in hand:", buttons = {
+        { label = "Pickaxe", commands = { hand .. "diamond_pickaxe" } },
+        { label = "Axe", commands = { hand .. "diamond_axe" } },
+        { label = "Shovel", commands = { hand .. "diamond_shovel" } },
+    } },
+    { label = "Weapons in hand:", buttons = {
+        { label = "Sword", commands = { hand .. "diamond_sword" } },
+        { label = "Mace", commands = { hand .. "mace" } },
+        { label = "Trident", commands = { hand .. "trident" } },
+        { label = "Crossbow", commands = { hand .. "crossbow", "/give @s minecraft:arrow 64" } },
+        { label = "Bow", commands = { hand .. "bow", "/give @s minecraft:arrow 64" } },
+    } },
+    { label = "Armor:", buttons = {
+        { label = "Diamond armor", commands = wear("diamond_helmet", "diamond_chestplate", "diamond_leggings", "diamond_boots") },
+        { label = "No armor", commands = wear("air", "air", "air", "air") },
+    } },
+    { label = "Health:", buttons = {
+        { label = "Heal", commands = { "/effect give @s minecraft:instant_health 1 3" } },
+    } },
+}
+
+-- Requests not yet sent, oldest first. BlockRender reads blockrender.request in this folder once a second, once its line
+-- is whole, and deletes it: the next is written only once it's gone, so no click overwrites one not yet read.
+local queued = {}
+
+-- Asks BlockRender for something: queued, and written by sendQueued.
+local function request(command)
+    table.insert(queued, command)
+end
+
+-- Writes the oldest queued request, once BlockRender has read the last.
+local function sendQueued()
+    if #queued == 0 then
+        return
+    end
+    local unread = io.open("blockrender.request", "r")
+    if unread ~= nil then
+        unread:close()
+        return
+    end
+    local file = io.open("blockrender.request", "w")
+    if file ~= nil then
+        file:write(table.remove(queued, 1), "\n")
+```
+```lua
+registerForEvent("onUpdate", function(delta)
+```
+```lua
+registerForEvent("onUpdate", function(delta)
+    sendQueued()
+```
+```lua
+            ImGui.Text("Last request: " .. reply)
+```
+```lua
+            ImGui.Text("Last request: " .. reply)
+        end
+        if #queued > 0 then
+            ImGui.Text(string.format("Requests waiting to be sent: %d, about one a second", #queued))
+```
+```lua
+        if ImGui.CollapsingHeader("Full status") then
+```
+```lua
+        if ImGui.CollapsingHeader("Fun") then
+            for _, row in ipairs(fun) do
+                ImGui.Text(row.label)
+                for _, button in ipairs(row.buttons) do
+                    ImGui.SameLine()
+                    if ImGui.Button(button.label) then
+                        for _, command in ipairs(button.commands) do
+                            request("mc " .. command)
+                        end
+                    end
+                end
+            end
+        end
+
+        if ImGui.CollapsingHeader("Full status") then
+```
+- [ ] **Step 2: Check the overlay's syntax**
+
+```bash
+cd /d/Cyberpunk-Minecraft/spikes/block-render && luac -p tools/blockrender_hud/init.lua && echo ok
+```
+Expected: `ok`.
+
+- [ ] **Step 3: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "npcs-and-combat: the overlay's Fun controls switch Minecraft's game mode and give items for the hotbar, the hand and armor, and a heal, through a request queue that loses no click" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+- [ ] **Step 4: In the game: the overlay installed, with the game running**
+
+```bash
+H=/e/Cyberpunk2077/bin/x64/plugins/cyber_engine_tweaks/mods/blockrender_hud
+cp /d/Cyberpunk-Minecraft/spikes/block-render/tools/blockrender_hud/init.lua "$H/init.lua" \
+  && cmp /d/Cyberpunk-Minecraft/spikes/block-render/tools/blockrender_hud/init.lua "$H/init.lua" && echo installed
+```
+Expected: `installed`. Only the overlay's file: BlockRender's DLL and the module stay as Task 52's Step 1 installed
+them. Then ask the user to open CET's overlay and click Reload All Mods. Expected: BlockRender's window comes back, with
+"Fun" after "More controls".
+
+- [ ] **Step 5: In the game: the Fun buttons**
+
+Outside build mode, with CET's overlay open, ask the user to click in "Fun", letting each button's requests go before
+the next (the waiting line gone): Creative, then Survival; "TNT (8)"; then, with a hotbar slot selected whose item may
+go (the build line names it), Stone bricks, Pickaxe and Bow; Diamond armor, then No armor; and Heal. Then to look in
+build mode, and to try any other buttons they like. Expected, in Minecraft's log (Task 48's grep), Minecraft's replies:
+- `Set own game mode to Creative Mode`, then `Set own game mode to Survival Mode`;
+- for each slot filled, `Replaced 1 slot(s) on ItzBloxy with [TNT]`, `[Stone Bricks]`, `[Diamond Pickaxe]`, `[Bow]`;
+  then `Gave 64 [Arrow] to ItzBloxy`;
+- four such lines for the diamond armor's pieces, then four for the air that takes them off;
+- `Applied effect Instant Health to ItzBloxy`.
+
+In BlockRender's log, `typed: /…` for each command, and none `not typed`. In build mode: the TNT in slot 8, the bow in
+the selected slot, the armor bar while the armor was on, and the hearts full after Heal. Ask the user what they saw.
+
+---
+
+### Task 54: Close the spike
 
 - [ ] **Step 1: The spike's answer, and "How Part 3 went"**
 
 At the top of the results, the spike's answer to its question, with Part 3's: whether Minecraft's explosions knock down
-and throw NPCs and push cars and props, and what is left. At the end of this plan, after "Step 5b's fix":
+and throw NPCs and push cars and props, and what is left. At the end of this plan, after "The Fun controls":
 "How Part 3 went", what ran as written, what changed, and what steps 5a and 5b found.
 
 - [ ] **Step 2: Commit**
@@ -14553,3 +14766,33 @@ game's `Explosion` stimulus, from the NPC nearest the blast, with V as its insti
 Whether the forced knockdown, sent as the blast's attack starts, plays out, or the attack's hits cut it short; how other
 NPCs than residents take it, if any are about; and how the crowd, and the police, take the stimulus with V as its
 instigator. Task 52 opens with them.
+
+## The Fun controls
+
+During Task 52, with step 5b's fix's checks passed, the user asked for two things (the spec's "Asked for during step
+5b's fix"): Minecraft's inventory and its game mode switcher in build mode, which wait for a spike of their own; and a
+Fun header in the overlay, to switch Minecraft's game mode and restock without the agent. This records what the second
+did to the plan.
+
+### What changed in the plan
+
+- **Task 53,** after Task 52's Step 6: the overlay's Fun controls and its request queue, installed with the game
+  running. Task 52 goes on from its Step 7 after it, and its record takes Task 53's outcome, and the inventory and the
+  switcher under "Asked for, after Part 3".
+- **The close is Task 54,** where Task 53 was.
+
+### What was checked
+
+- For the inventory and the switcher: the user's Minecraft 26.3 (`Options`' default bindings), SkyCraft 0.1.2's
+  `InputBridge` (`javap`), and the game's `inputUserMappings.xml`. For the Fun controls: BlockRender's request reading
+  (`RunRequest`: once a second, deleted as read) and command typing (`CommandTyper`: queued, typed one at a time).
+- Task 53's code, in the scratch clone on Task 51's commit: the overlay's syntax; and the overlay under Lua with CET's
+  functions stubbed (`fun_check.lua`), every Fun button clicked, with Link and the NPCs' list button: 32 requests,
+  exact and in order; with the request file left unread, only the first written, and "Requests waiting to be sent: 3";
+  against the game's own status, the overlay as before. Then Task 53's file step applied from this plan's text to a
+  clone of Task 51's commit: the file identical to the scratch clone's.
+
+### Left to the game
+
+Minecraft's replies to each kind of command, typed through its chat while linked; the items where they're meant to be in
+build mode; and CET reloading the overlay with the game running.

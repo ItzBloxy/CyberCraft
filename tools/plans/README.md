@@ -100,7 +100,14 @@ and added `assemble3.py`. Their paths point at that session's scratchpad, where 
   own on the task before's commit first, as `p3-t42` was put on `p3-t41`'s.
 - **`assemble3.py`** puts a generated part after Task 37 and before "Found while planning", brings the plan's header and
   "Before you start" up to Part 3, and adds "Found while planning Part 3" at the end. **`assemble_fix.py`** does the
-  same for step 5b's fix: its tasks after Task 48, the close renumbered, and "Step 5b's fix" at the end.
+  same for step 5b's fix: its tasks after Task 48, the close renumbered, and "Step 5b's fix" at the end; and
+  **`assemble_fun.py`** for the overlay's Fun controls: Task 53 before the close, renumbered 54, and "The Fun controls"
+  at the end.
+- **`fun_check.lua`** runs the overlay's `init.lua` under Lua 5.4 with CET's functions stubbed, in a folder holding a
+  `status.txt`, and plays BlockRender's side of `blockrender.request`, reading and deleting it each frame:
+  `lua fun_check.lua <init.lua> show` prints what the overlay shows, with "More controls" and "Fun" open;
+  `click <label>…` clicks those buttons and prints each request written, in order; `hold <label>…` first leaves the
+  file unread for 5 frames, and prints it and the waiting line.
 
 A step whose title starts with "Write", "Edit", "Delete" or "Copy" is a file step to all of these tools: a step that
 records results by hand is titled "Record …".
