@@ -43,8 +43,8 @@ stay, and the blades' heat comes back after build mode. The overlay's Fun contro
 user switch Minecraft's game mode and restock without the agent.
 
 **What is left:**
-- **Minecraft's inventory and its game mode switcher** in build mode, asked for during step 5b's fix's check, for a spike
-  of their own ("Asked for, after Part 3");
+- **Minecraft's inventory and its game mode switcher** in build mode, asked for during step 5b's fix's check, for a
+  spike of their own ("Asked for, after Part 3");
 - **Minecraft's health back to V:** it goes one way, into Minecraft as build mode starts, as the user chose;
 - **our Immortal,** which can't work for the user's V (Part 2): the damage wrap stays V's only guard in build mode;
 - **solid NPCs and props, and NPCs' routing,** which this spike left out from the start.

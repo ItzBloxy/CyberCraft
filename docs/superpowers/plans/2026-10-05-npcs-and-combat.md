@@ -14417,7 +14417,7 @@ cd /d/Cyberpunk-Minecraft && git add docs \
        -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
 ```
 
-- [ ] **Step 3: Finish the branch**
+- [x] **Step 3: Finish the branch**
 
 Use superpowers:finishing-a-development-branch. The user has chosen a local fast-forward merge of the spike's branch
 into `main` each time so far: ask again. Ask before deleting branch `spike/player-puppeting` (spike 2's handoff).
