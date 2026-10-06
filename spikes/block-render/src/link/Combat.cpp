@@ -35,6 +35,9 @@ double Window(double aTickMs)
 	const double tickMs = aTickMs >= 1.0 && aTickMs <= 1000.0 ? aTickMs : 50.0;
 	return kHurtTicks * tickMs / 1000.0;
 }
+
+// The set-health flag is a bit of its own, beside SkyCraft's blocked and power attack flags.
+static_assert((kHurtSetHealth & (proto::kHurtBlockedInSkyrim | proto::kHurtPowerAttack)) == 0);
 }
 
 const char* HitDropName(HitDrop aDrop)
@@ -302,5 +305,64 @@ std::optional<bool> VSwitch::Frame(bool aWanted, bool aVFound, double aNow)
 		return false;
 	}
 	return std::nullopt;
+}
+
+std::optional<Blast> AcceptBlast(const proto::McEvent& aEvent, double aNow)
+{
+	if (!std::isfinite(aEvent.a) || !std::isfinite(aEvent.b) || !std::isfinite(aEvent.c) || !std::isfinite(aEvent.d) || aEvent.d <= 0.0f)
+	{
+		return std::nullopt;
+	}
+	Blast blast;
+	blast.centre = WorldFromMc({ aEvent.a, aEvent.b, aEvent.c });
+	blast.reach = 2.0 * std::min(double(aEvent.d), kBlastRadiusCap);
+	blast.at = aNow;
+	return blast;
+}
+
+void Blasts::Add(const Blast& aBlast)
+{
+	recent_.push_back(aBlast);
+	++count_;
+}
+
+std::optional<Blast> Blasts::HitOn(const Vec3d& aFeet, double aNow)
+{
+	for (auto blast = recent_.rbegin(); blast != recent_.rend(); ++blast)
+	{
+		const double after = aNow - blast->at;
+		const double distance = std::hypot(aFeet.x - blast->centre.x, aFeet.y - blast->centre.y, aFeet.z - blast->centre.z);
+		if (after >= 0.0 && after <= kBlastWindow && distance <= blast->reach)
+		{
+			++blast->hits;
+			return *blast;
+		}
+	}
+	return std::nullopt;
+}
+
+std::vector<Blast> Blasts::Pushes(double aNow)
+{
+	std::vector<Blast> due;
+	std::erase_if(recent_, [&](const Blast& aBlast) {
+		if (aNow - aBlast.at < kPushDelay)
+		{
+			return false;
+		}
+		due.push_back(aBlast);
+		return true;
+	});
+	return due;
+}
+
+proto::InputEvent HealthInput(double aShare)
+{
+	proto::InputEvent input{};
+	input.type = proto::kInHurt;
+	input.code = proto::kHurtOther;
+	input.a = 0;
+	input.b = std::isfinite(aShare) ? int32_t(std::lround(std::clamp(aShare, 0.0, 1.0) * 10000.0)) : 0;
+	input.c = int32_t(kHurtSetHealth);
+	return input;
 }
 }

@@ -23,6 +23,18 @@ proto::McEvent Hit(uint32_t aFormId, float aDamage, float aKnockback = 0.4f, boo
 	return event;
 }
 
+// Minecraft's blast at aX aY aZ (its axes), of radius aRadius.
+proto::McEvent Explosion(float aX, float aY, float aZ, float aRadius)
+{
+	proto::McEvent event{};
+	event.type = proto::kEvExplosion;
+	event.a = aX;
+	event.b = aY;
+	event.c = aZ;
+	event.d = aRadius;
+	return event;
+}
+
 // gamedataAttackType's values in the game 2.31.
 constexpr int32_t kQuickMelee = 9;
 constexpr int32_t kStrongMelee = 12;
@@ -241,4 +253,85 @@ TEST(CombatSwitchesVsWeaponAndMeshesWhileWanted)
 	CHECK(!hide.Frame(true, true, 1.9).has_value());
 	CHECK(hide.Frame(false, true, 2.0) == std::optional<bool>(false));
 	CHECK(!hide.Frame(false, true, 2.6).has_value());
+}
+
+TEST(CombatTakesMinecraftsBlastsIntoTheGamesAxes)
+{
+	// TNT at Minecraft 620.5 6.25 2007.5, radius 4: its centre in the world's axes (x, -z, y), and a reach of twice the
+	// radius, as SkyCraft's.
+	const std::optional<Blast> blast = AcceptBlast(Explosion(620.5f, 6.25f, 2007.5f, 4.0f), 12.0);
+	CHECK(blast.has_value());
+	CHECK_NEAR(blast ? blast->centre.x : 0.0, 620.5, 1e-9);
+	CHECK_NEAR(blast ? blast->centre.y : 0.0, -2007.5, 1e-9);
+	CHECK_NEAR(blast ? blast->centre.z : 0.0, 6.25, 1e-9);
+	CHECK_NEAR(blast ? blast->reach : 0.0, 8.0, 1e-9);
+	CHECK_NEAR(blast ? blast->at : 0.0, 12.0, 1e-9);
+	CHECK_EQ(blast ? blast->hits : 1u, 0u);
+	// A radius past kBlastRadiusCap is held to it: TNT summoned with an explosion power of 100 reaches 32 m, not 200.
+	CHECK_NEAR(AcceptBlast(Explosion(620.5f, 6.25f, 2007.5f, 100.0f), 12.0).value_or(Blast{}).reach, 32.0, 1e-9);
+	// No radius, or a centre or radius that isn't finite: no blast.
+	CHECK(!AcceptBlast(Explosion(620.5f, 6.25f, 2007.5f, 0.0f), 12.0).has_value());
+	CHECK(!AcceptBlast(Explosion(620.5f, 6.25f, 2007.5f, std::numeric_limits<float>::quiet_NaN()), 12.0).has_value());
+	CHECK(!AcceptBlast(Explosion(std::numeric_limits<float>::infinity(), 6.25f, 2007.5f, 4.0f), 12.0).has_value());
+}
+
+TEST(CombatCountsHitsWithinABlastsWindowAndReach)
+{
+	Blasts blasts;
+	blasts.Add(*AcceptBlast(Explosion(0.0f, 0.0f, 0.0f, 4.0f), 0.0));  // at the world's origin, reach 8
+	// An NPC 7.9 m from the centre, hit 0.1 s after the blast: one of its hits. 8.1 m away: not.
+	const std::optional<Blast> hit = blasts.HitOn({ 7.9, 0.0, 0.0 }, 0.1);
+	CHECK(hit.has_value());
+	CHECK_EQ(hit ? hit->hits : 0u, 1u);
+	CHECK(!blasts.HitOn({ 8.1, 0.0, 0.0 }, 0.1).has_value());
+	// The reach is straight-line, height included: 6 east and 6 up is 8.49 m away. Exactly 8 is within it.
+	CHECK(!blasts.HitOn({ 6.0, 0.0, 6.0 }, 0.1).has_value());
+	CHECK(blasts.HitOn({ 0.0, 8.0, 0.0 }, 0.1).has_value());
+	// 0.15 s after the blast still counts; later doesn't, and nor does a hit from before it.
+	CHECK(blasts.HitOn({ 1.0, 0.0, 0.0 }, 0.15).has_value());
+	CHECK(!blasts.HitOn({ 1.0, 0.0, 0.0 }, 0.16).has_value());
+	CHECK(!blasts.HitOn({ 1.0, 0.0, 0.0 }, -0.01).has_value());
+	// Of two blasts, the newer counts the hit.
+	blasts.Add(*AcceptBlast(Explosion(0.0f, 0.0f, 0.0f, 4.0f), 0.125));
+	const std::optional<Blast> newer = blasts.HitOn({ 1.0, 0.0, 0.0 }, 0.13);
+	CHECK(newer.has_value());
+	CHECK(newer && newer->at == 0.125 && newer->hits == 1);
+	CHECK_EQ(blasts.Count(), uint64_t(2));
+}
+
+TEST(CombatPushesEachBlastOnceAQuarterSecondAfter)
+{
+	Blasts blasts;
+	blasts.Add(*AcceptBlast(Explosion(1.0f, 2.0f, 3.0f, 4.0f), 0.0));
+	blasts.HitOn({ 1.0, -3.0, 2.0 }, 0.0625);
+	blasts.HitOn({ 2.0, -3.0, 2.0 }, 0.125);
+	blasts.Add(*AcceptBlast(Explosion(4.0f, 5.0f, 6.0f, 3.0f), 0.125));
+	CHECK(blasts.Pushes(0.24).empty());
+	// The first's push, a quarter second after it, with its two hits; then the second's.
+	const std::vector<Blast> first = blasts.Pushes(0.25);
+	CHECK_EQ(first.size(), size_t(1));
+	CHECK_NEAR(first.empty() ? 0.0 : first[0].reach, 8.0, 1e-9);
+	CHECK_EQ(first.empty() ? 0u : first[0].hits, 2u);
+	CHECK(blasts.Pushes(0.3).empty());  // once
+	const std::vector<Blast> second = blasts.Pushes(0.375);
+	CHECK_EQ(second.size(), size_t(1));
+	CHECK_NEAR(second.empty() ? 0.0 : second[0].reach, 6.0, 1e-9);
+	CHECK(blasts.Pushes(5.0).empty());
+	CHECK_EQ(blasts.Count(), uint64_t(2));
+}
+
+TEST(CombatSetsMinecraftsHealthThroughCyberCraftTweaks)
+{
+	// V's health share, for Minecraft's player: kInHurt of no damage, so SkyCraft's own hurtPlayer leaves it, with
+	// CyberCraft Tweaks' flag, the share x 10,000 in b.
+	const proto::InputEvent half = HealthInput(0.5);
+	CHECK_EQ(half.type, uint16_t(proto::kInHurt));
+	CHECK_EQ(half.code, uint16_t(proto::kHurtOther));
+	CHECK_EQ(half.a, 0);
+	CHECK_EQ(half.b, 5000);
+	CHECK_EQ(half.c, int32_t(kHurtSetHealth));
+	CHECK_EQ(HealthInput(0.12345).b, 1235);  // rounded
+	CHECK_EQ(HealthInput(1.5).b, 10000);     // held to 0 to 1
+	CHECK_EQ(HealthInput(-0.5).b, 0);
+	CHECK_EQ(HealthInput(std::numeric_limits<double>::quiet_NaN()).b, 0);
 }

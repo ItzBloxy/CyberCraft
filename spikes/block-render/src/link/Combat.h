@@ -6,11 +6,14 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <vector>
 
 // Combat both ways (spike 6's "Part 2"), the parts that don't need the game: which of Minecraft's hits on NPCs count, what
 // each starts at, and what the game's damage pipeline made of it; V's hurts as SkyCraft's kInHurt, summed so that
 // Minecraft takes them all; when Minecraft's death kills V; and when V's god mode, V's unarmed weapon and V's hidden
-// meshes go on and off. Pure: the tests give it hits and hurts of their own.
+// meshes go on and off. Minecraft's blasts (spike 6's "Part 3"): where each is in the game, which hits are its own, and
+// when its push is due; and V's health share for Minecraft's player as build mode starts. Pure: the tests give it hits,
+// hurts and blasts of their own.
 namespace cpmc::link
 {
 constexpr double kHitCap = 1000.0;         // Minecraft's damage, at most: /kill on a stand-in sends 3.4e38
@@ -18,6 +21,12 @@ constexpr double kHitPower = 0.5;          // set hitpower's default: a hit star
 constexpr double kStrongKnockback = 0.45;  // SkyCraft staggers above this knockback, or on a crit, comparing floats
 constexpr double kDeathWindow = 2.0;       // seconds after build mode ends that Minecraft's death still kills V
 constexpr int    kHurtTicks = 11;          // Minecraft's ticks between kInHurts: within 10 it takes only the excess
+constexpr double kBlastPower = 0.5;        // set blastpower's default: a blast hit starts at V's punch x damage^0.5
+constexpr double kBlastWindow = 0.15;      // seconds after a blast that Minecraft's hits within its reach are its own
+constexpr double kPushDelay = 0.25;        // seconds after a blast that it pushes: the NPCs it killed are ragdolls by then
+constexpr double kBlastRadiusCap = 16.0;   // Minecraft's radius, at most: TNT's is 4, a charged creeper's 6
+constexpr uint32_t kHurtSetHealth = 0x100;  // CyberCraft Tweaks 1.3.0: a kInHurt of no damage that sets Minecraft's
+                                            // player's health to b / 10,000 of its max
 
 // A hit of Minecraft's on an NPC, as it's applied.
 struct NpcHit
@@ -178,4 +187,39 @@ private:
 	bool   on_ = false;
 	double onAt_ = 0.0;     // when on was last called
 };
+
+// One of Minecraft's blasts, in the game's terms.
+struct Blast
+{
+	Vec3d    centre;       // world axes
+	double   reach = 0.0;  // metres from the centre, straight-line: twice Minecraft's radius, as SkyCraft's
+	double   at = 0.0;     // when it came, seconds
+	uint32_t hits = 0;     // Minecraft's hits that are its own, so far
+};
+
+// A kEvExplosion at aNow as a blast: its centre, Minecraft's a, b and c, in world axes; its reach twice its radius, d, held
+// to kBlastRadiusCap. Nothing if the centre or the radius isn't finite, or the radius isn't over 0.
+std::optional<Blast> AcceptBlast(const proto::McEvent& aEvent, double aNow);
+
+// The last moments' blasts: which of Minecraft's hits are a blast's own, and when each blast's push is due.
+class Blasts
+{
+public:
+	void Add(const Blast& aBlast);
+	// The blast that Minecraft's hit at aNow, on an NPC whose last listed feet are aFeet (world axes), is the own hit of: the
+	// newest that came within kBlastWindow before aNow, with aFeet within its reach, its hit counted. Nothing if none.
+	std::optional<Blast> HitOn(const Vec3d& aFeet, double aNow);
+	// The blasts whose push is due at aNow, kPushDelay after each, oldest first, each once; they're forgotten then.
+	std::vector<Blast> Pushes(double aNow);
+	uint64_t           Count() const { return count_; }  // blasts since the start
+
+private:
+	std::vector<Blast> recent_;  // not pushed yet, oldest first
+	uint64_t           count_ = 0;
+};
+
+// V's health share for Minecraft's player, through CyberCraft Tweaks 1.3.0: kInHurt, kind other, with no damage (a = 0, so
+// SkyCraft's own hurtPlayer leaves it, and so does a SkyCraft without the mod), b = aShare x 10,000 rounded and held to 0 to
+// 10,000, and c = kHurtSetHealth.
+proto::InputEvent HealthInput(double aShare);
 }
