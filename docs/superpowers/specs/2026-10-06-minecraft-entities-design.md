@@ -4,7 +4,8 @@ Date: 2026-10-06. Status: agreed with the user section by section in the brainst
 approaches that the user asked for ("Decisions from the brainstorm"). "Found while writing", near the end, lists what
 writing it out added to what was agreed. Then revised after a deep self-review, which checked each claim against its
 source and walked through step 0 and run A as the user would play them: "Changes from the deep review", at the end,
-lists what changed and what was checked. The sections above already include those changes.
+lists what changed and what was checked. Planning Part 1 settled more, which "Changes while planning Part 1" lists.
+The sections above already include all of those changes.
 
 ## Purpose
 
@@ -280,8 +281,9 @@ docs/superpowers/specs/2026-10-06-minecraft-entities-design.md   this file
 docs/superpowers/plans/2026-10-06-minecraft-entities.md          the plan
 docs/spikes/2026-10-06-minecraft-entities-results.md             the results
 spikes/block-render/
-  src/link/SceneMessages.*     kRenTexture and kRenScene, checked against their layouts (pure)
-  src/link/WorldTable.*        the world-entity table, copied under its sequence lock and checked (pure)
+  src/link/Messages.*          + kRenTexture and kRenScene, checked against their layouts (pure)
+  src/link/Rings.*             + the world-entity table, copied under its sequence lock (pure)
+  src/link/WorldTable.*        the world-entity table's records and outline, checked (pure)
   src/entities/Entities.*      the textures, the newest scene and world entities, and each frame's geometry (pure)
   src/entities/WorldShapes.*   items, cubes, arrows, tridents, cracks and the outline as triangles (pure)
   src/render/EntityTextures.*  where each texture goes in the one buffer, and when it grows (pure)
@@ -300,9 +302,9 @@ The names are proposals; the plan settles them.
 
 ## Build
 
-- **The libraries:** `render_core` gains the pure parts (`link/SceneMessages`, `link/WorldTable`, `entities/`,
-  `render/EntityTextures`, `render/Snapshots`), so `mclink` and the tests use them; `render_runtime` keeps the
-  renderer.
+- **The libraries:** `render_core` gains the pure parts (`link/WorldTable`, `entities/`, `render/EntityTextures`,
+  `render/Snapshots`, and the additions to `link/Messages` and `link/Rings`), so `mclink` and the tests use them;
+  `render_runtime` keeps the renderer.
 - **The versions:** step A deploys 0.20.0 and step B 0.21.0, in the log line and in `Query`. Module version 7 stays: no
   redscript changes.
 - **CyberCraft Tweaks 1.4.0,** step C only, built by its own `build.sh` with the JDK alone, as in spikes 5 and 6, and
@@ -340,9 +342,12 @@ treats any position, UV or flag as data, and a NaN only drops its triangle.
 
 ### The world-entity table
 
-`ReadWorldTable` copies the table when `seq` is even, then reads `seq` again: the copy stands if it hasn't changed, and
-after 3 tries the last good copy stays. The count is at most 160, the kinds 1 to 6, and the floats finite; a record
-that fails is left out and counted. It goes to the sink each update.
+`ReadWorldEntities` copies the table when `seq` is even, then reads `seq` again: the copy stands if it hasn't changed,
+64 tries at most, as `ReadMcState` copies Minecraft's state. If none stands, the link keeps the last good table.
+`CheckWorldTable` reads at most 160 records, whatever the count says, keeps those whose kind is 1 to 6 and whose
+numbers are finite, and counts the rest as left out; it takes the outline when `hasSelection` is set and its numbers are
+finite. The link reads the table each update while Minecraft is in its world, and hands the sink the table every
+update.
 
 ### Coming and going
 
@@ -351,7 +356,9 @@ that fails is left out and counted. It goes to the sink each update.
   SkyCraft reuses after its clear. They're counted (`beforeAtlas`).
 - **`kRenClearAll`** drops the textures (in `Entities` and on the GPU) and the scene.
 - **Minecraft gone or out of its world** (its heartbeat, or `kMcInWorld` clear): the scene and world entities are
-  emptied, so nothing stale is drawn. The textures stay; a new Minecraft process starts with its own clear.
+  emptied, so nothing stale is drawn. The link empties the table it hands on; `Entities` empties the scene, which
+  Minecraft stops sending when it leaves its world. The textures stay; a new Minecraft process starts with its own
+  clear.
 - **Unlink, the Clear request, and drawing switched off** keep the textures, since SkyCraft wouldn't send them again.
   Only a clear from Minecraft drops them.
 
@@ -499,11 +506,14 @@ dumped ground (`ground city`, so things stand on it) in creative, then makes eac
 only the particles in its view:
 - a pig and a villager with a profession and a level;
 - a spider and a blaze, AI off;
-- a falling sand, with a marker entity tagged `sp7b` where it lands, since it lands as a block;
+- a falling sand, dropped from 12 blocks up so a scene catches it in the air, with a marker entity tagged `sp7b` where
+  it lands, since it lands as a block;
 - a chest and a banner with patterns, each with a marker;
 - a dropped item, a dropped grass block and an arrow;
 - a firework and a splash potion, for translucent particles;
-- last, 12 blocks away, a lit TNT: a TNT's power is 4, and its blast hurts up to twice that, so it spares the rest.
+- last, a lit TNT 18 blocks ahead on a stone block, at least 11 blocks from the rest: a TNT's power is 4, and its
+  blast hurts up to twice that, so it spares them. It flashes white every quarter second, so the scene is printed
+  thrice a quarter second apart, then just after its blast.
 
 It records:
 - **the scenes:** batches (texture, flags, count, first), vertices, those with block light 15, translucent batches, MB a
@@ -636,8 +646,8 @@ A new status line, `entities`, shown by the overlay:
 - **`ParseTexture` and `ParseScene`:** good payloads; a short header, short pixels, a zero or oversized side, a batch
   past the vertices, a count not a multiple of 3, a non-finite origin, too many batches or vertices, each rejected with
   its reason.
-- **`ReadWorldTable`:** a good table; a torn copy (`seq` odd, or changed) keeping the last; a bad kind, count or NaN
-  left out.
+- **`ReadWorldEntities` and `CheckWorldTable`:** a good table; a copy mid-write refused, and the link keeping the last;
+  a bad kind, count or NaN left out.
 - **`Entities`:** the frame's draws from a scene and a table, in order and by kind; the origin with no scene; textures
   and the scene dropped at a clear but kept at Unlink and the Clear request; Minecraft gone empties the scene and table.
 - **`WorldShapes`:** each kind's triangles against hand-worked corners (an item at yaw 90, a cube's top tint, an arrow
@@ -701,7 +711,7 @@ Runs A and B, as "The steps" has them.
   7 free.
 - **Minecraft extracts only the particles in its view,** so step 0's stand-in V looks at each thing as it's made. In
   the game Minecraft's FOV (90°) is wider than the game's, so nothing on screen is lost.
-- **A TNT hurts up to 8 blocks away** (twice its power of 4), so step 0's goes 12 blocks from the rest.
+- **A TNT hurts up to 8 blocks away** (twice its power of 4), so step 0's goes at least 11 blocks from the rest.
 - **Build mode doesn't forward Q,** Minecraft's drop key (only WASD, Space, Left Shift, Left Ctrl, 1 to 9 and the mouse
   buttons): run A's dropped items come from the Spawn row.
 - **Combat off keeps Minecraft's blasts and death out of the game** (spike 6's `set combat`), so runs need no more
@@ -800,3 +810,29 @@ through step 0 and run A as the user would play them. One design fault turned up
 - The villager's batch order with real texture ids (step 0).
 - 26.3's data for villagers, fireworks and potions in `/summon` (the plan checks each against the jar).
 - How the game takes two lists of ours in one frame (run B).
+
+## Changes while planning Part 1
+
+The plan is written part by part, as spike 6's was. Part 1 is step 0 alone: what the link takes, and `mclink`'s
+report. Parts 2 and 3 (steps A and B, and C if run A needs it) are planned from step 0's results, which settle the
+sizes, flags and textures they build on. Planning Part 1 settled these:
+1. **The parsers live in `link/Messages`,** beside the section and atlas parsers, as `ParseTexture`, `ParseScene` and
+   `SceneVertices`, not in a new `link/SceneMessages`.
+2. **The table's read lives in `link/Rings`,** as `ReadWorldEntities` beside `ReadMcState`, with its 64 tries rather
+   than 3; its checks live in `link/WorldTable` (`CheckWorldTable`, `WorldKindName`).
+3. **The link empties the table,** not `Entities`: it reads the table each update while Minecraft is in its world, keeps
+   the last good one when it finds it mid-write, and hands the sink the table every update, empty otherwise. The
+   scene's emptying stays with `Entities` (Part 2), since the link has no scene to keep.
+4. **Textures and scenes count toward the ring's budget,** as the messages the link takes do; the budget test now steps
+   over atlas patches instead of scenes.
+5. **`mclink`** reports each texture, sums up the scenes every five seconds with the largest among them, and gains
+   `scene` (the newest scene batch by batch, with each batch's glowing vertices, and the table) and `save-textures`.
+6. **Step 0's script is `tools/mclink/entities.txt`,** at x 880 on spike 1's dump, whose ground reaches 36 blocks east:
+   - the falling sand drops from 12 blocks up, so a scene catches it in the air;
+   - the TNT goes 18 blocks ahead on a stone block, with a marker, in case the street dips there;
+   - its scenes come thrice a quarter second apart, since it flashes white every quarter second, then just after its
+     blast.
+7. **Step 0's commands follow 26.3's data,** checked in its classes: the entity ids (`splash_potion`, `firework_rocket`,
+   `falling_block`, `marker`), `VillagerData` (`type`, `profession`, `level`), the banner's `patterns` (`pattern`,
+   `color`), `Item` and `PickupDelay`, `FireworksItem`, `LifeTime`, the `fireworks` component's `explosions` (`shape`,
+   `colors`), `potion_contents` (`potion`), `BlockState`, `NoAI` and `PersistenceRequired`.
