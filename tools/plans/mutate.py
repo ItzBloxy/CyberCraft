@@ -87,6 +87,11 @@ MUTATIONS = [
     ("src/Status.cpp", "OneLine(aLink.bushRule), aLink.shapesBush);", "OneLine(aLink.bushRule), aLink.shapesLeft);", "StatusWritesBlasts", None),
     ("src/Status.cpp", "\tout += FormatCombat(aLink);\n\tout += FormatBlasts(aLink);", "\tout += FormatBlasts(aLink);\n\tout += FormatCombat(aLink);",
      "StatusWritesBlasts", None),
+    # Status: the forced knockdowns, on by default (step 5b's fix, Task 49)
+    ("src/Status.cpp", "aLink.blastKnock ? \"\" : \", the forced knockdowns off\"", "aLink.blastKnock ? \", the forced knockdowns off\" : \"\"",
+     "StatusWritesBlasts", None),
+    ("src/Status.cpp", "\", the forced knockdowns off\"", "\", forced knockdowns off\"", "StatusWritesBlasts", None),
+    ("src/Status.h", "bool        blastKnock = true;", "bool        blastKnock = false;", "StatusWritesBlasts", "tests/TestStatus.cpp"),
 ]
 
 

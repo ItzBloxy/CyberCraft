@@ -93,11 +93,14 @@ and added `assemble3.py`. Their paths point at that session's scratchpad, where 
   and Java and shell files.
 - **`run_plan.py`** runs a step titled "Build CyberCraft Tweaks" as it runs the module's compile: its bash block, and
   every quoted text of its Expected paragraph must be in what it printed. Its log is `<mode>_p3.log`.
-- **`mutate.py`** has Part 3's list (Tasks 38 to 40 and 45, 38 mutations).
+- **`mutate.py`** has Part 3's list (Tasks 38 to 40 and 45, 38 mutations), then step 5b's fix's (Task 49, 3 more). A
+  header's mutation names the source to touch: the one that compiles the changed declaration in, which for a default
+  member initializer is the test that constructs the struct.
 - **`fold.sh`** works on `verify/` and the tags `p3-t<n>`. A task with no code (one with the user) needs a tag of its
   own on the task before's commit first, as `p3-t42` was put on `p3-t41`'s.
 - **`assemble3.py`** puts a generated part after Task 37 and before "Found while planning", brings the plan's header and
-  "Before you start" up to Part 3, and adds "Found while planning Part 3" at the end.
+  "Before you start" up to Part 3, and adds "Found while planning Part 3" at the end. **`assemble_fix.py`** does the
+  same for step 5b's fix: its tasks after Task 48, the close renumbered, and "Step 5b's fix" at the end.
 
 A step whose title starts with "Write", "Edit", "Delete" or "Copy" is a file step to all of these tools: a step that
 records results by hand is titled "Record …".

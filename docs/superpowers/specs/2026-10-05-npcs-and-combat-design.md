@@ -11,8 +11,10 @@ those too. A deep review of Part 2's plan, before step 4, changed how Minecraft'
 with three fixes to make, which the user chose how to make: "Changes from step 4" says what they are, and the sections
 above include them. Planning Part 3 found that the game measures an explosion's knockdowns from the hit's source object,
 and the user chose how Minecraft's blasts knock NPCs down instead, how hard their hits start, and to take the follow-ups
-Part 2 left with Part 3: "Changes while planning Part 3", at the very end, says what and why, and the sections above
-include it.
+Part 2 left with Part 3: "Changes while planning Part 3" says what and why, and the sections above include it. Step 5b
+then found that living NPCs don't fall from the knockdown's status effect alone, and that crowds don't panic at a blast;
+the user chose the game's forced knockdown and its explosion stimulus: "Changes from step 5b", at the very end, says what
+and why, and the sections above include them.
 
 ## Purpose
 
@@ -738,25 +740,36 @@ For each `kEvExplosion`, with combat on, linked and V found, `AcceptBlast` takes
 (`WorldFromMc`) and its reach as twice its radius, in metres, as SkyCraft's is, the radius held to 16 at most (TNT's 4
 reaches 8 m); a centre or radius that isn't finite, or a radius that isn't over 0, isn't taken. At once, the module's
 `Explode`:
-- **knocks down what the blast reaches, as the game's knockdown grenade does:** that grenade's attack,
-  `Attacks.FragGrenadeKnockdown`, runs as a game effect at the centre, the reach as its radius and range, as
-  `CombatGadgetHelper.SpawnAttack` runs a claymore's: from V, as its instigator and source, and flagged `DealNoDamage`
-  and `WeakExplosion` under `n"BlockRender blast"`. Its hits deal nothing, but `PostProcess` still gives each NPC they
-  reach the record's `Knockdown` status effect, unless the NPC is immune to it, friendly to V or blocked the hit. Its
-  hit on V stops at `CheckForQuickExit`, V being its instigator. `WeakExplosion` keeps out the game's handling of strong
+- **runs the game's knockdown grenade's attack** over what the blast reaches: `Attacks.FragGrenadeKnockdown`, as a game
+  effect at the centre, the reach as its radius and range, as `CombatGadgetHelper.SpawnAttack` runs a claymore's: from
+  V, as its instigator and source, and flagged `DealNoDamage` and `WeakExplosion` under `n"BlockRender blast"`. Its hits
+  deal nothing, but `PostProcess` still gives each NPC they reach the record's `Knockdown` status effect, unless the NPC
+  is immune to it, friendly to V or blocked the hit, so that one the blast then kills ragdolls at once. Its hit on V
+  stops at `CheckForQuickExit`, V being its instigator. `WeakExplosion` keeps out the game's handling of strong
   explosions, which would measure from V;
+- **knocks down each living NPC on the list within the reach** with the game's forced reaction, as perks force theirs:
+  `AISubActionForceHitReaction_Record_Implementation.SendForcedHitDataToAIBehavior`, a knockdown (its type 4) at an
+  explosion's intensity (3), turned away from the centre (`GameObject.GetLocalAngleForDirectionInInt`), in one of an
+  explosion's animation variations (`RandRange(0, 3)`, as the hit reaction component picks for a strong explosion). It
+  sends the NPC's AI the knockdown its hit reaction component would send. It skips the NPCs that component keeps from
+  being knocked down: those with knockdown immunity, on an off-mesh link, friendly to V or a Cerberus
+  (`SetHitReactionImmunities`), and massive ones or ones with a leg dismembered (`GetReactionType`). With `set
+  blastknock 0`, it knocks none down;
+- **tells the crowd,** as the game's explosions do: the `Explosion` stimulus, 30 m around the listed NPC nearest the
+  centre, within 30 m of it, with V as its instigator and V's position revealed
+  (`StimBroadcasterComponent.BroadcastStim`), as the game broadcasts a thrown body's explosion from the body
+  (`NPCPuppet`). Crowds panic, and others investigate. With no NPC that near, nobody is told;
 - **sounds** as a claymore does: `AudioSystem.PlayShockwave(n"explosion", centre)`;
-- **looks** as the attack's game effect draws it, if it draws anything: the scripts draw no frag grenade's explosion, so
-  step 5b looks.
+- **looks** as the attack's game effect draws it: step 5b saw the game's explosion effect.
 
 An explosion of the game's own kind can't knock NPCs down here: the game measures a strong explosion from the hit's
 source object (`IsStrongExplosion`), and a blast made by script has no grenade or device to be its source, only V. An
-`Explosion` hit from V would knock down only NPCs within 3 m of V, wherever the blast was. The knockdown grenade's record
-knocks down by its status effect, which the pipeline gives wherever the source is. The user chose it.
-
-With `set blastknock 1`, `Explode` also gives each NPC on the list within the reach that status effect itself
-(`StatusEffectHelper.ApplyStatusEffect`), as SkyCraft's `KnockExplosion` knocks people down: the fallback, if the
-effect's hits don't (risk 13).
+`Explosion` hit from V would knock down only NPCs within 3 m of V, wherever the blast was. The user chose the knockdown
+grenade's record, whose status effect the pipeline gives wherever the source is; step 5b found that alone plays nothing
+on a crowd NPC. An NPC falls when its hit reaction component sends its AI a knockdown, and `GetReactionType` gives one
+only for a strong explosion, a hit flagged `HighSpeedMelee`, or, with both the NPC's knockdown thresholds over 0, a hit
+of reaction severity 3 or enough impulse and damage; a crowd NPC's impulse threshold is 0, and our hits have no damage,
+weapon or impulse. So the forced reaction, which the user chose after step 5b ("Changes from step 5b").
 
 ### The push
 
@@ -764,8 +777,9 @@ A quarter of a second after the blast (`kPushDelay`), as SkyCraft waits, the mod
 `physicalImpulseSphere` at the centre with the reach as its radius, as `CombatGadgetHelper.SpawnPhysicalImpulse` runs
 it. It pushes cars and loose things, and throws the bodies of NPCs the blast killed: knocked down as they died, they
 ragdolled at once (the game's `ForcedRagdoll`, for an NPC that dies with a `Knockdown` status effect on it). `Push` then
-counts the NPCs on the list within the reach, how many of them the game has knocked down (a `Knockdown` status effect,
-`ObjectHasStatusEffectOfType`), and how many are dead, for the log and the status. Each blast is pushed once
+counts the NPCs on the list within the reach, how many of them carry the knockdown's status effect
+(`ObjectHasStatusEffectOfType`; the log and the status call them knocked down), and how many are dead, for the log and
+the status. Each blast is pushed once
 (`Blasts::Pushes`); while V isn't found, the push is logged and not made.
 
 ### Blast hits
@@ -796,7 +810,10 @@ The follow-ups Part 2 left (the results' "Asked for, after Part 2"), which the u
   damage that isn't over 0; CyberCraft Tweaks 1.3.0's `SetHealth` mixin, at its start, takes exactly that input, sets a
   living player's health, up or down, and logs `CyberCraft Tweaks: Minecraft's player's health set to V's share …:
   <before> -> <after>`. Without CyberCraft Tweaks 1.3.0 nothing happens. The module reads V's health share four times a
-  second, with V's max health. With combat off, the two healths stay apart, as the fights do.
+  second, with V's max health. With combat off, the two healths stay apart, as the fights do. The carry is one way: in
+  build mode the game goes on regenerating V's own health, which nothing uses there, and Minecraft's hearts don't come
+  back to V when build mode ends (SkyCraft's `McState` has no health to read). Step 5b showed it, and the user chose to
+  leave it so.
 - **Bushes out of Minecraft's ground:** the exporter also leaves out the static scene-query shapes the **bush rule**
   names by their filters (`set bushrule`): 1, the default, those whose query filter is the sight layer alone,
   `0:0:80000:0`, as a bush's foliage was in step 4's fixes (spheres of about 2 m, with an all-zero simulation filter),
@@ -821,7 +838,8 @@ The follow-ups Part 2 left (the results' "Asked for, after Part 2"), which the u
   as Minecraft gives one, over 0 and up to 16 (4 for TNT), as if it were Minecraft's. It goes through all a blast of
   Minecraft's does, so with no stand-in hit it knocks down, sounds and pushes, and deals nothing. For step 5b's opening
   check, and the overlay's "TNT 5 m ahead".
-- `set blastpower <0 to 1>` (0.5), `set blastknock 0|1` (0) and `set bushrule 0|1|2` (1).
+- `set blastpower <0 to 1>` (0.5), `set blastknock 0|1` (1, since step 5b: the forced knockdowns) and `set bushrule
+  0|1|2` (1).
 - **The status's blasts line:** with combat on, the blasts taken, the blast power, whether knockdowns are given
   directly too, and the last blast: its centre, reach and the NPCs within it, then after its push, those knocked down
   and dead, and its own hits. The combat line says when Minecraft's health was last set, and the ground line what the
@@ -929,6 +947,16 @@ Then TNT, set off by Minecraft's player in build mode among NPCs:
 - V's health doesn't move, and Minecraft's player is hurt only by Minecraft's own blast;
 - build mode ends with V's blades as they were, and their heat back a second after.
 
+### Step 5b's fix, in the game (Part 3)
+
+BlockRender 0.19.1, the module's version 7, with step 5b's fix ("Changes from step 5b"). The check, with `explode` and
+TNT on a pavement with residents about:
+- the residents within a blast's reach fall, away from the blast, and get up again; the log says how many the forced
+  knockdown reached, and how many the game made immune;
+- the crowd panics and flees, and others react as to the game's own explosions;
+- with `set blastknock 0`, nobody falls again;
+- TNT among residents still kills and throws those it hits hard enough.
+
 ### Step 6: the results
 
 `docs/spikes/2026-10-05-npcs-and-combat-results.md`, with the spike's answer at its top.
@@ -949,7 +977,7 @@ plugin's folder or the overlay's. The new commands:
 | `set hitpower <0 to 1>` | Where a hit starts: V's punch × Minecraft's damage to this power (0.5, the default: a fist one punch, a diamond sword 2.65) |
 | `explode <metres> <radius>` | A blast that far ahead of V (0 to 100 m), at the height of V's feet, with a radius over 0 and up to 16 (TNT's is 4), as if it were Minecraft's |
 | `set blastpower <0 to 1>` | Where a blast's own hits start: V's punch × Minecraft's damage to this power (0.5, the default: TNT's 57 at its centre 7.5 punches) |
-| `set blastknock 0\|1` | Each NPC within a blast's reach given the knockdown directly too (1), or left to the blast's attack (0, the default) |
+| `set blastknock 0\|1` | Each living NPC within a blast's reach knocked down by the game's forced reaction, unless the game makes it immune (1, the default since step 5b), or none (0) |
 | `set bushrule 0\|1\|2` | What else the exporter leaves out of Minecraft's ground: nothing (0), sight-only shapes such as a bush's foliage (1, the default), or unsimulated shapes (2); the city is read again |
 
 The overlay gains the NPC and combat lines, and two buttons, NPCs and Combat; and, under "More controls", ones that
@@ -969,9 +997,9 @@ blasts line, and under "More controls" a button that sends `explode 5 4`, "TNT 5
   can't.
 - **V's look:** hidden in build mode, with the meshes switched off, the effects stopped and whether the crosshair is
   hidden; or seen, and why.
-- **Blasts:** with combat on, how many; the blast power; whether knockdowns are given directly too; the last: its centre,
-  reach and the NPCs within it, then after its push those knocked down and dead, and its own hits. With combat off,
-  that they're only logged.
+- **Blasts:** with combat on, how many; the blast power; whether the forced knockdowns are off; the last: its centre,
+  reach and the NPCs within it, those the forced knockdown reached and those immune, then after its push those carrying
+  the knockdown's status effect and dead, and its own hits. With combat off, that they're only logged.
 - **The ground** (spike 5's line): also the bush rule, and how many shapes it has left out.
 - **Frame rates:** with NPCs and combat on and off.
 
@@ -998,7 +1026,9 @@ blasts line, and under "More controls" a button that sends `explode 5 4`, "TNT 5
   can't fail the compile that every mod's scripts share (risk 9); `check_reds.py` compiles the module both ways.
 - **Blasts:** one is taken only with a finite centre and a radius over 0, held to 16; its attack deals no damage, and
   its hit on V stops at `CheckForQuickExit`; its own hits are Minecraft's hits, checked and capped as any (a listed NPC,
-  finite, over 0, at most 1,000); its knockdowns and push are the game's own, run as the game's explosives run them.
+  finite, over 0, at most 1,000); its knockdowns are the game's forced reaction, which skips whatever the game's own
+  hit reactions keep from being knocked down; its stimulus and push are the game's own, sent as the game's explosions
+  send them.
 - **Minecraft's health** is only ever set to a share over 0 and up to 1 of its max, so setting it never kills; and only
   by CyberCraft Tweaks, on an input SkyCraft ignores.
 - **The bush rule** only leaves shapes out of what Minecraft gets; the game's own collision is never touched, and
@@ -1098,10 +1128,10 @@ Steps 2, 4, step 4's fixes, and 5b. The module's code runs only in the game.
 11. **Not every NPC has a capsule:** a drone's or a mech's collision may be something else, and it stays person-sized.
 12. **The list costs too much in crowds.** Measured in step 2. The slow fields are read at most four times a second an
     NPC.
-13. **The blast's attack doesn't knock NPCs down** (Part 3): its hits deal nothing, and the game might not give the
-    knockdown on such a hit from a game effect run by script, or a crowd's NPCs might not take it. Step 5b's opening
-    check reads the push's count of NPCs knocked down; the fallback is `set blastknock 1`, the status effect given
-    directly, and past that the game's forced reactions (`ForcedHitReactionEvent`, `CreateForceRagdollEvent`).
+13. **The blast's attack doesn't knock NPCs down** (Part 3). Step 5b found it so: residents carried the knockdown's
+    status effect and only flinched, and the status effect given directly did no better. Since, the game's forced
+    reaction knocks them down, as it did one in CET's console. It might not reach an NPC whose AI ignores a forced
+    knockdown (a mech, a drone); the check of the fix looks at whatever kinds of NPC are about.
 14. **Accepted limits:** Minecraft's armour doesn't reduce hits from attackers more than 24 blocks away, or blasts;
     Minecraft's player walks through NPCs, and can hit a driver through a car, since cars aren't solid for Minecraft;
     NPCs walk through blocks. Minecraft's arrows land as V's melee hits, so an NPC's melee block and resistance apply to
@@ -1578,3 +1608,73 @@ knocks NPCs down, a crowd's included, and whether it draws an explosion; whether
 REDmod's older sources do; whether the push throws the bodies of NPCs a blast killed, and pushes cars; how much of each
 stand-in a blast on the floor sees; whether CyberCraft Tweaks' mixin applies in the running Minecraft; whether drawing
 the blades again brings their heat back; and whether the bush rule leaves bushes out and walls in.
+
+## Changes from step 5b
+
+Step 5b ran on 2026-10-06 (the results' "Step 5b"). Blasts showed the game's explosion, pushed and damaged cars and
+props, and their own hits landed as explosions that killed and threw; Minecraft's health came from V's as build mode
+started, a bush was out of Minecraft's ground and a wall in, and the blades' heat came back after build mode. Two things
+didn't work as this spec meant, and the user noticed a third; the user chose what to do. The sections above include the
+outcome.
+
+### What step 5b found
+
+1. **Living NPCs didn't fall.** Residents within a blast carried the knockdown's status effect, and only flinched and
+   slid with the push; with the status effect given directly too (`set blastknock 1`), the same. The game's hit reaction
+   component, read for it: an NPC falls when the component sends its AI a knockdown (`SendDataToAIBehavior`), and
+   `GetReactionType` gives one only for a strong explosion, a hit flagged `HighSpeedMelee`, or, with both the NPC's
+   knockdown thresholds over 0, a hit of reaction severity 3 or enough impulse and damage. In CET's console the resident
+   was a crowd NPC with `KnockdownImmunity` 0, `KnockdownDamageThreshold` 33 and `KnockdownDamageThresholdImpulse` 0, so
+   the blast's hits, with no damage, weapon or impulse, only twitched it, and the status effect alone played nothing. The
+   game's forced reaction, `SendForcedHitDataToAIBehavior` with a knockdown at an explosion's intensity, knocked it down
+   there.
+2. **The crowd didn't panic.** The game's explosions broadcast an `Explosion` stimulus from the exploding object; a blast
+   of ours broadcast none.
+3. **The health carries one way.** In build mode the game went on regenerating V's own health while Minecraft's hearts
+   stayed, and nothing carries them back to V.
+
+### What the user decided
+
+- **Knockdowns by the game's forced reaction,** for each living NPC within a blast's reach, skipping those the game keeps
+  from being knocked down; on by default, `set blastknock 0` turning them off; the direct status effect, which did
+  nothing, gone.
+- **The crowd told,** by the game's `Explosion` stimulus from the NPC nearest the blast, with V as its instigator.
+- **The health left as it is:** one way, as build mode starts. Carrying Minecraft's health back would have needed
+  CyberCraft Tweaks to write it into `McState`'s padding, which SkyCraft's `writeMcState` leaves unwritten; stopping V's
+  regeneration, a modifier on `HealthOutOfCombatRegenEnabled`.
+
+### What changed
+
+- **The blast in the game:** `Explode` knocks down by the forced reaction (`KnockdownImmune` mirroring the hit reaction
+  component's immunities) and tells the crowd; the module is version 7, with three new fields saying what it did
+  (`blastKnocked`, `blastImmune`, `blastPanic`): 13 functions and 22 fields.
+- **BlockRender 0.19.1:** `set blastknock` on by default; each blast's log line says how many it knocked down, how many
+  were immune, and whether the crowd was told; the status says when the forced knockdowns are off.
+- **Risk 13** is restated, and step 5b's fix gets its own check in the game, before step 6.
+
+### What was checked
+
+- **The game's scripts** (2.31): `hitReactionComponent.swift` (`EvaluateHit`, `SetHitReactionThresholds`,
+  `SetHitReactionImmunities`, `GetHitIntensity`, `GetReactionType`, `IsStrongExplosion`, `SendDataToAIBehavior`,
+  `OnForcedHitReaction`); `tweakAISubActions.swift`'s `SendForcedHitDataToAIBehavior`, and its callers in the
+  effectors (`triggerAttackOnTargetEffector.swift`, `triggerAttackOnAttackEffect.swift`,
+  `triggerAttackOnOwnerEffector.swift`) and `NPCPuppet`'s vehicle bump; `gameObject.swift`'s
+  `GetLocalAngleForDirectionInInt`; `scriptedPuppet.swift`'s `IsMassive`, `GetNPCType`, `IsOnOffMeshLink` and
+  `CanRagdoll`; `stimBroadcasterComponent.swift`'s `BroadcastStim` and `TriggerSingleBroadcast`, with the explosion
+  stimuli `NPCPuppet` and the rain missile broadcast; and `orphans.swift`'s `animHitReactionType`, `EAIHitIntensity`,
+  `gameEPowerDifferential` (from 0 to 4, so the hit reaction's power difference never stops a knockdown),
+  `ForcedHitReactionEvent`, `stimInvestigateData`, `IsCrowd` and `RequestSettingStatPoolValue`.
+- **In the game, through CET's console** (step 5b): the resident's `IsCrowd`, its knockdown stats, and the forced
+  knockdown.
+- **For the health:** V's regeneration in the game's TweakDB sources (`player_base_stat_pools.tweak`:
+  `PlayerBaseOutOfCombatHealthRegen`, enabled by `HealthOutOfCombatRegenEnabled`), and SkyCraft's
+  `SkyLink.writeMcState`, which leaves `McState`'s padding unwritten.
+- **The code:** Tasks 49 to 51 written and run in the scratch clone: zero warnings, 450 tests, the module compiling with
+  and without Codeware and a slip in `Explode` failing it both ways, and 3 mutations of the changed status test each
+  failing it; then replayed from the plan's text in a fresh clone.
+
+### Not settled by reading
+
+Left to the fix's check in the game: whether the forced knockdown, sent as the blast's attack starts, plays out, or the
+attack's hits, reaching the NPC the same frame, cut it short; how NPCs other than residents take it (gangers, police, a
+drone), if any are about; and how the crowd and the police take the stimulus, with V as its instigator.

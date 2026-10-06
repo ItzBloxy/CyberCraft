@@ -50,11 +50,14 @@ hide V in build mode; "The deep review of Part 2", at the end, says why. Step 4 
 to make, which Tasks 32 to 35 make and Task 36 checks in the game: hits start at V's punch × the square root of
 Minecraft's damage, V's Immortal is the game's override, and hiding V hides V's effects and the game's crosshair too;
 "Step 4's fixes", at the end, says why.
-**Part 3** (Tasks 38 to 49) makes Minecraft's blasts knock down and throw NPCs, and push cars and props, through the
+**Part 3** (Tasks 38 to 53) makes Minecraft's blasts knock down and throw NPCs, and push cars and props, through the
 game's own explosion code, with the game's knockdown grenade's attack; and takes the follow-ups Part 2 left:
 Minecraft's health from V's as build mode starts, bushes out of Minecraft's ground, and the blades' heat after build
 mode. It was planned after step 4's fixes, from Task 37's handoff
 (`docs/superpowers/handoffs/2026-10-06-spike-6-part-3-planning.md`), and its own section below says how it's built.
+Step 5b (Task 48) passed but for living NPCs' knockdowns, which the knockdown's status effect alone doesn't make on a
+crowd NPC: Tasks 49 to 51 knock them down with the game's forced reaction instead, and tell the crowd with the game's
+explosion stimulus, and Task 52 checks it in the game; "Step 5b's fix", at the end, says why.
 
 ---
 
@@ -108,18 +111,22 @@ mode. It was planned after step 4's fixes, from Task 37's handoff
   without and with Codeware's, and a slip in `Push` fails it both ways. CyberCraft Tweaks 1.3.0 builds without a
   warning. The overlay ran under Lua with CET's functions stubbed, with a blast before and after its push, and combat
   off.
+- **Step 5b's fix, verified the same way:** Tasks 49 to 51 were written in the scratch clone on top of Task 47's
+  commit, then replayed in a fresh clone from this plan's text: zero warnings, 450 tests, the files identical to the
+  scratch clone's. The changed test was broken once per change: 3 mutations, all caught. The module compiles against
+  the game's own scripts both without and with Codeware's, and a slip in `Explode` fails it both ways.
 - **Test counts:** 396 at the start. Then 403, 406 and 408 after Tasks 1 to 3, 412 after Task 5, and 414 after Task 8.
   Tasks 6, 7, 9 and 10 add none.
 - **What only Minecraft and the game can test:** the actor table against SkyCraft's real mod in Task 4, and the module
   and the NPCs in the game in Task 11; in Part 2, the hurts against SkyCraft's mod in Task 16, and combat in the game in
   Tasks 31 and 36; in Part 3, a real blast's hits and the health against SkyCraft's mod and CyberCraft Tweaks in Task
-  42, and blasts in the game in Task 48. All with the user.
+  42, and blasts in the game in Tasks 48 and 52. All with the user.
 - **The user:**
   - **does everything in Minecraft, the Modrinth App and the game:** starting and stopping them, loading, moving,
     keys, clicks and screenshots. Never drive their mouse or keyboard: ask, then wait for them to say they're done;
   - **approves downloads first.** Nothing in Parts 1 to 3 downloads anything;
   - **approves changes to their Minecraft instance:** Task 42 installs CyberCraft Tweaks 1.3.0 in place of 1.2.0.
-- **The game:** builds deploy only with `CP2077_DIR` set, which only the deploy steps set (Tasks 11, 31, 36 and 48),
+- **The game:** builds deploy only with `CP2077_DIR` set, which only the deploy steps set (Tasks 11, 31, 36, 48 and 52),
   with the game closed, and clear straight after. `mclink` needs the game closed too, since the game would hold the
   mapping.
 - **redscript:** a script that doesn't compile at the game's start shows a message box, and that run the mods' scripts
@@ -10647,10 +10654,12 @@ what and why.
 - **Tasks 43 to 47** make the game's side: the module's `Explode`, `Push` and `BlastHit`, V's health share, and the
   blades drawn again after build mode; `GameScript`'s calls; the `explode` request and the status; BlockRender 0.19.0's
   frame and settings; and the overlay.
-- **Task 48** is step 5b, in the game. **Task 49** closes the spike.
+- **Task 48** is step 5b, in the game. It passed but for living NPCs' knockdowns, and found that the crowd doesn't
+  panic: **Tasks 49 to 51** make step 5b's fix, and **Task 52** checks it in the game.
+- **Task 53** closes the spike.
 
 Test counts: 440 at the start of Part 3. Then 444 after Task 38, 447 after Task 39, 448 after Task 40, and 450 after
-Task 45. Tasks 41, 43, 44, 46 and 47 add none.
+Task 45. Tasks 41, 43, 44, 46 and 47 add none, nor do step 5b's fix's Tasks 49 to 51: Task 49 changes a test.
 
 ## File map (Part 3)
 
@@ -10661,10 +10670,10 @@ Task 45. Tasks 41, 43, 44, 46 and 47 add none.
 | `src/link/Link.*` | The city started over when what the exporter keeps changes |
 | `tools/mclink/*` | `health`; a blast's own hits by the made-up NPCs' feet; each blast's push; step 5a's script `blasts.txt` |
 | `minecraft/cybercraft-tweaks/*` | 1.3.0: `SetHealth`, Minecraft's player's health set by a `kInHurt` of no damage with the flag `0x100` |
-| `scripts/BlockRender.reds` | Version 6: `Explode`, `Push` and `BlastHit` (with `Hit`, through `Strike`); V's health share; the blades drawn again after build mode |
-| `src/GameScript.*` | The module's three new calls, and V's health share and what `Push` found |
-| `src/Requests.*`, `src/Status.*` | `explode`; the blasts line, Minecraft's health in the combat line, the bush rule in the ground line |
-| `src/Plugin.cpp`, `CMakeLists.txt` | 0.19.0: blasts, their hits and pushes in `Fight`, V's health share as build mode starts, `explode`, `set blastpower`, `set blastknock` and `set bushrule` |
+| `scripts/BlockRender.reds` | Version 6: `Explode`, `Push` and `BlastHit` (with `Hit`, through `Strike`); V's health share; the blades drawn again after build mode. Version 7: `Explode` knocks living NPCs down with the game's forced reaction and tells the crowd |
+| `src/GameScript.*` | The module's three new calls, and V's health share and what `Push` found; then what `Explode` did |
+| `src/Requests.*`, `src/Status.*` | `explode`; the blasts line, Minecraft's health in the combat line, the bush rule in the ground line; then whether the forced knockdowns are off |
+| `src/Plugin.cpp`, `CMakeLists.txt` | 0.19.0: blasts, their hits and pushes in `Fight`, V's health share as build mode starts, `explode`, `set blastpower`, `set blastknock` and `set bushrule`. 0.19.1: the forced knockdowns on by default, and what each blast did in the log |
 | `tools/blockrender_hud/init.lua` | The blasts line, and "TNT 5 m ahead" |
 | `tests/` | `TestCombat`, `TestExport`, `TestLink`, `TestMcLinkScript`, `TestRequests` and `TestStatus` gain tests |
 
@@ -13591,12 +13600,600 @@ cd /d/Cyberpunk-Minecraft && git add docs/spikes/2026-10-05-npcs-and-combat-resu
 
 ---
 
-### Task 49: Close the spike
+### Task 49: The status says when the forced knockdowns are off
+
+Step 5b's fix (the spec's "Changes from step 5b"). Living NPCs within a blast didn't fall: the knockdown grenade's status
+effect alone plays nothing on a crowd NPC, whose hit reactions give a knockdown only to a strong explosion. So a blast
+now knocks each living NPC within it down with the game's forced reaction (Task 50), on by default; `set blastknock 0`
+turns that off (Task 51). The blasts line said `, knockdowns applied directly too` when the old fallback was on; now it
+says `, the forced knockdowns off` when they're off, and nothing while they're on, as they are by default
+(`LinkReport.blastKnock`, now true).
+
+**Files:**
+- Modify: `src/Status.h`, `src/Status.cpp`, `tests/TestStatus.cpp`
+
+- [ ] **Step 1: Edit `tests/TestStatus.cpp`: the blasts line with the forced knockdowns off**
+
+```cpp
+	link.blastKnock = true;
+	link.lastBlast = "at world (680.50, -1997.50, 6.20), reaching 8.0 m: 5 NPCs within it, 4 hits of its own; after its push 2 "
+	                 "knocked down, 2 dead";
+	report.link = link;
+	CHECK(Has(cpmc::FormatStatus(report), "blasts=on: 2 taken, blast power 1.00, knockdowns applied directly too; the last at world "
+```
+```cpp
+	link.lastBlast = "at world (680.50, -1997.50, 6.20), reaching 8.0 m: 5 NPCs within it, 4 hits of its own; after its push 2 "
+	                 "knocked down, 2 dead";
+	report.link = link;
+	CHECK(Has(cpmc::FormatStatus(report), "blasts=on: 2 taken, blast power 1.00; the last at world (680.50, -1997.50, 6.20), "
+	                                      "reaching 8.0 m: 5 NPCs within it, 4 hits of its own; after its push 2 knocked down, 2 dead"));
+	// The forced knockdowns are on unless set blastknock 0 (step 5b's fix): the line says only when they're off.
+	link.blastKnock = false;
+	report.link = link;
+	CHECK(Has(cpmc::FormatStatus(report), "blasts=on: 2 taken, blast power 1.00, the forced knockdowns off; the last at world "
+```
+- [ ] **Step 2: Build and run the tests; the new one must fail**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | grep -E "^FAIL|test\(s\)"
+```
+Expected: `FAIL StatusWritesBlasts`, then `450 test(s), 1 failure(s)`: the line still says nothing with them off.
+
+- [ ] **Step 3: Edit `src/Status.h`**
+
+```cpp
+	bool        blastKnock = false;  // set blastknock 1: each NPC within reach gets the knockdown directly too
+```
+```cpp
+	bool        blastKnock = true;   // set blastknock: each living NPC within reach knocked down by the game's forced reaction
+```
+- [ ] **Step 4: Edit `src/Status.cpp`**
+
+```cpp
+	                   aLink.blastKnock ? ", knockdowns applied directly too" : "",
+```
+```cpp
+	                   aLink.blastKnock ? "" : ", the forced knockdowns off",
+```
+- [ ] **Step 5: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `450 test(s), 0 failure(s)`.
+
+- [ ] **Step 6: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "npcs-and-combat: the status's blasts line says when the forced knockdowns are off, as they're on by default" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 50: A blast knocks NPCs down with the game's forced reaction, and tells the crowd
+
+The module's side of step 5b's fix, `scripts/BlockRender.reds`, version 7. Step 5b found why living NPCs didn't fall
+(the results' "Step 5b"): an NPC falls when its hit reaction component sends its AI a knockdown, and `GetReactionType`
+gives one only for a strong explosion, a hit flagged `HighSpeedMelee`, or, with both the NPC's knockdown thresholds over
+0, a hit of reaction severity 3 or enough impulse and damage. A crowd NPC's impulse threshold is 0, and the blast's hits
+have no damage, weapon or impulse, so they twitch; the knockdown's status effect alone plays nothing. In CET's console the
+game's forced reaction knocked a resident down. So `Explode`, after the attack and the sound:
+- **knocks down each living NPC on the list within the reach** with `knock`, as perks force theirs:
+  `AISubActionForceHitReaction_Record_Implementation.SendForcedHitDataToAIBehavior(npc, direction, 3, 4, 2, 0,
+  RandRange(0, 3), 0)`: a knockdown (the sub-action's type 4) at an explosion's intensity (3), hit from the centre's side
+  (`GameObject.GetLocalAngleForDirectionInInt` of the direction from the centre), in one of an explosion's animation
+  variations, as the hit reaction component picks them for a strong explosion. It skips the NPCs the game keeps from
+  being knocked down (`KnockdownImmune`, as the hit reaction component decides: `KnockdownImmunity` over 0, an off-mesh
+  link, friendly to V or a Cerberus, massive, or a leg dismembered). The direct status effect, which did nothing, goes;
+- **tells the crowd** as the game's explosions do: `StimBroadcasterComponent.BroadcastStim` of the `Explosion`
+  stimulus, 30 m, from the listed NPC nearest the centre within 30 m, alive or dead, with V as the instigator and V's
+  position revealed, as `NPCPuppet` broadcasts a thrown body's explosion from the body. With no NPC that near, nobody is
+  told;
+- **says what it did** in three new fields: `blastKnocked` and `blastImmune`, and `blastPanic`, whether it told the
+  crowd. Task 51 reads them.
+
+**Files:**
+- Modify: `scripts/BlockRender.reds`
+
+- [ ] **Step 1: Edit `scripts/BlockRender.reds`**
+
+```swift
+// Minecraft's blasts (spike 6's Part 3): Explode knocks down what is within a blast's reach, as the game's knockdown
+// grenade does, with the explosion's sound; BlastHit makes one of Minecraft's hits on an NPC within the reach into the
+// blast's own, of type Explosion and from its centre, which knocks the NPC down too; and Push, a quarter second later,
+// throws the bodies and loose things.
+```
+```swift
+// Minecraft's blasts (spike 6's Part 3): Explode runs the game's knockdown grenade's attack over what a blast reaches,
+// with the explosion's sound, knocks each living NPC within it down with the game's forced reaction, and tells the crowd
+// with the game's explosion stimulus; BlastHit makes one of Minecraft's hits on an NPC within the reach into the blast's
+// own, of type Explosion and from its centre; and Push, a quarter second later, throws the bodies and loose things.
+```
+```swift
+  public let pushDead: Int32;
+
+  // The module's version, which BlockRender checks: 2 since the list moved into BlockRender, 3 with combat, 4 since hits
+  // go through the whole damage pipeline, with what V's unarmed slot draws, 5 since V's Immortal is the game's override,
+  // and HideV stops V's effects and hides the game's crosshair, 6 with Minecraft's blasts and V's health share.
+  public final static func Version() -> Int32 {
+    return 6;
+```
+```swift
+  public let pushDead: Int32;
+  // What Explode last did besides its attack and sound: how many living NPCs within the blast's reach it knocked down with
+  // the game's forced reaction, how many it left standing as the game keeps them from being knocked down, and whether it
+  // told the crowd.
+  public let blastKnocked: Int32;
+  public let blastImmune: Int32;
+  public let blastPanic: Bool;
+
+  // The module's version, which BlockRender checks: 2 since the list moved into BlockRender, 3 with combat, 4 since hits
+  // go through the whole damage pipeline, with what V's unarmed slot draws, 5 since V's Immortal is the game's override,
+  // and HideV stops V's effects and hides the game's crosshair, 6 with Minecraft's blasts and V's health share, 7 since a
+  // blast knocks NPCs down with the game's forced reaction and tells the crowd.
+  public final static func Version() -> Int32 {
+    return 7;
+```
+```swift
+  // A blast of Minecraft's at centre (world axes), knocking down what is within reach metres of it, as the game's
+  // knockdown grenade does: its attack, Attacks.FragGrenadeKnockdown, run as a game effect at the centre with the reach as
+  // its radius, as CombatGadgetHelper.SpawnAttack runs one, from V and dealing no damage. The pipeline still knocks down
+  // whatever it hits with the record's status effect (PostProcess), unless immune or friendly to V, and its hit on V stops
+  // at CheckForQuickExit. Its hits are flagged weak explosions, as BlastHit's are. With the explosion's sound at the
+  // centre, as a claymore plays it. With knock, each NPC on BlockRender's list within reach also gets the record's status
+  // effect directly (risk 13's fallback). 1: started; 0: V isn't found; -1: there's no attack record or effect.
+```
+```swift
+  // A blast of Minecraft's at centre (world axes), over what is within reach metres of it. The game's knockdown grenade's
+  // attack, Attacks.FragGrenadeKnockdown, runs as a game effect at the centre with the reach as its radius, as
+  // CombatGadgetHelper.SpawnAttack runs one, from V and dealing no damage: the pipeline still gives whatever it hits the
+  // record's status effect (PostProcess), unless immune or friendly to V, so that one the blast then kills ragdolls at
+  // once, and its hit on V stops at CheckForQuickExit. Its hits are flagged weak explosions, as BlastHit's are. With the
+  // explosion's sound at the centre, as a claymore plays it. That status effect alone doesn't make an NPC fall (step 5b):
+  // with knock, each living NPC on BlockRender's list within reach is knocked down by the game's forced reaction, as perks
+  // force theirs, away from the centre, unless the game keeps it from being knocked down (KnockdownImmune); blastKnocked
+  // and blastImmune count them. The crowd is told as the game's explosions tell it: the Explosion stimulus, 30 m around
+  // the listed NPC nearest the centre within 30 m, with V as its instigator, as the game broadcasts a thrown body's
+  // explosion from the body; blastPanic says whether. 1: started; 0: V isn't found; -1: there's no attack record or effect.
+```
+```swift
+    if knock {
+      let count: Int32 = BlockRenderNpcCount();
+      let i: Int32 = 0;
+      while i < count {
+        let npc: ref<NPCPuppet> = GameInstance.FindEntityByID(game, BlockRenderNpcAt(i)) as NPCPuppet;
+        if IsDefined(npc) && !npc.IsDead() && Vector4.Distance(npc.GetWorldPosition(), centre) <= reach {
+          StatusEffectHelper.ApplyStatusEffect(npc, t"BaseStatusEffect.Knockdown", player.GetEntityID());
+        };
+        i += 1;
+      };
+```
+```swift
+    this.blastKnocked = 0;
+    this.blastImmune = 0;
+    this.blastPanic = false;
+    let nearest: ref<NPCPuppet>;
+    let nearestDistance: Float = 30.00;
+    let count: Int32 = BlockRenderNpcCount();
+    let i: Int32 = 0;
+    while i < count {
+      let npc: ref<NPCPuppet> = GameInstance.FindEntityByID(game, BlockRenderNpcAt(i)) as NPCPuppet;
+      if IsDefined(npc) {
+        let distance: Float = Vector4.Distance(npc.GetWorldPosition(), centre);
+        if distance <= nearestDistance {
+          nearest = npc;
+          nearestDistance = distance;
+        };
+        if knock && !npc.IsDead() && distance <= reach {
+          if this.KnockdownImmune(npc, player, game) {
+            this.blastImmune += 1;
+          } else {
+            // A knockdown (the sub-action's type 4) at an explosion's intensity (3), hit from the centre's side, in one of
+            // an explosion's variations, as the hit reaction component picks them for a strong explosion.
+            let direction: Int32 = GameObject.GetLocalAngleForDirectionInInt(Vector4.Normalize(npc.GetWorldPosition() - centre), npc);
+            AISubActionForceHitReaction_Record_Implementation.SendForcedHitDataToAIBehavior(npc, direction, 3, 4, 2, 0, RandRange(0, 3), 0);
+            this.blastKnocked += 1;
+          };
+        };
+      };
+      i += 1;
+    };
+    if IsDefined(nearest) {
+      let investigate: stimInvestigateData;
+      investigate.attackInstigator = player;
+      investigate.attackInstigatorPosition = player.GetWorldPosition();
+      investigate.revealsInstigatorPosition = true;
+      StimBroadcasterComponent.BroadcastStim(nearest, gamedataStimType.Explosion, 30.00, investigate);
+      this.blastPanic = true;
+```
+```swift
+    return 0;
+  }
+```
+```swift
+    return 0;
+  }
+
+  // Whether the game keeps npc from being knocked down, as its hit reaction component decides for a hit: knockdown
+  // immunity, an off-mesh link, friendly to V or a Cerberus (SetHitReactionImmunities); massive, or a leg dismembered
+  // (GetReactionType).
+  private final func KnockdownImmune(npc: ref<NPCPuppet>, player: ref<GameObject>, game: GameInstance) -> Bool {
+    if GameInstance.GetStatsSystem(game).GetStatValue(Cast<StatsObjectID>(npc.GetEntityID()), gamedataStatType.KnockdownImmunity) > 0.00 || ScriptedPuppet.IsOnOffMeshLink(npc) {
+      return true;
+    };
+    if Equals(GameObject.GetAttitudeTowards(npc, player), EAIAttitude.AIA_Friendly) || Equals(npc.GetNPCType(), gamedataNPCType.Cerberus) {
+      return true;
+    };
+    return npc.IsMassive() || StatusEffectSystem.ObjectHasStatusEffectWithTag(npc, n"DismemberedLeg");
+  }
+```
+- [ ] **Step 2: Compile the module against the game's scripts, without and with Codeware**
+
+```bash
+cd /d/Cyberpunk-Minecraft/spikes/block-render && uv run --no-project python tools/check_reds.py E:/Cyberpunk2077 scripts | tail -1; \
+  echo "without Codeware: exit ${PIPESTATUS[0]}"; \
+  uv run --no-project python tools/check_reds.py E:/Cyberpunk2077 scripts E:/Cyberpunk2077/red4ext/plugins/Codeware/Scripts | tail -1; \
+  echo "with Codeware: exit ${PIPESTATUS[0]}"
+```
+Expected: `compiled`, `without Codeware: exit 0` and `with Codeware: exit 0`.
+
+- [ ] **Step 3: Check that the compile catches a slip in `Explode`, without and with Codeware**
+
+```bash
+cd /d/Cyberpunk-Minecraft/spikes/block-render && mkdir -p build/reds-slip \
+  && sed 's/AISubActionForceHitReaction_Record_Implementation.SendForcedHitDataToAIBehavior(npc,/AISubActionForceHitReaction_Record_Implementation.SendForcedHitDataToAI(npc,/' scripts/BlockRender.reds > build/reds-slip/BlockRender.reds \
+  && uv run --no-project python tools/check_reds.py E:/Cyberpunk2077 build/reds-slip | grep -E "^compiled|^failed|UNRESOLVED"; \
+  echo "without Codeware: exit ${PIPESTATUS[0]}"; \
+  uv run --no-project python tools/check_reds.py E:/Cyberpunk2077 build/reds-slip E:/Cyberpunk2077/red4ext/plugins/Codeware/Scripts \
+    | grep -E "^compiled|^failed|UNRESOLVED"; echo "with Codeware: exit ${PIPESTATUS[0]}"
+```
+Expected: redscript's `[UNRESOLVED_METHOD]` at the slip's line, `BlockRender.reds:356:13`, then `failed` and
+`without Codeware: exit 1`; the same again, and `with Codeware: exit 1`.
+
+- [ ] **Step 4: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "npcs-and-combat: a blast knocks each living NPC within it down with the game's forced reaction, unless the game keeps it from being knocked down, and tells the crowd with the game's explosion stimulus, from module version 7" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 51: BlockRender 0.19.1 knocks down by the game's forced reaction, and says what each blast did
+
+`GameScript` and the plugin follow the module to version 7:
+- **`GameScript`** wants version 7, reads the three new fields (22 in all), and `Explode` returns what the module did
+  (`BlastStart`): how it went, how many it knocked down, how many it left immune, and whether it told the crowd.
+- **The plugin, 0.19.1:** `set blastknock` is on by default (`g_blastKnock`), its replies say what it now does, and each
+  blast's log line says `N knocked down by the game's forced reaction, I immune to it`, or `the forced knockdowns off`,
+  and whether the crowd was told; the status's last blast carries the counts until its push.
+
+**Files:**
+- Modify: `src/GameScript.h`, `src/GameScript.cpp`, `src/Plugin.cpp`, `CMakeLists.txt`
+
+- [ ] **Step 1: Edit `src/GameScript.h`**
+
+```cpp
+constexpr int32_t kModuleVersion = 6;  // BlockRenderNpcs.Version(), as this BlockRender needs it
+```
+```cpp
+constexpr int32_t kModuleVersion = 7;  // BlockRenderNpcs.Version(), as this BlockRender needs it
+```
+```cpp
+	bool operator==(const BlastPush&) const = default;
+```
+```cpp
+	bool operator==(const BlastPush&) const = default;
+};
+
+// What the module's Explode did: how it went (1 started, 0 V isn't found, -1 no attack record or effect); then how many
+// living NPCs within the blast's reach it knocked down with the game's forced reaction, how many it left standing as the
+// game keeps them from being knocked down, and whether it told the crowd.
+struct BlastStart
+{
+	int32_t result = 0;
+	int32_t knocked = 0;
+	int32_t immune = 0;
+	bool    panic = false;
+
+	bool operator==(const BlastStart&) const = default;
+```
+```cpp
+	// grenade's attack as a game effect there, and the explosion's sound; with aKnock, its knockdown on each NPC within reach
+	// directly too. The module's Explode says how it went (1 started, 0 V isn't found, -1 no attack record or effect).
+	std::optional<int32_t> Explode(const Vec3d& aCentre, double aReach, bool aKnock, std::string& aWhy);
+```
+```cpp
+	// grenade's attack as a game effect there, and the explosion's sound; with aKnock, each living NPC within reach knocked
+	// down by the game's forced reaction, unless the game keeps it from being knocked down; and the crowd told.
+	std::optional<BlastStart> Explode(const Vec3d& aCentre, double aReach, bool aKnock, std::string& aWhy);
+```
+```cpp
+		kVHealth,
+```
+```cpp
+		kVHealth,
+		kBlastKnocked,
+		kBlastImmune,
+		kBlastPanic,
+```
+- [ ] **Step 2: Edit `src/GameScript.cpp`**
+
+```cpp
+// In GameScript::Field's order: the fields List fills, those HideV fills and those Push fills, and their types.
+```
+```cpp
+// In GameScript::Field's order: the fields List fills, those HideV fills, those Push fills and those Explode fills, and
+// their types.
+```
+```cpp
+		{ "vHealth", "Float" },
+```
+```cpp
+		{ "vHealth", "Float" },            { "blastKnocked", "Int32" },         { "blastImmune", "Int32" },
+		{ "blastPanic", "Bool" },
+```
+```cpp
+std::optional<int32_t> GameScript::Explode(const Vec3d& aCentre, double aReach, bool aKnock, std::string& aWhy)
+```
+```cpp
+std::optional<BlastStart> GameScript::Explode(const Vec3d& aCentre, double aReach, bool aKnock, std::string& aWhy)
+```
+```cpp
+		aWhy = "BlockRenderNpcs.Explode failed";
+		return std::nullopt;
+	}
+	return result;
+}
+```
+```cpp
+		aWhy = "BlockRenderNpcs.Explode failed";
+		return std::nullopt;
+	}
+	RED4ext::IScriptable& instance = *system.GetPtr();
+	return BlastStart{ result, FieldOf<int32_t>(*fields_[kBlastKnocked], instance), FieldOf<int32_t>(*fields_[kBlastImmune], instance),
+		               FieldOf<bool>(*fields_[kBlastPanic], instance) };
+}
+```
+- [ ] **Step 3: Edit `src/Plugin.cpp`**
+
+```cpp
+// share as build mode starts. Minecraft's blasts knock down what they reach as the game's knockdown grenade does, their own
+// hits land as explosions, and their push throws the bodies, cars and loose things.
+```
+```cpp
+// share as build mode starts. Minecraft's blasts run the game's knockdown grenade's attack over what they reach, knock its
+// living NPCs down with the game's forced reaction and tell the crowd, their own hits land as explosions, and their push
+// throws the bodies, cars and loose things.
+```
+```cpp
+constexpr const char* kVersion = "0.19.0";
+```
+```cpp
+constexpr const char* kVersion = "0.19.1";
+```
+```cpp
+bool               g_blastKnock = false;  // set blastknock 1: each NPC within a blast's reach gets the knockdown directly too
+```
+```cpp
+bool               g_blastKnock = true;  // set blastknock: each living NPC within a blast's reach knocked down by force
+```
+```cpp
+	std::string                  why;
+	const std::optional<int32_t> result = g_script.Explode(blast->centre, blast->reach, g_blastKnock, why);
+	std::string                  outcome = "there's no attack record or effect for its knockdowns";
+	if (!result)
+	{
+		outcome = "the module can't be called: " + why;
+	}
+	else if (*result == 1)
+	{
+		outcome = g_blastKnock ? "its knockdown attack and sound started, and each NPC within it knocked down directly"
+		                       : "its knockdown attack and sound started";
+	}
+	else if (*result == 0)
+	{
+		outcome = "V isn't found";
+	}
+	g_lastBlast = std::format("{}: {} NPCs within it; its push to come", where, within);
+```
+```cpp
+	std::string                           why;
+	const std::optional<cpmc::BlastStart> start = g_script.Explode(blast->centre, blast->reach, g_blastKnock, why);
+	std::string                           outcome = "there's no attack record or effect for its knockdowns";
+	std::string                           knocked;
+	if (!start)
+	{
+		outcome = "the module can't be called: " + why;
+	}
+	else if (start->result == 1)
+	{
+		knocked = g_blastKnock ? std::format("{} knocked down by the game's forced reaction, {} immune to it", start->knocked, start->immune)
+		                       : std::string("the forced knockdowns off");
+		outcome = std::format("its knockdown attack and sound started; {}; {}", knocked,
+		                      start->panic ? "the crowd told, from the NPC nearest it" : "no NPC near enough to tell the crowd");
+	}
+	else if (start->result == 0)
+	{
+		outcome = "V isn't found";
+	}
+	g_lastBlast = std::format("{}: {} NPCs within it{}; its push to come", where, within, knocked.empty() ? "" : ", " + knocked);
+```
+```cpp
+			return Report("set blastknock: 1 knocks down each NPC within a blast's reach directly too, with the knockdown grenade's status "
+			              "effect; 0 leaves knockdowns to the blast's attack");
+		}
+		g_blastKnock = aRequest.number == 1.0;
+		return Report(g_blastKnock ? "set blastknock 1: each NPC within a blast's reach is knocked down directly too"
+		                           : "set blastknock 0: the blast's attack knocks NPCs down");
+```
+```cpp
+			return Report("set blastknock: 1, the default, knocks down each living NPC within a blast's reach with the game's forced "
+			              "reaction, unless the game keeps it from being knocked down; 0 knocks none down");
+		}
+		g_blastKnock = aRequest.number == 1.0;
+		return Report(g_blastKnock ? "set blastknock 1: each living NPC within a blast's reach is knocked down by the game's forced reaction"
+		                           : "set blastknock 0: a blast knocks no NPC down; its attack, sound, own hits and push stay");
+```
+- [ ] **Step 4: Edit `CMakeLists.txt`: version 0.19.1**
+
+```cmake
+project(BlockRender VERSION 0.19.0 LANGUAGES C CXX)
+```
+```cmake
+project(BlockRender VERSION 0.19.1 LANGUAGES C CXX)
+```
+- [ ] **Step 5: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `450 test(s), 0 failure(s)`.
+
+- [ ] **Step 6: Check that BlockRender imports nothing from PhysX**
+
+```bash
+DUMPBIN="$(ls "/c/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/"*/bin/Hostx64/x64/dumpbin.exe | head -1)"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && MSYS_NO_PATHCONV=1 "$DUMPBIN" -imports -nologo build\\RelWithDebInfo\\BlockRender.dll \
+  | grep -ci "physx"
+```
+Expected: `0`.
+
+- [ ] **Step 7: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "npcs-and-combat: BlockRender 0.19.1 knocks down by the game's forced reaction by default, logs how many it knocked down and left immune and whether it told the crowd, from module version 7" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 52: In the game: step 5b's fix
+
+The spec's "Step 5b's fix, in the game", with the user, on BlockRender 0.19.1 with `set combat 1`, linked to
+Minecraft with CyberCraft Tweaks 1.3.0, its player in survival, on step 2's busy pavement as in step 5b. It settles what
+the fix left to the game (the spec's "Changes from step 5b"):
+- **the forced knockdowns:** whether the residents within a blast fall, away from it, and get up again, or the blast's
+  own attack, whose hits reach them the same frame, cuts the knockdown short;
+- **the crowd:** whether it panics and flees, and how the police and others take the stimulus, with V as its
+  instigator;
+- **other NPCs,** if any are about (gangers, police, a drone): whether they fall too, or the game keeps them standing.
+
+The commands of Task 31 come back, with Task 48's grep of Minecraft's log. Note what you see as you go: Step 9 records
+it. If the game freezes, read the logs and the newest folder in `%LOCALAPPDATA%\REDEngine\ReportQueue`, and force-close
+it only when the user asks. If a check fails, stop and find the cause with superpowers:systematic-debugging before going
+on. A blast's knockdowns and stimulus are V's: people flee, and the police may come; nothing of it lasts unless the user
+saves.
+
+**Files:**
+- Modify: `docs/spikes/2026-10-05-npcs-and-combat-results.md`
+
+- [ ] **Step 1: Deploy (the game must not be running)**
+
+```bash
+tasklist | grep -i -c "cyberpunk2077.exe"
+```
+Expected: `0`. If it's `1`, ask the user to quit the game first, because a running game locks the DLL.
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+P=/e/Cyberpunk2077/red4ext/plugins/BlockRender; H=/e/Cyberpunk2077/bin/x64/plugins/cyber_engine_tweaks/mods/blockrender_hud
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default -DCP2077_DIR=E:/Cyberpunk2077 > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C|error MSB"; \
+  "$CMAKE" --preset default -DCP2077_DIR= > /dev/null; \
+  cmp build/RelWithDebInfo/BlockRender.dll "$P/BlockRender.dll" && cmp scripts/BlockRender.reds "$P/Scripts/BlockRender.reds" \
+  && cmp tools/blockrender_hud/init.lua "$H/init.lua" && echo installed
+```
+Expected: `installed`. The second configure clears `CP2077_DIR` again.
+
+- [ ] **Step 2: In the game: the module and its natives**
+
+Ask the user to start the `CyberCraft` instance, then the game, and to wait at the game's main menu. If a "REDScript
+compilation has failed" message box shows instead, ask the user to click OK and quit the game, and read redscript's log
+for why. Otherwise:
+```bash
+grep -E "BlockRender|Codeware.Global|Compilation complete|ERROR" /e/Cyberpunk2077/r6/logs/redscript_rCURRENT.log; \
+  L=$(ls -t /e/Cyberpunk2077/red4ext/logs | grep -i blockrender | head -1); grep -E "loaded|natives:" "/e/Cyberpunk2077/red4ext/logs/$L"
+```
+Expected: the module's path and Codeware's among the files compiled, `Compilation complete`, and no `ERROR` line; in
+BlockRender's log, `BlockRender 0.19.1 loaded` and the seven natives added.
+
+- [ ] **Step 3: In the game: load, link, and combat on**
+
+Ask the user to load the save on the busy pavement, and click Link. Then send `set combat 1`.
+Expected: in the log, `module: found BlockRenderNpcs version 7, its 13 functions, the 22 fields List fills, and
+BlockRender's 7 natives`; in the status, `blasts=on: 0 taken, blast power 0.50; none yet`.
+
+- [ ] **Step 4: In the game: the forced knockdowns**
+
+Outside build mode, ask the user to face a few residents 4 to 6 m away, and click "TNT 5 m ahead". Expected:
+- in the log, `explosion at Minecraft …: a blast at world (…), reaching 8.0 m, N listed NPCs within it; its knockdown
+  attack and sound started; K knocked down by the game's forced reaction, I immune to it; the crowd told, from the NPC
+  nearest it`, K + I the living NPCs within it;
+- on screen: the residents within 8 m fall away from the blast, as in CET's console, and get up again; the others
+  panic and flee. Ask the user what they saw, and what the crowd and any police did.
+
+Then send `set blastknock 0` (`set blastknock 0: a blast knocks no NPC down; its attack, sound, own hits and push
+stay`) and again: `…; the forced knockdowns off; the crowd told, …`, nobody falls, and the status's blasts line says
+`the forced knockdowns off`. Then `set blastknock 1`.
+
+- [ ] **Step 5: In the game: TNT among residents**
+
+Ask the user to set off TNT among residents in build mode, from slots 8 and 9 as in step 5b, standing back more than 8
+blocks. Expected: the log's blast hits and landings as in step 5b, the dead thrown, residents within reach who live
+knocked down, and the crowd fleeing. Ask the user what they saw.
+
+- [ ] **Step 6: In the game: other NPCs, if any are about**
+
+If gangers, police or a drone are within reach of a blast, from TNT or "TNT 5 m ahead", note whether they fall, or the
+log counts them immune. Otherwise skip this step, and say so in the results.
+
+- [ ] **Step 7: In the game: combat off, unlinking, and quitting**
+
+Send `set combat 0`, then ask the user to click Unlink, quit the game and stop Minecraft. Expected: `blasts=off:
+Minecraft's blasts are logged, not applied`; the game quits normally (`25 vtable entries restored`).
+
+- [ ] **Step 8: Read the log once more**
+
+```bash
+L=$(ls -t /e/Cyberpunk2077/red4ext/logs | grep -i blockrender | head -1); grep -E "module:|explosion at|blast|hit on NPC|set blast|explode" "/e/Cyberpunk2077/red4ext/logs/$L" | head -400
+```
+Everything the steps above logged, for the results.
+
+- [ ] **Step 9: Record the results in `docs/spikes/2026-10-05-npcs-and-combat-results.md`**
+
+A "Step 5b's fix" section: each check above with its outcome and numbers: the forced knockdowns, with the log's counts
+and what the user saw; `set blastknock 0`; the crowd, and any police; the TNT; other NPCs, or that none were about; and
+anything that surprised. Update the spike's answer at the top.
+
+- [ ] **Step 10: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add docs/spikes/2026-10-05-npcs-and-combat-results.md docs/superpowers/plans/2026-10-05-npcs-and-combat.md \
+  && git commit -q -m "npcs-and-combat: step 5b's fix in the game" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 53: Close the spike
 
 - [ ] **Step 1: The spike's answer, and "How Part 3 went"**
 
 At the top of the results, the spike's answer to its question, with Part 3's: whether Minecraft's explosions knock down
-and throw NPCs and push cars and props, and what is left. At the end of this plan, after "Found while planning Part 3":
+and throw NPCs and push cars and props, and what is left. At the end of this plan, after "Step 5b's fix":
 "How Part 3 went", what ran as written, what changed, and what steps 5a and 5b found.
 
 - [ ] **Step 2: Commit**
@@ -13906,3 +14503,53 @@ The spec's "Changes while planning Part 3" records these too, with the user's de
 - **The module is version 6:** 13 functions, 19 fields, and the same seven natives.
 - **The plan's tools** (`tools/plans`): `planlib.py` and `gen_plan.py` take `minecraft/` paths, and Java and shell
   files; `run_plan.py` runs "Build CyberCraft Tweaks" steps as it runs the module's compile.
+
+## Step 5b's fix
+
+Step 5b (Task 48) ran on 2026-10-06 (the results' "Step 5b"). Blasts showed the game's explosion, pushed and damaged
+cars and props, and their own hits landed as explosions that killed and threw; the follow-ups worked. It found that
+living NPCs didn't fall, and that the crowd didn't panic, and the user chose how to fix both; the spec's "Changes from
+step 5b" says what and why. This records what it did to the plan.
+
+### What step 5b found
+
+1. **Living NPCs didn't fall.** Residents within a blast carried the knockdown's status effect, and only flinched and
+   slid with the push; with the status effect given directly too (`set blastknock 1`), the same. An NPC falls when its
+   hit reaction component sends its AI a knockdown, which `GetReactionType` gives only for a strong explosion, a hit
+   flagged `HighSpeedMelee`, or, with both the NPC's knockdown thresholds over 0, a hit of reaction severity 3 or enough
+   impulse and damage; a resident's impulse threshold is 0, and the blast's hits have no damage, weapon or impulse. The
+   game's forced reaction, `SendForcedHitDataToAIBehavior` with a knockdown, knocked a resident down in CET's console.
+2. **The crowd didn't panic:** the game's explosions broadcast an `Explosion` stimulus, and ours broadcast none.
+3. **The health carries one way:** in build mode V's own health goes on regenerating, and Minecraft's hearts don't come
+   back to V.
+
+### What the user decided
+
+Knock each living NPC within a blast down with the game's forced reaction, skipping those the game keeps from being
+knocked down, on by default (`set blastknock 0` turns it off), the direct status effect gone; tell the crowd with the
+game's `Explosion` stimulus, from the NPC nearest the blast, with V as its instigator; and leave the health as it is.
+
+### What changed in the plan
+
+- **New tasks, 49 to 52,** after Task 48, which had run: the status (49); the module, version 7, with the forced
+  knockdowns and the crowd told (50); `GameScript` and BlockRender 0.19.1 (51); and the fix in the game (52).
+- **The close is Task 53,** where Task 49 was.
+
+### What was checked
+
+- In the decompiled scripts, the hit reaction component's `EvaluateHit`, `SetHitReactionThresholds`,
+  `SetHitReactionImmunities`, `GetHitIntensity`, `GetReactionType`, `IsStrongExplosion`, `SendDataToAIBehavior` and
+  `OnForcedHitReaction`; `SendForcedHitDataToAIBehavior` and the effectors and `NPCPuppet` code that call it;
+  `GetLocalAngleForDirectionInInt`; `ScriptedPuppet`'s `IsMassive`, `GetNPCType` and `IsOnOffMeshLink`; the stimulus
+  broadcaster's `BroadcastStim` and `TriggerSingleBroadcast`, and the explosion stimuli `NPCPuppet` and the rain missile
+  broadcast; and the enums and structs they use. In the game, through CET's console, a resident's crowd flag and
+  knockdown stats, and the forced knockdown. The spec's "Changes from step 5b" lists each with its source.
+- Tasks 49 to 51 as "Before you start" says: written and tested in the scratch clone, 3 mutations of the changed status
+  test, the module compiled both ways with a slip in `Explode` failing both ways, then replayed from this text in a fresh
+  clone, every expectation met and the files identical.
+
+### Left to the game
+
+Whether the forced knockdown, sent as the blast's attack starts, plays out, or the attack's hits cut it short; how other
+NPCs than residents take it, if any are about; and how the crowd, and the police, take the stimulus with V as its
+instigator. Task 52 opens with them.
