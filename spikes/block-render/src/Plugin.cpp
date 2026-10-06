@@ -9,7 +9,9 @@
 // (scripts/BlockRender.reds), so that Minecraft's weapons hit them and they press its pressure plates; with combat on,
 // Minecraft's hits land on them as V's, through the game's whole damage pipeline, and in build mode the game's hits on V
 // go to Minecraft's player, whose death kills V. In build mode V's meshes and effects and the game's crosshair are
-// hidden, and with combat on V's unarmed weapon is drawn, so that hits carry it.
+// hidden, and with combat on V's unarmed weapon is drawn, so that hits carry it, and Minecraft's player takes V's health
+// share as build mode starts. Minecraft's blasts knock down what they reach as the game's knockdown grenade does, their own
+// hits land as explosions, and their push throws the bodies, cars and loose things.
 // Commands come through blockrender.request, in its folder or the overlay's, and status.txt in the overlay's folder says
 // what it's doing. See docs/superpowers/specs/2026-10-01-block-render-design.md, 2026-10-02-minecraft-link-design.md,
 // 2026-10-03-collision-and-movement-design.md and 2026-10-05-npcs-and-combat-design.md.
@@ -72,7 +74,7 @@ namespace
 using Clock = std::chrono::steady_clock;
 using namespace std::chrono_literals;
 
-constexpr const char* kVersion = "0.18.1";
+constexpr const char* kVersion = "0.19.0";
 
 // A number of a version "major.minor.patch", aIndex 0 being the major, so that Query reports kVersion, as the log does.
 constexpr uint32_t VersionNumber(std::string_view aVersion, size_t aIndex)
@@ -182,7 +184,7 @@ size_t                                    g_wrapThreads = 0;      // the wraps' 
 // Spike 6's combat both ways (its spec's "Part 2"). Main thread only: the natives' inbox takes what the damage
 // pipeline's wraps report, on whichever thread runs it.
 bool                                  g_combat = false;      // set combat 0|1: off until step 4 passes
-std::vector<skycraft::proto::McEvent> g_events;              // Minecraft's hits and deaths this frame, in the ring's order
+std::vector<skycraft::proto::McEvent> g_events;              // Minecraft's blasts, hits and deaths this frame, in the ring's order
 double                                g_punch = 0.0;         // V's punch and max health, as the module last read them
 double                                g_vHealthMax = 0.0;
 std::string                           g_punchItem;           // what V's unarmed slot draws, which the punch is read from
@@ -209,6 +211,7 @@ struct PendingHit
 	double   damage = 0.0;
 	double   amount = 0.0;  // where the pipeline starts it
 	double   at = 0.0;
+	bool     blast = false;  // a blast's own hit
 };
 std::vector<PendingHit>         g_pendingHits;
 std::map<std::string, uint64_t> g_hitDrops;  // hits not applied, by reason
@@ -218,6 +221,15 @@ uint64_t                        g_hurtsSent = 0;
 uint64_t                        g_deaths = 0;
 std::string                     g_lastHit;
 std::string                     g_lastHurt;
+
+// Spike 6's Minecraft blasts (its spec's "Part 3"), and V's health share for Minecraft's player (its follow-up). Main
+// thread only.
+cpmc::link::Blasts g_blasts;                                 // the last moments' blasts: their own hits, their pushes
+double             g_blastPower = cpmc::link::kBlastPower;  // set blastpower: a blast's hits start at the punch x damage^this
+bool               g_blastKnock = false;  // set blastknock 1: each NPC within a blast's reach gets the knockdown directly too
+std::string        g_lastBlast;
+double             g_vHealth = 0.0;  // V's health share, as the module last read it
+std::string        g_lastHealth;
 
 // This frame's figures, for bursts.
 struct FrameFigures
@@ -375,11 +387,12 @@ public:
 
 	void Explosion(const skycraft::proto::McEvent& aEvent) override
 	{
-		::Log("explosion at Minecraft {:.1f} {:.1f} {:.1f}, radius {:.1f}", aEvent.a, aEvent.b, aEvent.c, aEvent.d);
 		g_burst.Start(cpmc::SteadySeconds(), "explosion");
+		g_events.push_back(aEvent);  // Fight logs it
 	}
 
-	// Spike 6: Minecraft's hits on NPCs and its player's death, kept in the ring's order for Fight, after the link's update.
+	// Spike 6: Minecraft's blasts, hits on NPCs and its player's death, kept in the ring's order for Fight, after the link's
+	// update: a blast before its own hits.
 	void HitActor(const skycraft::proto::McEvent& aEvent) override { g_events.push_back(aEvent); }
 	void PlayerDied(const skycraft::proto::McEvent& aEvent) override { g_events.push_back(aEvent); }
 
@@ -652,6 +665,7 @@ void ListNpcs(double aNow, const std::optional<cpmc::Vec3d>& aFeet)
 	g_punchItem = g_npcList->punchItem;
 	g_punchDrawn = g_npcList->punchDrawn;
 	g_vHealthMax = g_npcList->vHealthMax;
+	g_vHealth = g_npcList->vHealth;
 	g_actorRecords = cpmc::link::ActorRecords(g_npcList->npcs, *aFeet, g_npcSizes.Boxes(), g_actorIds, aNow);
 	g_link->WriteActors(g_actorRecords);
 	g_listedEntities.clear();
@@ -702,19 +716,46 @@ void DropHit(const std::string& aHit, const std::string& aWhy)
 	Log("{}; not applied: {}", aHit, aWhy);
 }
 
+// The NPC aEntity as the module last listed it; null if it isn't listed.
+const cpmc::link::NpcSample* ListedByEntity(uint64_t aEntity)
+{
+	if (!g_npcList)
+	{
+		return nullptr;
+	}
+	const auto npc = std::find_if(g_npcList->npcs.begin(), g_npcList->npcs.end(),
+	                              [&](const cpmc::link::NpcSample& aNpc) { return aNpc.entity == aEntity; });
+	return npc != g_npcList->npcs.end() ? &*npc : nullptr;
+}
+
 // One of Minecraft's hits on an NPC (spike 6's "Minecraft's hits on NPCs"): logged, and with combat on, made V's through
-// the module, starting the game's damage pipeline at V's punch x Minecraft's damage to the hit power.
+// the module, starting the game's damage pipeline at V's punch x Minecraft's damage to the hit power. One within a blast's
+// window, on an NPC whose last listed feet are within the blast's reach, is the blast's own (its "Blast hits"): of type
+// Explosion, from the blast's centre, starting at V's punch x Minecraft's damage to the blast power.
 void HitOnNpc(const skycraft::proto::McEvent& aEvent, double aNow, bool aVFound)
 {
 	++g_npcHits;
-	const std::string hit = std::format("hit on NPC {} ({}) for {:.2f} of Minecraft's damage, knockback {:.2f}; {}", aEvent.formId,
-	                                    NpcName(aEvent.formId), aEvent.a, aEvent.d, cpmc::link::HitWords(aEvent));
+	std::string hit = std::format("hit on NPC {} ({}) for {:.2f} of Minecraft's damage, knockback {:.2f}; {}", aEvent.formId,
+	                              NpcName(aEvent.formId), aEvent.a, aEvent.d, cpmc::link::HitWords(aEvent));
 	if (!g_combat)
 	{
 		return Log("{}; not applied: combat is off", hit);
 	}
+	std::optional<cpmc::link::Blast> blast;
+	if (const std::optional<uint64_t> entity = g_actorIds.Entity(aEvent.formId, aNow))
+	{
+		if (const cpmc::link::NpcSample* npc = ListedByEntity(*entity))
+		{
+			blast = g_blasts.HitOn(npc->position, aNow);
+		}
+	}
+	if (blast)
+	{
+		hit += "; a blast's own";
+	}
+	const double                            power = blast ? g_blastPower : g_hitPower;
 	cpmc::link::HitDrop                     drop = cpmc::link::HitDrop::Count;
-	const std::optional<cpmc::link::NpcHit> accepted = cpmc::link::AcceptHit(aEvent, g_actorIds, aNow, g_punch, g_hitPower, drop);
+	const std::optional<cpmc::link::NpcHit> accepted = cpmc::link::AcceptHit(aEvent, g_actorIds, aNow, g_punch, power, drop);
 	if (!accepted)
 	{
 		return DropHit(hit, cpmc::link::HitDropName(drop));
@@ -724,17 +765,104 @@ void HitOnNpc(const skycraft::proto::McEvent& aEvent, double aNow, bool aVFound)
 		return DropHit(hit, "V isn't found");
 	}
 	std::string                  why;
-	const std::optional<int32_t> result = g_script.Hit(accepted->entity, accepted->amount, accepted->strong, why);
+	const std::optional<int32_t> result = blast ? g_script.BlastHit(accepted->entity, accepted->amount, blast->centre, why)
+	                                            : g_script.Hit(accepted->entity, accepted->amount, accepted->strong, why);
 	if (!result || *result != 1)
 	{
 		return DropHit(hit, result ? cpmc::link::HitResultName(*result) : "the module can't be called: " + why);
 	}
 	++g_hitsQueued;
-	g_pendingHits.push_back({ accepted->entity, accepted->formId, accepted->damage, accepted->amount, aNow });
-	g_lastHit = std::format("NPC {} ({}): {:.2f} of Minecraft's damage, starting at {:.2f}{}; queued", accepted->formId,
-	                        NpcName(accepted->formId), accepted->damage, accepted->amount, accepted->strong ? ", strong" : "");
-	Log("{}: starting at {:.2f} = V's punch {:.2f} x {:.2f}^{:.2f}{}{}; queued", hit, accepted->amount, g_punch, accepted->damage,
-	    g_hitPower, accepted->strong ? ", strong" : "", g_punchDrawn ? "" : ", without V's weapon drawn");
+	g_pendingHits.push_back({ accepted->entity, accepted->formId, accepted->damage, accepted->amount, aNow, blast.has_value() });
+	const bool strong = accepted->strong && !blast;
+	g_lastHit = std::format("NPC {} ({}): {:.2f} of Minecraft's damage{}, starting at {:.2f}{}; queued", accepted->formId,
+	                        NpcName(accepted->formId), accepted->damage, blast ? ", a blast's" : "", accepted->amount,
+	                        strong ? ", strong" : "");
+	Log("{}: starting at {:.2f} = V's punch {:.2f} x {:.2f}^{:.2f}{}{}; queued", hit, accepted->amount, g_punch, accepted->damage, power,
+	    strong ? ", strong" : "", blast || g_punchDrawn ? "" : ", without V's weapon drawn");
+}
+
+// One of Minecraft's blasts (spike 6's "The blast in the game"): with combat on, the game's knockdown grenade's attack and
+// the explosion's sound at its centre, in the game's axes, through the module; its push follows a quarter second after
+// (PushBlast).
+void BlastIn(const skycraft::proto::McEvent& aEvent, double aNow, bool aVFound)
+{
+	const std::string explosion =
+	    std::format("explosion at Minecraft {:.1f} {:.1f} {:.1f}, radius {:.1f}", aEvent.a, aEvent.b, aEvent.c, aEvent.d);
+	if (!g_combat)
+	{
+		return Log("{}; not applied: combat is off", explosion);
+	}
+	const std::optional<cpmc::link::Blast> blast = cpmc::link::AcceptBlast(aEvent, aNow);
+	if (!blast)
+	{
+		return Log("{}; not applied: its centre or radius isn't usable", explosion);
+	}
+	if (!aVFound)
+	{
+		return Log("{}; not applied: V isn't found", explosion);
+	}
+	g_blasts.Add(*blast);
+	size_t within = 0;
+	if (g_npcList)
+	{
+		for (const cpmc::link::NpcSample& npc : g_npcList->npcs)
+		{
+			within += std::hypot(npc.position.x - blast->centre.x, npc.position.y - blast->centre.y, npc.position.z - blast->centre.z) <=
+			          blast->reach;
+		}
+	}
+	const std::string where = std::format("at world ({:.2f}, {:.2f}, {:.2f}), reaching {:.1f} m", blast->centre.x, blast->centre.y,
+	                                      blast->centre.z, blast->reach);
+	std::string                  why;
+	const std::optional<int32_t> result = g_script.Explode(blast->centre, blast->reach, g_blastKnock, why);
+	std::string                  outcome = "there's no attack record or effect for its knockdowns";
+	if (!result)
+	{
+		outcome = "the module can't be called: " + why;
+	}
+	else if (*result == 1)
+	{
+		outcome = g_blastKnock ? "its knockdown attack and sound started, and each NPC within it knocked down directly"
+		                       : "its knockdown attack and sound started";
+	}
+	else if (*result == 0)
+	{
+		outcome = "V isn't found";
+	}
+	g_lastBlast = std::format("{}: {} NPCs within it; its push to come", where, within);
+	Log("{}: a blast {}, {} listed NPCs within it; {}", explosion, where, within, outcome);
+}
+
+// A blast's push, a quarter second after it (spike 6's "The blast in the game"), through the module, which then says what
+// is within the blast's reach: knocked down, and dead.
+void PushBlast(const cpmc::link::Blast& aBlast, double aNow, bool aVFound)
+{
+	const std::string where = std::format("at world ({:.2f}, {:.2f}, {:.2f}), reaching {:.1f} m", aBlast.centre.x, aBlast.centre.y,
+	                                      aBlast.centre.z, aBlast.reach);
+	std::string                    why = "V isn't found";
+	const std::optional<cpmc::BlastPush> push = aVFound ? g_script.Push(aBlast.centre, aBlast.reach, why) : std::nullopt;
+	if (!push || push->npcs < 0)
+	{
+		g_lastBlast = std::format("{}: {} hits of its own; not pushed: {}", where, aBlast.hits, push ? "V isn't found" : why);
+		return Log("blast {} not pushed: {}", where, push ? "V isn't found" : why);
+	}
+	g_lastBlast = std::format("{}: {} NPCs within it, {} hits of its own; after its push {} knocked down, {} dead", where, push->npcs,
+	                          aBlast.hits, push->down, push->dead);
+	Log("blast {} pushed, {:.2f} s after it: {} NPCs within it, {} knocked down, {} dead; {} hits of its own", where, aNow - aBlast.at,
+	    push->npcs, push->down, push->dead, aBlast.hits);
+}
+
+// V's health share to Minecraft's player as V's Immortal goes on, with build mode and combat (spike 6's follow-up), through
+// CyberCraft Tweaks 1.3.0: a SkyCraft without it leaves the input alone.
+void CarryHealth()
+{
+	if (!g_link || g_vHealth <= 0.0)
+	{
+		return Log("combat: Minecraft's health not set: {}", !g_link ? "the mapping isn't open" : "V's health isn't read yet");
+	}
+	const bool sent = g_link->Push(cpmc::link::HealthInput(g_vHealth));
+	g_lastHealth = std::format("set to V's share {:.4f} when build mode last started{}", g_vHealth, sent ? "" : ", but the input ring was full");
+	Log("combat: Minecraft's health {}", g_lastHealth);
 }
 
 // Minecraft's player's death (spike 6's "Deaths"): with combat on, in build mode or just after it, V's death too.
@@ -767,6 +895,8 @@ std::string ArmWords(int32_t aResult, bool aOn)
 		return aOn ? "asked the game to draw V's unarmed weapon" : "asked the game for V's own weapon back";
 	case 2:
 		return aOn ? "V has it drawn" : "nothing to put back";
+	case 3:
+		return "put away, and drawn again in a second, so that the game starts the effects it starts as it's drawn";
 	case 0:
 		return "V isn't found";
 	case -1:
@@ -842,9 +972,10 @@ void SwitchV(bool aBuild, bool aVFound, double aNow)
 	}
 }
 
-// Spike 6's combat, after the link's update and before the NPCs are listed (its spec's "The frame"): Minecraft's hits and
-// deaths in the ring's order; our hits the game has dealt, those it dealt nothing and why, and those it hasn't said
-// within kHitTrail; V's god mode, V's unarmed weapon and V's meshes; and whether V's hurts are taken.
+// Spike 6's combat, after the link's update and before the NPCs are listed (its spec's "The frame"): Minecraft's blasts,
+// hits and deaths in the ring's order, a blast before its own hits, and the blasts' pushes as they come due; our hits the
+// game has dealt, those it dealt nothing and why, and those it hasn't said within kHitTrail; V's god mode, with V's health
+// share for Minecraft as it goes on, V's unarmed weapon and V's meshes; and whether V's hurts are taken.
 void Fight(double aNow, const std::optional<cpmc::Vec3d>& aFeet)
 {
 	const bool build = g_router->On();
@@ -856,7 +987,11 @@ void Fight(double aNow, const std::optional<cpmc::Vec3d>& aFeet)
 	const bool vFound = aFeet.has_value();
 	for (const skycraft::proto::McEvent& event : std::exchange(g_events, {}))
 	{
-		if (event.type == skycraft::proto::kEvHitActor)
+		if (event.type == skycraft::proto::kEvExplosion)
+		{
+			BlastIn(event, aNow, vFound && g_linked);
+		}
+		else if (event.type == skycraft::proto::kEvHitActor)
 		{
 			HitOnNpc(event, aNow, vFound && g_linked);
 		}
@@ -864,6 +999,10 @@ void Fight(double aNow, const std::optional<cpmc::Vec3d>& aFeet)
 		{
 			MinecraftDied(event, aNow, vFound);
 		}
+	}
+	for (const cpmc::link::Blast& blast : g_blasts.Pushes(aNow))
+	{
+		PushBlast(blast, aNow, vFound && g_linked);
 	}
 	for (const cpmc::CombatInbox::Landed& landed : cpmc::CombatReported().TakeLanded())
 	{
@@ -873,29 +1012,31 @@ void Fight(double aNow, const std::optional<cpmc::Vec3d>& aFeet)
 		const uint32_t formId = pending != g_pendingHits.end() ? pending->formId : g_actorIds.IdOf(landed.target).value_or(0);
 		const double   damage = pending != g_pendingHits.end() ? pending->damage : 0.0;
 		const double   start = pending != g_pendingHits.end() ? pending->amount : 0.0;
+		const bool     blast = pending != g_pendingHits.end() && pending->blast;
 		if (pending != g_pendingHits.end())
 		{
 			g_pendingHits.erase(pending);
 		}
 		const std::string how = cpmc::link::LandedWords(landed.flags);
-		g_lastHit = std::format("NPC {} ({}): {:.2f} of Minecraft's damage, started at {:.2f}, {:.2f} dealt{}; {:.0f} -> {:.0f}", formId,
-		                        NpcName(formId), damage, start, landed.amount, how.empty() ? "" : " (" + how + ")", landed.before,
-		                        landed.after);
-		Log("hit on NPC {} landed: started at {:.2f}, {:.2f} dealt{}; its health {:.0f} -> {:.0f}", formId, start, landed.amount,
-		    how.empty() ? "" : " (" + how + ")", landed.before, landed.after);
+		g_lastHit = std::format("NPC {} ({}): {:.2f} of Minecraft's damage{}, started at {:.2f}, {:.2f} dealt{}; {:.0f} -> {:.0f}", formId,
+		                        NpcName(formId), damage, blast ? ", a blast's" : "", start, landed.amount, how.empty() ? "" : " (" + how + ")",
+		                        landed.before, landed.after);
+		Log("{}hit on NPC {} landed: started at {:.2f}, {:.2f} dealt{}; its health {:.0f} -> {:.0f}", blast ? "blast " : "", formId, start,
+		    landed.amount, how.empty() ? "" : " (" + how + ")", landed.before, landed.after);
 	}
 	for (const cpmc::CombatInbox::Ended& ended : cpmc::CombatReported().TakeEnded())
 	{
 		const auto pending = std::find_if(g_pendingHits.begin(), g_pendingHits.end(),
 		                                  [&](const PendingHit& aHit) { return aHit.entity == ended.target; });
 		const uint32_t formId = pending != g_pendingHits.end() ? pending->formId : g_actorIds.IdOf(ended.target).value_or(0);
+		const bool     blast = pending != g_pendingHits.end() && pending->blast;
 		if (pending != g_pendingHits.end())
 		{
 			g_pendingHits.erase(pending);
 		}
 		const std::string why = cpmc::link::HitEndedName(ended.why);
 		++g_hitDrops[why];
-		Log("hit on NPC {} dealt nothing: {}", formId, why);
+		Log("{}hit on NPC {} dealt nothing: {}", blast ? "blast " : "", formId, why);
 	}
 	std::erase_if(g_pendingHits, [&](const PendingHit& aHit) {
 		if (aNow - aHit.at <= cpmc::link::kHitTrail)
@@ -903,8 +1044,8 @@ void Fight(double aNow, const std::optional<cpmc::Vec3d>& aFeet)
 			return false;
 		}
 		++g_hitDrops["not dealt by the game"];
-		Log("hit on NPC {} (starting at {:.2f}) wasn't dealt by the game within {:.0f} s, nor said why", aHit.formId, aHit.amount,
-		    cpmc::link::kHitTrail);
+		Log("{}hit on NPC {} (starting at {:.2f}) wasn't dealt by the game within {:.0f} s, nor said why", aHit.blast ? "blast " : "",
+		    aHit.formId, aHit.amount, cpmc::link::kHitTrail);
 		return true;
 	});
 	if (const std::optional<bool> change = g_godMode.Frame(g_combat, build, vFound))
@@ -916,6 +1057,10 @@ void Fight(double aNow, const std::optional<cpmc::Vec3d>& aFeet)
 			g_immortal = *immortal;
 		}
 		Log("combat: V's Immortal {}: {}", *change ? "on" : "off", immortal ? ImmortalWords(*change, *immortal) : "not done: " + why);
+		if (*change)
+		{
+			CarryHealth();
+		}
 	}
 	SwitchV(build, vFound, aNow);
 	cpmc::CombatReported().SetTaking(g_combat && build && vFound && g_vHealthMax > 0.0);
@@ -1166,9 +1311,10 @@ void Set(const cpmc::Request& aRequest)
 			              "0 only logs hits");
 		}
 		g_combat = aRequest.number == 1.0;
-		return Report(g_combat ? "set combat 1: Minecraft's hits land on NPCs as V's; in build mode V is Immortal with its unarmed weapon "
-		                         "drawn, the game's hits on V go to Minecraft's player, and its death kills V"
-		                       : "set combat 0: Minecraft's hits are only logged, and V's health is V's");
+		return Report(g_combat ? "set combat 1: Minecraft's hits and blasts land on NPCs as V's; in build mode V is Immortal with its "
+		                         "unarmed weapon drawn, Minecraft's player takes V's health share as build mode starts, the game's hits on V "
+		                         "go to Minecraft's player, and its death kills V"
+		                       : "set combat 0: Minecraft's hits and blasts are only logged, and V's health is V's");
 	}
 	if (aRequest.what == "hidev")
 	{
@@ -1190,6 +1336,44 @@ void Set(const cpmc::Request& aRequest)
 		return Report(std::format("set hitpower {:.2f}: a hit starts at V's punch x Minecraft's damage^{:.2f}: a fist (1) one punch, a "
 		                          "diamond sword (7) {:.2f} punches",
 		                          g_hitPower, g_hitPower, std::pow(7.0, g_hitPower)));
+	}
+	if (aRequest.what == "blastpower")
+	{
+		if (aRequest.number < 0.0 || aRequest.number > 1.0)
+		{
+			return Report("set blastpower: from 0 to 1, the power of Minecraft's damage that V's punch is multiplied by for a blast's own "
+			              "hits: 0.5, the default, is the square root");
+		}
+		g_blastPower = aRequest.number;
+		return Report(std::format("set blastpower {:.2f}: a blast's hits start at V's punch x Minecraft's damage^{:.2f}: TNT's 57 at its "
+		                          "centre {:.2f} punches, its 1 at the edge one punch",
+		                          g_blastPower, g_blastPower, std::pow(57.0, g_blastPower)));
+	}
+	if (aRequest.what == "blastknock")
+	{
+		if (aRequest.number != 0.0 && aRequest.number != 1.0)
+		{
+			return Report("set blastknock: 1 knocks down each NPC within a blast's reach directly too, with the knockdown grenade's status "
+			              "effect; 0 leaves knockdowns to the blast's attack");
+		}
+		g_blastKnock = aRequest.number == 1.0;
+		return Report(g_blastKnock ? "set blastknock 1: each NPC within a blast's reach is knocked down directly too"
+		                           : "set blastknock 0: the blast's attack knocks NPCs down");
+	}
+	if (aRequest.what == "bushrule")
+	{
+		if (aRequest.number != 0.0 && aRequest.number != 1.0 && aRequest.number != 2.0)
+		{
+			return Report("set bushrule: what else the city's shape leaves out for Minecraft: 0 nothing, 1 sight-only shapes (a bush's "
+			              "foliage, the default), 2 unsimulated shapes");
+		}
+		g_ground.SetRule(cpmc::px::LeaveOut(int(aRequest.number)));
+		if (g_link)
+		{
+			g_link->RestartCity();
+		}
+		return Report(std::format("set bushrule {:.0f}: the city's shape leaves out {}, and Minecraft gets it again", aRequest.number,
+		                          cpmc::px::LeaveOutName(g_ground.Rule())));
 	}
 	if (aRequest.what == "npcs")
 	{
@@ -1390,6 +1574,33 @@ void HitRequest(const cpmc::Request& aRequest)
 	                   aRequest.what == "strong" ? ", strong" : ""));
 }
 
+// explode <metres> <radius> (spike 6's step 5b): a blast that far ahead of V, at the height of V's feet, as if it were
+// Minecraft's, through all that Minecraft's blasts go through. With no stand-in hit by it, it knocks down, pushes and
+// sounds, and deals nothing.
+void ExplodeRequest(const cpmc::Request& aRequest)
+{
+	const std::optional<cpmc::PlayerPose> pose = cpmc::LocatePlayer();
+	if (!pose)
+	{
+		return Report("explode: there's no player");
+	}
+	const double      flat = std::hypot(double(pose->forward.x), double(pose->forward.y));
+	const double      east = flat > 1e-6 ? pose->forward.x / flat : 0.0;
+	const double      north = flat > 1e-6 ? pose->forward.y / flat : 1.0;
+	const cpmc::Vec3d centre{ pose->feet.x + east * aRequest.number, pose->feet.y + north * aRequest.number, pose->feet.z };
+	const cpmc::Vec3d mc = cpmc::McFromWorld(centre);
+	skycraft::proto::McEvent event{};
+	event.type = skycraft::proto::kEvExplosion;
+	event.a = float(mc.x);
+	event.b = float(mc.y);
+	event.c = float(mc.z);
+	event.d = float(aRequest.radius);
+	g_events.push_back(event);
+	Report(std::format("explode: as if Minecraft blew up {:.1f} m ahead of V, at world ({:.2f}, {:.2f}, {:.2f}), radius {:.1f}; the log "
+	                   "says how it went",
+	                   aRequest.number, centre.x, centre.y, centre.z, aRequest.radius));
+}
+
 // box on|off (spike 5's step 4): a test box 3 m ahead of V, made as the bodies for blocks are, before any block is.
 void BoxRequest(bool aOn)
 {
@@ -1468,6 +1679,7 @@ void RunRequest(const std::filesystem::path& aFolder, bool aWholeLine)
 		Log("punch: {}", g_script.Punch());
 		Report("punch: V's punch, what it's read from, and what hits are made with, in the log");
 		break;
+	case cpmc::Request::Kind::Explode: ExplodeRequest(*request); break;
 	}
 }
 
@@ -1674,6 +1886,8 @@ cpmc::LinkReport LinkLines(const cpmc::Renderer::Stats& aStats, double aNow)
 	report.shapesKept = physx.kept;
 	report.shapesLeft = physx.left;
 	report.shapesUnreadable = physx.unreadable;
+	report.bushRule = cpmc::px::LeaveOutName(g_ground.Rule());
+	report.shapesBush = physx.leftByRule;
 	report.physxWhy = physx.why;
 	const cpmc::px::Bodies::Report& bodies = g_bodies.State();
 	report.bodiesOn = g_blocks && g_renderer->ModeName() != "off";
@@ -1720,10 +1934,15 @@ cpmc::LinkReport LinkLines(const cpmc::Renderer::Stats& aStats, double aNow)
 	report.hurtsLeft = combat.refused;
 	report.hurtsNonLethal = combat.nonLethal;
 	report.lastHurt = g_lastHurt;
+	report.lastHealth = g_lastHealth;
 	report.immortal = g_immortal;
 	report.deaths = g_deaths;
 	report.minecraftDeadFor = g_minecraftDiedAt ? std::optional<double>(aNow - *g_minecraftDiedAt) : std::nullopt;
 	report.combatWhy = CombatWhy();
+	report.blasts = g_blasts.Count();
+	report.blastPower = g_blastPower;
+	report.blastKnock = g_blastKnock;
+	report.lastBlast = g_lastBlast;
 	report.health = g_linked ? g_puppet.Health() : std::nullopt;  // once a second, so fall damage shows
 	report.hideV = g_hideV;
 	report.vHidden = g_hidden.On();
