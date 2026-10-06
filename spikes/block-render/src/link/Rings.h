@@ -25,6 +25,10 @@ void WriteActorTable(uint8_t* aBase, std::span<const proto::ActorRecord> aRecord
 // Minecraft's state, at aBase + kOffMcState. Nothing if it was mid-write all 64 times we looked.
 std::optional<proto::McState> ReadMcState(const uint8_t* aBase);
 
+// Spike 7: Minecraft's world entities, at aBase + kOffWorldEntities, as SkyLink.writeWorldEntities leaves them: the
+// sequence odd while it writes, even after. Nothing if it was mid-write all 64 times we looked.
+std::optional<proto::WorldEntities> ReadWorldEntities(const uint8_t* aBase);
+
 // One byte-ring message: its type, and its payload, which points into the ring.
 struct RingMessage
 {

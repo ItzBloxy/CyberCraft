@@ -81,6 +81,29 @@ std::optional<proto::McState> ReadMcState(const uint8_t* aBase)
 	return std::nullopt;
 }
 
+std::optional<proto::WorldEntities> ReadWorldEntities(const uint8_t* aBase)
+{
+	uint8_t* const source = const_cast<uint8_t*>(aBase) + proto::kOffWorldEntities;  // only loaded from
+	auto           seq = std::atomic_ref<uint32_t>(*reinterpret_cast<uint32_t*>(source));
+	for (int attempt = 0; attempt < 64; ++attempt)
+	{
+		const uint32_t before = seq.load(std::memory_order_acquire);
+		if (before & 1)
+		{
+			_mm_pause();
+			continue;
+		}
+		proto::WorldEntities table;
+		std::memcpy(&table, source, sizeof table);
+		std::atomic_thread_fence(std::memory_order_acquire);
+		if (seq.load(std::memory_order_relaxed) == before)
+		{
+			return table;
+		}
+	}
+	return std::nullopt;
+}
+
 DrainResult DrainByteRing(uint8_t* aRing, uint64_t aDataBytes, uint64_t aBudget, const std::function<bool(const RingMessage&)>& aVisit)
 {
 	DrainResult    result;

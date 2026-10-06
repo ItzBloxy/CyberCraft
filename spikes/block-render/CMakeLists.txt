@@ -65,6 +65,7 @@ add_library(render_core STATIC
 	src/link/Solids.cpp
 	src/link/Actors.cpp
 	src/link/Combat.cpp
+	src/link/WorldTable.cpp
 	src/physx/GameAbi.cpp
 	src/physx/ShapeTriangles.cpp
 	src/physx/OriginWatch.cpp
@@ -214,6 +215,7 @@ add_executable(render_tests
 	tests/TestNpcRegistry.cpp
 	tests/TestCombat.cpp
 	tests/TestCombatInbox.cpp
+	tests/TestWorldTable.cpp
 	tools/mclink/DumpObj.cpp
 	tools/mclink/McLinkScript.cpp
 )

@@ -112,6 +112,29 @@ TEST(RingsMcStateReadsWholeStates)
 	CHECK(!ReadMcState(memory.Bytes()).has_value());
 }
 
+TEST(RingsWorldEntitiesReadWholeTables)
+{
+	Memory               memory(proto::kOffWorldEntities + sizeof(proto::WorldEntities));
+	proto::WorldEntities table{};
+	table.seq = 4;  // even: as SkyLink.writeWorldEntities leaves it
+	table.count = 2;
+	table.entities[1].kind = proto::kWeArrow;
+	table.entities[1].x = 480.5f;
+	std::memcpy(memory.Bytes() + proto::kOffWorldEntities, &table, sizeof table);
+	const auto read = ReadWorldEntities(memory.Bytes());
+	CHECK(read.has_value());
+	if (!read)
+	{
+		return;
+	}
+	CHECK_EQ(read->count, 2u);
+	CHECK_EQ(read->entities[1].kind, uint32_t(proto::kWeArrow));
+	CHECK_EQ(read->entities[1].x, 480.5f);
+	const uint32_t writing = 5;  // odd: Minecraft is mid-write
+	std::memcpy(memory.Bytes() + proto::kOffWorldEntities, &writing, sizeof writing);
+	CHECK(!ReadWorldEntities(memory.Bytes()).has_value());
+}
+
 TEST(RingsByteRingRoundTrip)
 {
 	Memory     ring(0x80 + 128);
