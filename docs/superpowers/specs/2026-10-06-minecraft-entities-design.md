@@ -2,23 +2,25 @@
 
 Date: 2026-10-06. Status: agreed with the user section by section in the brainstorm, after a self-review of the three
 approaches that the user asked for ("Decisions from the brainstorm"). "Found while writing", near the end, lists what
-writing it out added to what was agreed.
+writing it out added to what was agreed. Then revised after a deep self-review, which checked each claim against its
+source and walked through step 0 and run A as the user would play them: "Changes from the deep review", at the end,
+lists what changed and what was checked. The sections above already include those changes.
 
 ## Purpose
 
 This is spike 7 of the project that recreates [SkyCraft](https://github.com/chasmlol/SkyCraft) (Minecraft in Skyrim)
 for Cyberpunk 2077. Night City shows Minecraft's blocks (spike 3), its HUD (spike 4), and lets the user build as
 Minecraft's player (spike 5) and fight with Minecraft's weapons (spike 6). Nothing else Minecraft draws is there:
-- **entities:** lit TNT, falling blocks, minecarts, boats, mobs. In spike 6's step 5b a TNT block was drawn until lit,
-  then vanished, and went off 4 s later where it was;
+- **entities:** lit TNT, falling blocks, minecarts, boats, mobs. In spike 6's step 5b, as the handoff tells it, a TNT
+  block was drawn until lit, then vanished, and went off 4 s later where it was;
 - **block entities,** which Minecraft draws apart from its section meshes: chests, beds, signs, banners, and pistons
   while they move;
 - **particles:** explosions, smoke, block debris, crits;
 - **dropped and thrown items, arrows and tridents;**
 - **the block-breaking cracks and the targeted block's outline.**
 
-SkyCraft's unchanged mod already sends all of it whenever linked, and BlockRender steps over every message of it. This
-spike draws it:
+SkyCraft's unchanged mod already sends all of it whenever it's connected to the game's mapping, Link on or off, and
+BlockRender steps over every message of it. This spike draws it:
 
 > Can Minecraft's entities live in Night City: drawn where Minecraft has them, posed and animated as Minecraft poses
 > them, lit by the game as its own geometry with Minecraft's glow kept, moving without smearing, at little cost?
@@ -43,8 +45,8 @@ steps"):
   Minecraft's own collision still applies to Minecraft's player, since Minecraft runs it.
 - **Lit by the game, with Minecraft's glow kept.** Opaque things go into the G-buffer as the blocks do, so Night City's
   sun, lamps, haze and ambient occlusion light them. What Minecraft draws full-bright (explosion puffs, lava particles,
-  lit TNT's flash, blazes) still glows at night. The user chose this over the game's light without glow, and over
-  Minecraft's own lighting in a forward pass.
+  lit TNT's flash, blazes, magma cubes, allays, vexes) still glows at night. The user chose this over the game's light
+  without glow, and over Minecraft's own lighting in a forward pass.
 - **Approach 1, staged after a self-review.** Three approaches were proposed: the G-buffer plus a forward pass before
   DLSS (1); everything in the G-buffer, translucent things dithered (2); everything forward with our own light (3, ruled
   out by the lighting decision). The user asked for a concrete self-review of them, which checked each claim against
@@ -85,7 +87,8 @@ steps"):
   and custom geometry (beacon beams, guardian beams). SkyCraft's own contact shadows (`kWeShadow`) wait for run A's
   check of the game's ambient occlusion.
 - **Arrows stuck in NPCs** (`kEvArrowStuck`, drained and counted as now): an arrow that hits an NPC's stand-in vanishes.
-- **Translucent entity parts** (a slime's outer layer, a ghast's glow): SkyCraft captures every model as a cut-out.
+- **Translucent entity parts** (a slime's outer layer; allays and vexes, which Minecraft draws translucent): SkyCraft
+  captures every model as a cut-out.
 - **Changes to SkyCraft's mod.** Protocol 11 stays. CyberCraft Tweaks changes only in step C, and only if run A shows
   the need.
 - **Only these versions:** game 2.31, SkyCraft 0.1.2, Minecraft 26.3, Fabric Loader 0.19.5.
@@ -106,12 +109,18 @@ Each fact below was read in its source:
 - **Its frame** (`Plugin.cpp`, `OnUpdate`): requests once a second; `UpdateLink`, which runs `Link::Update` (the rings
   drained, the sink called); then the fight, the NPC list and V's hurts; then `g_renderer->Update()`, which uploads.
 - **The link** (`Link::Take`) keeps `kRenAtlas`, `kRenSection`, `kRenClearAll` and `kRenSolids`; every other type is
-  counted and stepped over. Sections are skipped until the atlas is seen (`sectionsBeforeAtlas`). The mapping zeroes the
-  world-entity table when it creates it (`Mapping.cpp`), and nothing reads it.
-- **The ground** is the city's by default since spike 5 (`Plugin.cpp`): BlockRender sends Night City's shape as
-  triangles and voxels (`kColTris`, `kColRegion`). SkyCraft adds the voxels to every entity's block-collision queries
-  (`BlockCollisionsMixin`), so Minecraft's mobs, items and TNT stand on Night City's ground; on spike 4's floor, which
-  is triangles only, they fall through (`Commands.cpp`'s `tnt-ahead`).
+  counted and stepped over (`DrainByteRing`'s visitor returns false: consumed, not counted against the ring budget).
+  Sections are skipped until the atlas is seen (`sectionsBeforeAtlas`). `Link::Update` runs every frame once the
+  mapping is open, Link on or off, writing the game's heartbeat, so SkyCraft exports all the while.
+- **The mapping** (`Mapping::Open`) zeroes the world-entity table, and the render ring's head and tail, whenever it
+  opens the mapping, created or reused. Nothing reads the table.
+- **The ground** is the city's by default since spike 5 (`Plugin.cpp`), the floor if PhysX's audit fails: BlockRender
+  sends Night City's shape as triangles and voxels (`kColTris`, `kColRegion`). SkyCraft adds the voxels to every
+  entity's block-collision queries (`BlockCollisionsMixin`, `SkyCollision.readRegion`), so Minecraft's mobs, items and
+  TNT stand on Night City's ground; on spike 4's floor, which is triangles only, they fall through (`Commands.cpp`'s
+  `tnt-ahead`). The city's area (`GroundAreas`) reaches 5 regions of 8 blocks out from the centre's region
+  horizontally, 3 below and 2 above; SkyCraft keeps what it was sent, so things stand wherever V has been, and fall
+  beyond.
 - **The renderer** (`render/Renderer.cpp`):
   - **in `gbuffer` mode** one list of ours goes before the list that ends the G-buffer (`ListBefore`, `RecordGbuffer`):
     the blocks into base colour, normals, material and motion vectors (`R10G10B10A2_UNORM`, `R10G10B10A2_UNORM`,
@@ -147,7 +156,8 @@ Each fact below was read in its source:
 - **The tags** at the DLSS evaluate: depth, motion vectors, the scaling input colour, `biasCurrentColorHint`
   (`R8_UNORM`, 1707 × 960, render target and UAV, in UAV state 0x8 at the evaluate) and the output colour. There is no
   exposure tag.
-- **The game's ambient occlusion sees our G-buffer depth:** step 4's cube darkened the road under it (run 8).
+- **The game's ambient occlusion likely sees our G-buffer depth:** the road under step 4's cube darkened, "most likely
+  the game's ambient occlusion" (run 8).
 
 ### SkyCraft's Minecraft side
 
@@ -192,9 +202,14 @@ Each fact below was read in its source:
   - **contact shadows** (`kWeShadow`): the feet and width of players and mobs;
   - **the outline:** `hasSelection`, `selMin`, `selMax`, the targeted block's shape, or the block a held block would
     fill on the game's ground; none while a Minecraft screen is open.
-- **Minecraft's camera and FOV:** the camera follows V's (`SkyState`'s yaw and pitch). The CyberCraft instance's FOV
-  option is 90° (`fov:0.5` in `options.txt`), against the game's 68.24°, so Minecraft's own particle culling
-  (`Frustum.pointInFrustum` while particles are extracted) drops nothing the game shows.
+- **Arrows and tridents** hit the game's exact surfaces and stick there (`AbstractArrowMixin`, `SkyClip.refine`), so a
+  `kWeArrow` record sits where it hit Night City. One that hits an NPC's stand-in is gone, as vanilla Minecraft
+  discards an arrow that hits a creature, and SkyCraft reports `kEvArrowStuck`.
+- **Minecraft's camera and options:** outside build mode the camera follows V's look (`SkyClient` sets the player's
+  yaw and pitch from `SkyState`); in build mode Minecraft's look leads and V follows. The CyberCraft instance's FOV
+  option is 90° (`fov:0.5` in `options.txt`, stored as (FOV − 70) / 40), against the game's 68.24°, so Minecraft's own
+  particle culling (`Frustum.pointInFrustum` while particles are extracted) drops nothing the game shows. Its particles
+  are at All (`particles:0`), and its render distance 8 chunks.
 
 ### SkyCraft's game side, as a reference
 
@@ -206,13 +221,17 @@ Each fact below was read in its source:
 - **writes motion vectors from camera movement alone** ("Minecraft blocks don't move");
 - **darkens the ground** under players and mobs from `kWeShadow` in its own shader (`BlobAO`) and a full-screen pass.
 
-Its depth test with `HashMap` batch order shows layered models wrongly in Skyrim too, so its look there proves nothing
-about layers.
+Its depth test with `HashMap` batch order would show layered models wrongly in Skyrim too (read, not seen), so its look
+there would prove nothing about layers.
 
 ### Minecraft 26.3
 
 Read from the jar:
 - **Depth:** the default depth test is greater-or-equal (`DepthStencilState.DEFAULT`, reversed depth).
+- **Culling:** `EntityModel`'s default render type is `entityCutout`, whose pipeline (`entity_cutout`) culls nothing,
+  as `entity_translucent` and `entity_translucent_emissive` don't: Minecraft draws most entity models two-sided itself.
+- **Bright mobs:** blazes, magma cubes, allays and vexes return block light 15 (`getBlockLightLevel`); allays and vexes
+  are drawn translucent (`entityTranslucent`), as a slime's outer layer is.
 - **Cut-outs:** `ALPHA_CUTOUT` is 0.5 for cut-out blocks and terrain, 0.1 for entities, items and armour; the particle
   and crumbling shaders discard where texel × vertex colour has alpha under 0.1.
 - **Cracks:** the crumbling pipeline blends `DST_COLOR, SRC_COLOR`, which is 2 × crack × what's there. The
@@ -327,8 +346,9 @@ that fails is left out and counted. It goes to the sink each update.
 
 ### Coming and going
 
-- **Before the atlas,** textures and scenes are stepped over, as sections are: they belong to a link we never saw, and
-  SkyCraft reuses ids after its clear. They're counted (`beforeAtlas`).
+- **Before the atlas,** textures and scenes are stepped over, as sections are. The mapping's opening empties the ring,
+  but Minecraft may write for up to a frame before it sees a new game process, with the old generation's ids, which
+  SkyCraft reuses after its clear. They're counted (`beforeAtlas`).
 - **`kRenClearAll`** drops the textures (in `Entities` and on the GPU) and the scene.
 - **Minecraft gone or out of its world** (its heartbeat, or `kMcInWorld` clear): the scene and world entities are
   emptied, so nothing stale is drawn. The textures stay; a new Minecraft process starts with its own clear.
@@ -370,7 +390,8 @@ that fails is left out and counted. It goes to the sink each update.
 - **A texture with a reused id** (only after a clear, which empties the table) goes in afresh.
 - **A batch whose texture isn't on the GPU yet** is skipped that frame and counted. SkyCraft always sends a texture
   before the scene that uses it, so this lasts a frame.
-- **The total is capped at 64 MB.** A texture past it is left out, logged once, and its batches are skipped.
+- **The total is capped at 64 MB,** counting the pixels `Entities` keeps for upload, which pile up while drawing is
+  off. A texture past it is left out, logged once, and its batches are skipped.
 
 ### The snapshot ring
 
@@ -378,13 +399,16 @@ that fails is left out and counted. It goes to the sink each update.
   explosion's scene is about 1 MB). `Update` copies the frame's geometry into a buffer no recorded list still reads, the
   newest one becoming the frame's snapshot. If none is free, the copy waits for the next frame. A frame over 8 MB keeps
   its draws in order while they fit, and the rest are counted as skipped.
-- **Each recording** that draws a snapshot holds it until the GPU has passed that list's fence, as sections are held
-  (`Retired`).
+- **A frame's snapshot is held** from its G-buffer list's recording until the GPU passes the fence after the last list
+  of ours that can read it: the frame's forward list (step B), or, if that doesn't come, the next G-buffer list. Holding
+  it only to the G-buffer list's own fence would let `Update` rewrite it before the forward list reads it, mixing two
+  frames' vertices under one frame's draws. The fence after a list, not before it, as `Retired` learnt from Task 52.
 - **The G-buffer pass** takes the newest snapshot and records which; the forward pass of the same frame takes that one.
 
 ### Step A: into the G-buffer
 
-In `RecordGbuffer`, after `DrawSections`, while `set entities` is 1:
+Only in `gbuffer` mode: `predlss` and `present` keep drawing the blocks alone. In `RecordGbuffer`, after
+`DrawSections`, while `set entities` is 1:
 1. **The scene's `model` draws, in the order SkyCraft sent them,** then the world entities' `model` draws. Each draw
    sets its root constants: the origin's offset from the camera (as a section's corner is computed, `WorldFromMc` minus
    the camera's origin) and its texture's start and size.
@@ -393,14 +417,14 @@ In `RecordGbuffer`, after `DrawSections`, while `set entities` is 1:
 
 **Three new pipelines**, all with the blocks' root signature, grown to eight 32-bit constants in b1 and a fourth root
 SRV (t3, the entity textures):
-- **entities:** no culling; depth test greater-or-equal (less-or-equal when the depth isn't reversed), so a later
-  triangle on the same surface wins, as in Minecraft, and banner patterns show over their cloth; depth written; the four
-  G-buffer targets, the motion vectors' write mask following `gbmotion`; the stencil class as the blocks' (`stencil`,
-  0);
+- **entities:** no culling, as Minecraft's own `entity_cutout`; depth test greater-or-equal (less-or-equal when the
+  depth isn't reversed), so a later triangle on the same surface wins, as in Minecraft, and banner patterns show over
+  their cloth; depth written; the four G-buffer targets, the motion vectors' write mask following `gbmotion`; the
+  stencil class as the blocks' (`stencil`, 0);
 - **entities' depth:** the same tests, depth only, into the tagged depth;
-- **cracks:** no culling; depth tested greater-or-equal, not written; the base colour blended `DEST_COLOR, SRC_COLOR`
-  (2 × crack × base colour, Minecraft's crumbling blend), the normals, material and motion targets masked off; the
-  stencil left alone. The base colour is sRGB-encoded in a UNORM target, as Minecraft's framebuffer is, so the blend's
+- **cracks:** no culling; depth tested greater-or-equal, not written; the base colour's RGB blended `DEST_COLOR,
+  SRC_COLOR` (2 × crack × base colour, Minecraft's crumbling blend), its A and the normals, material and motion targets
+  masked off; the stencil left alone. The base colour is sRGB-encoded in a UNORM target, as Minecraft's framebuffer is, so the blend's
   numbers are Minecraft's.
 
 **The shader** (new entry points beside the blocks'):
@@ -414,8 +438,8 @@ SRV (t3, the entity textures):
 - **glow:** a triangle whose first vertex has block light of at least `glowlight` (a setting, 15 at first) writes
   `glow` (a setting, 0 to 1, 0.9 at first, near the 0.93 spike 3 found on the game's signs) into the material target's
   A, which spike 3 found only on windows and signs; every other triangle writes 0, as the blocks do. At 15 the rule
-  takes explosion puffs, lava particles, lit TNT's flash and blazes; 14 would add flames, which take the world's light,
-  and anything standing beside a block of light 15;
+  takes explosion puffs, lava particles, lit TNT's flash, blazes, magma cubes, allays and vexes; 14 would add flames,
+  which take the world's light, and anything standing beside a block of light 15;
 - **colour:** texel × vertex colour (Minecraft's tint, the red hurt flash) × `brightness`, alpha 0, as the blocks;
 - **material:** `metalness`, `roughness` and `materialb`, as the blocks;
 - **motion:** from camera movement, as the blocks (`MotionVector`).
@@ -468,15 +492,16 @@ collide with SkyCraft's UV mode.
 
 ### Step 0: `mclink`, without the game
 
-With Cyberpunk closed, the user starts Minecraft from the Modrinth App. `mclink`'s report learns the new sink calls,
-and a new script, `entities.txt`, as `blast.txt` does, puts the stand-in V on spike 1's dumped ground (`ground city`,
-so things stand on it) in creative, then makes each test thing there, tagged `sp7` (`PersistenceRequired`, so nothing
-despawns), the stand-in V looking at each as it's made, since Minecraft extracts only the particles in its view:
+With Cyberpunk closed, the user starts Minecraft from the Modrinth App, its particles left at All. `mclink`'s report
+learns the new sink calls, and a new script, `entities.txt`, as `blast.txt` does, puts the stand-in V on spike 1's
+dumped ground (`ground city`, so things stand on it) in creative, then makes each test thing there, tagged `sp7`
+(`PersistenceRequired`, so nothing despawns), the stand-in V looking at each as it's made, since Minecraft extracts
+only the particles in its view:
 - a pig and a villager with a profession and a level;
 - a spider and a blaze, AI off;
-- a falling sand;
-- a chest and a banner with patterns, each with a marker entity tagged `sp7b`;
-- a dropped item and an arrow;
+- a falling sand, with a marker entity tagged `sp7b` where it lands, since it lands as a block;
+- a chest and a banner with patterns, each with a marker;
+- a dropped item, a dropped grass block and an arrow;
 - a firework and a splash potion, for translucent particles;
 - last, 12 blocks away, a lit TNT: a TNT's power is 4, and its blast hurts up to twice that, so it spares the rest.
 
@@ -502,20 +527,23 @@ In creative (the Fun row), with combat off (the default), so Minecraft's blasts 
 can't kill V. Before the user looks, the agent names what isn't drawn yet: translucent particles, the outline, signs'
 words, name tags.
 1. **Things in place:** a pig, a villager, a spider, a blaze, a lit TNT and a falling sand (the Spawn row, 5 m ahead)
-   stand where Minecraft has them, animate, are lit like the blocks by day, and stay put while V walks and turns.
+   stand with their feet on the ground, neither floating nor sunk, animate, are lit like the blocks by day, and stay
+   put while V walks and turns. The `entities` line shows the nearest mob's distance from V (from the world table's
+   shadow records), to compare with the 5 m.
 2. **Glow:** at night (Skip Time, as spike 3 did), the TNT's flash, the blaze and the explosion's puffs glow. A few
    `set glow` values are tried, and `set glowlight 14` beside a torch's flame; if nothing glows at any, step B's
    `glowpass` is the way.
 3. **The explosion:** its puffs, smoke and debris come and go as in Minecraft.
 4. **Block entities:** a chest, a bed and a sign show, and the banner's patterns show over its cloth.
 5. **World entities:** a dropped item and a dropped block (the Spawn row: build mode doesn't forward Q), arrows (the Fun
-   row's bow), and cracks while mining (briefly in survival, since creative breaks blocks at once).
+   row's bow) and a thrown trident (its trident), stuck where they hit Night City, and cracks while mining (briefly in
+   survival, since creative breaks blocks at once).
 6. **Contact darkening:** whether the game's ambient occlusion darkens the ground under a pig. If not, `kWeShadow` waits
    for a later step.
 7. **Layers:** the villager's clothes and the spider's eyes, right or wrong. Wrong decides step C.
 8. **Smearing:** the pig walking while V stands, and while V turns. Visible trails decide `dlsshint 2` for step B.
-9. **Cost:** the status's GPU times and the frame time, during `tnt-cube`'s blast (125 TNT, past the scene's cap of 48
-   entities, so some aren't drawn) and with many mobs.
+9. **Cost:** the status's GPU times and the frame time, with the herd, then, last, during `tnt-cube`'s blast (125 TNT,
+   whose chain may prime more than the scene's 48 entities at once, so some may not be drawn).
 10. **No crash or freeze.** DRED stays on.
 
 Then the Clear button clears it all.
@@ -554,9 +582,11 @@ flags; then run A's checks 2 and 7 again in the game.
   world entities by kind, into the log.
 - **The overlay's Spawn row** (Fun): each button types its commands as `mc` requests, each test thing 5 m ahead of
   Minecraft's player, level (`/execute rotated ~ 0 positioned ^ ^ ^5`, as the named sets do), tagged as in step 0:
-  - a pig, a villager (with a profession and a level), a spider and a blaze (AI off), a falling sand;
-  - block entities: a chest, a bed, a sign and a banner with patterns, side by side;
-  - items: a dropped item and a dropped block;
+  - a pig, a herd of 10 pigs (10 requests, about 10 s), a villager (with a profession and a level), a spider and a
+    blaze (AI off);
+  - a falling sand, with a marker where it lands, since it lands as a block;
+  - block entities: a chest, a bed, a sign and a banner with patterns, side by side, and a torch, for its flame;
+  - items: a dropped item and a dropped grass block (its top tinted);
   - for step B: a firework, a splash potion and a campfire.
 
   **Clear** clears what they made, by tag. A lit TNT and a big blast come from the named sets already there
@@ -570,6 +600,7 @@ A new status line, `entities`, shown by the overlay:
 - batches skipped (texture not yet on the GPU, or capped) and rejected messages;
 - textures: count and MB;
 - world entities by kind, and whether there's an outline;
+- the nearest mob's distance from V, from the world table's shadow records (`kWeShadow`: players' and mobs' feet);
 - the GPU time of our entity draws, and of the forward list (step B);
 - frames the G-buffer list drew entities in, and how many of those the forward list drew too (step B).
 
@@ -612,8 +643,9 @@ A new status line, `entities`, shown by the overlay:
 - **`WorldShapes`:** each kind's triangles against hand-worked corners (an item at yaw 90, a cube's top tint, an arrow
   flying north and up, a crack's box, the outline's 24 vertices).
 - **`EntityTextures`:** appending, growth, the cap, and a clear.
-- **`Snapshots`:** a buffer never reused while a recorded list's fence is ahead; the forward pass gets the G-buffer
-  pass's snapshot.
+- **`Snapshots`:** a buffer never reused while a recorded list's fence is ahead; a frame's snapshot held past its
+  G-buffer list's fence until its forward list's, or the next G-buffer list's when no forward list comes; the forward
+  pass gets the G-buffer pass's snapshot.
 - **The shader's constants:** the grown b1 checked against the compiled shader's reflection, as `TestShaders` does now.
 - **`Requests`:** the new settings' ranges (`entities`, `glow`, `glowlight`, `glowpass`, `dlsshint`, `outline`) and the
   `entities` request.
@@ -651,6 +683,8 @@ Runs A and B, as "The steps" has them.
     Minecraft in creative, and the spider and blaze have AI off.
 13. **Flames don't glow** at `glowlight` 15: Minecraft 26.3 gives them the world's light. 14 takes them, but also
     anything standing beside a block of light 15; run A tries it.
+14. **Things beyond the city's area fall:** SkyCraft holds the city's voxels only where V has been (5 regions of 8
+    blocks around it), so a mob wandering farther, or something summoned there, drops into the void.
 
 ## Found while writing
 
@@ -674,3 +708,95 @@ Runs A and B, as "The steps" has them.
   than creative.
 - **Flames take the world's light in 26.3,** not full light: `glowlight` lets run A try 14.
 - **Snapshots are capped at 8 MB each,** so 8 of them can't hold more than 64 MB of upload memory.
+
+## Changes from the deep review
+
+The user asked for a deep self-review of the spec before planning. It traced each claim to its source and walked
+through step 0 and run A as the user would play them. One design fault turned up, and a set of corrections.
+
+### What changed
+
+1. **A frame's snapshot is held until its forward list is done** ("The snapshot ring"). Holding it only to the
+   G-buffer list's own fence would have let `Update` rewrite it before step B's list read it: two frames' vertices under
+   one frame's draws. It's now held to the fence after the frame's forward list, or after the next G-buffer list when no
+   forward list comes, and a unit test covers it.
+2. **SkyCraft sends whenever it's connected to the mapping,** not "whenever linked": `Link::Update` writes the game's
+   heartbeat every frame once the mapping is open, Link on or off ("Purpose", "The game and BlockRender").
+3. **Bright and translucent mobs:** blazes, magma cubes, allays and vexes return block light 15, so the glow rule takes
+   all four. Allays and vexes are drawn translucent, as a slime's outer layer is. The non-goal's "a ghast's glow" was
+   wrong: nothing of the ghast's is translucent or bright.
+4. **Two-sided entities follow Minecraft itself:** `EntityModel`'s default render type, `entityCutout`, culls nothing in
+   26.3, so drawing the scene two-sided matches Minecraft rather than only making up for the capture.
+5. **The mapping empties the render ring whenever it opens,** created or reused, so the reason textures and scenes wait
+   for the atlas is the frame Minecraft may write before it sees a new game process ("Coming and going").
+6. **Where things stand:** the city's ground falls back to the floor if PhysX's audit fails, and the city's area reaches
+   5 regions of 8 blocks around V. Things farther than V has been fall into the void (risk 14).
+7. **Arrows and tridents stick in the game's exact surfaces** (`AbstractArrowMixin`), so run A's check 5 looks for
+   them stuck in Night City, and throws a trident too. An arrow that hits a stand-in is discarded, as vanilla does.
+8. **The camera follows V's look outside build mode only;** in build mode Minecraft's look leads.
+9. **What was read, not seen, now says so:** the game's ambient occlusion under spike 3's cube ("most likely", in run
+   8's words), SkyCraft's own layered models in Skyrim, and spike 6's TNT, which comes from the handoff.
+10. **The crack decal writes RGB only,** leaving the base colour's A.
+11. **Entities are drawn only in `gbuffer` mode,** stated.
+12. **The texture cap counts the pixels kept for upload,** which pile up while drawing is off.
+13. **The Spawn row and run A's checks:** a herd of 10 pigs for the cost check; a marker where the falling sand lands,
+    since it lands as a block; a torch, for `glowlight 14`; a dropped grass block, for its tint. Check 1 now names
+    what the user can see (feet on the ground, 5 m ahead) and the `entities` line shows the nearest mob's distance from
+    V. `tnt-cube` goes last, since it destroys what's near it.
+14. **Step 0** keeps Minecraft's particles at All, which they are now (`particles:0`).
+
+### What was checked
+
+- **BlockRender at `a1db95d`:** `DrainByteRing`'s visitor contract (`Rings.h`); `Mapping::Open`'s resets; `UpdateLink`
+  running `Link::Update` every frame; the ground's default and its PhysX fallback; `GroundAreas`' reach; `set
+  translucent`; `Retired`'s rule; `CreateCommittedResource` in `Gpu.cpp`; `ListBefore`, `OnEvaluate`, `RecordGbuffer`
+  and `RecordPredlss`; the root signature, the pipelines and `kGbufferFormats`; build mode's forwarded keys
+  (`BuildMode.cpp`); `LinkRequest`; the named sets (`Commands.cpp`); `mclink`'s scripts and actions.
+- **The installed game:** BlockRender 0.19.1's log line (`dred on`), `settings.txt`'s `dred = 1`, and spike 1's dump
+  (`collision.obj`) still in place.
+- **SkyCraft at `bfcaf17`:**
+  - `AvatarExporter`: the capture, flags, batches, `order`, textures and overlays;
+  - `WorldExporter`: the frame's order, the world table, cracks and the outline;
+  - `SkyLink`: the generation, the sequence lock and ring writes;
+  - `SkyAtlas`: arrows' and cracks' rectangles;
+  - `BlockCollisionsMixin` and `SkyCollision.readRegion`: voxels for every entity;
+  - `AbstractArrowMixin`: exact surfaces and arrows stuck in stand-ins;
+  - `SkyClient`: the look;
+  - `WorldRender.cpp`: states, shapes, motion and contact shadows.
+- **Minecraft 26.3's jar:**
+  - `DepthStencilState.DEFAULT`;
+  - `RenderPipelines`: every cut-out value, the entity pipelines' culling, the crumbling blend;
+  - every particle class's layer and light;
+  - `EyesLayer`, `RenderLayer.renderColoredCutoutModel`, and `VillagerProfessionLayer`'s orders and textures (`type`,
+    `profession`, `profession_level`);
+  - `BannerRenderer` and `Sheets` (one banner atlas);
+  - `EntityModel`'s default render type, and `SlimeOuterLayer`, `AllayModel` and `VexModel`;
+  - the bright mobs' `getBlockLightLevel`;
+  - the outline's colour and `Window.getAppropriateLineWidth`;
+  - `Options`' FOV encoding;
+  - the core shaders' discards, the eye textures and the crack stages.
+- **The CyberCraft instance's `options.txt`:** FOV 0.5 (90°), particles 0 (All), render distance 8.
+- **Earlier results:** spike 3's tags, passes, material values and run 8; spike 4's settings; spike 6's combat switch.
+- **Step 0, walked through:**
+  - `mclink` creates the mapping, and Minecraft opens it and sends everything again;
+  - `ground city` with the dump; each thing summoned by `type`, the stand-in V turned toward it;
+  - the TNT last; then the clear by tag.
+
+  Found: the falling sand lands as a block, and particles need Minecraft's view.
+- **Run A, walked through as played:**
+  - Link switches drawing to `gbuffer`; creative from the Fun row;
+  - the Spawn row puts things 5 m ahead, level, on the city's voxels within the area;
+  - night by Skip Time;
+  - Q isn't forwarded, the bow and the trident are (the right button), and mining (the left button);
+  - `tnt-cube` last; then Clear.
+
+### Not settled by reading
+
+- Whether the material target's A is emission, and how strong `glow` needs to be (run A).
+- Whether DLSS smears moving mobs and particles, and how much the bias hint helps (runs A and B).
+- Whether the game's ambient occlusion darkens the ground under mobs (run A).
+- How large the textures are in all (chests', signs', banners' and particles' atlases), and the scenes' sizes (step
+  0).
+- The villager's batch order with real texture ids (step 0).
+- 26.3's data for villagers, fireworks and potions in `/summon` (the plan checks each against the jar).
+- How the game takes two lists of ours in one frame (run B).
