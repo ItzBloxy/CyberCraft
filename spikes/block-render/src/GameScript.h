@@ -23,7 +23,7 @@ struct CProperty;
 // Current() on every call, since a load makes a new one. Main thread only, while V is found.
 namespace cpmc
 {
-constexpr int32_t kModuleVersion = 6;  // BlockRenderNpcs.Version(), as this BlockRender needs it
+constexpr int32_t kModuleVersion = 7;  // BlockRenderNpcs.Version(), as this BlockRender needs it
 
 // What the module's List gives.
 struct NpcList
@@ -47,6 +47,19 @@ struct BlastPush
 	int32_t dead = 0;
 
 	bool operator==(const BlastPush&) const = default;
+};
+
+// What the module's Explode did: how it went (1 started, 0 V isn't found, -1 no attack record or effect); then how many
+// living NPCs within the blast's reach it knocked down with the game's forced reaction, how many it left standing as the
+// game keeps them from being knocked down, and whether it told the crowd.
+struct BlastStart
+{
+	int32_t result = 0;
+	int32_t knocked = 0;
+	int32_t immune = 0;
+	bool    panic = false;
+
+	bool operator==(const BlastStart&) const = default;
 };
 
 // What the module's HideV did: the meshes hidden, or shown again (-1 without Codeware, -2 V isn't found). Hiding: the
@@ -88,9 +101,9 @@ public:
 	// V's punch, what it's read from, and what hits are made with: for the punch request.
 	std::string Punch();
 	// Minecraft's blasts (spike 6's "Part 3"). A blast at aCentre (world axes) reaching aReach metres: the game's knockdown
-	// grenade's attack as a game effect there, and the explosion's sound; with aKnock, its knockdown on each NPC within reach
-	// directly too. The module's Explode says how it went (1 started, 0 V isn't found, -1 no attack record or effect).
-	std::optional<int32_t> Explode(const Vec3d& aCentre, double aReach, bool aKnock, std::string& aWhy);
+	// grenade's attack as a game effect there, and the explosion's sound; with aKnock, each living NPC within reach knocked
+	// down by the game's forced reaction, unless the game keeps it from being knocked down; and the crowd told.
+	std::optional<BlastStart> Explode(const Vec3d& aCentre, double aReach, bool aKnock, std::string& aWhy);
 	// The blast's push, a quarter second after it, and what the module then finds within its reach (npcs -1: V isn't found).
 	std::optional<BlastPush> Push(const Vec3d& aCentre, double aReach, std::string& aWhy);
 	// One of Minecraft's hits on the NPC aEntity, as the own hit of the blast at aCentre: aAmount where the game's damage
@@ -141,6 +154,9 @@ private:
 		kPushDown,
 		kPushDead,
 		kVHealth,
+		kBlastKnocked,
+		kBlastImmune,
+		kBlastPanic,
 		kFields,
 	};
 

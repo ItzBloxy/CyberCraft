@@ -51,7 +51,8 @@ const std::vector<FunctionTypes>& Functions()
 	return kFunctionTypes;
 }
 
-// In GameScript::Field's order: the fields List fills, those HideV fills and those Push fills, and their types.
+// In GameScript::Field's order: the fields List fills, those HideV fills, those Push fills and those Explode fills, and
+// their types.
 const std::vector<std::pair<const char*, const char*>>& Fields()
 {
 	static const std::vector<std::pair<const char*, const char*>> kFieldTypes{
@@ -61,7 +62,8 @@ const std::vector<std::pair<const char*, const char*>>& Fields()
 		{ "found", "Int32" },              { "punch", "Float" },                { "punchItem", "String" },
 		{ "punchDrawn", "Bool" },          { "vHealthMax", "Float" },           { "vEffects", "Int32" },
 		{ "vCrosshair", "Int32" },         { "pushDown", "Int32" },             { "pushDead", "Int32" },
-		{ "vHealth", "Float" },
+		{ "vHealth", "Float" },            { "blastKnocked", "Int32" },         { "blastImmune", "Int32" },
+		{ "blastPanic", "Bool" },
 	};
 	return kFieldTypes;
 }
@@ -384,7 +386,7 @@ std::string GameScript::Punch()
 	return result.c_str();
 }
 
-std::optional<int32_t> GameScript::Explode(const Vec3d& aCentre, double aReach, bool aKnock, std::string& aWhy)
+std::optional<BlastStart> GameScript::Explode(const Vec3d& aCentre, double aReach, bool aKnock, std::string& aWhy)
 {
 	if (const std::string& missing = Check(); !missing.empty())
 	{
@@ -406,7 +408,9 @@ std::optional<int32_t> GameScript::Explode(const Vec3d& aCentre, double aReach, 
 		aWhy = "BlockRenderNpcs.Explode failed";
 		return std::nullopt;
 	}
-	return result;
+	RED4ext::IScriptable& instance = *system.GetPtr();
+	return BlastStart{ result, FieldOf<int32_t>(*fields_[kBlastKnocked], instance), FieldOf<int32_t>(*fields_[kBlastImmune], instance),
+		               FieldOf<bool>(*fields_[kBlastPanic], instance) };
 }
 
 std::optional<BlastPush> GameScript::Push(const Vec3d& aCentre, double aReach, std::string& aWhy)

@@ -10,8 +10,9 @@
 // Minecraft's hits land on them as V's, through the game's whole damage pipeline, and in build mode the game's hits on V
 // go to Minecraft's player, whose death kills V. In build mode V's meshes and effects and the game's crosshair are
 // hidden, and with combat on V's unarmed weapon is drawn, so that hits carry it, and Minecraft's player takes V's health
-// share as build mode starts. Minecraft's blasts knock down what they reach as the game's knockdown grenade does, their own
-// hits land as explosions, and their push throws the bodies, cars and loose things.
+// share as build mode starts. Minecraft's blasts run the game's knockdown grenade's attack over what they reach, knock its
+// living NPCs down with the game's forced reaction and tell the crowd, their own hits land as explosions, and their push
+// throws the bodies, cars and loose things.
 // Commands come through blockrender.request, in its folder or the overlay's, and status.txt in the overlay's folder says
 // what it's doing. See docs/superpowers/specs/2026-10-01-block-render-design.md, 2026-10-02-minecraft-link-design.md,
 // 2026-10-03-collision-and-movement-design.md and 2026-10-05-npcs-and-combat-design.md.
@@ -74,7 +75,7 @@ namespace
 using Clock = std::chrono::steady_clock;
 using namespace std::chrono_literals;
 
-constexpr const char* kVersion = "0.19.0";
+constexpr const char* kVersion = "0.19.1";
 
 // A number of a version "major.minor.patch", aIndex 0 being the major, so that Query reports kVersion, as the log does.
 constexpr uint32_t VersionNumber(std::string_view aVersion, size_t aIndex)
@@ -226,7 +227,7 @@ std::string                     g_lastHurt;
 // thread only.
 cpmc::link::Blasts g_blasts;                                 // the last moments' blasts: their own hits, their pushes
 double             g_blastPower = cpmc::link::kBlastPower;  // set blastpower: a blast's hits start at the punch x damage^this
-bool               g_blastKnock = false;  // set blastknock 1: each NPC within a blast's reach gets the knockdown directly too
+bool               g_blastKnock = true;  // set blastknock: each living NPC within a blast's reach knocked down by force
 std::string        g_lastBlast;
 double             g_vHealth = 0.0;  // V's health share, as the module last read it
 std::string        g_lastHealth;
@@ -813,23 +814,26 @@ void BlastIn(const skycraft::proto::McEvent& aEvent, double aNow, bool aVFound)
 	}
 	const std::string where = std::format("at world ({:.2f}, {:.2f}, {:.2f}), reaching {:.1f} m", blast->centre.x, blast->centre.y,
 	                                      blast->centre.z, blast->reach);
-	std::string                  why;
-	const std::optional<int32_t> result = g_script.Explode(blast->centre, blast->reach, g_blastKnock, why);
-	std::string                  outcome = "there's no attack record or effect for its knockdowns";
-	if (!result)
+	std::string                           why;
+	const std::optional<cpmc::BlastStart> start = g_script.Explode(blast->centre, blast->reach, g_blastKnock, why);
+	std::string                           outcome = "there's no attack record or effect for its knockdowns";
+	std::string                           knocked;
+	if (!start)
 	{
 		outcome = "the module can't be called: " + why;
 	}
-	else if (*result == 1)
+	else if (start->result == 1)
 	{
-		outcome = g_blastKnock ? "its knockdown attack and sound started, and each NPC within it knocked down directly"
-		                       : "its knockdown attack and sound started";
+		knocked = g_blastKnock ? std::format("{} knocked down by the game's forced reaction, {} immune to it", start->knocked, start->immune)
+		                       : std::string("the forced knockdowns off");
+		outcome = std::format("its knockdown attack and sound started; {}; {}", knocked,
+		                      start->panic ? "the crowd told, from the NPC nearest it" : "no NPC near enough to tell the crowd");
 	}
-	else if (*result == 0)
+	else if (start->result == 0)
 	{
 		outcome = "V isn't found";
 	}
-	g_lastBlast = std::format("{}: {} NPCs within it; its push to come", where, within);
+	g_lastBlast = std::format("{}: {} NPCs within it{}; its push to come", where, within, knocked.empty() ? "" : ", " + knocked);
 	Log("{}: a blast {}, {} listed NPCs within it; {}", explosion, where, within, outcome);
 }
 
@@ -1353,12 +1357,12 @@ void Set(const cpmc::Request& aRequest)
 	{
 		if (aRequest.number != 0.0 && aRequest.number != 1.0)
 		{
-			return Report("set blastknock: 1 knocks down each NPC within a blast's reach directly too, with the knockdown grenade's status "
-			              "effect; 0 leaves knockdowns to the blast's attack");
+			return Report("set blastknock: 1, the default, knocks down each living NPC within a blast's reach with the game's forced "
+			              "reaction, unless the game keeps it from being knocked down; 0 knocks none down");
 		}
 		g_blastKnock = aRequest.number == 1.0;
-		return Report(g_blastKnock ? "set blastknock 1: each NPC within a blast's reach is knocked down directly too"
-		                           : "set blastknock 0: the blast's attack knocks NPCs down");
+		return Report(g_blastKnock ? "set blastknock 1: each living NPC within a blast's reach is knocked down by the game's forced reaction"
+		                           : "set blastknock 0: a blast knocks no NPC down; its attack, sound, own hits and push stay");
 	}
 	if (aRequest.what == "bushrule")
 	{
