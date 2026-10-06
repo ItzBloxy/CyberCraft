@@ -420,11 +420,15 @@ TEST(StatusWritesBlasts)
 	CHECK(Has(cpmc::FormatStatus(report), "blasts=on: 0 taken, blast power 0.50; none yet"));
 	link.blasts = 2;
 	link.blastPower = 1.0;
-	link.blastKnock = true;
 	link.lastBlast = "at world (680.50, -1997.50, 6.20), reaching 8.0 m: 5 NPCs within it, 4 hits of its own; after its push 2 "
 	                 "knocked down, 2 dead";
 	report.link = link;
-	CHECK(Has(cpmc::FormatStatus(report), "blasts=on: 2 taken, blast power 1.00, knockdowns applied directly too; the last at world "
+	CHECK(Has(cpmc::FormatStatus(report), "blasts=on: 2 taken, blast power 1.00; the last at world (680.50, -1997.50, 6.20), "
+	                                      "reaching 8.0 m: 5 NPCs within it, 4 hits of its own; after its push 2 knocked down, 2 dead"));
+	// The forced knockdowns are on unless set blastknock 0 (step 5b's fix): the line says only when they're off.
+	link.blastKnock = false;
+	report.link = link;
+	CHECK(Has(cpmc::FormatStatus(report), "blasts=on: 2 taken, blast power 1.00, the forced knockdowns off; the last at world "
 	                                      "(680.50, -1997.50, 6.20), reaching 8.0 m: 5 NPCs within it, 4 hits of its own; after its "
 	                                      "push 2 knocked down, 2 dead"));
 	// V's health share for Minecraft's player goes in the combat line, and the exporter's bush rule in the city's ground line.

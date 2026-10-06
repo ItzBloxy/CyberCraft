@@ -150,7 +150,7 @@ struct LinkReport
 	// Minecraft's blasts (spike 6's "Part 3"), with combat on: the count is since the start
 	uint64_t    blasts = 0;          // taken
 	double      blastPower = 0.5;    // set blastpower (link::kBlastPower): a blast's hits start at V's punch x damage^this
-	bool        blastKnock = false;  // set blastknock 1: each NPC within reach gets the knockdown directly too
+	bool        blastKnock = true;   // set blastknock: each living NPC within reach knocked down by the game's forced reaction
 	std::string lastBlast;           // its centre, reach, NPCs within it and its own hits; after its push, knocked down and dead
 	// The render ring
 	double      ringMb = 0.0;            // in the last second

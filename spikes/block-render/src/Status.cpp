@@ -252,7 +252,7 @@ std::string FormatBlasts(const LinkReport& aLink)
 		return "blasts=off: Minecraft's blasts are logged, not applied\n";
 	}
 	return std::format("blasts=on: {} taken, blast power {:.2f}{}; {}\n", aLink.blasts, aLink.blastPower,
-	                   aLink.blastKnock ? ", knockdowns applied directly too" : "",
+	                   aLink.blastKnock ? "" : ", the forced knockdowns off",
 	                   aLink.lastBlast.empty() ? std::string("none yet") : "the last " + OneLine(aLink.lastBlast));
 }
 
