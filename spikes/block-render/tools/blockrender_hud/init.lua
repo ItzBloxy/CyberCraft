@@ -4,9 +4,10 @@
 -- BlockRender for things through blockrender.request in this folder.
 -- Kept small: one row of buttons (link, Minecraft's blocks as bodies, step 4's test box, the turn, NPCs in Minecraft,
 -- combat), and a line each for the last request's reply, build mode (F8) with its drive and whether V is hidden, the
--- bodies, the NPCs, combat, and V. Two folded sections hold the rest: "More controls" (the drawing mode, Minecraft's HUD,
--- commands typed into Minecraft, the drive log, the ground and its shapes, the NPCs' list, V's punch, and V hidden or
--- seen in build mode) and "Full status" (every status line, and the frame time).
+-- bodies, the NPCs, combat, Minecraft's blasts, and V. Two folded sections hold the rest: "More controls" (the drawing
+-- mode, Minecraft's HUD, commands typed into Minecraft, the drive log, the ground and its shapes, the NPCs' list, V's
+-- punch, V hidden or seen in build mode, and a blast ahead of V) and "Full status" (every status line, and the frame
+-- time).
 -- Delete this folder to remove it.
 local status = nil       -- status.txt's lines, except the structures
 local structures = {}    -- { name, min = { x, y, z }, max = { x, y, z } }, in world coordinates
@@ -25,6 +26,8 @@ local npcsOn = nil       -- whether NPCs go into SkyCraft's actor table: "on" or
 local combat = nil       -- the combat line: on or off; V's weapon drawn or not; hits queued and landed; V's hurts;
                          -- Immortal; Minecraft's death
 local combatOn = nil     -- whether Minecraft's hits land as V's and V's hurts go to Minecraft: "on" or "off"
+local blasts = nil       -- the blasts line, with combat on: how many, and the last's NPCs within it, its own hits, and
+                         -- those knocked down and dead after its push
 local vLook = nil        -- the v line: V hidden in build mode, or seen and why
 local hideV = nil        -- whether V's meshes are hidden in build mode: "on" or "off"
 local reply = nil        -- the request line: what BlockRender made of the last request, cut short
@@ -98,6 +101,7 @@ local function readStatus()
     npcsOn = nil
     combat = nil
     combatOn = nil
+    blasts = nil
     vLook = nil
     hideV = nil
     reply = nil
@@ -163,6 +167,15 @@ local function readStatus()
             combat = combatState .. (drawn and (", V's weapon " .. drawn) or "") .. (hits and (", hits " .. hits) or "")
                 .. (hurts and (", V's hurts " .. hurts) or "") .. (immortal and (", Immortal " .. immortal) or "")
                 .. (dead and (", Minecraft's player " .. dead) or "")
+        end
+        local blastCount = line:match("^blasts=on: (%d+) taken")
+        if blastCount ~= nil then
+            local within = line:match("; the last [^;]*: (%d+) NPCs within it")
+            local own = line:match("(%d+) hits of its own")
+            local down, dead = line:match("after its push (%d+) knocked down, (%d+) dead")
+            blasts = blastCount .. " taken" .. (within and ("; the last: " .. within .. " NPCs within it") or "")
+                .. (own and (", " .. own .. " hits of its own") or "")
+                .. (down and (", " .. down .. " knocked down, " .. dead .. " dead") or "")
         end
         if name ~= nil then
             table.insert(structures, {
@@ -293,6 +306,9 @@ registerForEvent("onDraw", function()
         if combat ~= nil then
             ImGui.Text("Combat: " .. combat)
         end
+        if blasts ~= nil then
+            ImGui.Text("Blasts: " .. blasts)
+        end
         if player ~= nil then
             ImGui.Text(player)
         end
@@ -349,6 +365,13 @@ registerForEvent("onDraw", function()
                 ImGui.SameLine()
                 if ImGui.Button("Punch in the log") then
                     request("punch")
+                end
+            end
+            if blasts ~= nil then
+                ImGui.Text("Blasts:")
+                ImGui.SameLine()
+                if ImGui.Button("TNT 5 m ahead") then
+                    request("explode 5 4")
                 end
             end
             if hideV ~= nil then
