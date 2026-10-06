@@ -4,7 +4,7 @@ Spike 6 brings Night City's NPCs into Minecraft as SkyCraft's stand-ins (Part 1)
 Minecraft's explosions in the game (Part 3). Step 1 ran SkyCraft's actor table with `mclink`, without Cyberpunk; later
 steps add their sections as they run, and the spike's answer goes at the top once step 2 is in.
 
-## The answer so far (Parts 1 and 2, after step 4)
+## The answer so far (Parts 1 and 2, after step 4's fixes)
 
 **Part 1, yes: Night City's NPCs are in Minecraft as SkyCraft's stand-ins, where the game puts them.** On a busy
 pavement, every NPC within 80 m was listed, and the game's own targeting never found one the list lacked. A stone
@@ -14,16 +14,19 @@ list costs the game 0.08 ms a frame. It took three fixes; the last was a crash, 
 detach callbacks on many threads (16 in this run), so the list now lives in BlockRender behind a lock. Since Part 2's
 first task the boxes reach 1.76 m, the top of the NPC's tallest capsule; drones have no capsule and stay person-sized.
 
-**Part 2, yes, with three fixes to make: Minecraft's weapons fight Night City's NPCs as V, and in build mode the game's
-hits on V go to Minecraft's player, whose death kills V.** A Minecraft hit starts the game's own damage pipeline at
-Minecraft's damage × V's punch, and the game does the rest as for V's own strike: the first test hit, one point of
-Minecraft's damage, started at V's 104.87 and dealt 168.72 with V's crit, beside V's own crit strike of about 180 on the
-same ganger. The hits carry V's Mantis Blades, drawn for build mode, and burn the NPCs as the blades do; NPCs flinch,
-take cover, fight back and die. In build mode V is hidden, and all 42 hits on V, melee and pistol, went to Minecraft's
-hearts instead; the one time those ran out, Minecraft's death killed V. The fixes: every point of Minecraft's damage is
-worth a whole blade swing, so swords, axes and arrows one-shot level-47 gangers, while fists felt right; our Immortal
-never took effect, because V carries three Mortal god modes from the game, which outrank it; and the game's crosshair
-for the blades and their heat effect stay on screen when V is hidden.
+**Part 2, yes: Minecraft's weapons fight Night City's NPCs as V, and in build mode the game's hits on V go to
+Minecraft's player, whose death kills V.** A Minecraft hit starts the game's own damage pipeline at V's punch × the
+square root of Minecraft's damage, and the game does the rest as for V's own strike: in step 4 the first test hit, one
+point of Minecraft's damage, started at V's 104.87 and dealt 168.72 with V's crit, beside V's own crit strike of about
+180 on the same ganger. Since step 4's fixes a fist starts at one punch and a diamond sword at 2.65 (277.46), and a
+level-47 ganger of 594 health takes two or three sword hits, two axe hits or about five punches: the user found that
+"perfect", and three-quarters of the way to step 4's scale far too strong. The hits carry V's Mantis Blades, drawn for
+build mode, burn the NPCs as the blades do and earn V skill XP; NPCs flinch at every hit, stagger now and then, take
+cover, fight back and die. In build mode nothing of V's is on screen, the game's crosshair and the blades' heat
+included, and every hit on V there went to Minecraft's hearts instead (42 in step 4, 42 again in its fixes); each time
+those ran out, Minecraft's death killed V. One part can't work for the user's V: our Immortal backstop. V carries three
+Mortal god modes that quests left behind, and the game refuses even the override Second Heart uses, so in build mode
+the damage wrap is V's only guard; it has held for every hit.
 
 ## Step 1: made-up NPCs in SkyCraft's actor table, with `mclink`, without Cyberpunk
 
@@ -364,3 +367,113 @@ health shows a hit's change only after the damage step, not at once. Three thing
   "before" is.
 - **For Part 3:** a blast's hits start at the pipeline's entry too, and its scale needs the same thought, since a TNT
   blast is tens of Minecraft's damage.
+
+## Step 4's fixes: in the game, combat again
+
+Date: 2026-10-06, 01:47 to 02:20. BlockRender 0.18.1 at `0e23764` (module version 5: the plan's Tasks 32 to 35, which
+ran as written, each commit's code identical to the version tested before), with Minecraft 26.3, SkyCraft 0.1.2 and the
+game as in step 4, and V as in step 4: the Thermal, Legendary Mantis Blades, 456 max health. The user ran both games,
+and a few lines in CET's console; the agent sent the requests and read the logs and the status. Plan: Task 36.
+
+### Verdict
+
+**Two fixes work; the third can't, for this V.**
+- **Where hits start:** V's punch × the square root of Minecraft's damage. A fist starts at one punch, 104.87, and a
+  diamond sword at 2.65, 277.46. Level-47 gangers of 594 health took two or three sword hits, two axe hits, or about
+  five punches, and those of 891 about half as many again. The user: "0.5 is perfect"; `set hitpower 0.75` was "wayyy
+  too high". 0.5 stays the default.
+- **Hiding V:** the game's crosshair and the Thermal blades' heat now go with V, and the user saw nothing of V's in
+  build mode. The crosshair comes back when build mode ends. The heat comes back only if the blades are drawn again: the
+  game starts it as they're drawn, so it isn't one of the effects BlockRender restarts, which are those that start by
+  themselves. That matters only when V held the blades before build mode; otherwise build mode's end puts them away.
+- **V's Immortal:** the game refuses it on this V. V carries three Mortal god modes that quests left behind, and Mortal
+  outranks Immortal, whether it's added (step 4) or forced by the override Second Heart uses (now: `EnableOverride`
+  returns false). So the spec's fallback for its risk 18 holds: in build mode the damage wrap is V's only guard. It
+  held again for every hit, and the log now says what the game says: `V's Immortal on: but the game says V isn't
+  Immortal`.
+
+### The checks
+
+- **The module (Steps 2 and 3).** redscript compiled `BlockRender.reds` with Codeware's scripts, with no error;
+  `BlockRender 0.18.1 loaded` and its seven natives added; at Link, `module: found BlockRenderNpcs version 5, its 10
+  functions, the 16 fields List fills, and BlockRender's 7 natives`, and `combat: V's Immortal off: the game says V
+  isn't Immortal`. After `set combat 1` the status read `combat=on: V's punch 104.87 from
+  Items.AdvancedMantisBladesThermalLegendary, not drawn: …; hit power 0.50; hits 0 queued, 0 landed; …` and
+  `v=shown, and hidden in build mode`. Minecraft's player was still in survival.
+- **V's Immortal (Step 4).** F8 behind the car: `combat: V's Immortal on: but the game says V isn't Immortal`, and at
+  its end, `V's Immortal off: the game says V isn't Immortal`. Whether the override comes on a frame late, as the plan
+  asked, CET's console settled, outside build mode, under a test source name:
+  - `EnableOverride` returned false; `HasGodMode(Immortal)` was false at once, and still false 3 s later;
+  - V's god modes: Invulnerable from 0 sources, Immortal from 0, and Mortal from 3: `sq024_city_race`, `sq024_sd_race`
+    and `Quest node set mortality (no source given)`. The first two are named for two of The Beast in Me's races
+    (`sq024`); the third is a quest node that gave no source name;
+  - V has no Second Heart (`HasSecondHeart` 0), so nothing clashed with its override;
+  - `DisableOverride` returned false too, and V wasn't left Immortal.
+
+  The damage pipeline asks only `HasGodMode` whether its target is Immortal (`CacheLocalVars` → `GetImmortality`), so
+  on this V no god mode can be its backstop. A V without those leftovers would likely get one.
+- **The crosshair and the heat (Step 5).** F8 with the gun drawn: `build: V's meshes hidden: 90 meshes switched off,
+  258 effects stopped, the crosshair hidden (1.23 ms)`; a quarter second later, once the blades were drawn, `120 meshes
+  switched off, 289 effects stopped, the crosshair hidden`, the blades' 31 effects among them. The user saw nothing of
+  V's: no hands, blades, legs, shadow, game crosshair or heat; the white cross in the middle was Minecraft's own. F8
+  again: `124 meshes switched on again, 0 effects started again, the crosshair shown again (1.45 ms)`, and the game's
+  crosshair was back with the gun. With the blades drawn before build mode, their heat showed; in build mode, `89
+  meshes switched off, 276 effects stopped, the crosshair hidden`, and the heat was gone; F8 again, `nothing to put
+  back` and `0 effects started again`: the blades stayed drawn without their heat, which came back when the user
+  switched to the gun and back to the blades.
+- **The game puts the blades away by itself.** As in step 4, V's gun came back in build mode, the first time 23 s in,
+  then about every 68 s, and `Arm` drew the blades again within a second each time. The user knows why: the game puts a
+  melee weapon away after a while idle, and `Arm` draws it again without resetting that timer.
+- **Where hits start (Step 6).** Ganger 29, 594 health, unaware of V: `hit 29 1` with the blades drawn, `unarmed:
+  starting at 104.87 = V's punch 104.87 x 1.00^0.50; queued`, then `landed: started at 104.87, 123.93 dealt; its health
+  594 -> 594`, the spread and a bonus on top, with no crit. Then in build mode, a diamond sword hit on Rada Titova, 594
+  health: `blade: starting at 277.46 = V's punch 104.87 x 7.00^0.50; queued`, `293.64 dealt`, and she lived; in step 4
+  the same swing started at 734.08.
+- **The fights (Step 7).** All 21 hits at 0.5 landed, Step 6's two included; none dealt nothing, and V's crit fired on
+  five:
+  - **sword:** ganger 29, after the test hit, 271.98 and 309.62 (`killed it`); ganger 53, 891 health, a jump crit
+    starting at 339.82 that dealt 387.86, then 469.21 and 481.42 on sprint hits with V's crit (`killed it`);
+  - **axe:** Aleksandra Volkova, 594 health, 360.72 and a jump crit that started at 385.31 and dealt 448.18 (`killed
+    it`); Rada Titova finished by a sprint hit with V's crit, 570.91;
+  - **fists** (oak planks): ganger 54, 891 health, eight punches of 56.96 to 192.14, by the swing's cooldown and V's
+    crits (`killed it`);
+  - **arrows:** 272.84 to 297.34 each, on gangers of 449 and 891 health.
+
+  As in step 4, no hit came back blocked, parried, cut by armour or dodged. The user saw the NPCs flinch at every hit
+  and stagger now and then, and skill XP from the bow and the melee hits. 29 hits on V in these fights went to
+  Minecraft's hearts, two of them an explosion's (`other (Explosion)`, with no attacker), and a ganger's shots took the
+  last of them: `Minecraft's player died, killed by NPC 52; so V dies: V's health set to its least`, and V died. After
+  the load, V was found again, not Immortal.
+- **The hit power by feel (Step 8).** At 0.75 the sword started at 451.31 and the axe at 544.92, arrows at 498.84 to
+  589.72, and an axe jump crit started at 738.58 and dealt 1,366.71, one-shotting a ganger of 891; with V's crits the
+  sword killed a ganger of 594 in two hits and one of 449 in one. The user: "0.75 is wayyy too high compared to 0.5; 0.5
+  is perfect". `set hitpower 0.5` again.
+- **Combat off, unlinking and quitting (Steps 9 and 10).** `combat=off: Minecraft's hits are logged, not applied; V's
+  health is V's`; then `none listed: not linked`; the game quit normally (`25 vtable entries restored`), with no new
+  crash report.
+- **The log, in all:** 32 hits queued and 32 landed, none dealt nothing or left undealt; 42 hurts taken for Minecraft;
+  one death; eight times in build mode, each with `but the game says V isn't Immortal`; no error and no failed call.
+
+### Asked for, after Part 2
+
+- **V's health into Minecraft as build mode starts.** The two healths are apart by design: in build mode only
+  Minecraft's hearts take hits, outside it only V's health, and F8 switches which counts. The user went into build mode
+  at one heart with V at full health, and wants Minecraft's health set to V's share when build mode starts.
+- **Bushes out of Minecraft's collision.** BlockRender gives Minecraft every static collision shape near V, and bushes
+  have some, though V walks through them. Standing V in a bush, `shapes` found two spheres of about 2 m with query
+  layer `0x80000` alone and an all-zero simulation filter, the shapes that likely hide V from NPCs' sight; and, in one
+  bush, a capsule with real filters, whose own size the request doesn't print. The terrain's query layers include
+  `0x80000` among others (`0x449c080`), as do a parked car's (`0x4680010`, `0x684000`), on which V stood. So a rule
+  could drop static shapes whose only query layer is `0x80000`, or whose simulation filter is all zeros; which, and the
+  capsule, wants a check in the game.
+
+### What it means
+
+- **Part 2's combat is as the user wants it:** Minecraft's weapons work through the game's whole pipeline at a scale
+  that keeps fists at one punch and swords at a few, and V's hurts reach Minecraft whole.
+- **No Immortal backstop for this V,** since quests left it Mortal; the damage wrap has held for all 84 hits on V in
+  build mode across steps 4 and the fixes. BlockRender asks for the override as before, and says what the game answers.
+- **Left as they are, for now:** the heat that doesn't come back on blades V held before build mode, and the game's
+  idle timer that puts the blades away.
+- **For Part 3:** a blast's hits start where `Hit` marks them, and a TNT blast is tens of Minecraft's damage, so its
+  start needs the hit power too: at the square root, 25 points of it start at five punches.
