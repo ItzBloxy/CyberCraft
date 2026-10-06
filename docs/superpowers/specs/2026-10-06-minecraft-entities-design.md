@@ -424,8 +424,8 @@ SRV (t3, the entity textures):
 - **entities' depth:** the same tests, depth only, into the tagged depth;
 - **cracks:** no culling; depth tested greater-or-equal, not written; the base colour's RGB blended `DEST_COLOR,
   SRC_COLOR` (2 × crack × base colour, Minecraft's crumbling blend), its A and the normals, material and motion targets
-  masked off; the stencil left alone. The base colour is sRGB-encoded in a UNORM target, as Minecraft's framebuffer is, so the blend's
-  numbers are Minecraft's.
+  masked off; the stencil left alone. The base colour is sRGB-encoded in a UNORM target, as Minecraft's framebuffer
+  is, so the blend's numbers are Minecraft's.
 
 **The shader** (new entry points beside the blocks'):
 - **texture:** texture 0 reads the atlas at level 0 (the flags' bit 3: no mipmaps, as SkyCraft marks every entity
