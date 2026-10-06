@@ -23,6 +23,29 @@ namespace cpmc::px
 // simulation shape doesn't stop V's controller, and dynamic and kinematic actors are cars, litter, bodies and controllers.
 bool KeptShape(AuditedClass aActor, physx::PxShapeFlags aFlags, physx::PxGeometryType::Enum aGeometry, bool aOurs);
 
+// What else the exporter leaves out, by the shape's filters (spike 6's follow-up, set bushrule): static scene-query shapes
+// that V walks through all the same. A bush's foliage is spheres of about 2 m whose query filter is the sight layer alone,
+// 0:0:80000:0, and whose simulation filter is all zeros (Task 36's shapes); the terrain's query filter, 0:0:449c080:0, has
+// that layer among others.
+enum class LeaveOut
+{
+	Nothing = 0,      // every static scene-query shape stays, as before
+	SightOnly = 1,    // those whose query filter is the sight layer alone go: the default
+	Unsimulated = 2,  // those whose simulation filter is all zeros go
+};
+constexpr uint32_t kSightLayer = 0x80000;  // the query filter's third word
+
+// Whether aRule leaves out a shape with the query filter aQuery and the simulation filter aSimulation.
+bool        LeftOut(const physx::PxFilterData& aQuery, const physx::PxFilterData& aSimulation, LeaveOut aRule);
+const char* LeaveOutName(LeaveOut aRule);  // "nothing", "sight-only shapes", "unsimulated shapes"
+
+// A primitive shape's own size and place, for the shapes request, whose actor bounds can hold several shapes (a bush's
+// capsule): its centre, or a capsule's axis from end to end (PhysX's capsules lie along their local x axis), in world axes.
+// aPose is the shape's, in PhysX's frame: the world less aOrigin.
+std::string SphereWords(float aRadius, const physx::PxTransform& aPose, const Vec3d& aOrigin);
+std::string CapsuleWords(float aRadius, float aHalfHeight, const physx::PxTransform& aPose, const Vec3d& aOrigin);
+std::string BoxWords(const physx::PxVec3& aHalfExtents, const physx::PxTransform& aPose, const Vec3d& aOrigin);
+
 // BlockRender's own actors, part 3's bodies, which the exporter leaves out.
 class OwnActors
 {
@@ -76,12 +99,16 @@ public:
 		uint64_t             searches = 0;    // times V's controller was looked for among all of scene 0's capsules
 		uint64_t             kept = 0;        // shapes read, since the start
 		uint64_t             left = 0;        // shapes the overlap gave that aren't kept: simulation-only, triggers, planes
+		uint64_t             leftByRule = 0;  // of those, static scene-query shapes the rule (set bushrule) left out
 		uint64_t             unreadable = 0;  // objects that failed their checks, and meshes that couldn't be read
 		uint64_t             triangles = 0;   // triangles read
 	};
 
 	const Report& State() const { return report_; }
 	OwnActors&    Own() { return own_; }  // BlockRender's own, left out of what's read
+	// What else is left out, by the shapes' filters: sight-only shapes at first. The link reads the city again for a change.
+	void     SetRule(LeaveOut aRule) { rule_ = aRule; }
+	LeaveOut Rule() const { return rule_; }
 
 	// Diagnostics for step 3: a line for each batch read that took 3 ms or more, saying where its time went, for the
 	// plugin's log. At most 120 lines in all.
@@ -100,6 +127,7 @@ private:
 	physx::PxScene*       scene_ = nullptr;
 	const physx::PxActor*    controller_ = nullptr;
 	OwnActors                own_;
+	LeaveOut                 rule_ = LeaveOut::SightOnly;
 	Report                   report_;
 	std::vector<std::string> slow_;
 	uint32_t                 slowLogged_ = 0;

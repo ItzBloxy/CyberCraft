@@ -110,6 +110,10 @@ public:
 	// the city's, linked, Minecraft there, and the last update's centre known: Minecraft's player while it drives, and
 	// V otherwise.
 	void ReadGround(double aNow, GroundSource& aSource, double aBudgetMs);
+	// The city read again from the start at the next update, as when the ground switches to it: a clear with a new epoch,
+	// then every region afresh, for a change in what the source keeps (spike 6's follow-up, set bushrule). On the floor
+	// nothing is sent, the city starting over anyway when the ground switches to it.
+	void RestartCity() { cityRestart_ = true; }
 
 	// Push may be called from any thread. Everything else, from the thread that calls Update.
 	bool Type(std::string_view aCommandOrName, std::string& aError);  // queues a command, or a named set
@@ -242,6 +246,7 @@ private:
 	// The city's ground (spike 5's "Part 2")
 	bool                              wasLinked_ = false;
 	bool                              cityClear_ = false;  // a clear is due before the city's next regions
+	bool                              cityRestart_ = false;  // RestartCity: the city starts over at the next update
 	bool                              centred_ = false;    // the last update knew the city's centre, linked
 	GroundAreas                       areas_;
 	unsigned                          groundThreads_;

@@ -118,6 +118,12 @@ void Link::Update(const Frame& aFrame, const LinkSettings& aSettings, LinkSink& 
 		outbox_.clear();
 		aSink.Log(std::format("the ground is the {} now", GroundName(aSettings.ground)));
 	}
+	if (std::exchange(cityRestart_, false))
+	{
+		cityClear_ = true;
+		areas_.Reset(aFrame.now);
+		outbox_.clear();
+	}
 	const bool city = status_.ground == Ground::City;
 	if (aFrame.linked && !wasLinked_)
 	{

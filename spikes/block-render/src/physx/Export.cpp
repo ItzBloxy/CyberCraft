@@ -54,12 +54,85 @@ std::vector<PxOverlapHit> Overlap(PxScene& aScene, const PxGeometry& aGeometry, 
 	aScene.overlap(aGeometry, aPose, collect, PxQueryFilterData(aWhich | PxQueryFlag::eNO_BLOCK));
 	return hits;
 }
+
+// A primitive shape's own size and place, for the shapes request, aPose being its pose in PhysX's frame; empty for meshes,
+// heightfields and the rest, which the actor's bounds describe.
+std::string PrimitiveWords(const PxShape& aShape, const PxTransform& aPose, const Vec3d& aOrigin)
+{
+	switch (aShape.getGeometryType())
+	{
+	case PxGeometryType::eSPHERE:
+	{
+		PxSphereGeometry sphere;
+		return aShape.getSphereGeometry(sphere) ? SphereWords(sphere.radius, aPose, aOrigin) : std::string();
+	}
+	case PxGeometryType::eCAPSULE:
+	{
+		PxCapsuleGeometry capsule;
+		return aShape.getCapsuleGeometry(capsule) ? CapsuleWords(capsule.radius, capsule.halfHeight, aPose, aOrigin) : std::string();
+	}
+	case PxGeometryType::eBOX:
+	{
+		PxBoxGeometry box;
+		return aShape.getBoxGeometry(box) ? BoxWords(box.halfExtents, aPose, aOrigin) : std::string();
+	}
+	default:
+		return {};
+	}
+}
 }
 
 bool KeptShape(AuditedClass aActor, PxShapeFlags aFlags, PxGeometryType::Enum aGeometry, bool aOurs)
 {
 	return aActor == AuditedClass::RigidStatic && aFlags.isSet(PxShapeFlag::eSCENE_QUERY_SHAPE) && !aFlags.isSet(PxShapeFlag::eTRIGGER_SHAPE) &&
 	       aGeometry != PxGeometryType::ePLANE && !aOurs;
+}
+
+bool LeftOut(const PxFilterData& aQuery, const PxFilterData& aSimulation, LeaveOut aRule)
+{
+	switch (aRule)
+	{
+	case LeaveOut::SightOnly:
+		return aQuery.word0 == 0 && aQuery.word1 == 0 && aQuery.word2 == kSightLayer && aQuery.word3 == 0;
+	case LeaveOut::Unsimulated:
+		return aSimulation.word0 == 0 && aSimulation.word1 == 0 && aSimulation.word2 == 0 && aSimulation.word3 == 0;
+	default:
+		return false;
+	}
+}
+
+const char* LeaveOutName(LeaveOut aRule)
+{
+	switch (aRule)
+	{
+	case LeaveOut::SightOnly:
+		return "sight-only shapes";
+	case LeaveOut::Unsimulated:
+		return "unsimulated shapes";
+	default:
+		return "nothing";
+	}
+}
+
+std::string SphereWords(float aRadius, const PxTransform& aPose, const Vec3d& aOrigin)
+{
+	return std::format("sphere of radius {:.2f} at ({:.2f}, {:.2f}, {:.2f})", aRadius, aPose.p.x + aOrigin.x, aPose.p.y + aOrigin.y,
+	                   aPose.p.z + aOrigin.z);
+}
+
+std::string CapsuleWords(float aRadius, float aHalfHeight, const PxTransform& aPose, const Vec3d& aOrigin)
+{
+	const PxVec3 axis = aPose.q.rotate(PxVec3(aHalfHeight, 0.0f, 0.0f));
+	const PxVec3 from = aPose.p - axis;
+	const PxVec3 to = aPose.p + axis;
+	return std::format("capsule of radius {:.2f} from ({:.2f}, {:.2f}, {:.2f}) to ({:.2f}, {:.2f}, {:.2f})", aRadius, from.x + aOrigin.x,
+	                   from.y + aOrigin.y, from.z + aOrigin.z, to.x + aOrigin.x, to.y + aOrigin.y, to.z + aOrigin.z);
+}
+
+std::string BoxWords(const PxVec3& aHalfExtents, const PxTransform& aPose, const Vec3d& aOrigin)
+{
+	return std::format("box of {:.2f} x {:.2f} x {:.2f} at ({:.2f}, {:.2f}, {:.2f})", 2.0f * aHalfExtents.x, 2.0f * aHalfExtents.y,
+	                   2.0f * aHalfExtents.z, aPose.p.x + aOrigin.x, aPose.p.y + aOrigin.y, aPose.p.z + aOrigin.z);
 }
 
 void OwnActors::Set(std::vector<const void*> aActors)
@@ -257,6 +330,12 @@ bool PhysxGround::Read(const link::McBox& aBox, std::vector<link::McTriangle>& a
 			++report_.left;
 			continue;
 		}
+		if (LeftOut(hit.shape->getQueryFilterData(), hit.shape->getSimulationFilterData(), rule_))
+		{
+			++report_.left;
+			++report_.leftByRule;
+			continue;
+		}
 		++report_.kept;
 		++shapes;
 		const auto     shapeStart = Clock::now();
@@ -332,17 +411,22 @@ std::vector<std::string> PhysxGround::Describe(const Vec3d& aWorld, double aRadi
 		                                  : static_cast<const PxRigidBody&>(*hit.actor).getRigidBodyFlags().isSet(PxRigidBodyFlag::eKINEMATIC)
 		                                      ? "kinematic"
 		                                      : "dynamic";
-		const PxBounds3 bounds = hit.actor->getWorldBounds(1.0f);
-		lines.push_back(std::format("{} {} of actor {}, actor bounds ({:.2f}, {:.2f}, {:.2f}) to ({:.2f}, {:.2f}, {:.2f}) in world axes; "
+		const PxBounds3    bounds = hit.actor->getWorldBounds(1.0f);
+		const PxFilterData query = hit.shape->getQueryFilterData();
+		const PxFilterData simulation = hit.shape->getSimulationFilterData();
+		const std::string  primitive = PrimitiveWords(*hit.shape, hit.actor->getGlobalPose() * hit.shape->getLocalPose(), origin);
+		const std::string  exported = !KeptShape(actor.cls, flags, geometry, ours) ? std::string()
+		                              : LeftOut(query, simulation, rule_)
+		                                  ? std::format("; the exporter leaves it out, with {}", LeaveOutName(rule_))
+		                                  : std::string("; the exporter keeps it");
+		lines.push_back(std::format("{} {} of actor {}, actor bounds ({:.2f}, {:.2f}, {:.2f}) to ({:.2f}, {:.2f}, {:.2f}) in world axes{}; "
 		                            "{}{}{}; query filter {}, simulation filter {}{}{}",
 		                            kind, GeometryName(geometry), static_cast<const void*>(hit.actor), bounds.minimum.x + origin.x,
 		                            bounds.minimum.y + origin.y, bounds.minimum.z + origin.z, bounds.maximum.x + origin.x,
-		                            bounds.maximum.y + origin.y, bounds.maximum.z + origin.z,
+		                            bounds.maximum.y + origin.y, bounds.maximum.z + origin.z, primitive.empty() ? "" : "; the shape: " + primitive,
 		                            flags.isSet(PxShapeFlag::eSIMULATION_SHAPE) ? "simulation" : "not simulation",
 		                            flags.isSet(PxShapeFlag::eSCENE_QUERY_SHAPE) ? ", scene query" : ", not scene query",
-		                            flags.isSet(PxShapeFlag::eTRIGGER_SHAPE) ? ", trigger" : "", FilterKey(hit.shape->getQueryFilterData()),
-		                            FilterKey(hit.shape->getSimulationFilterData()),
-		                            KeptShape(actor.cls, flags, geometry, ours) ? "; the exporter keeps it" : "",
+		                            flags.isSet(PxShapeFlag::eTRIGGER_SHAPE) ? ", trigger" : "", FilterKey(query), FilterKey(simulation), exported,
 		                            ours ? "; BlockRender's own body" : ""));
 	}
 	scene_->unlockRead();

@@ -1204,6 +1204,46 @@ TEST(LinkSwitchesBetweenTheFloorAndTheCity)
 	CHECK_EQ(street.boxes.size(), size_t(1));
 }
 
+TEST(LinkStartsTheCityOverWhenWhatItKeepsChanges)
+{
+	FakeMinecraft                     minecraft;
+	Link                              link(minecraft.base, 0);
+	Sink                              sink;
+	Street                            street;
+	std::vector<std::vector<uint8_t>> payloads;
+	minecraft.Beat(77, 1000);
+	link.Update(At(1.0), City(), sink);  // the city, epoch 1, read once its collision has settled
+	link.ReadGround(2.5, street, 0.0);
+	CHECK(Finish(link, At(2.5), City(), sink));
+	minecraft.Collision(payloads);
+	CHECK_EQ(link.State().cityKnown, size_t(8));
+	// What the exporter keeps changes (set bushrule): at the next update the city starts over, with a clear and a new
+	// epoch, and every region is read again, at once, its collision being there already, V's batch first.
+	link.RestartCity();
+	link.Update(At(3.0), City(), sink);
+	payloads.clear();
+	const auto messages = minecraft.Collision(payloads);
+	CHECK(messages.size() == 1 && messages[0].type == proto::kColClear);
+	CHECK(payloads.size() == 1 && payloads[0] == std::vector<uint8_t>({ 2, 0, 0, 0 }));
+	CHECK(sink.Logged("the city starts over, as collision epoch 2"));
+	link.ReadGround(3.0, street, 0.0);
+	CHECK_EQ(street.boxes.size(), size_t(2));
+	CHECK_NEAR(street.boxes[1].low.x, street.boxes[0].low.x, 1e-9);
+	CHECK_NEAR(street.boxes[1].low.z, street.boxes[0].low.z, 1e-9);
+	// Once: the regions read again go out under epoch 2, with no second clear.
+	CHECK(Finish(link, At(3.0), City(), sink));
+	payloads.clear();
+	CHECK_EQ(minecraft.Collision(payloads).size(), size_t(16));
+	CHECK_EQ(link.State().collisionEpoch, 2u);
+	// On the floor nothing is sent: the city starts over anyway when the ground switches to it.
+	link.Update(At(3.1), kSettings, sink);
+	minecraft.Collision(payloads);
+	link.RestartCity();
+	link.Update(At(3.2), kSettings, sink);
+	payloads.clear();
+	CHECK(minecraft.Collision(payloads).empty());
+}
+
 TEST(LinkReadsTheCityAgainWhenVIsFoundAgain)
 {
 	FakeMinecraft                     minecraft;

@@ -61,6 +61,48 @@ TEST(ExportNamesShapesForTheShapesRequest)
 	CHECK_STR(FilterKey(PxFilterData(0, 0, 0x449c004, 0)), "0:0:449c004:0");
 }
 
+TEST(ExportLeavesOutWhatTheBushRuleSays)
+{
+	// A bush's foliage, as Task 36's shapes found it: query filter the sight layer alone, simulation filter all zeros. The
+	// terrain's heightfield and the bush's capsule have the sight layer among others, and real simulation filters.
+	const PxFilterData foliageQuery(0, 0, 0x80000, 0), foliageSimulation(0, 0, 0, 0);
+	const PxFilterData terrainQuery(0, 0, 0x449c080, 0), terrainSimulation(0x1c080, 0, 0x104a, 0);
+	const PxFilterData capsuleQuery(0, 0, 0x4484000, 0), capsuleSimulation(0x4004, 0, 0x1e0c, 0);
+	// Nothing: every static scene-query shape stays, as before.
+	CHECK(!LeftOut(foliageQuery, foliageSimulation, LeaveOut::Nothing));
+	// Sight-only, the default: the foliage goes, and the terrain and the capsule stay; so does a shape with the sight layer
+	// alone but another word set.
+	CHECK(LeftOut(foliageQuery, foliageSimulation, LeaveOut::SightOnly));
+	CHECK(!LeftOut(terrainQuery, terrainSimulation, LeaveOut::SightOnly));
+	CHECK(!LeftOut(capsuleQuery, capsuleSimulation, LeaveOut::SightOnly));
+	CHECK(!LeftOut(PxFilterData(1, 0, 0x80000, 0), foliageSimulation, LeaveOut::SightOnly));
+	// Unsimulated: whatever has an all-zero simulation filter goes, whatever its query filter.
+	CHECK(LeftOut(foliageQuery, foliageSimulation, LeaveOut::Unsimulated));
+	CHECK(LeftOut(terrainQuery, foliageSimulation, LeaveOut::Unsimulated));
+	CHECK(!LeftOut(terrainQuery, terrainSimulation, LeaveOut::Unsimulated));
+	// The exporter starts with the sight-only rule.
+	Session     session;
+	PhysxGround ground(session);
+	CHECK(ground.Rule() == LeaveOut::SightOnly);
+	ground.SetRule(LeaveOut::Nothing);
+	CHECK(ground.Rule() == LeaveOut::Nothing);
+	CHECK_STR(LeaveOutName(LeaveOut::SightOnly), "sight-only shapes");
+	CHECK_STR(LeaveOutName(LeaveOut::Unsimulated), "unsimulated shapes");
+	CHECK_STR(LeaveOutName(LeaveOut::Nothing), "nothing");
+}
+
+TEST(ExportDescribesEachPrimitiveShape)
+{
+	// PhysX's frame is the world less its origin; a capsule lies along its local x axis. Upright, as an NPC's controller
+	// stands: its local x turned to world z.
+	const Vec3d       origin{ 0.0, -2048.0, 0.0 };
+	const PxTransform upright(PxVec3(-26.0f, -176.0f, 7.0f), PxQuat(-PxHalfPi, PxVec3(0.0f, 1.0f, 0.0f)));
+	CHECK_STR(SphereWords(1.07f, PxTransform(PxVec3(-26.39f, -175.71f, 6.94f)), origin),
+	          "sphere of radius 1.07 at (-26.39, -2223.71, 6.94)");
+	CHECK_STR(CapsuleWords(0.3f, 0.5f, upright, origin), "capsule of radius 0.30 from (-26.00, -2224.00, 6.50) to (-26.00, -2224.00, 7.50)");
+	CHECK_STR(BoxWords(PxVec3(1.0f, 0.25f, 1.5f), PxTransform(PxVec3(10.0f, 20.0f, 30.0f)), origin), "box of 2.00 x 0.50 x 3.00 at (10.00, -2028.00, 30.00)");
+}
+
 TEST(ExportReadsNothingWithoutTheGame)
 {
 	Session                       session;
