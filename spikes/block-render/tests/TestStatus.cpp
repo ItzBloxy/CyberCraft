@@ -406,3 +406,35 @@ TEST(StatusWritesWhetherVIsHidden)
 	report.link = link;
 	CHECK(Has(cpmc::FormatStatus(report), "v=shown: set hidev is 0"));
 }
+
+TEST(StatusWritesBlasts)
+{
+	cpmc::StatusReport report;
+	cpmc::LinkReport   link;
+	report.link = link;
+	std::string status = cpmc::FormatStatus(report);
+	CHECK(Has(status, "blasts=off: Minecraft's blasts are logged, not applied"));
+	CHECK(status.find("combat=") < status.find("blasts=") && status.find("blasts=") < status.find("ring="));
+	link.combatOn = true;
+	report.link = link;
+	CHECK(Has(cpmc::FormatStatus(report), "blasts=on: 0 taken, blast power 0.50; none yet"));
+	link.blasts = 2;
+	link.blastPower = 1.0;
+	link.blastKnock = true;
+	link.lastBlast = "at world (680.50, -1997.50, 6.20), reaching 8.0 m: 5 NPCs within it, 4 hits of its own; after its push 2 "
+	                 "knocked down, 2 dead";
+	report.link = link;
+	CHECK(Has(cpmc::FormatStatus(report), "blasts=on: 2 taken, blast power 1.00, knockdowns applied directly too; the last at world "
+	                                      "(680.50, -1997.50, 6.20), reaching 8.0 m: 5 NPCs within it, 4 hits of its own; after its "
+	                                      "push 2 knocked down, 2 dead"));
+	// V's health share for Minecraft's player goes in the combat line, and the exporter's bush rule in the city's ground line.
+	link.lastHealth = "set to V's share 0.7500 when build mode last started";
+	link.ground = "city";
+	link.bushRule = "sight-only shapes";
+	link.shapesBush = 12;
+	report.link = link;
+	status = cpmc::FormatStatus(report);
+	CHECK(Has(status, "; Minecraft's health set to V's share 0.7500 when build mode last started; Immortal off; 0 deaths; Minecraft's "
+	                  "player alive"));
+	CHECK(Has(status, "0 unreadable; the bush rule leaves out sight-only shapes: 12 so far"));
+}

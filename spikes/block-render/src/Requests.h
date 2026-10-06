@@ -29,6 +29,8 @@ namespace cpmc
 //   npcs                       (spike 6: every NPC listed, into the log, and what the game's targeting finds)
 //   hit <id> <damage> [strong] (spike 6: as if Minecraft hit NPC <id>, from 1, for <damage>, over 0, of its damage)
 //   punch                      (spike 6: V's punch, what it's read from, and what hits are made with, into the log)
+//   explode <metres> <radius>  (spike 6's Part 3: a blast that far ahead of V, from 0 to 100, as if it were Minecraft's,
+//                               with its radius, over 0 and up to 16)
 struct Request
 {
 	enum class Kind
@@ -51,13 +53,16 @@ struct Request
 		Npcs,
 		Hit,
 		Punch,
+		Explode,
 	};
 
 	Kind        kind = Kind::Log;
 	std::string what;          // the dump target, mode, structure, setting name, on or off, what to type, or a hit's
 	                           // strong or quick
-	double      number = 0.0;  // the field's block count, the setting's value, the drive log's seconds, or a hit's damage
+	double      number = 0.0;  // the field's block count, the setting's value, the drive log's seconds, a hit's damage, or
+	                           // how far ahead of V a blast is
 	uint32_t    id = 0;        // a hit's NPC: its number in SkyCraft's actor table
+	double      radius = 0.0;  // a blast's, as Minecraft gives one
 };
 
 // The command in aText (one line; surrounding whitespace is ignored). Nothing, with aError saying why, if the text

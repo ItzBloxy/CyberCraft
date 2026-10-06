@@ -94,6 +94,8 @@ struct LinkReport
 	uint64_t                       shapesKept = 0;            // since the start
 	uint64_t                       shapesLeft = 0;            // given by the overlap but not kept: simulation-only, triggers
 	uint64_t                       shapesUnreadable = 0;
+	std::string                    bushRule;                  // what else the exporter leaves out (set bushrule); empty: not said
+	uint64_t                       shapesBush = 0;            // shapes it left out so, since the start
 	std::string                    physxWhy;                  // why the exporter couldn't read, while it can't
 	// Minecraft's solid blocks, and V's bodies for them (spike 5's "Part 3"): the counts are since the start
 	size_t               solidSections = 0;
@@ -140,10 +142,16 @@ struct LinkReport
 	uint64_t              hurtsLeft = 0;     // offered while not taken: left to V
 	uint64_t              hurtsNonLethal = 0;  // offered while taken, but the game won't let them kill V: left to V
 	std::string           lastHurt;          // its amount and share, Minecraft's damage, kind, attack type and attacker
+	std::string           lastHealth;        // V's health share last sent to Minecraft's player, and when; empty: none yet
 	bool                  immortal = false;  // our Immortal on V
 	uint64_t              deaths = 0;        // Minecraft's deaths that killed V
 	std::optional<double> minecraftDeadFor;  // seconds; none: alive
 	std::string           combatWhy;         // why combat can't do all it should, while it can't
+	// Minecraft's blasts (spike 6's "Part 3"), with combat on: the count is since the start
+	uint64_t    blasts = 0;          // taken
+	double      blastPower = 0.5;    // set blastpower (link::kBlastPower): a blast's hits start at V's punch x damage^this
+	bool        blastKnock = false;  // set blastknock 1: each NPC within reach gets the knockdown directly too
+	std::string lastBlast;           // its centre, reach, NPCs within it and its own hits; after its push, knocked down and dead
 	// The render ring
 	double      ringMb = 0.0;            // in the last second
 	double      ringMbWorstFrame = 0.0;  // the most in one frame of it
@@ -215,8 +223,8 @@ struct StatusReport
 };
 
 // Lines of "key=value": mode, frames, blocks, gpu, frame, streamline, hooks, request; with a link, its lines (link, build,
-// drive, positions, ground, solids, bodies, npcs, ring, atlas, hud, latency, burst and processes); then one structure line
-// per structure:
+// drive, v, positions, ground, solids, bodies, npcs, combat, blasts, ring, atlas, hud, latency, burst and processes); then
+// one structure line per structure:
 // "structure=<name> <min x> <min y> <min z> <max x> <max y> <max z>".
 std::string FormatStatus(const StatusReport& aReport);
 }

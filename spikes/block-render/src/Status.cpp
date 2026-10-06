@@ -162,6 +162,10 @@ std::string FormatGround(const LinkReport& aLink)
 	           : std::string("; PhysX's origin unknown");
 	out += std::format(", V's controller looked for {} times; shapes since the start: {} kept, {} left out, {} unreadable",
 	                   aLink.controllerSearches, aLink.shapesKept, aLink.shapesLeft, aLink.shapesUnreadable);
+	if (!aLink.bushRule.empty())
+	{
+		out += std::format("; the bush rule leaves out {}: {} so far", OneLine(aLink.bushRule), aLink.shapesBush);
+	}
 	if (!aLink.physxWhy.empty())
 	{
 		out += "; nothing can be read now: " + OneLine(aLink.physxWhy);
@@ -227,6 +231,10 @@ std::string FormatCombat(const LinkReport& aLink)
 	{
 		out += "; the last " + OneLine(aLink.lastHurt);
 	}
+	if (!aLink.lastHealth.empty())
+	{
+		out += "; Minecraft's health " + OneLine(aLink.lastHealth);
+	}
 	out += std::format("; Immortal {}; {} deaths; Minecraft's player {}", aLink.immortal ? "on" : "off", aLink.deaths,
 	                   aLink.minecraftDeadFor ? std::format("dead for {:.1f} s", *aLink.minecraftDeadFor) : std::string("alive"));
 	if (!aLink.combatWhy.empty())
@@ -234,6 +242,18 @@ std::string FormatCombat(const LinkReport& aLink)
 		out += "; " + OneLine(aLink.combatWhy);
 	}
 	return out + "\n";
+}
+
+// Minecraft's blasts, with combat on: how many, where the hits start, and the last.
+std::string FormatBlasts(const LinkReport& aLink)
+{
+	if (!aLink.combatOn)
+	{
+		return "blasts=off: Minecraft's blasts are logged, not applied\n";
+	}
+	return std::format("blasts=on: {} taken, blast power {:.2f}{}; {}\n", aLink.blasts, aLink.blastPower,
+	                   aLink.blastKnock ? ", knockdowns applied directly too" : "",
+	                   aLink.lastBlast.empty() ? std::string("none yet") : "the last " + OneLine(aLink.lastBlast));
 }
 
 std::string FormatLink(const LinkReport& aLink)
@@ -267,6 +287,7 @@ std::string FormatLink(const LinkReport& aLink)
 	out += FormatBodies(aLink);
 	out += FormatNpcs(aLink);
 	out += FormatCombat(aLink);
+	out += FormatBlasts(aLink);
 	out += std::format("ring={:.2f} MB in the last second, at most {:.2f} MB in one frame; drain {:.3f} ms average, {:.3f} ms worst; {}; "
 	                   "{} rejected, {} resyncs\n",
 	                   aLink.ringMb, aLink.ringMbWorstFrame, aLink.drainMsAverage, aLink.drainMsWorst,

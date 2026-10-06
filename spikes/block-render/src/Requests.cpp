@@ -135,6 +135,18 @@ std::optional<Request> ParseRequest(std::string_view aText, std::string& aError)
 		request.id = uint32_t(*id);
 		return request;
 	}
+	if (command == "explode")
+	{
+		const std::optional<double> metres = arguments == 2 ? Number(words[1]) : std::nullopt;
+		const std::optional<double> radius = arguments == 2 ? Number(words[2]) : std::nullopt;
+		if (!metres || *metres < 0.0 || *metres > 100.0 || !radius || *radius <= 0.0 || *radius > 16.0)
+		{
+			return Fail(aError, "explode takes metres ahead of V, from 0 to 100, and Minecraft's radius, over 0 and up to 16 (TNT's is 4)");
+		}
+		Request request{ Request::Kind::Explode, {}, *metres };
+		request.radius = *radius;
+		return request;
+	}
 	if (command == "mc")
 	{
 		// The rest of the line, verbatim: a Minecraft command keeps its own spacing.

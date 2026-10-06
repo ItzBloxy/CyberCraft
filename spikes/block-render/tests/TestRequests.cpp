@@ -220,3 +220,19 @@ TEST(RequestsForTheNpcs)
 	const auto off = cpmc::ParseRequest("set npcs 0", error);
 	CHECK(off && off->kind == cpmc::Request::Kind::Set && off->what == "npcs" && off->number == 0.0);
 }
+
+TEST(RequestsForBlasts)
+{
+	std::string error;
+	const auto  tnt = cpmc::ParseRequest("explode 4 4", error);
+	CHECK(tnt && tnt->kind == cpmc::Request::Kind::Explode && tnt->number == 4.0 && tnt->radius == 4.0);
+	const auto creeper = cpmc::ParseRequest("explode 6.5 3", error);
+	CHECK(creeper && creeper->number == 6.5 && creeper->radius == 3.0);
+	CHECK(cpmc::ParseRequest("explode 0 16", error));  // at V's feet, and the biggest radius the plugin takes
+	for (const char* bad : { "explode", "explode 4", "explode -1 4", "explode 101 4", "explode 4 0", "explode 4 17", "explode 4 4 4",
+	                         "explode four 4" })
+	{
+		CHECK(!cpmc::ParseRequest(bad, error));
+	}
+	CHECK_STR(error, "explode takes metres ahead of V, from 0 to 100, and Minecraft's radius, over 0 and up to 16 (TNT's is 4)");
+}
