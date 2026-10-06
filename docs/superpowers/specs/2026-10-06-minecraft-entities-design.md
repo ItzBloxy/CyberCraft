@@ -4,8 +4,9 @@ Date: 2026-10-06. Status: agreed with the user section by section in the brainst
 approaches that the user asked for ("Decisions from the brainstorm"). "Found while writing", near the end, lists what
 writing it out added to what was agreed. Then revised after a deep self-review, which checked each claim against its
 source and walked through step 0 and run A as the user would play them: "Changes from the deep review", at the end,
-lists what changed and what was checked. Planning Part 1 settled more, which "Changes while planning Part 1" lists.
-The sections above already include all of those changes.
+lists what changed and what was checked. Planning Part 1 settled more, which "Changes while planning Part 1" lists,
+and a read before executing it corrected step 0's script ("Changes before executing Part 1"). The sections above
+already include all of those changes.
 
 ## Purpose
 
@@ -506,14 +507,18 @@ dumped ground (`ground city`, so things stand on it) in creative, then makes eac
 only the particles in its view:
 - a pig and a villager with a profession and a level;
 - a spider and a blaze, AI off;
-- a falling sand, dropped from 12 blocks up so a scene catches it in the air, with a marker entity tagged `sp7b` where
-  it lands, since it lands as a block;
-- a chest and a banner with patterns, each with a marker;
+- a falling sand, dropped from 12 blocks up so a scene catches it in the air;
+- a chest and a banner with patterns, each with a marker entity tagged `sp7b`;
 - a dropped item, a dropped grass block and an arrow;
 - a firework and a splash potion, for translucent particles;
-- last, a lit TNT 18 blocks ahead on a stone block, at least 11 blocks from the rest: a TNT's power is 4, and its
-  blast hurts up to twice that, so it spares them. It flashes white every quarter second, so the scene is printed
-  thrice a quarter second apart, then just after its blast.
+- last, a lit TNT 18 blocks ahead, at least 11 blocks from the rest: a TNT's power is 4, and its blast hurts up to
+  twice that, so it spares them. Spike 1's raised ground ends 6 blocks ahead, so an obsidian block with a marker holds
+  the TNT at the stand-in V's level. It flashes white every quarter second, so the scene is printed thrice a quarter
+  second apart, then just after its blast.
+
+Nothing it makes leaves a drop that a clear by tag would miss, since Night City's ground is only collision to
+Minecraft ("Changes before executing Part 1"): the mobs' loot tables are empty (`DeathLootTable`), the sand drops no
+item where it can't land as a block (`DropItem`), and TNT can't break obsidian.
 
 It records:
 - **the scenes:** batches (texture, flags, count, first), vertices, those with block light 15, translucent batches, MB a
@@ -523,7 +528,8 @@ It records:
 - **the world entities** by kind, and the outline.
 
 Then `/execute at @e[tag=sp7b] run setblock ~ ~ ~ air`, `/kill @e[tag=sp7]` and `/kill @e[tag=sp7b]` clear it, sparing
-the NPCs' stand-ins. This settles, from Minecraft's own data, the sizes and flags step A builds on.
+the NPCs' stand-ins, and a last scene 7 s later, once the mobs' death puffs and the blaze's smoke are gone, shows
+nothing left. This settles, from Minecraft's own data, the sizes and flags step A builds on.
 
 ### Step A's code
 
@@ -593,14 +599,14 @@ flags; then run A's checks 2 and 7 again in the game.
 - **The overlay's Spawn row** (Fun): each button types its commands as `mc` requests, each test thing 5 m ahead of
   Minecraft's player, level (`/execute rotated ~ 0 positioned ^ ^ ^5`, as the named sets do), tagged as in step 0:
   - a pig, a herd of 10 pigs (10 requests, about 10 s), a villager (with a profession and a level), a spider and a
-    blaze (AI off);
-  - a falling sand, with a marker where it lands, since it lands as a block;
+    blaze (AI off), each with an empty loot table, as in step 0;
+  - a falling sand, which drops no item where it lands, as in step 0: on the city's ground it can't become a block;
   - block entities: a chest, a bed, a sign and a banner with patterns, side by side, and a torch, for its flame;
   - items: a dropped item and a dropped grass block (its top tinted);
   - for step B: a firework, a splash potion and a campfire.
 
-  **Clear** clears what they made, by tag. A lit TNT and a big blast come from the named sets already there
-  (`tnt-ahead`, `tnt-cube`).
+  **Clear** clears what they made, by tag, leaving no drops. A lit TNT and a big blast come from the named sets already
+  there (`tnt-ahead`, `tnt-cube`).
 
 ## Measurements and the status
 
@@ -628,7 +634,7 @@ A new status line, `entities`, shown by the overlay:
 - **Builds and deploys** only with the game closed (`tasklist` shows no `Cyberpunk2077.exe`), `CP2077_DIR` set only for
   the deploy and cleared after.
 - **Minecraft's world:** every test thing is tagged and cleared after each step; placed blocks are removed by their
-  markers. Test runs are in creative.
+  markers; and nothing a test makes leaves an untagged drop. Test runs are in creative.
 
 ## Error handling
 
@@ -836,3 +842,26 @@ sizes, flags and textures they build on. Planning Part 1 settled these:
    `falling_block`, `marker`), `VillagerData` (`type`, `profession`, `level`), the banner's `patterns` (`pattern`,
    `color`), `Item` and `PickupDelay`, `FireworksItem`, `LifeTime`, the `fireworks` component's `explosions` (`shape`,
    `colors`), `potion_contents` (`potion`), `BlockState`, `NoAI` and `PersistenceRequired`.
+
+## Changes before executing Part 1
+
+Before Part 1 ran, the user asked for a read of the plan, this spec and their context. Step 0's script, played through
+against SkyCraft's source, Minecraft 26.3's classes and spike 1's dump, would have left untagged items in the user's
+world past its clear. Night City's ground is only collision to Minecraft, in SkyCraft's void world `SkyCraft`, so:
+1. **Spike 1's raised ground ends 6 blocks ahead** of the stand-in V, 6 to 9 m above the ground beyond, which reaches
+   about 30 blocks east. "Changes while planning Part 1" had it reaching 36 blocks: that was the dump's extent, not its
+   ground at the stand-in V's level. The TNT, 18 ahead, stands only on the block under it.
+2. **That block is obsidian,** not stone: a TNT blast drops every block it breaks (`tnt_explosion_drop_decay` is false
+   by default), and TNT can't break obsidian.
+3. **A falling sand can't land as a block on the city's ground:** Minecraft has no block under it
+   (`FallingBlock.isFree`), so it drops as a sand item. `DropItem:0b` stops that, and the sand needs no marker.
+4. **`/kill` runs a mob's loot table:** the pig would drop porkchops, the spider string. The mobs have
+   `DeathLootTable:"minecraft:empty"`, which `Mob.getLootTable` honours.
+5. **Timing:** the potion breaks on the ground about half a second after it's summoned, so its scene comes after 1 s.
+   The last scene comes 7 s after the clear, once the killed mobs' death puffs (up to 4 s) and the blaze's smoke (up to
+   5 s; it smokes even with its AI off) are gone, so its world line saying `nothing` shows that nothing was left.
+6. **A dropped full block is a `block` record** in the world table (`WorldExporter.addItem`), so the items' scene shows
+   `1 arrow, 1 block, 1 item, 4 shadows`.
+
+The Spawn row (Part 2) follows step 0: its mobs have empty loot tables and its falling sand drops no item, so Clear
+leaves nothing behind.

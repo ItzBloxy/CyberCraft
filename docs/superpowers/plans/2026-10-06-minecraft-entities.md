@@ -54,7 +54,10 @@ settles the sizes, flags and textures they build on.
     - the replayed files identical to the scratch clone's.
   - Each new test was broken once, by a mutation of the code it covers, and failed as it should: 40 mutations.
   - Step 0's commands were checked against Minecraft 26.3's own classes: the entity ids, and the data each `/summon`
-    and `/setblock` gives (`VillagerData`, `patterns`, `PickupDelay`, `FireworksItem`, `potion_contents` and the rest).
+    and `/setblock` gives (`VillagerData`, `patterns`, `PickupDelay`, `FireworksItem`, `potion_contents`, `DropItem`,
+    `DeathLootTable` and the rest).
+  - Before Part 1 ran, step 0's script was also played through against SkyCraft's source and spike 1's dump, for
+    where each thing lands and what it leaves behind ("Found before executing Part 1").
 
   So a failure while following the plan most likely means a transcription slip: compare against the plan's code first.
 - **Test counts:** 450 at the start, then 455, 461, 464 and 465 after Tasks 1 to 4.
@@ -63,8 +66,8 @@ settles the sizes, flags and textures they build on.
   - **does everything in Minecraft and the Modrinth App:** starting and stopping it, and anything on its screen. Never
     drive their mouse or keyboard: ask, then wait for them to say they're done;
   - **approves downloads first.** Nothing in Part 1 downloads anything;
-  - **approves changes to their Minecraft world:** Task 5's script summons and places test things at x 880 on the
-    `CyberCraft` world, and clears them at its end.
+  - **approves changes to their Minecraft world:** Task 5's script summons and places test things at x 880 in the
+    `SkyCraft` world, SkyCraft's own in the `CyberCraft` instance, and clears them at its end, leaving no drops.
 - **The game:** Part 1 deploys nothing. `mclink` needs the game closed, since the game would hold the mapping.
 - **No faults:** shared memory is written by another process: every count, size and offset from it is checked before
   use, as the render ring's other messages are.
@@ -1184,11 +1187,21 @@ city's ground so that things stand on it, in creative, at a fresh spot 400 block
 test thing 3 to 7 blocks ahead, the stand-in V looking at it, since Minecraft extracts only the particles in its view:
 a pig and a villager with a profession and a level; a spider and a blaze with their AI off; a falling sand, dropped
 from 12 blocks up so a scene catches it in the air; a chest and a banner with two patterns; a dropped diamond and a
-dropped grass block, and an arrow; a firework, looking up, and a splash potion. Then a TNT 18 blocks ahead on a stone
-block, beyond the 8 blocks its blast hurts: it flashes white every quarter second of its 4 s fuse, so three scenes a
-quarter second apart catch it with and without its flash, and one more comes just after its blast. Everything summoned
-is tagged `sp7`, and each block placed has a marker tagged `sp7b`, so the end clears them all and spares the NPCs'
-stand-ins.
+dropped grass block, and an arrow; a firework, looking up, and a splash potion. Then a TNT 18 blocks ahead, beyond
+the 8 blocks its blast hurts, and beyond the dump's raised ground, which ends 6 blocks ahead, 6 to 9 m above the
+ground past it: an obsidian block holds the TNT at the stand-in V's level. It flashes white every quarter second of
+its 4 s fuse, so three scenes a quarter second apart catch it with and without its flash, and one more comes just
+after its blast. Everything summoned is tagged `sp7`, and each block placed has a marker tagged `sp7b`, so the end
+clears them all and spares the NPCs' stand-ins.
+
+Nothing it makes leaves a drop that the clear would miss, since Night City's ground is only collision to Minecraft
+("Found before executing Part 1"):
+- **the mobs** have empty loot tables (`DeathLootTable:"minecraft:empty"`), since `/kill` runs them;
+- **the sand** drops no item (`DropItem:0b`): it can't land as a block on the city's ground;
+- **the TNT** stands on obsidian, which its blast can't break: a block it broke would drop as an item.
+
+The last scene comes 7 s after the clear, once the killed mobs' death puffs and the blaze's smoke are gone: its world
+line saying `nothing` shows that nothing is left.
 
 **Files:**
 - Create: `tools/mclink/entities.txt`
@@ -1531,9 +1544,11 @@ void PrintScene(const Report& aReport)
 # Spike 7's step 0: what Minecraft sends of its entities, block entities, particles and world entities, against
 # SkyCraft's real mod, without the game. At a fresh spot 400 blocks east of blast.txt's, on spike 1's dumped ground, in
 # creative, each test thing goes 3 to 7 blocks ahead of the stand-in V, who looks east at it: Minecraft extracts only
-# the particles in its view. Everything summoned is tagged sp7, and each block placed gets a marker tagged sp7b, so the
-# end clears them all and spares the NPCs' stand-ins. The TNT goes last, 18 blocks ahead, on a stone block: its blast
-# hurts up to 8 blocks out. Start Minecraft first; this waits for its world.
+# the particles in its view. The dump's raised ground ends 6 blocks ahead, 6 to 9 m above the ground beyond. Everything
+# summoned is tagged sp7, and each block placed gets a marker tagged sp7b, so the end clears them all and spares the
+# NPCs' stand-ins. Nothing leaves a drop the clear would miss: the mobs have no loot, the sand drops no item, and the
+# TNT stands on obsidian, which its blast can't break. The TNT goes last, 18 blocks ahead: its blast hurts up to 8
+# blocks out. Start Minecraft first; this waits for its world.
 status
 wait-world 180
 ground city
@@ -1545,19 +1560,20 @@ type /gamemode creative
 wait-ground 30
 wait 2
 scene
-# Mobs: a pig, and a villager with a profession and a level: one over 1 keeps its profession.
-type /execute rotated ~ 0 positioned ^ ^ ^5 run summon minecraft:pig ~ ~ ~ {Tags:["sp7"],PersistenceRequired:1b}
-type /execute rotated ~ 0 positioned ^-2 ^ ^5 run summon minecraft:villager ~ ~ ~ {Tags:["sp7"],PersistenceRequired:1b,VillagerData:{type:"minecraft:plains",profession:"minecraft:farmer",level:2}}
+# Mobs: a pig, and a villager with a profession and a level: one over 1 keeps its profession. Every mob here has an
+# empty loot table, so the clear's /kill drops nothing.
+type /execute rotated ~ 0 positioned ^ ^ ^5 run summon minecraft:pig ~ ~ ~ {Tags:["sp7"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty"}
+type /execute rotated ~ 0 positioned ^-2 ^ ^5 run summon minecraft:villager ~ ~ ~ {Tags:["sp7"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty",VillagerData:{type:"minecraft:plains",profession:"minecraft:farmer",level:2}}
 wait 3
 scene
 # AI off: a spider, whose eyes glow in Minecraft by their render type, and a blaze, which has block light 15.
-type /execute rotated ~ 0 positioned ^2 ^ ^5 run summon minecraft:spider ~ ~ ~ {Tags:["sp7"],PersistenceRequired:1b,NoAI:1b}
-type /execute rotated ~ 0 positioned ^4 ^ ^5 run summon minecraft:blaze ~ ~1 ~ {Tags:["sp7"],PersistenceRequired:1b,NoAI:1b}
+type /execute rotated ~ 0 positioned ^2 ^ ^5 run summon minecraft:spider ~ ~ ~ {Tags:["sp7"],PersistenceRequired:1b,NoAI:1b,DeathLootTable:"minecraft:empty"}
+type /execute rotated ~ 0 positioned ^4 ^ ^5 run summon minecraft:blaze ~ ~1 ~ {Tags:["sp7"],PersistenceRequired:1b,NoAI:1b,DeathLootTable:"minecraft:empty"}
 wait 3
 scene
-# A falling sand, dropped from 12 blocks up so a scene catches it in the air, with a marker where it will land as a block.
-type /execute rotated ~ 0 positioned ^-4 ^ ^5 run summon minecraft:marker ~ ~ ~ {Tags:["sp7b"]}
-type /execute rotated ~ 0 positioned ^-4 ^ ^5 run summon minecraft:falling_block ~ ~12 ~ {BlockState:{Name:"minecraft:sand"},Tags:["sp7"]}
+# A falling sand, dropped from 12 blocks up so a scene catches it in the air. Minecraft has no block under the city's
+# ground, so the sand can't land as one: it would drop as an item, which DropItem stops.
+type /execute rotated ~ 0 positioned ^-4 ^ ^5 run summon minecraft:falling_block ~ ~12 ~ {BlockState:{Name:"minecraft:sand"},DropItem:0b,Tags:["sp7"]}
 wait 0.5
 scene
 wait 3
@@ -1574,7 +1590,8 @@ type /execute rotated ~ 0 positioned ^1 ^ ^3 run summon minecraft:item ~ ~1 ~ {I
 type /execute rotated ~ 0 positioned ^-1 ^ ^3 run summon minecraft:arrow ~ ~1 ~ {Motion:[0.6,0.3,0.0],Tags:["sp7"]}
 wait 2
 scene
-# Translucent particles: a firework bursting overhead, the stand-in V looking up at it; then a splash potion.
+# Translucent particles: a firework bursting overhead, the stand-in V looking up at it; then a splash potion, which
+# breaks on the ground about half a second after it's summoned.
 look 270 -45
 type /execute rotated ~ 0 positioned ^ ^ ^6 run summon minecraft:firework_rocket ~ ~ ~ {LifeTime:20,FireworksItem:{id:"minecraft:firework_rocket",count:1,components:{"minecraft:fireworks":{explosions:[{shape:"large_ball",colors:[I;16711680]}]}}}}
 wait 1.5
@@ -1582,14 +1599,16 @@ scene
 wait 1
 look 270 0
 type /execute rotated ~ 0 positioned ^2 ^ ^3 run summon minecraft:splash_potion ~ ~2 ~ {Item:{id:"minecraft:splash_potion",count:1,components:{"minecraft:potion_contents":{potion:"minecraft:regeneration"}}}}
-wait 0.5
+wait 1
 scene
 wait 2
 save-textures build\step0\textures
 status
-# Last, the TNT 18 blocks ahead, on a stone block with a marker. Its fuse is 4 s, and it flashes white every quarter
-# second: three scenes a quarter second apart catch it with and without its flash; one more comes just after its blast.
-type /execute rotated ~ 0 positioned ^ ^ ^18 run setblock ~ ~-1 ~ minecraft:stone
+# Last, the TNT 18 blocks ahead, beyond the raised ground, held at the stand-in V's level by an obsidian block with a
+# marker: TNT can't break obsidian, and a block it broke would drop as an item. Its fuse is 4 s, and it flashes white
+# every quarter second: three scenes a quarter second apart catch it with and without its flash; one more comes just
+# after its blast.
+type /execute rotated ~ 0 positioned ^ ^ ^18 run setblock ~ ~-1 ~ minecraft:obsidian
 type /execute rotated ~ 0 positioned ^ ^-1 ^18 run summon minecraft:marker ~ ~ ~ {Tags:["sp7b"]}
 type /execute rotated ~ 0 positioned ^ ^ ^18 run summon minecraft:tnt
 wait 2
@@ -1602,11 +1621,13 @@ wait 1.7
 scene
 wait 3
 status
-# The clear: the placed blocks by their markers, then everything tagged.
+# The clear: the placed blocks by their markers, then everything tagged. A killed mob takes a second to die, and the
+# puffs it leaves, and a blaze's smoke, last up to 5 s more: the last scene, 7 s on, has nothing in it, and its world
+# line says nothing is left.
 type /execute at @e[tag=sp7b] run setblock ~ ~ ~ minecraft:air
 type /kill @e[tag=sp7]
 type /kill @e[tag=sp7b]
-wait 1
+wait 7
 scene
 status
 quit
@@ -1669,8 +1690,9 @@ Expected: `0`. If it's `1`, ask the user to quit the game: it would hold the map
 
 - [ ] **Step 2: Ask the user to start Minecraft**
 
-With their leave to summon and place test things at x 880 in the `CyberCraft` world, which the script clears at its end,
-the user starts the `CyberCraft` instance from the Modrinth App, and says when its title screen shows. Then:
+With their leave to summon and place test things at x 880 in the `SkyCraft` world, SkyCraft's own in the `CyberCraft`
+instance, which the script clears at its end, leaving no drops, the user starts the `CyberCraft` instance from the
+Modrinth App, and says when its title screen shows. Then:
 ```bash
 grep -E "SkyCraft:" "/c/Users/BLOXY/AppData/Roaming/ModrinthApp/profiles/CyberCraft/logs/latest.log" | tail -3
 ```
@@ -1701,7 +1723,8 @@ minutes. Expected, against the spec's "Step 0":
   - the lit TNT: an atlas batch, all its vertices glowing in a scene where it flashes and none in one where it doesn't;
   - just after its blast: the explosion's puffs, glowing (`HugeExplosionParticle` has full light), and its smoke, not;
   - after the clear: no batches.
-- **The world table:** two items, an arrow and four mobs' shadows; `nothing` after the clear.
+- **The world table:** `1 arrow, 1 block, 1 item, 4 shadows` at the items' scene, the grass block being a dropped full
+  block, which SkyCraft records as a `block`; then `nothing` after the clear: no drop is left.
 - **The blast:** a `scenes:` line whose largest scene is the explosion's, near the 1 MB a frame spike 4 measured.
 - **No `[CHAT]` line with an error,** and `exit: 0`.
 
@@ -1718,9 +1741,10 @@ anything that surprised, and what it means for Part 2. The spike's answer goes a
 
 - [ ] **Step 6: Commit**
 
+With the plan, its steps ticked up to this one: running Tasks 1 to 4 ticked theirs.
 ```bash
-cd /d/Cyberpunk-Minecraft && git add docs/spikes/2026-10-06-minecraft-entities-results.md \
-  && git commit -q -m "minecraft-entities: step 0's results" \
+cd /d/Cyberpunk-Minecraft && git add docs/spikes/2026-10-06-minecraft-entities-results.md docs/superpowers/plans/2026-10-06-minecraft-entities.md \
+  && git commit -q -m "minecraft-entities: step 0's results, and Part 1's steps ticked" \
        -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
 ```
 
@@ -1736,5 +1760,36 @@ The spec's "Changes while planning Part 1" lists what planning settled in the de
 - **The scene's limits are tested by their own words,** `is too big`: the size check's error names the counts too, so
   a limit moved by one still passed a test that looked only for the counts.
 - **`LinkStepsOverOtherMessagesAndKeepsToTheBudget` steps over atlas patches,** since the link now takes scenes.
-- **Step 0's spot, x 880,** is 400 blocks east of `blast.txt`'s, on spike 1's dump, which reaches 36 blocks east of the
-  stand-in V: the TNT, 18 ahead, stands on it, and on a stone block besides.
+- **Step 0's spot, x 880,** is 400 blocks east of `blast.txt`'s, on spike 1's dump, whose raised ground ends 6 blocks
+  east of the stand-in V: the things 3 to 5 blocks ahead stand on it, and the TNT, 18 ahead, on an obsidian block at
+  its level. Planning had the dump's ground reaching 36 blocks east and the TNT on it; "Found before executing Part 1"
+  corrects that.
+
+## Found before executing Part 1
+
+Before Part 1 ran, the user asked for a read of the plan, the spec and their context. Step 0's script, played through
+against SkyCraft's source, Minecraft 26.3's classes and spike 1's dump, would have left untagged items in the user's
+world past its clear, since Night City's ground is only collision to Minecraft, in SkyCraft's void world. Task 4's
+script and Task 5's expectations now have these changes:
+- **The dump's ground:** its raised level ends 6 blocks east of the stand-in V, 6 to 9 m above the ground beyond, which
+  reaches about 30 blocks east. The TNT, 18 ahead, stands only on the block under it, which holds it at the stand-in
+  V's level.
+- **That block is obsidian, not stone:** a TNT blast drops every block it breaks (26.3's `tnt_explosion_drop_decay` is
+  false by default), so the stone's cobblestone would have fallen to the ground below, untagged. TNT can't break
+  obsidian.
+- **The falling sand drops no item:** Minecraft has no block under the city's ground (`FallingBlock.isFree`), so the
+  sand can't land as a block, and would drop as a sand item. `DropItem:0b` stops that, and its marker is gone.
+- **The mobs have no loot:** `/kill` runs a mob's loot table, so the pig would have dropped porkchops and the spider
+  string. Each mob has `DeathLootTable:"minecraft:empty"`, which 26.3's `Mob.getLootTable` honours.
+- **The potion's scene comes after 1 s,** not 0.5: the potion breaks on the ground about half a second after it's
+  summoned.
+- **The last scene comes 7 s after the clear,** not 1: a killed mob takes a second to die, and its death puffs (up to
+  4 s) and a blaze's smoke (up to 5 s; it smokes even with its AI off) outlast it. Its world line saying `nothing`
+  then shows that nothing was left.
+- **The world line** at the items' scene is `1 arrow, 1 block, 1 item, 4 shadows`: SkyCraft records a dropped full
+  block, the grass block, as a `block`.
+- **The world** is `SkyCraft`, SkyCraft's own void world in the `CyberCraft` instance.
+- **Task 5's commit** takes the plan too, so the ticked steps are kept.
+
+The changed script was checked as Part 1's code was: the scratch clone's tests parse it (465 passing, and one failing
+when the script is broken), and the plan's text still makes each task's files.
