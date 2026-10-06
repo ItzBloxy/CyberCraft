@@ -3,6 +3,6 @@
   "minVersion": "0.8",
   "package": "dev.cybercraft.tweaks.mixin",
   "compatibilityLevel": "JAVA_21",
-  "mixins": ["NoBlastBlocks", "NoDigging"],
+  "mixins": ["NoBlastBlocks", "NoDigging", "SetHealth"],
   "injectors": { "defaultRequire": 1 }
 }

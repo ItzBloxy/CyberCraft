@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
   "id": "cybercraft_tweaks",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "name": "CyberCraft Tweaks",
-  "description": "SkyCraft adjusted for Cyberpunk 2077's Night City: nothing digs into the game's ground, so blasts leave no blocks floating above it.",
+  "description": "SkyCraft adjusted for Cyberpunk 2077's Night City: nothing digs into the game's ground, so blasts leave no blocks floating above it; and V's health share carries into Minecraft's player as build mode starts.",
   "environment": "client",
   "entrypoints": { "main": ["dev.cybercraft.tweaks.CyberCraftTweaks"] },
   "mixins": ["cybercraft_tweaks.mixins.json"],

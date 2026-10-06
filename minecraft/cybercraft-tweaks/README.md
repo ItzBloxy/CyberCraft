@@ -15,6 +15,11 @@ would disagree about where the ground is.
 - **What was dug before is undug** (`CyberCraftTweaks`). SkyCraft keeps its dug cells as a `skycraft:dug` attachment on
   each chunk: holes in Minecraft's copy of the ground, whose walls SkyCraft draws, and the game shows floating. Each
   chunk drops it as the server loads it, and SkyCraft's sync takes that to clients.
+- **V's health carries into Minecraft as build mode starts** (`SetHealth`, from 1.3.0). With combat on, BlockRender
+  sends V's share of its health when build mode starts, as SkyCraft's `kInHurt` with no damage, `0x100` among its
+  flags, and the share × 10,000 where an attacker's form ID would be. SkyCraft's own `hurtPlayer` leaves a hurt with no
+  damage alone, so without this mod nothing happens; with it, Minecraft's player's health becomes the same share of its
+  max health, and Minecraft's log says so.
 
 It targets SkyCraft 0.1.2's classes by name, so `fabric.mod.json` asks for exactly that version: Fabric won't start with
 another SkyCraft until this mod is checked against it.
@@ -43,4 +48,5 @@ the mod, nothing is revealed behind them.
 ## Test
 
 `spikes/block-render/tools/mclink/blast.txt` blows up TNT on Night City's ground at a fresh spot: with the mod, the solid
-blocks around it are the same afterwards as before.
+blocks around it are the same afterwards as before. `spikes/block-render/tools/mclink/blasts.txt` sets Minecraft's
+player's health to half, all and a twentieth of its max, and reads each back with `/data`.

@@ -4,6 +4,8 @@ import dev.skycraft.world.SkyDig;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.attachment.v1.AttachmentTarget;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerChunkEvents;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Drops what SkyCraft dug before this mod. Nothing digs into the game's ground any more ({@code NoBlastBlocks},
@@ -12,6 +14,10 @@ import net.fabricmc.fabric.api.event.lifecycle.v1.ServerChunkEvents;
  * floating. Each chunk drops it as the server loads it; SkyCraft syncs the attachment, so clients drop it with it.
  */
 public final class CyberCraftTweaks implements ModInitializer {
+    public static final Logger LOG = LoggerFactory.getLogger("cybercraft_tweaks");
+    /** In a kInHurt's flags, beside SkyCraft's blocked (1) and power attack (2): set the health instead ({@code SetHealth}). */
+    public static final int SET_HEALTH = 0x100;
+
     @Override
     public void onInitialize() {
         ServerChunkEvents.CHUNK_LOAD.register((level, chunk, generated) -> {
