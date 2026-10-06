@@ -1,0 +1,51 @@
+# Spike 6's step 5a: Minecraft's blasts as BlockRender takes them, and V's health share set on Minecraft's player
+# through CyberCraft Tweaks 1.3.0, without the game. At a fresh spot on the floor, 160 blocks east of step 3's: five
+# stand-ins 1.5, 3, 5, 7 and 9 blocks from a point 10 blocks north of the stand-in V, each in its own direction, and TNT
+# at the point with no fuse. Its explosion comes first, then its hits on the four within its reach of 8, each a blast's
+# own, Minecraft's damage falling off with distance; none on the fifth; and the push a quarter second after. The blocks
+# around the point are all air before and after, so the blast built and broke nothing. Then the health, in survival:
+# half, all and a twentieth of Minecraft's 20, each read back with /data; and a hurt after it, which still hurts. It ends
+# at full health in survival, as step 5b wants Minecraft's player. Start Minecraft first, with CyberCraft Tweaks 1.3.0 in
+# its mods; this waits for its world.
+status
+wait-world 180
+at 680.5 6.14 2007.5
+look 180 0
+link on
+wait 3
+type /gamemode creative
+# 8 blocks each way around the point, from y 5 to 13, the same as the sky's at y 300: all air, "Test passed".
+type /execute if blocks 672 5 1989 688 13 2005 672 300 1989 all
+# The stand-ins, around the point 680.5 6.14 1997.5: east, south, west, north, and north-east, out of reach.
+actor 1 682.0 6.14 1997.5 0 0.6 1.8 One
+actor 2 680.5 6.14 2000.5 0 0.6 1.8 Two
+actor 3 675.5 6.14 1997.5 0 0.6 1.8 Three
+actor 4 680.5 6.14 1990.5 0 0.6 1.8 Four
+actor 5 686.86 6.14 1991.14 0 0.6 1.8 Five
+wait 2
+type /summon minecraft:tnt 680.5 6.14 1997.5 {fuse:0s}
+wait 3
+type /execute if blocks 672 5 1989 688 13 2005 672 300 1989 all
+status
+# The health. CyberCraft Tweaks logs each it sets; /data reads it back.
+type /gamemode survival
+health 0.5
+wait 1
+type /data get entity @s Health
+health 1
+wait 1
+type /data get entity @s Health
+health 0.05
+wait 1
+type /data get entity @s Health
+# A hurt after it still hurts: a tenth, other, takes 20 to 18. Then full health again.
+health 1
+wait 1
+hurt other 0.1
+wait 1
+type /data get entity @s Health
+health 1
+wait 1
+actor-remove all
+status
+quit

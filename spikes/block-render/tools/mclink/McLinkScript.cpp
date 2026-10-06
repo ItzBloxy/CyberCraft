@@ -257,6 +257,14 @@ std::optional<std::vector<Action>> ParseScript(std::string_view aText, std::stri
 			}
 			action.numbers[0] = double(kind - kinds.begin());
 		}
+		else if (verb == "health")
+		{
+			action.kind = Action::Kind::Health;
+			if (!numbers(1) || action.numbers[0] <= 0.0 || action.numbers[0] > 1.0)
+			{
+				return fail("health takes a share of Minecraft's max health, over 0 and up to 1");
+			}
+		}
 		else if (verb == "floor" || verb == "status" || verb == "quit")
 		{
 			action.kind = verb == "floor" ? Action::Kind::Floor : verb == "status" ? Action::Kind::Status : Action::Kind::Quit;

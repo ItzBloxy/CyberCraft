@@ -36,6 +36,8 @@
 //                                  V hurt, as the plugin sends it (spike 6's Part 2): melee, projectile, magic or other;
 //                                  its share of V's health, over 0 and up to 1; the made-up NPC that did it, or 0; and
 //                                  power for a power attack. It goes through the plugin's sums: at once, or in a sum
+//   health <share>                 Minecraft's player's health set to that share of its max, over 0 and up to 1, as the
+//                                  plugin sends V's as build mode starts (spike 6's follow-up): CyberCraft Tweaks 1.3.0 sets it
 //   status                         print the link's state
 //   quit                           stop here
 namespace cpmc::mclink
@@ -67,6 +69,7 @@ struct Action
 		Actor,
 		ActorRemove,
 		Hurt,
+		Health,
 		Status,
 		Quit,
 	};
@@ -74,7 +77,7 @@ struct Action
 	Kind   kind = Kind::Quit;
 	double numbers[7]{};  // seconds; x, y, z; yaw and pitch; the scancode; the button (1 left, 2 middle, 3 right); an
 	                      // actor's number, x, y, z, yaw, width and height; the actor to remove, or 0 for all; a hurt's
-	                      // kind (proto::HurtKind), share and attacker
+	                      // kind (proto::HurtKind), share and attacker; the health's share
 	bool        on = false;  // link, build and hud; a hurt's power attack
 	std::string text;        // the command, the file, the ground, or an actor's name
 	int         line = 0;

@@ -1,5 +1,5 @@
 // mclink: a console stand-in for Cyberpunk's side of SkyCraft's protocol, for spike 4's step 1, spike 5's steps 1 and 3,
-// and spike 6's steps 1 and 3. It runs BlockRender's link code against the real Minecraft, without the game
+// and spike 6's steps 1, 3 and 5a. It runs BlockRender's link code against the real Minecraft, without the game
 // (docs/superpowers/specs/2026-10-02-minecraft-link-design.md, 2026-10-03-collision-and-movement-design.md and
 // 2026-10-05-npcs-and-combat-design.md).
 //
@@ -8,7 +8,8 @@
 // It runs the script (McLinkScript.h) at 60 Hz with a stand-in V where the script says, or, in build mode, where the
 // drive puts it, as the plugin teleports V. With the city's ground, Night City's shape comes from a dump spike 1 saved.
 // Made-up NPCs go into SkyCraft's actor table, as the plugin writes the game's. It reports what Minecraft sends, its solid
-// blocks and its hits on the NPCs among it, and refuses to start while another game side uses the mapping.
+// blocks and its hits on the NPCs among it, which of those hits are a blast's own, as the plugin tells them by the NPCs'
+// feet, and when each blast's push would come; and refuses to start while another game side uses the mapping.
 #include "DumpObj.h"
 #include "McLinkScript.h"
 
@@ -90,13 +91,32 @@ struct Report : LinkSink
 
 	void Explosion(const proto::McEvent& aEvent) override
 	{
-		Say("explosion at {:.1f} {:.1f} {:.1f}, radius {:.1f}", aEvent.a, aEvent.b, aEvent.c, aEvent.d);
+		const std::optional<Blast> blast = AcceptBlast(aEvent, Now());
+		Say("explosion at {:.2f} {:.2f} {:.2f}, radius {:.1f}{}", aEvent.a, aEvent.b, aEvent.c, aEvent.d,
+		    blast ? std::format(": a blast reaching {:.1f} m", blast->reach) : std::string(": not a blast the plugin takes"));
+		if (blast)
+		{
+			blasts.Add(*blast);
+		}
 	}
 
 	void HitActor(const proto::McEvent& aEvent) override
 	{
-		Say("hit: actor {} for {:.2f}, knockback {:.2f} towards x {:.2f} z {:.2f}; {}", aEvent.formId, aEvent.a, aEvent.d, aEvent.b, aEvent.c,
-		    HitWords(aEvent));
+		// A blast's own hit, as the plugin tells it: by the NPC's feet, which are the made-up NPC's record.
+		std::string blastWords;
+		const auto  actor = actors ? actors->find(aEvent.formId) : std::map<uint32_t, proto::ActorRecord>::const_iterator();
+		if (actors && actor != actors->end())
+		{
+			const Vec3d feet = WorldFromMc({ actor->second.x, actor->second.y, actor->second.z });
+			if (const std::optional<Blast> blast = blasts.HitOn(feet, Now()))
+			{
+				blastWords = std::format("; a blast's own, {:.2f} m from its centre, {:.3f} s after it",
+				                         std::hypot(feet.x - blast->centre.x, feet.y - blast->centre.y, feet.z - blast->centre.z),
+				                         Now() - blast->at);
+			}
+		}
+		Say("hit: actor {} for {:.2f}, knockback {:.2f} towards x {:.2f} z {:.2f}; {}{}", aEvent.formId, aEvent.a, aEvent.d, aEvent.b, aEvent.c,
+		    HitWords(aEvent), blastWords);
 	}
 
 	void PlayerDied(const proto::McEvent& aEvent) override
@@ -178,6 +198,8 @@ struct Report : LinkSink
 	bool                 wantHud = false;
 	bool                 hudReady = false;
 	std::vector<uint8_t> hud;
+	Blasts                                        blasts;            // Minecraft's, as the plugin takes them
+	const std::map<uint32_t, proto::ActorRecord>* actors = nullptr;  // the made-up NPCs, by number
 };
 
 // Minecraft's solid blocks: all of them, and in the 3 x 3 x 3 sections around the stand-in V's, where V's bodies would go.
@@ -339,6 +361,7 @@ int main(int aArgc, char** aArgv)
 		Say("hurt {}: {} {:.4f} of V's health, a = {}, attacker {}{}{}", aHow, HurtKindName(aHurt.kind), aHurt.share, input.a, aHurt.attacker,
 		    aHurt.power ? ", power attack" : "", sent ? "" : "; DROPPED, the input ring is full");
 	};
+	report.actors = &actors;  // for telling a blast's own hits
 
 	LARGE_INTEGER qpcRate;
 	QueryPerformanceFrequency(&qpcRate);
@@ -392,6 +415,11 @@ int main(int aArgc, char** aArgv)
 		if (const std::optional<Hurt> due = sums.Due(now, state.minecraftTickMs))
 		{
 			send(*due, "sent, summed");
+		}
+		for (const Blast& blast : report.blasts.Pushes(now))
+		{
+			Say("the blast at world {:.2f} {:.2f} {:.2f} would push now, {:.2f} s after it, with {} hits of its own", blast.centre.x,
+			    blast.centre.y, blast.centre.z, now - blast.at, blast.hits);
 		}
 		if (state.placeV)
 		{
@@ -515,6 +543,13 @@ int main(int aArgc, char** aArgv)
 					Say("hurt joins a sum: {} {:.4f} of V's health, attacker {}{}", HurtKindName(hurt.kind), hurt.share, hurt.attacker,
 					    hurt.power ? ", power attack" : "");
 				}
+				break;
+			}
+			case Action::Kind::Health:
+			{
+				const proto::InputEvent input = HealthInput(action.numbers[0]);
+				Say("health: Minecraft's player to {:.4f} of its max, b = {}{}", action.numbers[0], input.b,
+				    link.Push(input) ? "" : "; DROPPED, the input ring is full");
 				break;
 			}
 			case Action::Kind::Status: PrintStatus(link, report, feet); break;
