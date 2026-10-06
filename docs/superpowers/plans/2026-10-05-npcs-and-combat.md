@@ -14403,13 +14403,13 @@ the selected slot, the armor bar while the armor was on, and the hearts full aft
 
 ### Task 54: Close the spike
 
-- [ ] **Step 1: The spike's answer, and "How Part 3 went"**
+- [x] **Step 1: The spike's answer, and "How Part 3 went"**
 
 At the top of the results, the spike's answer to its question, with Part 3's: whether Minecraft's explosions knock down
 and throw NPCs and push cars and props, and what is left. At the end of this plan, after "The Fun controls":
 "How Part 3 went", what ran as written, what changed, and what steps 5a and 5b found.
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add docs \
@@ -14796,3 +14796,42 @@ did to the plan.
 
 Minecraft's replies to each kind of command, typed through its chat while linked; the items where they're meant to be in
 build mode; and CET reloading the overlay with the game running.
+
+## How Part 3 went
+
+Part 3 ran on 2026-10-06, from 15:19, when it was planned, to 20:15, when step 5b's fix's check ended. The results:
+[2026-10-05-npcs-and-combat-results.md](../../spikes/2026-10-05-npcs-and-combat-results.md), steps 5a and 5b and "Step
+5b's fix".
+- **As written:** every task ran as the plan has it, each build without a warning and the test counts as listed (440
+  to 450):
+  - Tasks 38 to 41 and 43 to 47, `2056fda` to `d018b04`;
+  - step 5b's fix, Tasks 49 to 51, `e845a4a` to `bd7acca`;
+  - the Fun controls, Task 53, `30bd3e2`.
+
+  All were executed by `run_plan.py`, which checked every expected result, and each of their commits holds exactly the
+  code tested before in the scratch clone.
+- **What changed:**
+  - planning found that a blast made by script can't knock NPCs down as the spec had it, and the user chose the
+    knockdown grenade's attack ("Found while planning Part 3");
+  - step 5b passed but for living NPCs' knockdowns, and the crowd didn't panic: Tasks 49 to 51 send the game's forced
+    knockdown and its explosion stimulus, and Task 52 checked them ("Step 5b's fix");
+  - during Task 52 the user asked for the overlay's Fun controls, made as Task 53 and installed with the game running,
+    and for Minecraft's inventory and game mode switcher, left to a spike of their own ("The Fun controls").
+- **Step 5a (Task 42) passed,** against SkyCraft's real mod and CyberCraft Tweaks 1.3.0: a real TNT's hits on four
+  stand-ins came back as the blast's own, Minecraft's damage exactly 26.3's formula (42.23, 29.44, 15.44 and 4.94); the
+  push came a quarter second after; nothing was built or broken; and the health was set, up and down.
+- **Step 5b (Task 48) passed but for the knockdowns:** the game's explosion effect and sound; cars and props pushed and
+  damaged; blast hits that started at V's punch × the square root of Minecraft's damage, and killed residents whose
+  bodies the pushes threw; Minecraft's hearts from V's share; the bush rule; and the blades' heat after build mode.
+  Living NPCs carried the knockdown's status effect and didn't fall, since a crowd NPC falls only when its AI gets a
+  knockdown reaction; the crowd didn't panic; and the health went one way, which the user kept.
+- **Step 5b's fix (Task 52) passed:** every NPC within a blast fell, but a friendly one, which the game kept from both
+  the knockdown and the damage; the forced knockdown, sent the same frame as the attack's hits, played out, and those
+  who lived got up again; the crowd fled, with no wanted level; and TNT killed residents and gangers.
+- **Not as expected:**
+  - **the grenade's status effect alone fells NPCs in combat:** with `set blastknock 0`, gangers fighting V still fell,
+    so its reply's "knocks no NPC down" holds for the crowd only;
+  - **V's punch read 25.00,** not 104.87, beside the friendly NPC, high up, for a reason the log doesn't give.
+- **Left for later:** Minecraft's inventory and game mode switcher in build mode, for a spike of their own (the results'
+  "Asked for, after Part 3"); Minecraft's health back to V; and, from Part 2, our Immortal, which can't work for the
+  user's V.

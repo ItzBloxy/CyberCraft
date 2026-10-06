@@ -4,7 +4,7 @@ Spike 6 brings Night City's NPCs into Minecraft as SkyCraft's stand-ins (Part 1)
 Minecraft's explosions in the game (Part 3). Step 1 ran SkyCraft's actor table with `mclink`, without Cyberpunk; later
 steps add their sections as they run, and the spike's answer goes at the top once step 2 is in.
 
-## The answer so far (Parts 1 to 3, after step 5b's fix)
+## The answer (Parts 1 to 3)
 
 **Part 1, yes: Night City's NPCs are in Minecraft as SkyCraft's stand-ins, where the game puts them.** On a busy
 pavement, every NPC within 80 m was listed, and the game's own targeting never found one the list lacked. A stone
@@ -41,6 +41,13 @@ up again, the crowd fled, and no wanted level came. The follow-ups work: Minecra
 hearts take V's share as build mode starts (one way, as the user chose), a bush is out of Minecraft's ground while walls
 stay, and the blades' heat comes back after build mode. The overlay's Fun controls, asked for during the check, let the
 user switch Minecraft's game mode and restock without the agent.
+
+**What is left:**
+- **Minecraft's inventory and its game mode switcher** in build mode, asked for during step 5b's fix's check, for a spike
+  of their own ("Asked for, after Part 3");
+- **Minecraft's health back to V:** it goes one way, into Minecraft as build mode starts, as the user chose;
+- **our Immortal,** which can't work for the user's V (Part 2): the damage wrap stays V's only guard in build mode;
+- **solid NPCs and props, and NPCs' routing,** which this spike left out from the start.
 
 ## Step 1: made-up NPCs in SkyCraft's actor table, with `mclink`, without Cyberpunk
 
