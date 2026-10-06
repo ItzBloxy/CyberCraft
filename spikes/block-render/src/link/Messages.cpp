@@ -2,6 +2,7 @@
 
 #include <skycraft_protocol.h>
 
+#include <cmath>
 #include <cstdlib>
 #include <cstring>
 #include <format>
@@ -11,6 +12,7 @@ namespace cpmc::link
 namespace proto = skycraft::proto;
 static_assert(sizeof(proto::RenVertex) == sizeof(Vertex));
 static_assert(sizeof(proto::RenSection) == 16 && sizeof(proto::RenAtlas) == 8);
+static_assert(sizeof(proto::RenTexture) == 16 && sizeof(proto::RenScene) == 32 && sizeof(proto::RenBatch) == 16);
 
 std::optional<SectionMesh> ParseSection(std::span<const uint8_t> aPayload, bool aKeepTranslucent, std::string& aError)
 {
@@ -73,5 +75,90 @@ std::optional<AtlasImage> ParseAtlas(std::span<const uint8_t> aPayload, std::str
 		return std::nullopt;
 	}
 	return AtlasImage{ header.width, header.height, aPayload.subspan(sizeof header, size_t(bytes)) };
+}
+
+std::optional<TextureImage> ParseTexture(std::span<const uint8_t> aPayload, std::string& aError)
+{
+	proto::RenTexture header;
+	if (aPayload.size() < sizeof header)
+	{
+		aError = std::format("a texture message of {} bytes has no room for its header", aPayload.size());
+		return std::nullopt;
+	}
+	std::memcpy(&header, aPayload.data(), sizeof header);
+	if (header.id == 0)
+	{
+		aError = std::format("a texture of {} x {} has id 0", header.width, header.height);
+		return std::nullopt;
+	}
+	if (header.width == 0 || header.height == 0 || header.width > kMaxTextureSide || header.height > kMaxTextureSide)
+	{
+		aError = std::format("texture {} of {} x {} is out of range", header.id, header.width, header.height);
+		return std::nullopt;
+	}
+	const uint64_t bytes = uint64_t(header.width) * header.height * 4;
+	if (aPayload.size() - sizeof header < bytes)
+	{
+		aError = std::format("texture {} of {} x {} needs {} bytes, and has {}", header.id, header.width, header.height, bytes,
+		                     aPayload.size() - sizeof header);
+		return std::nullopt;
+	}
+	return TextureImage{ header.id, header.width, header.height, aPayload.subspan(sizeof header, size_t(bytes)) };
+}
+
+std::optional<SceneMessage> ParseScene(std::span<const uint8_t> aPayload, std::string& aError)
+{
+	proto::RenScene header;
+	if (aPayload.size() < sizeof header)
+	{
+		aError = std::format("a scene message of {} bytes has no room for its header", aPayload.size());
+		return std::nullopt;
+	}
+	std::memcpy(&header, aPayload.data(), sizeof header);
+	if (!std::isfinite(header.originX) || !std::isfinite(header.originY) || !std::isfinite(header.originZ))
+	{
+		aError = "a scene's origin isn't finite";
+		return std::nullopt;
+	}
+	if (header.batchCount > kMaxSceneBatches || header.vertexCount > kMaxSceneVertices)
+	{
+		aError = std::format("a scene of {} batches and {} vertices is too big", header.batchCount, header.vertexCount);
+		return std::nullopt;
+	}
+	const uint64_t batchBytes = uint64_t(header.batchCount) * sizeof(proto::RenBatch);
+	const uint64_t vertexBytes = uint64_t(header.vertexCount) * sizeof(Vertex);
+	if (aPayload.size() - sizeof header < batchBytes + vertexBytes)
+	{
+		aError = std::format("a scene of {} batches and {} vertices needs {} bytes, and has {}", header.batchCount, header.vertexCount,
+		                     batchBytes + vertexBytes, aPayload.size() - sizeof header);
+		return std::nullopt;
+	}
+	SceneMessage scene;
+	scene.origin = { header.originX, header.originY, header.originZ };
+	scene.vertexCount = header.vertexCount;
+	scene.batches.reserve(header.batchCount);
+	for (uint32_t b = 0; b < header.batchCount; ++b)
+	{
+		proto::RenBatch batch;
+		std::memcpy(&batch, aPayload.data() + sizeof header + size_t(b) * sizeof batch, sizeof batch);
+		if (batch.count % 3 != 0 || uint64_t(batch.first) + batch.count > header.vertexCount)
+		{
+			aError = std::format("a scene's batch {} has {} vertices from {}, of {}", b, batch.count, batch.first, header.vertexCount);
+			return std::nullopt;
+		}
+		scene.batches.push_back({ batch.texture, batch.first, batch.count, batch.flags });
+	}
+	scene.vertices = aPayload.subspan(sizeof header + size_t(batchBytes), size_t(vertexBytes));
+	return scene;
+}
+
+std::vector<Vertex> SceneVertices(const SceneMessage& aScene)
+{
+	std::vector<Vertex> vertices(aScene.vertexCount);
+	if (!vertices.empty())
+	{
+		std::memcpy(vertices.data(), aScene.vertices.data(), vertices.size() * sizeof(Vertex));
+	}
+	return vertices;
 }
 }
