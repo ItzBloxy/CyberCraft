@@ -3,11 +3,12 @@
 -- frame time as CET sees it, which works without BlockRender too and goes into frames.txt here as well. It asks
 -- BlockRender for things through blockrender.request in this folder.
 -- Kept small: one row of buttons (link, Minecraft's blocks as bodies, step 4's test box, the turn, NPCs in Minecraft,
--- combat), and a line each for the last request's reply, build mode (F8) with its drive and whether V is hidden, the
--- bodies, the NPCs, combat, Minecraft's blasts, and V. Two folded sections hold the rest: "More controls" (the drawing
--- mode, Minecraft's HUD, commands typed into Minecraft, the drive log, the ground and its shapes, the NPCs' list, V's
--- punch, V hidden or seen in build mode, and a blast ahead of V) and "Full status" (every status line, and the frame
--- time).
+-- combat), and a line each for the last request's reply and the requests waiting to be sent, build mode (F8) with its
+-- drive and whether V is hidden, the bodies, the NPCs, combat, Minecraft's blasts, and V. Three folded sections hold the
+-- rest: "More controls" (the drawing mode, Minecraft's HUD, commands typed into Minecraft, the drive log, the ground and
+-- its shapes, the NPCs' list, V's punch, V hidden or seen in build mode, and a blast ahead of V), "Fun" (Minecraft's game
+-- mode, items for the hotbar and the hand, armor, and a heal, typed into Minecraft's chat) and "Full status" (every status
+-- line, and the frame time).
 -- Delete this folder to remove it.
 local status = nil       -- status.txt's lines, except the structures
 local structures = {}    -- { name, min = { x, y, z }, max = { x, y, z } }, in world coordinates
@@ -52,11 +53,82 @@ local sets = { "creative", "tnt-kit", "tnt-ahead", "wall", "tnt-cube", "field", 
 -- The HUD button's cycle: after each `hud` setting, as the status names it, the one a click asks for.
 local hudNext = { ["never"] = 1, ["in build mode"] = 2, ["always"] = 0 }
 
--- Sends BlockRender a command. It reads blockrender.request in this folder once a second, once the line is whole.
+-- The Fun header's rows (spike 6's "The overlay's Fun controls"): each button's commands are typed into Minecraft's chat,
+-- one `mc` request each, in order. "In hand" is the hotbar slot Minecraft's player has selected, and "Your slots" those
+-- the user keeps these in: both replace what is there, since without Minecraft's inventory screen an item given past the
+-- hotbar is out of reach. Arrows are given, as a bow or a crossbow takes them from anywhere.
+local hand = "/item replace entity @s weapon.mainhand with minecraft:"
+
+local function wear(head, chest, legs, feet)
+    return {
+        "/item replace entity @s armor.head with minecraft:" .. head,
+        "/item replace entity @s armor.chest with minecraft:" .. chest,
+        "/item replace entity @s armor.legs with minecraft:" .. legs,
+        "/item replace entity @s armor.feet with minecraft:" .. feet,
+    }
+end
+
+local fun = {
+    { label = "Mode:", buttons = {
+        { label = "Creative", commands = { "/gamemode creative" } },
+        { label = "Survival", commands = { "/gamemode survival" } },
+    } },
+    { label = "Your slots:", buttons = {
+        { label = "Golden apples (6)", commands = { "/item replace entity @s hotbar.5 with minecraft:golden_apple 64" } },
+        { label = "Golden carrots (7)", commands = { "/item replace entity @s hotbar.6 with minecraft:golden_carrot 64" } },
+        { label = "TNT (8)", commands = { "/item replace entity @s hotbar.7 with minecraft:tnt 64" } },
+        { label = "Flint and steel (9)", commands = { "/item replace entity @s hotbar.8 with minecraft:flint_and_steel" } },
+    } },
+    { label = "Blocks in hand:", buttons = {
+        { label = "Stone bricks", commands = { hand .. "stone_bricks 64" } },
+        { label = "Oak planks", commands = { hand .. "oak_planks 64" } },
+        { label = "Bricks", commands = { hand .. "bricks 64" } },
+        { label = "White concrete", commands = { hand .. "white_concrete 64" } },
+        { label = "Glass", commands = { hand .. "glass 64" } },
+    } },
+    { label = "Tools in hand:", buttons = {
+        { label = "Pickaxe", commands = { hand .. "diamond_pickaxe" } },
+        { label = "Axe", commands = { hand .. "diamond_axe" } },
+        { label = "Shovel", commands = { hand .. "diamond_shovel" } },
+    } },
+    { label = "Weapons in hand:", buttons = {
+        { label = "Sword", commands = { hand .. "diamond_sword" } },
+        { label = "Mace", commands = { hand .. "mace" } },
+        { label = "Trident", commands = { hand .. "trident" } },
+        { label = "Crossbow", commands = { hand .. "crossbow", "/give @s minecraft:arrow 64" } },
+        { label = "Bow", commands = { hand .. "bow", "/give @s minecraft:arrow 64" } },
+    } },
+    { label = "Armor:", buttons = {
+        { label = "Diamond armor", commands = wear("diamond_helmet", "diamond_chestplate", "diamond_leggings", "diamond_boots") },
+        { label = "No armor", commands = wear("air", "air", "air", "air") },
+    } },
+    { label = "Health:", buttons = {
+        { label = "Heal", commands = { "/effect give @s minecraft:instant_health 1 3" } },
+    } },
+}
+
+-- Requests not yet sent, oldest first. BlockRender reads blockrender.request in this folder once a second, once its line
+-- is whole, and deletes it: the next is written only once it's gone, so no click overwrites one not yet read.
+local queued = {}
+
+-- Asks BlockRender for something: queued, and written by sendQueued.
 local function request(command)
+    table.insert(queued, command)
+end
+
+-- Writes the oldest queued request, once BlockRender has read the last.
+local function sendQueued()
+    if #queued == 0 then
+        return
+    end
+    local unread = io.open("blockrender.request", "r")
+    if unread ~= nil then
+        unread:close()
+        return
+    end
     local file = io.open("blockrender.request", "w")
     if file ~= nil then
-        file:write(command, "\n")
+        file:write(table.remove(queued, 1), "\n")
         file:close()
     end
 end
@@ -204,6 +276,7 @@ local function distanceToBox(p, box)
 end
 
 registerForEvent("onUpdate", function(delta)
+    sendQueued()
     frames.sum = frames.sum + delta
     frames.count = frames.count + 1
     frames.worst = math.max(frames.worst, delta)
@@ -293,6 +366,9 @@ registerForEvent("onDraw", function()
         if reply ~= nil then
             ImGui.Text("Last request: " .. reply)
         end
+        if #queued > 0 then
+            ImGui.Text(string.format("Requests waiting to be sent: %d, about one a second", #queued))
+        end
         if build ~= nil then
             ImGui.Text("Build mode (F8): " .. build .. (driveState and ("; drive " .. driveState) or "")
                 .. (vLook and ("; V " .. vLook) or ""))
@@ -379,6 +455,20 @@ registerForEvent("onDraw", function()
                 ImGui.SameLine()
                 if ImGui.Button((hideV == "on" and "Hidden" or "Seen") .. "###hidev") then
                     request("set hidev " .. (hideV == "on" and 0 or 1))
+                end
+            end
+        end
+
+        if ImGui.CollapsingHeader("Fun") then
+            for _, row in ipairs(fun) do
+                ImGui.Text(row.label)
+                for _, button in ipairs(row.buttons) do
+                    ImGui.SameLine()
+                    if ImGui.Button(button.label) then
+                        for _, command in ipairs(button.commands) do
+                            request("mc " .. command)
+                        end
+                    end
                 end
             end
         end
