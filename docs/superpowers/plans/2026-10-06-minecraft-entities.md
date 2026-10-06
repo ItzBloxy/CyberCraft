@@ -107,7 +107,7 @@ The vertices stay in the payload, which is valid only during the sink's call: `S
 **Files:**
 - Modify: `src/link/Messages.h`, `src/link/Messages.cpp`, `tests/TestMessages.cpp`
 
-- [ ] **Step 1: Edit `tests/TestMessages.cpp` to add the failing tests**
+- [x] **Step 1: Edit `tests/TestMessages.cpp` to add the failing tests**
 
 ```cpp
 #include <cstring>
@@ -262,7 +262,7 @@ TEST(MessagesSceneRejections)
 }
 ```
 
-- [ ] **Step 2: Build; it must fail**
+- [x] **Step 2: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -271,7 +271,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `error C3861: 'ParseTexture': identifier not found`.
 
-- [ ] **Step 3: Edit `src/link/Messages.h` to declare the parsers**
+- [x] **Step 3: Edit `src/link/Messages.h` to declare the parsers**
 
 ```cpp
 #include "world/Vertex.h"
@@ -339,7 +339,7 @@ std::optional<SceneMessage> ParseScene(std::span<const uint8_t> aPayload, std::s
 std::vector<Vertex> SceneVertices(const SceneMessage& aScene);
 ```
 
-- [ ] **Step 4: Edit `src/link/Messages.cpp` to add them**
+- [x] **Step 4: Edit `src/link/Messages.cpp` to add them**
 
 ```cpp
 #include <cstdlib>
@@ -451,7 +451,7 @@ std::vector<Vertex> SceneVertices(const SceneMessage& aScene)
 }
 ```
 
-- [ ] **Step 5: Build and run the tests; they must pass**
+- [x] **Step 5: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -461,7 +461,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `455 test(s), 0 failure(s)`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -486,7 +486,7 @@ writes and even after (the spec's "The world-entity table"):
 - Create: `src/link/WorldTable.h`, `src/link/WorldTable.cpp`, `tests/TestWorldTable.cpp`
 - Modify: `src/link/Rings.h`, `src/link/Rings.cpp`, `tests/TestRings.cpp`, `CMakeLists.txt`
 
-- [ ] **Step 1: Write the failing test, `tests/TestWorldTable.cpp`**
+- [x] **Step 1: Write the failing test, `tests/TestWorldTable.cpp`**
 
 ```cpp
 #include "Harness.h"
@@ -603,7 +603,7 @@ TEST(WorldTableNamesTheKinds)
 }
 ```
 
-- [ ] **Step 2: Edit `tests/TestRings.cpp` to add the failing test of the table's read**
+- [x] **Step 2: Edit `tests/TestRings.cpp` to add the failing test of the table's read**
 
 ```cpp
 	CHECK(!ReadMcState(memory.Bytes()).has_value());
@@ -635,7 +635,7 @@ TEST(RingsWorldEntitiesReadWholeTables)
 	CHECK(!ReadWorldEntities(memory.Bytes()).has_value());
 ```
 
-- [ ] **Step 3: Edit `CMakeLists.txt` to add the test**
+- [x] **Step 3: Edit `CMakeLists.txt` to add the test**
 
 ```cmake
 	tests/TestCombatInbox.cpp
@@ -647,7 +647,7 @@ TEST(RingsWorldEntitiesReadWholeTables)
 	tools/mclink/DumpObj.cpp
 ```
 
-- [ ] **Step 4: Build; it must fail**
+- [x] **Step 4: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -656,7 +656,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `error C1083: Cannot open include file: 'link/WorldTable.h'`.
 
-- [ ] **Step 5: Write `src/link/WorldTable.h`**
+- [x] **Step 5: Write `src/link/WorldTable.h`**
 
 ```cpp
 #pragma once
@@ -690,7 +690,7 @@ const char* WorldKindName(uint32_t aKind);
 }
 ```
 
-- [ ] **Step 6: Write `src/link/WorldTable.cpp`**
+- [x] **Step 6: Write `src/link/WorldTable.cpp`**
 
 ```cpp
 #include "link/WorldTable.h"
@@ -754,7 +754,7 @@ const char* WorldKindName(uint32_t aKind)
 }
 ```
 
-- [ ] **Step 7: Edit `src/link/Rings.h` to declare the table's read**
+- [x] **Step 7: Edit `src/link/Rings.h` to declare the table's read**
 
 ```cpp
 std::optional<proto::McState> ReadMcState(const uint8_t* aBase);
@@ -767,7 +767,7 @@ std::optional<proto::McState> ReadMcState(const uint8_t* aBase);
 std::optional<proto::WorldEntities> ReadWorldEntities(const uint8_t* aBase);
 ```
 
-- [ ] **Step 8: Edit `src/link/Rings.cpp` to add it**
+- [x] **Step 8: Edit `src/link/Rings.cpp` to add it**
 
 ```cpp
 			return state;
@@ -799,7 +799,7 @@ std::optional<proto::WorldEntities> ReadWorldEntities(const uint8_t* aBase)
 			return table;
 ```
 
-- [ ] **Step 9: Edit `CMakeLists.txt` to add the source**
+- [x] **Step 9: Edit `CMakeLists.txt` to add the source**
 
 ```cmake
 	src/link/Combat.cpp
@@ -811,7 +811,7 @@ std::optional<proto::WorldEntities> ReadWorldEntities(const uint8_t* aBase)
 	src/physx/GameAbi.cpp
 ```
 
-- [ ] **Step 10: Build and run the tests; they must pass**
+- [x] **Step 10: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -821,7 +821,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `461 test(s), 0 failure(s)`.
 
-- [ ] **Step 11: Commit**
+- [x] **Step 11: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -849,7 +849,7 @@ stepped over.
 **Files:**
 - Modify: `src/link/Link.h`, `src/link/Link.cpp`, `tests/TestLink.cpp`
 
-- [ ] **Step 1: Edit `tests/TestLink.cpp` to add the failing tests**
+- [x] **Step 1: Edit `tests/TestLink.cpp` to add the failing tests**
 
 ```cpp
 	proto::ActorTable Actors()
@@ -1024,7 +1024,7 @@ TEST(LinkReadsTheWorldTableWhileMinecraftIsInItsWorld)
 	CHECK(!sink.worlds[2].outline.has_value());
 ```
 
-- [ ] **Step 2: Build; it must fail**
+- [x] **Step 2: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -1033,7 +1033,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `error C2065: 'WorldTable': undeclared identifier`.
 
-- [ ] **Step 3: Edit `src/link/Link.h` to add the sink's calls and the status's counts**
+- [x] **Step 3: Edit `src/link/Link.h` to add the sink's calls and the status's counts**
 
 ```cpp
 #include "link/Ticks.h"
@@ -1080,7 +1080,7 @@ Expected: `error C2065: 'WorldTable': undeclared identifier`.
 	WorldTable            world_;  // the last good table read, while Minecraft is in its world
 ```
 
-- [ ] **Step 4: Edit `src/link/Link.cpp` to take textures and scenes, and read the table**
+- [x] **Step 4: Edit `src/link/Link.cpp` to take textures and scenes, and read the table**
 
 ```cpp
 	if (aFrame.takeHud && there)
@@ -1148,7 +1148,7 @@ Expected: `error C2065: 'WorldTable': undeclared identifier`.
 		return false;  // atlas patches, lights, digging, avatar, ragdoll: stepped over
 ```
 
-- [ ] **Step 5: Build and run the tests; they must pass**
+- [x] **Step 5: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -1158,7 +1158,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `464 test(s), 0 failure(s)`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -1208,7 +1208,7 @@ line saying `nothing` shows that nothing is left.
 - Modify: `tools/mclink/McLinkScript.h`, `tools/mclink/McLinkScript.cpp`, `tools/mclink/Main.cpp`,
   `tests/TestMcLinkScript.cpp`
 
-- [ ] **Step 1: Edit `tests/TestMcLinkScript.cpp` to add the failing tests**
+- [x] **Step 1: Edit `tests/TestMcLinkScript.cpp` to add the failing tests**
 
 ```cpp
 	for (const char* name : { "step1.txt", "again.txt", "eye.txt", "drive.txt", "relink.txt", "city.txt", "npcs.txt", "hurts.txt", "blasts.txt" })
@@ -1242,7 +1242,7 @@ TEST(ScriptParsesScenesAndTextures)
 TEST(ScriptParsesHealth)
 ```
 
-- [ ] **Step 2: Build; it must fail**
+- [x] **Step 2: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -1251,7 +1251,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `error C2065: 'Scene': undeclared identifier`.
 
-- [ ] **Step 3: Edit `tools/mclink/McLinkScript.h` to add the two actions**
+- [x] **Step 3: Edit `tools/mclink/McLinkScript.h` to add the two actions**
 
 ```cpp
 //                                  plugin sends V's as build mode starts (spike 6's follow-up): CyberCraft Tweaks 1.3.0 sets it
@@ -1276,7 +1276,7 @@ Expected: `error C2065: 'Scene': undeclared identifier`.
 	std::string text;        // the command, the file, the folder, the ground, or an actor's name
 ```
 
-- [ ] **Step 4: Edit `tools/mclink/McLinkScript.cpp` to parse them**
+- [x] **Step 4: Edit `tools/mclink/McLinkScript.cpp` to parse them**
 
 ```cpp
 		else if (verb == "floor" || verb == "status" || verb == "quit")
@@ -1301,7 +1301,7 @@ Expected: `error C2065: 'Scene': undeclared identifier`.
 			                                 : Action::Kind::Quit;
 ```
 
-- [ ] **Step 5: Edit `tools/mclink/Main.cpp` to report textures, scenes and the table, and run the actions**
+- [x] **Step 5: Edit `tools/mclink/Main.cpp` to report textures, scenes and the table, and run the actions**
 
 ```cpp
 // and spike 6's steps 1, 3 and 5a. It runs BlockRender's link code against the real Minecraft, without the game
@@ -1538,7 +1538,7 @@ void PrintScene(const Report& aReport)
 			}
 ```
 
-- [ ] **Step 6: Write step 0's script, `tools/mclink/entities.txt`**
+- [x] **Step 6: Write step 0's script, `tools/mclink/entities.txt`**
 
 ```text
 # Spike 7's step 0: what Minecraft sends of its entities, block entities, particles and world entities, against
@@ -1633,7 +1633,7 @@ status
 quit
 ```
 
-- [ ] **Step 7: Build and run the tests; they must pass**
+- [x] **Step 7: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -1643,7 +1643,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `465 test(s), 0 failure(s)`.
 
-- [ ] **Step 8: Run mclink without Minecraft**
+- [x] **Step 8: Run mclink without Minecraft**
 
 Minecraft and the game must not be running.
 ```bash
@@ -1654,7 +1654,7 @@ Expected: `the mapping: created (process …); waiting for Minecraft`, then the 
 `entities: 0 scenes and 0 textures, 0 of them from before the atlas; 0 textures kept; the world table: 0 records, 0
 left out, 0 updates found it mid-write`. Then `exit: 0`.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -1681,14 +1681,14 @@ against SkyCraft's unchanged mod in the `CyberCraft` instance, without the game.
 **Files:**
 - Create: `docs/spikes/2026-10-06-minecraft-entities-results.md`
 
-- [ ] **Step 1: Check that the game isn't running**
+- [x] **Step 1: Check that the game isn't running**
 
 ```bash
 tasklist | grep -i -c "cyberpunk2077.exe"
 ```
 Expected: `0`. If it's `1`, ask the user to quit the game: it would hold the mapping.
 
-- [ ] **Step 2: Ask the user to start Minecraft**
+- [x] **Step 2: Ask the user to start Minecraft**
 
 With their leave to summon and place test things at x 880 in the `SkyCraft` world, SkyCraft's own in the `CyberCraft`
 instance, which the script clears at its end, leaving no drops, the user starts the `CyberCraft` instance from the
@@ -1698,7 +1698,7 @@ grep -E "SkyCraft:" "/c/Users/BLOXY/AppData/Roaming/ModrinthApp/profiles/CyberCr
 ```
 Expected: `SkyCraft: can't open Skyrim's shared memory yet (Windows error 2: …)`: waiting for a game side.
 
-- [ ] **Step 3: Run step 0's script**
+- [x] **Step 3: Run step 0's script**
 
 ```bash
 L="/c/Users/BLOXY/AppData/Roaming/ModrinthApp/profiles/CyberCraft/logs/latest.log"; before=$(wc -l < "$L"); \
@@ -1728,18 +1728,18 @@ minutes. Expected, against the spec's "Step 0":
 - **The blast:** a `scenes:` line whose largest scene is the explosion's, near the 1 MB a frame spike 4 measured.
 - **No `[CHAT]` line with an error,** and `exit: 0`.
 
-- [ ] **Step 4: Ask the user to stop Minecraft**
+- [x] **Step 4: Ask the user to stop Minecraft**
 
 Its window is hidden while `mclink` drives it, so the user stops it from the Modrinth App.
 
-- [ ] **Step 5: Write step 0's results, `docs/spikes/2026-10-06-minecraft-entities-results.md`**
+- [x] **Step 5: Write step 0's results, `docs/spikes/2026-10-06-minecraft-entities-results.md`**
 
 From `build/step0/entities.log`, `build/step0/minecraft.log` and the saved textures in `build/step0/textures/`, as spike
 6's results doc does: the versions; each check above with its outcome and numbers (the textures' sizes and MB in all,
 each test thing's batches, the glowing and translucent counts, the villager's batch order, the explosion's peak);
 anything that surprised, and what it means for Part 2. The spike's answer goes at the top once step A is in.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 With the plan, its steps ticked up to this one: running Tasks 1 to 4 ticked theirs.
 ```bash
