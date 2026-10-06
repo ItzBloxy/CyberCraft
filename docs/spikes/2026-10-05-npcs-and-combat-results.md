@@ -477,3 +477,47 @@ and a few lines in CET's console; the agent sent the requests and read the logs 
   idle timer that puts the blades away.
 - **For Part 3:** a blast's hits start where `Hit` marks them, and a TNT blast is tens of Minecraft's damage, so its
   start needs the hit power too: at the square root, 25 points of it start at five punches.
+
+## Step 5a: Minecraft's blasts and health, with `mclink`, without the game
+
+Date: 2026-10-06, 16:12. `mclink` at `cee26c3` (the plan's Task 40), running step 5a's script, `blasts.txt`, against the
+`CyberCraft` instance: Minecraft 26.3, SkyCraft 0.1.2, and CyberCraft Tweaks 1.3.0 at `ca31bf4` (Task 41), installed in
+place of 1.2.0, which is kept beside it as `cybercraft-tweaks-1.2.0.jar.disabled`. The user agreed to the install and to
+what the script does in their world, and started Minecraft; the agent ran the script and read both logs. Plan: Task 42.
+
+### Verdict
+
+**Step 5a: pass.** A real TNT blast came first, then its hits on the four stand-ins within its reach, each told as the
+blast's own, Minecraft's damage exactly 26.3's formula for stand-ins the blast saw whole; the push came a quarter second
+after; nothing was built or broken. CyberCraft Tweaks 1.3.0 set Minecraft's player's health to each share sent, up and
+down, and SkyCraft's hurts went on as before.
+
+### The checks
+
+- **The blast:** `explosion at 680.50 6.16 1997.50, radius 4.0: a blast reaching 8.0 m`. The TNT, summoned at 6.14 with
+  no fuse, fell 0.04 in its one tick and went off 0.06 above its feet.
+- **Its hits,** all in the same frame as the explosion, each `knockback 0.00`, `unarmed`, and `a blast's own, … 0.000 s
+  after it`: actor 1, 1.50 m from the centre, 42.23; actor 2 at 3.00 m, 29.44; actor 3 at 5.00 m, 15.44; actor 4 at
+  7.00 m, 4.94. The formula, (i² + i) ÷ 2 × 56 + 1 with i = 1 − d ÷ 8, gives exactly those: the floor hid none of the
+  stand-ins. Actor 5, 9 m away, had no hit.
+- **The push:** `the blast at world 680.50 -1997.50 6.16 would push now, 0.27 s after it, with 4 hits of its own`, in
+  the first frame after the quarter second.
+- **Nothing built or broken:** `Test passed. Count: 2601` before the TNT and after it: the 17 × 9 × 17 blocks around the
+  point matched the sky's, all air, both times.
+- **The health:** CyberCraft Tweaks' lines, `Minecraft's player's health set to V's share 0.5: 20.0 -> 10.0`, then
+  `share 1.0: 11.5 -> 20.0`, `share 0.05: 20.0 -> 1.0` and `share 1.0: 2.0 -> 20.0`. `/data` read 11.5, 20.0 and 2.0 a
+  second after each: Minecraft's own healing, from full hunger, added 1.5 and 1 in between.
+- **A hurt after it:** `hurt sent at once: other 0.1000 of V's health, a = 1000, attacker 0`, and SkyCraft's `Skyrim hit
+  the player for 10.0 (2.0 Minecraft): health 20.0 -> 18.0`; `/data` 18.5; then `share 1.0: 18.5 -> 20.0`.
+- **The status:** `events: 1 explosions, 4 hits on actors, 0 deaths, 1 others` (SkyCraft's skill event for the hurt),
+  `0 inputs dropped`, and `exit: 0`. Minecraft's player was left in survival at full health, the stand-ins removed.
+- **Minecraft's log** had one warning, `Failed to present image, swapchain out of date`, as SkyCraft hid its window when
+  the link came up; earlier runs had it too.
+
+### What it means for step 5b
+
+- **BlockRender sees a blast before its hits, in the same frame,** so the 0.15 s window has room to spare.
+- **TNT's damage falls off as the spec read,** so in the game these hits would start at V's punch × the square root:
+  681, 569, 412 and 233 for the user's V at 1.5, 3, 5 and 7 m, before the pipeline's own modifiers.
+- **CyberCraft Tweaks 1.3.0 works in the running Minecraft:** its mixin applied, setting the health raises and lowers it,
+  and SkyCraft's own hurts are untouched.
