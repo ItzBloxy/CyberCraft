@@ -31,7 +31,7 @@ import planlib  # noqa: E402
 HERE = Path(__file__).parent
 CMAKE = r"C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe"
 SDK = "D:/Cyberpunk-Minecraft/extern/RED4ext.SDK"
-VERIFIED = HERE / "verify3"
+VERIFIED = HERE.parent / "verify"
 
 mode = sys.argv[1]
 plan_path = Path(sys.argv[2]).resolve()
@@ -40,7 +40,7 @@ first = int(sys.argv[4]) if len(sys.argv) > 4 else 1
 last = int(sys.argv[5]) if len(sys.argv) > 5 else 10
 first_step = int(sys.argv[6]) if len(sys.argv) > 6 else 1
 project = repo / "spikes" / "block-render"
-log = open(HERE / f"{mode}7.log", "a", encoding="utf-8")
+log = open(HERE / f"{mode}_p2r.log", "a", encoding="utf-8")
 
 
 def say(text):
@@ -163,6 +163,14 @@ for step in planlib.read_plan(plan_path):
         if code != 0 or "KERNEL32.dll" not in imports or any("physx" in name.lower() for name in imports):
             fail(step, "dumpbin said:\n" + out[:1500])
         say(f"{label}: {len(imports)} DLLs imported, none of them PhysX's")
+    elif title.startswith(("Compile the module", "Check that the compile catches a slip")):
+        # The step's bash block, run in this repo, and every `text` of its Expected paragraph found in what it printed.
+        script = re.search(r"```bash\n(.*?)```", step.body, re.S).group(1).replace("/d/Cyberpunk-Minecraft", repo.as_posix())
+        code, out = run([shutil.which("bash"), "-c", script], project)
+        expected = re.findall(r"`([^`]+)`", step.body.split("Expected", 1)[1].split("\n\n", 1)[0])
+        if not expected or any(text not in out for text in expected):
+            fail(step, f"expected {expected}, exit {code}:\n{out[-1500:]}")
+        say(f"{label}: {', '.join(expected)}")
     elif title.startswith("Check the overlay's syntax"):
         code, out = run(["luac", "-p", str(project / "tools" / "blockrender_hud" / "init.lua")], project)
         if code != 0:

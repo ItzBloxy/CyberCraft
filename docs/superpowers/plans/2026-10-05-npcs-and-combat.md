@@ -50,7 +50,8 @@ hide V in build mode; "The deep review of Part 2", at the end, says why. Step 4 
 to make, which Tasks 32 to 35 make and Task 36 checks in the game: hits start at V's punch × the square root of
 Minecraft's damage, V's Immortal is the game's override, and hiding V hides V's effects and the game's crosshair too;
 "Step 4's fixes", at the end, says why.
-**Part 3** is planned after step 4's fixes, as the spec says: Task 37 closes Part 2 and plans it.
+**Part 3** is planned after step 4's fixes, as the spec says: Task 37 closes Part 2 and, at the user's choice, writes a
+handoff for planning Part 3 in a new session (`docs/superpowers/handoffs/2026-10-06-spike-6-part-3-planning.md`).
 
 ---
 
@@ -4013,7 +4014,7 @@ and call BlockRender's natives, and nothing in them touches the module's state.
 - **Tasks 32 to 35** make step 4's three fixes: hits start at V's punch × Minecraft's damage to the hit power, the
   square root by default; V's Immortal is the game's override; and hiding V stops V's effects and hides the game's
   crosshair. **Task 36** checks them in the game, and fights again.
-- **Task 37** closes Part 2, and plans Part 3.
+- **Task 37** closes Part 2, with a handoff for planning Part 3.
 
 Test counts: 423 at the start of Part 2. Then 424 after Task 13, 429 after Task 14, 431 after Task 15, 434 after Task 17,
 and 435 after Task 20; 437 after Task 23, 438 after Task 24, 439 after Task 28, and 440 after Task 32. Tasks 18, 19, 21,
@@ -10576,26 +10577,32 @@ cd /d/Cyberpunk-Minecraft && git add docs/spikes/2026-10-05-npcs-and-combat-resu
 
 ---
 
-### Task 37: Close Part 2, and plan Part 3
+### Task 37: Close Part 2, and hand off Part 3's planning
 
-- [ ] **Step 1: Add "How Part 2 went" to this plan**
+The user chose to plan Part 3 in a new session, so this task's second step, which was to plan it, writes a handoff for
+planning it instead.
+
+- [x] **Step 1: Add "How Part 2 went" to this plan**
 
 At the end, after "Step 4's fixes": what ran as written, what changed, and what steps 3 and 4 and the fixes' check
 found.
 
-- [ ] **Step 2: Plan Part 3**
+- [x] **Step 2: Write a handoff for planning Part 3**
 
-Use superpowers:writing-plans to add Part 3's tasks, from Task 38 on, to this plan: Minecraft's explosions in the game
-(the spec's "Part 3", and step 5). Verify them as Parts 1 and 2 were. Changes to the spec found while planning go in its
-"Changes while planning". A blast's hits now go through the whole damage pipeline too: Part 3's explosion hits start
-where `Hit` marks them, so the blast's own modifiers (`ExplosionResistance`, the distance curve) apply; and their start
-needs the hit power's thought, since a TNT blast is tens of Minecraft's damage.
+`docs/superpowers/handoffs/2026-10-06-spike-6-part-3-planning.md`, as spike 4's handoff for planning its Part 3 was:
+what Part 3 builds (the spec's "Part 3", and step 5), what Parts 1 and 2 left for it, the game and Minecraft as they
+are, how Parts 1 and 2 were planned and verified, and the rules to keep. Part 3's tasks start at Task 38, and its
+planning uses superpowers:writing-plans and verifies them as Parts 1 and 2 were; changes to the spec found while
+planning go in its "Changes while planning". A blast's hits go through the whole damage pipeline too: they start where
+`Hit` marks them, so the blast's own modifiers (`ExplosionResistance`, the distance curve) apply, and their start needs
+the hit power's thought, since a TNT blast is tens of Minecraft's damage. Spike 6's plan tooling goes into
+`tools/plans/` with it, since the scratchpad it lived in is temporary.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
-cd /d/Cyberpunk-Minecraft && git add docs/superpowers \
-  && git commit -q -m "npcs-and-combat plan: Part 2 closed, Part 3 planned" \
+cd /d/Cyberpunk-Minecraft && git add docs/superpowers tools/plans \
+  && git commit -q -m "npcs-and-combat: Part 2 closed, with a handoff for planning Part 3 and spike 6's plan tooling" \
        -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
 ```
 
@@ -10816,3 +10823,51 @@ hidden, not the rest of its HUD; and all three fixes made before Part 2 closes, 
 Whether the override makes V Immortal at once, and how it sits with Second Heart's own; whether the heat is one of the
 blades' spawners' effects, and whether a kill reaches a spawner that's then switched off; and whether the crosshair
 container is among the HUD layer's game controllers. Task 36 opens with all three.
+
+## How Part 2 went
+
+Part 2 ran from 18:11 on 2026-10-05, when it was planned, to 02:23 on 2026-10-06. The results:
+[2026-10-05-npcs-and-combat-results.md](../../spikes/2026-10-05-npcs-and-combat-results.md), steps 3 and 4 and "Step
+4's fixes".
+- **As written:** every task ran as the plan has it, each build without a warning and the test counts as listed (423
+  to 440):
+  - Tasks 13 to 15 and 17 to 22, `8466cec` to `eeef938`;
+  - the deep review's Tasks 23 to 30, `454c003` to `f5214b7`;
+  - step 4's fixes, Tasks 32 to 35, `cfa03ae` to `0e23764`.
+
+  Tasks 23 to 30 and 32 to 35 were executed by `run_plan.py`, which checked every expected result, and each of their
+  commits holds exactly the code tested before in the scratch clone.
+- **What changed:**
+  - the deep review of Part 2, after Task 22 and before step 4, replaced Task 18's `Process` wrap and exact amount with
+    the game's whole damage pipeline: Tasks 23 to 30, and step 4 rewritten as Task 31 ("The deep review of Part 2");
+  - step 4 passed with three fixes to make, made as Tasks 32 to 35 and checked in the game as Task 36 ("Step 4's
+    fixes");
+  - Task 37's second step became a handoff for planning Part 3 in a new session, at the user's choice.
+- **Step 3 (Task 16) passed,** against SkyCraft's real mod: each hurt reached Minecraft's player as the share sent, and
+  the sums landed whole. Two expected numbers were off, for the player's world: it already wore 4 points of armour, and
+  it healed half a point between two hurts.
+- **Step 4 (Task 31) passed,** and settled all the review had left to it: the start set at `ProcessPipeline`'s entry
+  holds; V's unarmed slot draws the Mantis Blades, and the game draws them while build mode places V; hiding V leaves no
+  mesh, nor V's shadow; an NPC's health shows a hit's change only after `DealDamages`. It found three things to fix:
+  each point of Minecraft's damage was a whole blade swing, so weapons one-shot gangers; our Immortal never took
+  effect; and the game's crosshair and the Thermal blades' heat stayed on screen.
+- **The fixes' check (Task 36):**
+  - the square root keeps a fist at one punch and makes a diamond sword 2.65; the user found it "perfect", and 0.75 far
+    too strong, so 0.5 stays the default;
+  - the crosshair and the heat go with V; the heat isn't restarted when build mode ends, so blades V held before it
+    come back without their heat until they're drawn again;
+  - our Immortal can't work for the user's V: three Mortal god modes that quests left behind outrank it, and the game
+    refuses even the override Second Heart uses. The damage wrap is V's only guard in build mode, as the spec's risk 18
+    foresaw, and it held for all 84 hits on V there, over steps 4 and its fixes.
+- **Not as expected:**
+  - **the game puts V's blades away** after a while idle, about every 68 s in build mode; `Arm` draws them again within
+    a second (the user found the cause);
+  - **no NPC ever blocked, parried, dodged or cut a hit with its armour** in the 53 hits of steps 4 and the fixes, all
+    on 6th Street gangers;
+  - **hits take a moment, sometimes:** a strong hit once landed 1.4 s after it was queued.
+- **For Part 3:**
+  - a blast's hits start where `Hit` marks them, and the hit power applies to them too; a TNT blast is tens of
+    Minecraft's damage;
+  - the user asked for two follow-ups, to come after Part 2 or with Part 3 as the user chooses: Minecraft's health set
+    to V's share when build mode starts, and bushes kept out of the city's collision for Minecraft (the results' "Asked
+    for, after Part 2").

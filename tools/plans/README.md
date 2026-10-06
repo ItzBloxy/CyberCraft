@@ -1,9 +1,10 @@
-# Plan tooling, as spikes 3, 4 and 5 used it
+# Plan tooling, as spikes 3 to 6 used it
 
 Spike 3 (block rendering) kept its plan verified: every code step was compiled and tested in a scratch copy first, then
 the plan's tasks were replayed in a fresh clone exactly as written, checking every expected result, before they ran in
-the real repo. These scripts did that, and spikes 4 (the Minecraft link) and 5 (collision and movement) did the same. They live in the session's
-scratchpad while in use; this is a copy, so the next spike can start from them. Adapt before reuse.
+the real repo. These scripts did that, and spikes 4 (the Minecraft link), 5 (collision and movement) and 6 (NPCs and
+combat) did the same. They live in the session's scratchpad while in use; this is a copy, so the next spike can start
+from them. Adapt before reuse.
 
 - **`planlib.py`:** reads a plan's tasks and steps, and applies a step whose title says `Write`, `Edit`, `Delete` or
   `Copy` a file: a Write step's first code block is the whole file; an Edit step's code blocks are (old, new) pairs,
@@ -63,3 +64,27 @@ Their paths point at that session's scratchpad (`verify2/`, `snap6/`, `replay6/`
   match it to PhysX 3.4's source; **`physx-audit/tree.py`** follows a function's calls a few levels down. They made the
   audit's Part 3 addendum. They need capstone, `uv run --no-project --with capstone python slots.py static 21`, a
   download the first time.
+
+**Spike 6's versions** (NPCs and combat, Parts 1 and 2) replaced `planlib.py`, `gen_plan.py`, `run_plan.py`,
+`mutate.py` and `b.sh`, and added `trees_match.py`, `rewrap.py` and `hud_check.lua`. Their paths point at that session's
+scratchpad, where the scratch copy was `verify/`, beside `plans/`, and the snapshots `snap8/`: adapt before reuse.
+- **`planlib.py` and `gen_plan.py`** know the redscript module: a `.reds` path in a step's title, shown as `swift`.
+- **`run_plan.py`** runs the module's offline compile: a step titled "Compile the module …" or "Check that the compile
+  catches a slip …" runs its bash block, in the clone or the repo, and every quoted text of its Expected paragraph
+  must be in what it printed. In `execute` mode it ran Part 2 in the real repo a task at a time (`execute <plan>
+  D:/Cyberpunk-Minecraft 32 32`), stopping at deploys and the game's steps.
+- **`mutate.py`** has step 4's fixes' list (Tasks 32 to 35, 9 mutations). Each mutation names the test that must fail,
+  and a header's names a source to touch too, since under `%TEMP%` MSBuild doesn't see a header change. Running it runs
+  the whole list.
+- **`trees_match.py`** applies a plan's file steps to a clone, task by task, without building, and compares each
+  task's tree with a verified clone's tag, `<prefix><task>`:
+  `trees_match.py <plan> <clone> <verified clone> <first> <last> <prefix>`, the clone checked out at the commit the
+  tasks start from. A quick check, after editing a plan, that its text still makes the code tested.
+- **`rewrap.py`** rewraps the Markdown paragraphs or list items that start with given text to a width, with LF line
+  endings: `rewrap.py <file> 120 "<start>" …`.
+- **`hud_check.lua`** runs the CET overlay's `init.lua` under Lua 5.4 with CET's functions stubbed, against the
+  `status.txt` in the current folder, and prints the lines and buttons the overlay shows: `lua hud_check.lua
+  <path to init.lua>`.
+
+The module's offline compile itself is `spikes/block-render/tools/check_reds.py`, with Codeware's scripts as an extra
+folder for the parts that need Codeware.

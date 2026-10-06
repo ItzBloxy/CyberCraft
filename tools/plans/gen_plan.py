@@ -22,11 +22,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 from pairs import make_pairs  # noqa: E402
 
-CLONE = Path(os.environ.get("GEN_CLONE", Path(__file__).parent / "verify3"))  # a worktree at the head, while mutations run
-SNAPSHOTS = Path(__file__).parent / "snap7"
-REPO = CLONE  # spike 5's Part 3: the tasks are tagged t37 to t51 in the verified clone
+CLONE = Path(os.environ.get("GEN_CLONE", Path(__file__).parent.parent / "verify"))
+SNAPSHOTS = Path(__file__).parent / "snap8"
+REPO = CLONE  # spike 6s Part 2 review: the tasks are tagged p2r-t23 to p2r-t30 in the verified clone
 LANGUAGES = {".h": "cpp", ".cpp": "cpp", ".c": "c", ".hlsl": "hlsl", ".lua": "lua", ".py": "python", ".json": "json",
-             ".md": "markdown", ".txt": "cmake"}
+             ".md": "markdown", ".txt": "cmake", ".reds": "swift"}
 
 
 def repo_path(path):

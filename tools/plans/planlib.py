@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 FENCE = re.compile(r"^(`{3,})[a-z]*\n(.*?)^\1[ \t]*$", re.M | re.S)
-PATH = re.compile(r"`([^`]+\.(?:h|c|cpp|txt|md|py|json|hlsl|lua))`")
+PATH = re.compile(r"`([^`]+\.(?:h|c|cpp|txt|md|py|json|hlsl|lua|reds))`")
 TASK = re.compile(r"^### Task (\d+):(.*)$", re.M)
 STEP = re.compile(r"^- \[[ x]\] \*\*Step (\d+): (.+?)\*\*\s*$", re.M)
 
