@@ -832,6 +832,24 @@ The follow-ups Part 2 left (the results' "Asked for, after Part 2"), which the u
   also decides how NPCs take V's drawn weapon. `Arm` draws the blades again within a second (step 4's fixes), so it's
   left as it is.
 
+### The overlay's Fun controls
+
+Asked for during step 5b's fix's check ("Asked for during step 5b's fix"), so that the user can switch Minecraft's game
+mode and restock during in-game sessions without the agent. A **Fun** header in the overlay, after More controls, whose
+buttons each send one `mc` request: a command BlockRender types into Minecraft's chat, as the Type buttons' are.
+- **Mode:** Creative and Survival (`/gamemode creative`, `/gamemode survival`). No spectator: in build mode V follows
+  Minecraft's player, which would fly through Night City's walls.
+- **Hotbar:** the slots the user keeps these in, replacing what is there: 64 golden apples in slot 6, 64 golden carrots
+  in 7, 64 TNT in 8 and a flint and steel in 9 (`/item replace entity @s hotbar.<slot - 1> with minecraft:<item>
+  <count>`).
+- **Heal:** Minecraft's player's health full: `/effect give @s minecraft:instant_health 1 3`, which heals 32.
+
+The overlay shows BlockRender's reply as its last request: the command being typed, or that there's no link. Minecraft
+replies in its chat, which the HUD shows in build mode, and BlockRender's log says each command typed, or not typed and
+why: Minecraft not in its world, or a Minecraft screen open. Only the overlay changes, so it's installed while the game
+runs: `init.lua` copied into CET's folder, then CET's Reload All Mods. That's the one install with the game running, as
+the user chose: the game holds BlockRender's DLL, and nothing holds the overlay's file.
+
 ### Requests and status
 
 - `explode <metres> <radius>`: a blast that far ahead of V, from 0 to 100 m, at the height of V's feet, with a radius
@@ -955,7 +973,9 @@ TNT on a pavement with residents about:
   knockdown reached, and how many the game made immune;
 - the crowd panics and flees, and others react as to the game's own explosions;
 - with `set blastknock 0`, nobody falls again;
-- TNT among residents still kills and throws those it hits hard enough.
+- TNT among residents still kills and throws those it hits hard enough;
+- the overlay's Fun controls, asked for during the check: each button's command typed, and Minecraft's reply in its
+  chat.
 
 ### Step 6: the results
 
@@ -1678,3 +1698,43 @@ outcome.
 Left to the fix's check in the game: whether the forced knockdown, sent as the blast's attack starts, plays out, or the
 attack's hits, reaching the NPC the same frame, cut it short; how NPCs other than residents take it (gangers, police, a
 drone), if any are about; and how the crowd and the police take the stimulus, with V as its instigator.
+
+## Asked for during step 5b's fix
+
+During step 5b's fix's check (the plan's Task 52), on 2026-10-06, with its checks passed, the user asked for two more
+things. The sections above include the outcome.
+
+### What the user asked for
+
+1. **Minecraft's inventory, and its game mode switcher, in build mode,** worked from Cyberpunk.
+2. **A Fun header in the overlay:** food, creative, more TNT and a flint and steel, and other supplies, so that in-game
+   sessions need no agent to restock.
+
+### What reading found
+
+- **SkyCraft's mod already works Minecraft's screens.** Its protocol has a cursor input (`kInCursor`: an absolute
+  position in the HUD image's pixels), which `InputBridge` passes to `MouseHandler.onMove`, as it passes keys to
+  `KeyboardHandler.keyPress`, buttons to `MouseHandler.onButton`, and text to `textInput` while a screen is open. The HUD
+  image already holds Minecraft's screens.
+- **26.3's default bindings** (`Options`, by SDL scancode): the inventory is E (8), the debug modifier F3 (60), and the
+  game mode switcher F4 (61), so F3+F4; F3+F6 (63) opens the Debug Options screen.
+- **Cyberpunk's bindings** (`inputUserMappings.xml`): E is the iconic weapon, F3 the free camera (`ActivateFreeCam`), and
+  F4 its control switch (`SwitchFreeCamControl`).
+- **So working Minecraft's screens takes, on the game's side:** E, F3 and F4 forwarded and hidden from the game, and Esc
+  closing a Minecraft screen while one is open; while one is open, the mouse's movement turned into a cursor for
+  Minecraft and hidden from the game, so V's view doesn't turn; and a cursor drawn, since the HUD image has none. The
+  minecraft-link spike's non-goals left these out. Spectator mode, which the switcher cycles through, would drag V
+  through walls, since in build mode V follows Minecraft's player.
+
+### What the user decided
+
+- **The inventory and the switcher wait for a spike of their own,** after this one; the results' "Asked for, after Part
+  3" keeps them.
+- **The Fun controls now:** one command per button, in the overlay alone, installed while the game runs; not kits of
+  several commands, which would need a queue in the overlay, or named sets in BlockRender and so a rebuild and a
+  restart.
+
+### What changed
+
+- **"The overlay's Fun controls"** in Part 3, and their check in "Step 5b's fix, in the game".
+- **The plan:** Task 53 makes them, between step 5b's fix's check and the close, which is now Task 54.
