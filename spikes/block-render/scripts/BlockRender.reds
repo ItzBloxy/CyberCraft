@@ -16,6 +16,11 @@
 // thread, so those wraps too touch nothing of the module's: they read the hit itself, and call BlockRender's natives.
 // For build mode, Arm draws V's unarmed weapon, so that hits carry it, and HideV hides V's meshes, stops V's effects and
 // hides the game's crosshair, through Codeware where it's installed.
+//
+// Minecraft's blasts (spike 6's Part 3): Explode knocks down what is within a blast's reach, as the game's knockdown
+// grenade does, with the explosion's sound; BlastHit makes one of Minecraft's hits on an NPC within the reach into the
+// blast's own, of type Explosion and from its centre, which knocks the NPC down too; and Push, a quarter second later,
+// throws the bodies and loose things.
 
 // BlockRender's natives, added before the game loads its scripts; any thread may call them.
 public native func BlockRenderNpcAttached(id: EntityID)
@@ -68,22 +73,27 @@ public class BlockRenderNpcs extends ScriptableSystem {
   public let attached: Int32;
   public let found: Int32;
   // V's punch, the damage per hit of what V punches with (what V's unarmed slot draws: UnarmedItem), that item, and
-  // whether V has it drawn; and V's max health. Read at most four times a second.
+  // whether V has it drawn; V's max health, and V's health as a share of it. Read at most four times a second.
   public let punch: Float;
   public let punchItem: String;
   public let punchDrawn: Bool;
   public let vHealthMax: Float;
+  public let vHealth: Float;
   // What HideV last did, besides the meshes it gives, for BlockRender to read after it. Hiding: the effects it has
   // stopped since V was hidden, and the crosshair (1 hidden, -1 not found among the HUD layer's game controllers).
   // Showing: the effects it started again, and the crosshair (1 shown again, 0 it hadn't hidden it).
   public let vEffects: Int32;
   public let vCrosshair: Int32;
+  // What Push last found within the blast's reach, besides the NPCs it gives: how many of them the game has knocked down
+  // (a Knockdown status effect on them), and how many are dead.
+  public let pushDown: Int32;
+  public let pushDead: Int32;
 
   // The module's version, which BlockRender checks: 2 since the list moved into BlockRender, 3 with combat, 4 since hits
   // go through the whole damage pipeline, with what V's unarmed slot draws, 5 since V's Immortal is the game's override,
-  // and HideV stops V's effects and hides the game's crosshair.
+  // and HideV stops V's effects and hides the game's crosshair, 6 with Minecraft's blasts and V's health share.
   public final static func Version() -> Int32 {
-    return 5;
+    return 6;
   }
 
   public final static func Get(game: GameInstance) -> ref<BlockRenderNpcs> {
@@ -209,10 +219,10 @@ public class BlockRenderNpcs extends ScriptableSystem {
     return "GetTargetParts finds " + ToString(ArraySize(found)) + " NPCs within " + FloatToStringPrec(range, 0) + " m; the list lacks " + ToString(lacks) + (lacks > 0 ? ": " + lacking : "");
   }
 
-  // One of Minecraft's hits on an NPC, as V's: amount is where the damage pipeline starts it, Minecraft's damage x V's
-  // punch, and strong picks the strong attack. Built as the game's SendHitEvent builds one, from V, with the attack record
-  // of what V punches with, and the weapon object of it if V has it drawn. 1: queued; 0: V isn't found; -1: the NPC is
-  // gone; -2: it's dead; -3: there's no attack record to make it with.
+  // One of Minecraft's hits on an NPC, as V's: amount is where the damage pipeline starts it, V's punch x Minecraft's
+  // damage to the hit power, and strong picks the strong attack. Built as the game's SendHitEvent builds one, from V, with
+  // the attack record of what V punches with, and the weapon object of it if V has it drawn (Strike). 1: queued; 0: V isn't
+  // found; -1: the NPC is gone; -2: it's dead; -3: there's no attack record to make it with.
   public final func Hit(id: EntityID, amount: Float, strong: Bool) -> Int32 {
     let game: GameInstance = this.GetGameInstance();
     let player: ref<GameObject> = GameInstance.GetPlayerSystem(game).GetLocalPlayerMainGameObject();
@@ -231,33 +241,137 @@ public class BlockRenderNpcs extends ScriptableSystem {
     if !IsDefined(record) {
       return -3;
     };
-    let weapon: ref<WeaponObject> = this.PunchWeapon(player, game, item);
+    this.Strike(game, player, npc, record, this.PunchWeapon(player, game, item), amount, player.GetWorldPosition(), false);
+    return 1;
+  }
+
+  // One of Minecraft's hits on an NPC within a blast's reach, as the blast's own: amount is where the damage pipeline
+  // starts it, V's punch x Minecraft's damage to the blast power, and centre is the blast's, in world axes. Made as Hit
+  // makes hits (Strike), but with the game's knockdown grenade's attack record, Attacks.FragGrenadeKnockdown, of type
+  // Explosion: after the damage the pipeline knocks the NPC down with the record's status effect (PostProcess), so that one
+  // the hit kills ragdolls at once and the push throws it. With no weapon, from the blast's centre, and flagged a weak
+  // explosion: the game measures a strong one from the hit's source, V. 1: queued; 0: V isn't found; -1: the NPC is gone;
+  // -2: it's dead; -3: there's no attack record to make it with.
+  public final func BlastHit(id: EntityID, amount: Float, centre: Vector4) -> Int32 {
+    let game: GameInstance = this.GetGameInstance();
+    let player: ref<GameObject> = GameInstance.GetPlayerSystem(game).GetLocalPlayerMainGameObject();
+    if !IsDefined(player) {
+      return 0;
+    };
+    let npc: ref<NPCPuppet> = GameInstance.FindEntityByID(game, id) as NPCPuppet;
+    if !IsDefined(npc) {
+      return -1;
+    };
+    if npc.IsDead() {
+      return -2;
+    };
+    let record: ref<Attack_Record> = TweakDBInterface.GetAttackRecord(t"Attacks.FragGrenadeKnockdown");
+    if !IsDefined(record) || !IsDefined(record.AttackType()) {
+      return -3;
+    };
+    this.Strike(game, player, npc, record, null, amount, centre, true);
+    return 1;
+  }
+
+  // A blast of Minecraft's at centre (world axes), knocking down what is within reach metres of it, as the game's
+  // knockdown grenade does: its attack, Attacks.FragGrenadeKnockdown, run as a game effect at the centre with the reach as
+  // its radius, as CombatGadgetHelper.SpawnAttack runs one, from V and dealing no damage. The pipeline still knocks down
+  // whatever it hits with the record's status effect (PostProcess), unless immune or friendly to V, and its hit on V stops
+  // at CheckForQuickExit. Its hits are flagged weak explosions, as BlastHit's are. With the explosion's sound at the
+  // centre, as a claymore plays it. With knock, each NPC on BlockRender's list within reach also gets the record's status
+  // effect directly (risk 13's fallback). 1: started; 0: V isn't found; -1: there's no attack record or effect.
+  public final func Explode(centre: Vector4, reach: Float, knock: Bool) -> Int32 {
+    let game: GameInstance = this.GetGameInstance();
+    let player: ref<GameObject> = GameInstance.GetPlayerSystem(game).GetLocalPlayerMainGameObject();
+    if !IsDefined(player) {
+      return 0;
+    };
+    let record: ref<Attack_Record> = TweakDBInterface.GetAttackRecord(t"Attacks.FragGrenadeKnockdown");
+    if !IsDefined(record) {
+      return -1;
+    };
     let context: AttackInitContext;
     context.record = record;
     context.instigator = player;
     context.source = player;
-    context.weapon = weapon;
-    let hit: ref<gameHitEvent> = new gameHitEvent();
-    hit.attackData = new AttackData();
-    hit.target = npc;
-    hit.attackData.SetAttackDefinition(IAttack.Create(context));
-    hit.attackData.SetInstigator(player);
-    hit.attackData.SetSource(player);
-    hit.attackData.SetWeapon(weapon);
-    hit.attackData.SetAttackType(record.AttackType().Type());
-    // Ours, with where it starts, on the hit itself, as the game marks its environment's attacks with hitFlag.None and a
-    // source name: the pipeline's wraps read it back on whichever thread runs it.
-    let mark: String = "BlockRender " + FloatToStringPrec(amount, 2);
-    hit.attackData.AddFlag(hitFlag.None, StringToName(mark));
-    let middle: Vector4 = npc.GetWorldPosition() + new Vector4(0.00, 0.00, 1.00, 0.00);
-    hit.hitPosition = middle;
-    hit.hitDirection = Vector4.Normalize(middle - player.GetWorldPosition());
-    let shape: HitShapeData;
-    shape.result.hitPositionEnter = middle;
-    shape.result.hitPositionExit = middle;
-    ArrayPush(hit.hitRepresentationResult.hitShapes, shape);
-    GameInstance.GetDamageSystem(game).QueueHitEvent(hit, npc);
+    let attack: ref<Attack_GameEffect> = IAttack.Create(context) as Attack_GameEffect;
+    if !IsDefined(attack) {
+      return -1;
+    };
+    let effect: ref<EffectInstance> = attack.PrepareAttack(player);
+    if !IsDefined(effect) {
+      return -1;
+    };
+    let mods: array<ref<gameStatModifierData>>;
+    attack.GetStatModList(mods);
+    let flags: array<SHitFlag>;
+    let flag: SHitFlag;
+    flag.source = n"BlockRender blast";
+    flag.flag = hitFlag.DealNoDamage;
+    ArrayPush(flags, flag);
+    flag.flag = hitFlag.WeakExplosion;
+    ArrayPush(flags, flag);
+    let shared: ref<EffectSharedDataDef> = GetAllBlackboardDefs().EffectSharedData;
+    EffectData.SetFloat(effect.GetSharedData(), shared.radius, reach);
+    EffectData.SetFloat(effect.GetSharedData(), shared.range, reach);
+    EffectData.SetVector(effect.GetSharedData(), shared.position, centre);
+    EffectData.SetVariant(effect.GetSharedData(), shared.attack, ToVariant(attack));
+    EffectData.SetVariant(effect.GetSharedData(), shared.attackStatModList, ToVariant(mods));
+    EffectData.SetVariant(effect.GetSharedData(), shared.flags, ToVariant(flags));
+    attack.StartAttack();
+    GameInstance.GetAudioSystem(game).PlayShockwave(n"explosion", centre);
+    if knock {
+      let count: Int32 = BlockRenderNpcCount();
+      let i: Int32 = 0;
+      while i < count {
+        let npc: ref<NPCPuppet> = GameInstance.FindEntityByID(game, BlockRenderNpcAt(i)) as NPCPuppet;
+        if IsDefined(npc) && !npc.IsDead() && Vector4.Distance(npc.GetWorldPosition(), centre) <= reach {
+          StatusEffectHelper.ApplyStatusEffect(npc, t"BaseStatusEffect.Knockdown", player.GetEntityID());
+        };
+        i += 1;
+      };
+    };
     return 1;
+  }
+
+  // A blast's push, a quarter second after it: the game effect physicalImpulseSphere at centre (world axes) with reach as
+  // its radius, as CombatGadgetHelper.SpawnPhysicalImpulse runs it, which throws the bodies of the NPCs the blast killed
+  // (knocked down as they died, they ragdolled at once) and pushes cars and loose things. Then the NPCs on BlockRender's
+  // list within reach: how many, and in pushDown and pushDead how many of them the game has knocked down (a Knockdown
+  // status effect) and how many are dead. -1 if V isn't found.
+  public final func Push(centre: Vector4, reach: Float) -> Int32 {
+    let game: GameInstance = this.GetGameInstance();
+    let player: ref<GameObject> = GameInstance.GetPlayerSystem(game).GetLocalPlayerMainGameObject();
+    this.pushDown = 0;
+    this.pushDead = 0;
+    if !IsDefined(player) {
+      return -1;
+    };
+    let effect: ref<EffectInstance> = GameInstance.GetGameEffectSystem(game).CreateEffectStatic(n"physicalImpulseSphere", n"None", player);
+    if IsDefined(effect) {
+      let shared: ref<EffectSharedDataDef> = GetAllBlackboardDefs().EffectSharedData;
+      EffectData.SetFloat(effect.GetSharedData(), shared.radius, reach);
+      EffectData.SetVector(effect.GetSharedData(), shared.position, centre);
+      effect.Run();
+    };
+    let near: Int32 = 0;
+    let count: Int32 = BlockRenderNpcCount();
+    let i: Int32 = 0;
+    while i < count {
+      let npc: ref<NPCPuppet> = GameInstance.FindEntityByID(game, BlockRenderNpcAt(i)) as NPCPuppet;
+      if IsDefined(npc) && Vector4.Distance(npc.GetWorldPosition(), centre) <= reach {
+        near += 1;
+        if npc.IsDead() {
+          this.pushDead += 1;
+        } else {
+          if StatusEffectSystem.ObjectHasStatusEffectOfType(npc, gamedataStatusEffectType.Knockdown) {
+            this.pushDown += 1;
+          };
+        };
+      };
+      i += 1;
+    };
+    return near;
   }
 
   // V's god mode for build mode: Immortal forced on V by the game's override, enabled or disabled under BlockRender's own
@@ -304,8 +418,10 @@ public class BlockRenderNpcs extends ScriptableSystem {
   // V's unarmed weapon, drawn for build mode's fights so that Minecraft's hits carry it, as V's own punches do (on); or
   // what V held before, put back (off). Drawing asks the equipment system for weapon-wheel slot 4 at once, as the slot's
   // key does; putting back asks for the wheel's slot V's weapon is in, or holsters if V held nothing, or something not on
-  // the wheel. Called again while on, it asks again if the weapon isn't drawn yet. 1: asked; 2: nothing to ask; 0: V isn't
-  // found; -1: V has no unarmed weapon; -2: there's no equipment system.
+  // the wheel. Called again while on, it asks again if the weapon isn't drawn yet. If V held its unarmed weapon already,
+  // and HideV has stopped its effects, putting back puts it away and draws it again a second later, since the game starts
+  // some of a weapon's effects only as it's drawn (the Thermal blades' heat). 1: asked; 2: nothing to ask; 3: put away,
+  // to be drawn again; 0: V isn't found; -1: V has no unarmed weapon; -2: there's no equipment system.
   public final func Arm(on: Bool) -> Int32 {
     let game: GameInstance = this.GetGameInstance();
     let player: ref<GameObject> = GameInstance.GetPlayerSystem(game).GetLocalPlayerMainGameObject();
@@ -345,6 +461,14 @@ public class BlockRenderNpcs extends ScriptableSystem {
     };
     this.armed = false;
     if held == this.armedFrom {
+      if this.hiding && ItemID.IsValid(held) && held == this.UnarmedItem(player) {
+        request.requestType = EquipmentManipulationAction.UnequipWeapon;
+        equipment.QueueRequest(request);
+        let again: ref<BlockRenderDrawAgain> = new BlockRenderDrawAgain();
+        again.player = player;
+        GameInstance.GetDelaySystem(game).DelayCallback(again, 1.00, false);
+        return 3;
+      };
       return 2;
     };
     request.requestType = this.WheelRequest(player, this.armedFrom);
@@ -559,6 +683,40 @@ public class BlockRenderNpcs extends ScriptableSystem {
     return 0;
   }
 
+  // A hit on npc's middle, built as the game's SendHitEvent builds one: from V, as its instigator and source, with record
+  // and weapon (or none), its direction from the point from (world axes); marked as ours, with where it starts, amount, on
+  // the hit itself, as the game marks its environment's attacks with hitFlag.None and a source name, so that the
+  // pipeline's wraps read it back on whichever thread runs it; flagged a weak explosion if weak; and queued.
+  private final func Strike(game: GameInstance, player: ref<GameObject>, npc: ref<NPCPuppet>, record: ref<Attack_Record>,
+    weapon: ref<WeaponObject>, amount: Float, from: Vector4, weak: Bool) -> Void {
+    let context: AttackInitContext;
+    context.record = record;
+    context.instigator = player;
+    context.source = player;
+    context.weapon = weapon;
+    let hit: ref<gameHitEvent> = new gameHitEvent();
+    hit.attackData = new AttackData();
+    hit.target = npc;
+    hit.attackData.SetAttackDefinition(IAttack.Create(context));
+    hit.attackData.SetInstigator(player);
+    hit.attackData.SetSource(player);
+    hit.attackData.SetWeapon(weapon);
+    hit.attackData.SetAttackType(record.AttackType().Type());
+    let mark: String = "BlockRender " + FloatToStringPrec(amount, 2);
+    hit.attackData.AddFlag(hitFlag.None, StringToName(mark));
+    if weak {
+      hit.attackData.AddFlag(hitFlag.WeakExplosion, n"BlockRender blast");
+    };
+    let middle: Vector4 = npc.GetWorldPosition() + new Vector4(0.00, 0.00, 1.00, 0.00);
+    hit.hitPosition = middle;
+    hit.hitDirection = Vector4.Normalize(middle - from);
+    let shape: HitShapeData;
+    shape.result.hitPositionEnter = middle;
+    shape.result.hitPositionExit = middle;
+    ArrayPush(hit.hitRepresentationResult.hitShapes, shape);
+    GameInstance.GetDamageSystem(game).QueueHitEvent(hit, npc);
+  }
+
   // What V punches with: what V's unarmed slot draws (weapon-wheel slot 4: the game's GetMeleewareOrFistsItemID), V's arm
   // cyberware weapon if it has a melee attack to make hits with, otherwise what's in the BaseFists area, the fists or
   // Gorilla Arms. None if there's neither.
@@ -692,7 +850,10 @@ public class BlockRenderNpcs extends ScriptableSystem {
   }
 
   private final func ReadV(player: ref<GameObject>, game: GameInstance) -> Void {
-    this.vHealthMax = GameInstance.GetStatPoolsSystem(game).GetStatPoolMaxPointValue(Cast<StatsObjectID>(player.GetEntityID()), gamedataStatPoolType.Health);
+    let stats: StatsObjectID = Cast<StatsObjectID>(player.GetEntityID());
+    let pools: ref<StatPoolsSystem> = GameInstance.GetStatPoolsSystem(game);
+    this.vHealthMax = pools.GetStatPoolMaxPointValue(stats, gamedataStatPoolType.Health);
+    this.vHealth = pools.GetStatPoolValue(stats, gamedataStatPoolType.Health, true) / 100.00;
     this.punch = 0.00;
     this.punchDrawn = false;
     this.punchItem = "nothing in V's unarmed slot";
@@ -707,6 +868,28 @@ public class BlockRenderNpcs extends ScriptableSystem {
       };
       this.punchDrawn = IsDefined(this.PunchWeapon(player, game, item));
     };
+  }
+}
+
+// V's unarmed weapon drawn again, a second after Arm put it away as build mode ended, so that the game starts the effects it
+// starts as a weapon is drawn, which HideV stopped. The game's delay system calls it.
+public class BlockRenderDrawAgain extends DelayCallback {
+  public let player: wref<GameObject>;
+
+  public func Call() -> Void {
+    let player: ref<GameObject> = this.player;
+    if !IsDefined(player) {
+      return;
+    };
+    let equipment: ref<EquipmentSystem> = EquipmentSystem.GetInstance(player);
+    if !IsDefined(equipment) {
+      return;
+    };
+    let request: ref<EquipmentSystemWeaponManipulationRequest> = new EquipmentSystemWeaponManipulationRequest();
+    request.owner = player;
+    request.requestType = EquipmentManipulationAction.RequestWeaponSlot4;
+    request.equipAnimType = gameEquipAnimationType.Instant;
+    equipment.QueueRequest(request);
   }
 }
 
@@ -853,9 +1036,11 @@ protected cb func OnDetach() -> Bool {
   return wrappedMethod();
 }
 
-// Our hits start the whole pipeline where Hit marked them, Minecraft's damage x V's punch, split across damage types as
-// the attack splits its own; the pipeline then does to them all it does to V's own punches, from the spread and V's crits,
-// perks and cyberware to the NPC's armour, resistances, blocks and dodges. One it dealt nothing says why. Any thread.
+// Our hits start the whole pipeline where Hit or BlastHit marked them, V's punch x Minecraft's damage to the hit power or
+// the blast power, split across damage types as the attack splits its own; the pipeline then does to them all it does to
+// V's own punches, from the spread and V's crits, perks and cyberware to the NPC's armour, resistances, blocks and dodges,
+// and to a blast's hits all it does to explosions, the NPC's explosion resistance included. One it dealt nothing says
+// why. Any thread.
 @wrapMethod(DamageSystem)
 private final func ProcessPipeline(hitEvent: ref<gameHitEvent>, cache: ref<CacheData>) -> Void {
   let amount: Float = BlockRenderNpcs.AmountOf(hitEvent.attackData);
