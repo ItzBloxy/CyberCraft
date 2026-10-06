@@ -17,10 +17,10 @@
 // For build mode, Arm draws V's unarmed weapon, so that hits carry it, and HideV hides V's meshes, stops V's effects and
 // hides the game's crosshair, through Codeware where it's installed.
 //
-// Minecraft's blasts (spike 6's Part 3): Explode knocks down what is within a blast's reach, as the game's knockdown
-// grenade does, with the explosion's sound; BlastHit makes one of Minecraft's hits on an NPC within the reach into the
-// blast's own, of type Explosion and from its centre, which knocks the NPC down too; and Push, a quarter second later,
-// throws the bodies and loose things.
+// Minecraft's blasts (spike 6's Part 3): Explode runs the game's knockdown grenade's attack over what a blast reaches,
+// with the explosion's sound, knocks each living NPC within it down with the game's forced reaction, and tells the crowd
+// with the game's explosion stimulus; BlastHit makes one of Minecraft's hits on an NPC within the reach into the blast's
+// own, of type Explosion and from its centre; and Push, a quarter second later, throws the bodies and loose things.
 
 // BlockRender's natives, added before the game loads its scripts; any thread may call them.
 public native func BlockRenderNpcAttached(id: EntityID)
@@ -88,12 +88,19 @@ public class BlockRenderNpcs extends ScriptableSystem {
   // (a Knockdown status effect on them), and how many are dead.
   public let pushDown: Int32;
   public let pushDead: Int32;
+  // What Explode last did besides its attack and sound: how many living NPCs within the blast's reach it knocked down with
+  // the game's forced reaction, how many it left standing as the game keeps them from being knocked down, and whether it
+  // told the crowd.
+  public let blastKnocked: Int32;
+  public let blastImmune: Int32;
+  public let blastPanic: Bool;
 
   // The module's version, which BlockRender checks: 2 since the list moved into BlockRender, 3 with combat, 4 since hits
   // go through the whole damage pipeline, with what V's unarmed slot draws, 5 since V's Immortal is the game's override,
-  // and HideV stops V's effects and hides the game's crosshair, 6 with Minecraft's blasts and V's health share.
+  // and HideV stops V's effects and hides the game's crosshair, 6 with Minecraft's blasts and V's health share, 7 since a
+  // blast knocks NPCs down with the game's forced reaction and tells the crowd.
   public final static func Version() -> Int32 {
-    return 6;
+    return 7;
   }
 
   public final static func Get(game: GameInstance) -> ref<BlockRenderNpcs> {
@@ -273,13 +280,17 @@ public class BlockRenderNpcs extends ScriptableSystem {
     return 1;
   }
 
-  // A blast of Minecraft's at centre (world axes), knocking down what is within reach metres of it, as the game's
-  // knockdown grenade does: its attack, Attacks.FragGrenadeKnockdown, run as a game effect at the centre with the reach as
-  // its radius, as CombatGadgetHelper.SpawnAttack runs one, from V and dealing no damage. The pipeline still knocks down
-  // whatever it hits with the record's status effect (PostProcess), unless immune or friendly to V, and its hit on V stops
-  // at CheckForQuickExit. Its hits are flagged weak explosions, as BlastHit's are. With the explosion's sound at the
-  // centre, as a claymore plays it. With knock, each NPC on BlockRender's list within reach also gets the record's status
-  // effect directly (risk 13's fallback). 1: started; 0: V isn't found; -1: there's no attack record or effect.
+  // A blast of Minecraft's at centre (world axes), over what is within reach metres of it. The game's knockdown grenade's
+  // attack, Attacks.FragGrenadeKnockdown, runs as a game effect at the centre with the reach as its radius, as
+  // CombatGadgetHelper.SpawnAttack runs one, from V and dealing no damage: the pipeline still gives whatever it hits the
+  // record's status effect (PostProcess), unless immune or friendly to V, so that one the blast then kills ragdolls at
+  // once, and its hit on V stops at CheckForQuickExit. Its hits are flagged weak explosions, as BlastHit's are. With the
+  // explosion's sound at the centre, as a claymore plays it. That status effect alone doesn't make an NPC fall (step 5b):
+  // with knock, each living NPC on BlockRender's list within reach is knocked down by the game's forced reaction, as perks
+  // force theirs, away from the centre, unless the game keeps it from being knocked down (KnockdownImmune); blastKnocked
+  // and blastImmune count them. The crowd is told as the game's explosions tell it: the Explosion stimulus, 30 m around
+  // the listed NPC nearest the centre within 30 m, with V as its instigator, as the game broadcasts a thrown body's
+  // explosion from the body; blastPanic says whether. 1: started; 0: V isn't found; -1: there's no attack record or effect.
   public final func Explode(centre: Vector4, reach: Float, knock: Bool) -> Int32 {
     let game: GameInstance = this.GetGameInstance();
     let player: ref<GameObject> = GameInstance.GetPlayerSystem(game).GetLocalPlayerMainGameObject();
@@ -320,16 +331,42 @@ public class BlockRenderNpcs extends ScriptableSystem {
     EffectData.SetVariant(effect.GetSharedData(), shared.flags, ToVariant(flags));
     attack.StartAttack();
     GameInstance.GetAudioSystem(game).PlayShockwave(n"explosion", centre);
-    if knock {
-      let count: Int32 = BlockRenderNpcCount();
-      let i: Int32 = 0;
-      while i < count {
-        let npc: ref<NPCPuppet> = GameInstance.FindEntityByID(game, BlockRenderNpcAt(i)) as NPCPuppet;
-        if IsDefined(npc) && !npc.IsDead() && Vector4.Distance(npc.GetWorldPosition(), centre) <= reach {
-          StatusEffectHelper.ApplyStatusEffect(npc, t"BaseStatusEffect.Knockdown", player.GetEntityID());
+    this.blastKnocked = 0;
+    this.blastImmune = 0;
+    this.blastPanic = false;
+    let nearest: ref<NPCPuppet>;
+    let nearestDistance: Float = 30.00;
+    let count: Int32 = BlockRenderNpcCount();
+    let i: Int32 = 0;
+    while i < count {
+      let npc: ref<NPCPuppet> = GameInstance.FindEntityByID(game, BlockRenderNpcAt(i)) as NPCPuppet;
+      if IsDefined(npc) {
+        let distance: Float = Vector4.Distance(npc.GetWorldPosition(), centre);
+        if distance <= nearestDistance {
+          nearest = npc;
+          nearestDistance = distance;
         };
-        i += 1;
+        if knock && !npc.IsDead() && distance <= reach {
+          if this.KnockdownImmune(npc, player, game) {
+            this.blastImmune += 1;
+          } else {
+            // A knockdown (the sub-action's type 4) at an explosion's intensity (3), hit from the centre's side, in one of
+            // an explosion's variations, as the hit reaction component picks them for a strong explosion.
+            let direction: Int32 = GameObject.GetLocalAngleForDirectionInInt(Vector4.Normalize(npc.GetWorldPosition() - centre), npc);
+            AISubActionForceHitReaction_Record_Implementation.SendForcedHitDataToAIBehavior(npc, direction, 3, 4, 2, 0, RandRange(0, 3), 0);
+            this.blastKnocked += 1;
+          };
+        };
       };
+      i += 1;
+    };
+    if IsDefined(nearest) {
+      let investigate: stimInvestigateData;
+      investigate.attackInstigator = player;
+      investigate.attackInstigatorPosition = player.GetWorldPosition();
+      investigate.revealsInstigatorPosition = true;
+      StimBroadcasterComponent.BroadcastStim(nearest, gamedataStimType.Explosion, 30.00, investigate);
+      this.blastPanic = true;
     };
     return 1;
   }
@@ -681,6 +718,19 @@ public class BlockRenderNpcs extends ScriptableSystem {
       i += 1;
     };
     return 0;
+  }
+
+  // Whether the game keeps npc from being knocked down, as its hit reaction component decides for a hit: knockdown
+  // immunity, an off-mesh link, friendly to V or a Cerberus (SetHitReactionImmunities); massive, or a leg dismembered
+  // (GetReactionType).
+  private final func KnockdownImmune(npc: ref<NPCPuppet>, player: ref<GameObject>, game: GameInstance) -> Bool {
+    if GameInstance.GetStatsSystem(game).GetStatValue(Cast<StatsObjectID>(npc.GetEntityID()), gamedataStatType.KnockdownImmunity) > 0.00 || ScriptedPuppet.IsOnOffMeshLink(npc) {
+      return true;
+    };
+    if Equals(GameObject.GetAttitudeTowards(npc, player), EAIAttitude.AIA_Friendly) || Equals(npc.GetNPCType(), gamedataNPCType.Cerberus) {
+      return true;
+    };
+    return npc.IsMassive() || StatusEffectSystem.ObjectHasStatusEffectWithTag(npc, n"DismemberedLeg");
   }
 
   // A hit on npc's middle, built as the game's SendHitEvent builds one: from V, as its instigator and source, with record
