@@ -44,11 +44,14 @@ const std::vector<FunctionTypes>& Functions()
 		{ "Punch", nullptr, {}, { "String" } },
 		{ "Arm", nullptr, { { "Bool" } }, { "Int32" } },
 		{ "HideV", nullptr, { { "Bool" } }, { "Int32" } },
+		{ "Explode", nullptr, { { "Vector4" }, { "Float" }, { "Bool" } }, { "Int32" } },
+		{ "Push", nullptr, { { "Vector4" }, { "Float" } }, { "Int32" } },
+		{ "BlastHit", nullptr, { { "entEntityID" }, { "Float" }, { "Vector4" } }, { "Int32" } },
 	};
 	return kFunctionTypes;
 }
 
-// In GameScript::Field's order: the fields List fills, and those HideV fills, and their types.
+// In GameScript::Field's order: the fields List fills, those HideV fills and those Push fills, and their types.
 const std::vector<std::pair<const char*, const char*>>& Fields()
 {
 	static const std::vector<std::pair<const char*, const char*>> kFieldTypes{
@@ -57,9 +60,16 @@ const std::vector<std::pair<const char*, const char*>>& Fields()
 		{ "npcNames", "array:String" },    { "npcFlags", "array:Int32" },       { "attached", "Int32" },
 		{ "found", "Int32" },              { "punch", "Float" },                { "punchItem", "String" },
 		{ "punchDrawn", "Bool" },          { "vHealthMax", "Float" },           { "vEffects", "Int32" },
-		{ "vCrosshair", "Int32" },
+		{ "vCrosshair", "Int32" },         { "pushDown", "Int32" },             { "pushDead", "Int32" },
+		{ "vHealth", "Float" },
 	};
 	return kFieldTypes;
+}
+
+// A point in world axes as the module takes one: a Vector4 with w 1, as the game's positions are.
+RED4ext::Vector4 PointOf(const Vec3d& aWorld)
+{
+	return { float(aWorld.x), float(aWorld.y), float(aWorld.z), 1.0f };
 }
 
 // BlockRender's natives (Natives.cpp), as the module declares them: added when the game registered its types.
@@ -257,6 +267,7 @@ std::optional<NpcList> GameScript::List(double aRange, std::string& aWhy)
 	list.punchItem = FieldOf<RED4ext::CString>(*fields_[kPunchItem], instance).c_str();
 	list.punchDrawn = FieldOf<bool>(*fields_[kPunchDrawn], instance);
 	list.vHealthMax = FieldOf<float>(*fields_[kVHealthMax], instance);
+	list.vHealth = FieldOf<float>(*fields_[kVHealth], instance);
 	return list;
 }
 
@@ -371,6 +382,81 @@ std::string GameScript::Punch()
 		return "BlockRenderNpcs.Punch failed";
 	}
 	return result.c_str();
+}
+
+std::optional<int32_t> GameScript::Explode(const Vec3d& aCentre, double aReach, bool aKnock, std::string& aWhy)
+{
+	if (const std::string& missing = Check(); !missing.empty())
+	{
+		aWhy = missing;
+		return std::nullopt;
+	}
+	const Strong system = SessionSystem(*functions_[kCurrent], *class_, aWhy);
+	if (!system)
+	{
+		return std::nullopt;
+	}
+	RED4ext::Vector4     centre = PointOf(aCentre);
+	float                reach = float(aReach);
+	bool                 knock = aKnock;
+	int32_t              result = 0;
+	RED4ext::StackArgs_t args{ { nullptr, &centre }, { nullptr, &reach }, { nullptr, &knock } };
+	if (!RED4ext::ExecuteFunction(system.GetPtr(), functions_[kExplode], &result, args))
+	{
+		aWhy = "BlockRenderNpcs.Explode failed";
+		return std::nullopt;
+	}
+	return result;
+}
+
+std::optional<BlastPush> GameScript::Push(const Vec3d& aCentre, double aReach, std::string& aWhy)
+{
+	if (const std::string& missing = Check(); !missing.empty())
+	{
+		aWhy = missing;
+		return std::nullopt;
+	}
+	const Strong system = SessionSystem(*functions_[kCurrent], *class_, aWhy);
+	if (!system)
+	{
+		return std::nullopt;
+	}
+	RED4ext::Vector4     centre = PointOf(aCentre);
+	float                reach = float(aReach);
+	int32_t              npcs = 0;
+	RED4ext::StackArgs_t args{ { nullptr, &centre }, { nullptr, &reach } };
+	if (!RED4ext::ExecuteFunction(system.GetPtr(), functions_[kPush], &npcs, args))
+	{
+		aWhy = "BlockRenderNpcs.Push failed";
+		return std::nullopt;
+	}
+	RED4ext::IScriptable& instance = *system.GetPtr();
+	return BlastPush{ npcs, FieldOf<int32_t>(*fields_[kPushDown], instance), FieldOf<int32_t>(*fields_[kPushDead], instance) };
+}
+
+std::optional<int32_t> GameScript::BlastHit(uint64_t aEntity, double aAmount, const Vec3d& aCentre, std::string& aWhy)
+{
+	if (const std::string& missing = Check(); !missing.empty())
+	{
+		aWhy = missing;
+		return std::nullopt;
+	}
+	const Strong system = SessionSystem(*functions_[kCurrent], *class_, aWhy);
+	if (!system)
+	{
+		return std::nullopt;
+	}
+	RED4ext::ent::EntityID npc(aEntity);
+	float                  amount = float(aAmount);
+	RED4ext::Vector4       centre = PointOf(aCentre);
+	int32_t                result = 0;
+	RED4ext::StackArgs_t   args{ { nullptr, &npc }, { nullptr, &amount }, { nullptr, &centre } };
+	if (!RED4ext::ExecuteFunction(system.GetPtr(), functions_[kBlastHit], &result, args))
+	{
+		aWhy = "BlockRenderNpcs.BlastHit failed";
+		return std::nullopt;
+	}
+	return result;
 }
 
 std::optional<int32_t> GameScript::Arm(bool aOn, std::string& aWhy)

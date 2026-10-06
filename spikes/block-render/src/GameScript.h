@@ -23,7 +23,7 @@ struct CProperty;
 // Current() on every call, since a load makes a new one. Main thread only, while V is found.
 namespace cpmc
 {
-constexpr int32_t kModuleVersion = 5;  // BlockRenderNpcs.Version(), as this BlockRender needs it
+constexpr int32_t kModuleVersion = 6;  // BlockRenderNpcs.Version(), as this BlockRender needs it
 
 // What the module's List gives.
 struct NpcList
@@ -35,6 +35,18 @@ struct NpcList
 	std::string                  punchItem;
 	bool                         punchDrawn = false;  // V has it drawn, so hits carry it as their weapon
 	float                        vHealthMax = 0.0f;
+	float                        vHealth = 0.0f;      // V's health, as a share of its max
+};
+
+// What the module's Push found within a blast's reach, after its push: the NPCs on BlockRender's list there, how many of
+// them the game has knocked down, and how many are dead.
+struct BlastPush
+{
+	int32_t npcs = 0;
+	int32_t down = 0;
+	int32_t dead = 0;
+
+	bool operator==(const BlastPush&) const = default;
 };
 
 // What the module's HideV did: the meshes hidden, or shown again (-1 without Codeware, -2 V isn't found). Hiding: the
@@ -75,6 +87,15 @@ public:
 	std::optional<bool> KillV(uint64_t aKiller, std::string& aWhy);
 	// V's punch, what it's read from, and what hits are made with: for the punch request.
 	std::string Punch();
+	// Minecraft's blasts (spike 6's "Part 3"). A blast at aCentre (world axes) reaching aReach metres: the game's knockdown
+	// grenade's attack as a game effect there, and the explosion's sound; with aKnock, its knockdown on each NPC within reach
+	// directly too. The module's Explode says how it went (1 started, 0 V isn't found, -1 no attack record or effect).
+	std::optional<int32_t> Explode(const Vec3d& aCentre, double aReach, bool aKnock, std::string& aWhy);
+	// The blast's push, a quarter second after it, and what the module then finds within its reach (npcs -1: V isn't found).
+	std::optional<BlastPush> Push(const Vec3d& aCentre, double aReach, std::string& aWhy);
+	// One of Minecraft's hits on the NPC aEntity, as the own hit of the blast at aCentre: aAmount where the game's damage
+	// pipeline starts it. The module's BlastHit says what became of it, as Hit does.
+	std::optional<int32_t> BlastHit(uint64_t aEntity, double aAmount, const Vec3d& aCentre, std::string& aWhy);
 	// Checks the class, its version, functions and fields, and BlockRender's natives, the first time, and logs what it
 	// found. Empty: all there. List and Compare check first; BlockRender checks before its first List too, and writes the
 	// log, so a fault in the module's first call still leaves the check's line.
@@ -93,6 +114,9 @@ private:
 		kPunchReport,
 		kArm,
 		kHideV,
+		kExplode,
+		kPush,
+		kBlastHit,
 		kFunctions,
 	};
 
@@ -114,6 +138,9 @@ private:
 		kVHealthMax,
 		kVEffects,
 		kVCrosshair,
+		kPushDown,
+		kPushDead,
+		kVHealth,
 		kFields,
 	};
 
