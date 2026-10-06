@@ -4,7 +4,7 @@ Spike 6 brings Night City's NPCs into Minecraft as SkyCraft's stand-ins (Part 1)
 Minecraft's explosions in the game (Part 3). Step 1 ran SkyCraft's actor table with `mclink`, without Cyberpunk; later
 steps add their sections as they run, and the spike's answer goes at the top once step 2 is in.
 
-## The answer so far (Parts 1 and 2, after step 4's fixes)
+## The answer so far (Parts 1 to 3, after step 5b's first run)
 
 **Part 1, yes: Night City's NPCs are in Minecraft as SkyCraft's stand-ins, where the game puts them.** On a busy
 pavement, every NPC within 80 m was listed, and the game's own targeting never found one the list lacked. A stone
@@ -27,6 +27,17 @@ included, and every hit on V there went to Minecraft's hearts instead (42 in ste
 those ran out, Minecraft's death killed V. One part can't work for the user's V: our Immortal backstop. V carries three
 Mortal god modes that quests left behind, and the game refuses even the override Second Heart uses, so in build mode
 the damage wrap is V's only guard; it has held for every hit.
+
+**Part 3, mostly: Minecraft's blasts reach Night City through the game's own explosion code.** In step 5a a real TNT's
+hits on stand-ins came back as the formula says, each told as the blast's own. In the game, a blast shows the game's
+explosion effect and sound, pushes and damages cars and props, and its own hits land as explosions: a chain of TNT
+started its hits at V's punch × the square root of Minecraft's damage, the pipeline dealt about half, killed two
+residents of 543 and 594 health, and the pushes threw their bodies; the user found it worked "perfectly". One part
+doesn't work yet: living NPCs aren't knocked down. The game gives them the knockdown grenade's status effect, but a crowd
+NPC falls only when its AI gets a knockdown reaction, which our weak, damageless hits never reach; the game's own forced
+reaction knocked one down in CET's console, so that's the fix. The follow-ups work: Minecraft's hearts take V's share as
+build mode starts, a bush is out of Minecraft's ground while walls stay, and the blades' heat comes back after build
+mode.
 
 ## Step 1: made-up NPCs in SkyCraft's actor table, with `mclink`, without Cyberpunk
 
@@ -521,3 +532,77 @@ down, and SkyCraft's hurts went on as before.
   681, 569, 412 and 233 for the user's V at 1.5, 3, 5 and 7 m, before the pipeline's own modifiers.
 - **CyberCraft Tweaks 1.3.0 works in the running Minecraft:** its mixin applied, setting the health raises and lowers it,
   and SkyCraft's own hurts are untouched.
+
+## Step 5b: in the game, explosions
+
+Date: 2026-10-06, 16:16 to 16:44. BlockRender 0.19.0 at `d018b04` (module version 6: the plan's Tasks 43 to 47, which ran
+as written, each commit's code identical to the version tested before), with Minecraft 26.3, SkyCraft 0.1.2 and
+CyberCraft Tweaks 1.3.0, and V as before: the Thermal, Legendary Mantis Blades, 456 max health. On a pavement with
+residents about, parked cars, bins and boxes. The user ran both games and a few lines in CET's console; the agent sent
+the requests and read the logs and the status. Plan: Task 48.
+
+### Verdict
+
+**Step 5b: pass, but for living NPCs' knockdowns, which need a fix.** Blasts show the game's explosion, push and damage
+cars and props, and their own hits land as explosions that kill and throw; the follow-ups work. Living NPCs within a
+blast carry the knockdown grenade's status effect and don't fall: a crowd NPC falls only when its AI gets a knockdown
+reaction, which the game's own forced reaction gave one in CET's console. Two more things for the user to decide: the
+crowd doesn't panic at a blast, and the health carries only into Minecraft.
+
+### The checks
+
+- **The module (Steps 2 and 3).** redscript compiled `BlockRender.reds` with Codeware's scripts, with no error;
+  `BlockRender 0.19.0 loaded` and its seven natives; at Link, `module: found BlockRenderNpcs version 6, its 13
+  functions, the 19 fields List fills, and BlockRender's 7 natives`. After `set combat 1`, `blasts=on: 0 taken, blast
+  power 0.50; none yet`, and the ground line `the bush rule leaves out sight-only shapes: 377 so far`.
+- **Knockdowns (Step 4).** "TNT 5 m ahead" beside two residents: `explosion at Minecraft -120.6 5.9 2036.2, radius 4.0:
+  a blast at world (-120.65, -2036.20, 5.94), reaching 8.0 m, 2 listed NPCs within it; its knockdown attack and sound
+  started`, then `pushed, 0.26 s after it: 2 NPCs within it, 2 knocked down, 0 dead`. The game gave both the status
+  effect, but the user saw them only flinch and slide with the push, without falling, and without fear or flight. With
+  `set blastknock 1`, the status effect given directly too, the same. V, within the reach too, wasn't hurt.
+- **Why (settled with CET's console).** The resident was a crowd NPC (`IsCrowd` true) with `KnockdownImmunity` 0,
+  `KnockdownDamageThreshold` 33 and `KnockdownDamageThresholdImpulse` 0. An NPC falls when its hit reaction component
+  sends its AI a knockdown (`SendDataToAIBehavior`), and `GetReactionType` gives one only for a strong explosion, a hit
+  flagged `HighSpeedMelee`, or, with both knockdown thresholds over 0, a hit of reaction severity 3 or enough impulse and
+  damage. A crowd NPC's impulse threshold is 0, and our hits are weak explosions with no damage, weapon or impulse, so
+  they twitch; the status effect alone plays nothing on it. The game's own forced reaction,
+  `AISubActionForceHitReaction_Record_Implementation.SendForcedHitDataToAIBehavior(t, 4, 3, 4, 2, 0, 0, 0)`, a
+  knockdown at an explosion's intensity, as perks force reactions, knocked the resident down: "the anim looks pretty
+  cool".
+- **The look.** The game's explosion effect played at the blast, with its sound. Minecraft's own explosion doesn't show:
+  `explode` makes no blast in Minecraft, and BlockRender draws Minecraft's blocks, not its particles.
+- **The push (Step 5).** By a parked car with props: the car rocked a little, took damage and lost its windows, and the
+  props moved as the game's own explosions move them.
+- **Minecraft's health (Step 6).** V's health set to 60% in CET's console, then F8: Minecraft's log, `Minecraft's
+  player's health set to V's share 0.6612: 20.0 -> 13.224` (V had regenerated to 66%), and the hearts showed it; later
+  `share 0.3173: 17.72 -> 6.35`. In build mode V's own health went on regenerating while Minecraft's hearts stayed: the
+  share goes one way, as build mode starts, and SkyCraft's `McState` has no player health to carry back.
+- **The bush and the wall (Step 7).** In a bush, `shapes`: `sphere of radius 1.40 at (-18.58, -2272.71, 7.36); …;
+  query filter 0:0:80000:0, simulation filter 0:0:0:0; the exporter leaves it out, with sight-only shapes`, beside the
+  terrain's heightfield, kept; this bush had no capsule. Against a wall every shape was kept (query filters
+  `0:0:449c004:0`, `0:0:405c004:0` and `0:0:480000:0`), boxes with their sizes. In build mode Minecraft's player walked
+  through the bush and not through the wall.
+- **TNT (Step 8).** With the user's leave, 16 TNT in hotbar slot 8 and a flint and steel in slot 9; the user set off a
+  chain of 25 blasts among residents. Each blast hit landed as an explosion, starting at V's punch × the square root of
+  Minecraft's damage: on NPC 160, a resident of 594 health, `40.75 of Minecraft's damage … a blast's own: starting at
+  669.45`, 318.08 dealt; then 479.03 and 234.39; then 161.11 and 76.57, `killed it`. On NPC 161, of 543, 492.93 and
+  271.40, then 217.60 and 162.20, `critical, killed it`. The pipeline dealt about half of each start, as it does to
+  explosions. The later pushes threw the bodies (`1 NPCs within it, 0 knocked down, 1 dead`). V's health didn't move;
+  Minecraft's player lost only 20 → 16.46, to NPC 161's strong melee hit on V, not to the blasts. The user: "Works
+  perfectly". The user's punch on a fleeing resident, outside every blast's reach, landed as a punch.
+- **The blast power (Step 9).** Not tried: 0.5 felt right.
+- **The blades' heat (Step 10).** Blades drawn before build mode, then F8 twice: `V's unarmed weapon put away: put away,
+  and drawn again in a second, so that the game starts the effects it starts as it's drawn`, and the heat was back.
+- **Combat off, unlinking and quitting (Steps 11 and 12).** `blasts=off: Minecraft's blasts are logged, not applied`;
+  the game quit normally (`25 vtable entries restored`), with no new crash report.
+- **The log, in all:** 25 blasts and 25 pushes, each 0.26 or 0.27 s after; 5 blast hits queued and landed, 2 of them
+  kills, none dealt nothing; 8 health carries.
+
+### What it means
+
+- **The knockdowns need the game's forced reaction:** each living NPC within a blast's reach sent a forced knockdown, its
+  direction from the blast, skipping those the game makes immune. A fix, then a check in the game.
+- **The crowd doesn't panic:** the game's explosions broadcast an `Explosion` stimulus (`TriggerSingleBroadcast`), and a
+  blast of ours broadcasts none. For the user to decide.
+- **The health carries one way:** for the user to decide whether Minecraft's health should come back to V as build mode
+  ends, or V's own health stop regenerating in build mode.

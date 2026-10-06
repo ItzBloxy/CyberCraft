@@ -10694,7 +10694,7 @@ exactly its delay, is tested as it reads.
 **Files:**
 - Modify: `src/link/Combat.h`, `src/link/Combat.cpp`, `tests/TestCombat.cpp`
 
-- [ ] **Step 1: Edit `tests/TestCombat.cpp`: blasts, their hits and pushes, and the health input**
+- [x] **Step 1: Edit `tests/TestCombat.cpp`: blasts, their hits and pushes, and the health input**
 
 ```cpp
 	event.weapon = proto::kWeaponBlade;
@@ -10803,7 +10803,7 @@ TEST(CombatSetsMinecraftsHealthThroughCyberCraftTweaks)
 	CHECK_EQ(HealthInput(std::numeric_limits<double>::quiet_NaN()).b, 0);
 }
 ```
-- [ ] **Step 2: Build; it must fail**
+- [x] **Step 2: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -10812,7 +10812,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `error C2065: 'Blast': undeclared identifier`.
 
-- [ ] **Step 3: Edit `src/link/Combat.h`**
+- [x] **Step 3: Edit `src/link/Combat.h`**
 
 ```cpp
 #include <string>
@@ -10886,7 +10886,7 @@ private:
 proto::InputEvent HealthInput(double aShare);
 }
 ```
-- [ ] **Step 4: Edit `src/link/Combat.cpp`**
+- [x] **Step 4: Edit `src/link/Combat.cpp`**
 
 ```cpp
 	return kHurtTicks * tickMs / 1000.0;
@@ -10970,7 +10970,7 @@ proto::InputEvent HealthInput(double aShare)
 }
 }
 ```
-- [ ] **Step 5: Build and run the tests; they must pass**
+- [x] **Step 5: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -10980,7 +10980,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `444 test(s), 0 failure(s)`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -11014,7 +11014,7 @@ The second follow-up (the spec's "Part 3's follow-ups"): bushes out of Minecraft
 - Modify: `src/physx/Export.h`, `src/physx/Export.cpp`, `src/link/Link.h`, `src/link/Link.cpp`, `tests/TestExport.cpp`,
   `tests/TestLink.cpp`
 
-- [ ] **Step 1: Edit `tests/TestExport.cpp`: the bush rule, and each shape's words**
+- [x] **Step 1: Edit `tests/TestExport.cpp`: the bush rule, and each shape's words**
 
 ```cpp
 TEST(ExportReadsNothingWithoutTheGame)
@@ -11064,7 +11064,7 @@ TEST(ExportDescribesEachPrimitiveShape)
 
 TEST(ExportReadsNothingWithoutTheGame)
 ```
-- [ ] **Step 2: Edit `tests/TestLink.cpp`: the city started over**
+- [x] **Step 2: Edit `tests/TestLink.cpp`: the city started over**
 
 ```cpp
 TEST(LinkReadsTheCityAgainWhenVIsFoundAgain)
@@ -11112,7 +11112,7 @@ TEST(LinkStartsTheCityOverWhenWhatItKeepsChanges)
 
 TEST(LinkReadsTheCityAgainWhenVIsFoundAgain)
 ```
-- [ ] **Step 3: Build; it must fail**
+- [x] **Step 3: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -11121,7 +11121,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `error C2039: 'RestartCity': is not a member of 'cpmc::link::Link'`.
 
-- [ ] **Step 4: Edit `src/physx/Export.h`**
+- [x] **Step 4: Edit `src/physx/Export.h`**
 
 ```cpp
 bool KeptShape(AuditedClass aActor, physx::PxShapeFlags aFlags, physx::PxGeometryType::Enum aGeometry, bool aOurs);
@@ -11175,7 +11175,7 @@ std::string BoxWords(const physx::PxVec3& aHalfExtents, const physx::PxTransform
 	OwnActors                own_;
 	LeaveOut                 rule_ = LeaveOut::SightOnly;
 ```
-- [ ] **Step 5: Edit `src/physx/Export.cpp`**
+- [x] **Step 5: Edit `src/physx/Export.cpp`**
 
 ```cpp
 	return hits;
@@ -11311,7 +11311,7 @@ std::string BoxWords(const PxVec3& aHalfExtents, const PxTransform& aPose, const
 		                            flags.isSet(PxShapeFlag::eSCENE_QUERY_SHAPE) ? ", scene query" : ", not scene query",
 		                            flags.isSet(PxShapeFlag::eTRIGGER_SHAPE) ? ", trigger" : "", FilterKey(query), FilterKey(simulation), exported,
 ```
-- [ ] **Step 6: Edit `src/link/Link.h`**
+- [x] **Step 6: Edit `src/link/Link.h`**
 
 ```cpp
 	void ReadGround(double aNow, GroundSource& aSource, double aBudgetMs);
@@ -11330,7 +11330,7 @@ std::string BoxWords(const PxVec3& aHalfExtents, const PxTransform& aPose, const
 	bool                              cityClear_ = false;  // a clear is due before the city's next regions
 	bool                              cityRestart_ = false;  // RestartCity: the city starts over at the next update
 ```
-- [ ] **Step 7: Edit `src/link/Link.cpp`**
+- [x] **Step 7: Edit `src/link/Link.cpp`**
 
 ```cpp
 		aSink.Log(std::format("the ground is the {} now", GroundName(aSettings.ground)));
@@ -11344,7 +11344,7 @@ std::string BoxWords(const PxVec3& aHalfExtents, const PxTransform& aPose, const
 		areas_.Reset(aFrame.now);
 		outbox_.clear();
 ```
-- [ ] **Step 8: Build and run the tests; they must pass**
+- [x] **Step 8: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -11354,7 +11354,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `447 test(s), 0 failure(s)`.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -11384,7 +11384,7 @@ Step 5a runs against the real Minecraft with `mclink`, before anything goes into
 - Modify: `tools/mclink/McLinkScript.h`, `tools/mclink/McLinkScript.cpp`, `tools/mclink/Main.cpp`,
   `tests/TestMcLinkScript.cpp`
 
-- [ ] **Step 1: Edit `tests/TestMcLinkScript.cpp`: `health`, and step 5a's script parses**
+- [x] **Step 1: Edit `tests/TestMcLinkScript.cpp`: `health`, and step 5a's script parses**
 
 ```cpp
 	for (const char* name : { "step1.txt", "again.txt", "eye.txt", "drive.txt", "relink.txt", "city.txt", "npcs.txt", "hurts.txt" })
@@ -11416,7 +11416,7 @@ TEST(ScriptParsesHealth)
 
 TEST(ScriptParsesMadeUpNpcs)
 ```
-- [ ] **Step 2: Build; it must fail**
+- [x] **Step 2: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -11425,7 +11425,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `error C2065: 'Health': undeclared identifier`.
 
-- [ ] **Step 3: Edit `tools/mclink/McLinkScript.h`**
+- [x] **Step 3: Edit `tools/mclink/McLinkScript.h`**
 
 ```cpp
 //                                  power for a power attack. It goes through the plugin's sums: at once, or in a sum
@@ -11450,7 +11450,7 @@ Expected: `error C2065: 'Health': undeclared identifier`.
 ```cpp
 	                      // kind (proto::HurtKind), share and attacker; the health's share
 ```
-- [ ] **Step 4: Edit `tools/mclink/McLinkScript.cpp`**
+- [x] **Step 4: Edit `tools/mclink/McLinkScript.cpp`**
 
 ```cpp
 		}
@@ -11468,7 +11468,7 @@ Expected: `error C2065: 'Health': undeclared identifier`.
 		}
 		else if (verb == "floor" || verb == "status" || verb == "quit")
 ```
-- [ ] **Step 5: Write `tools/mclink/blasts.txt`**
+- [x] **Step 5: Write `tools/mclink/blasts.txt`**
 
 ```text
 # Spike 6's step 5a: Minecraft's blasts as BlockRender takes them, and V's health share set on Minecraft's player
@@ -11523,7 +11523,7 @@ actor-remove all
 status
 quit
 ```
-- [ ] **Step 6: Edit `tools/mclink/Main.cpp`**
+- [x] **Step 6: Edit `tools/mclink/Main.cpp`**
 
 ```cpp
 // and spike 6's steps 1 and 3. It runs BlockRender's link code against the real Minecraft, without the game
@@ -11616,7 +11616,7 @@ quit
 				    link.Push(input) ? "" : "; DROPPED, the input ring is full");
 				break;
 ```
-- [ ] **Step 7: Build and run the tests; they must pass**
+- [x] **Step 7: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -11626,7 +11626,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `448 test(s), 0 failure(s)`.
 
-- [ ] **Step 8: Run mclink without Minecraft**
+- [x] **Step 8: Run mclink without Minecraft**
 
 Minecraft and the game must not be running.
 ```bash
@@ -11636,7 +11636,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && printf 'status\nquit\n' > build
 Expected: `the mapping: created (process …); waiting for Minecraft`, then the status with `Minecraft: absent` and
 `events: 0 explosions, 0 hits on actors, 0 deaths, 0 others; 0 actors in the table; …`. Then `exit: 0`.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -11670,7 +11670,7 @@ Fabric mod beside SkyCraft, takes:
   `minecraft/cybercraft-tweaks/src/main/resources/fabric.mod.json`, `minecraft/cybercraft-tweaks/build.sh`,
   `minecraft/cybercraft-tweaks/README.md`
 
-- [ ] **Step 1: Write `minecraft/cybercraft-tweaks/src/main/java/dev/cybercraft/tweaks/mixin/SetHealth.java`**
+- [x] **Step 1: Write `minecraft/cybercraft-tweaks/src/main/java/dev/cybercraft/tweaks/mixin/SetHealth.java`**
 
 ```java
 package dev.cybercraft.tweaks.mixin;
@@ -11709,7 +11709,7 @@ public abstract class SetHealth {
     }
 }
 ```
-- [ ] **Step 2: Edit `minecraft/cybercraft-tweaks/src/main/java/dev/cybercraft/tweaks/CyberCraftTweaks.java`**
+- [x] **Step 2: Edit `minecraft/cybercraft-tweaks/src/main/java/dev/cybercraft/tweaks/CyberCraftTweaks.java`**
 
 ```java
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerChunkEvents;
@@ -11729,7 +11729,7 @@ public final class CyberCraftTweaks implements ModInitializer {
     public static final int SET_HEALTH = 0x100;
 
 ```
-- [ ] **Step 3: Edit `minecraft/cybercraft-tweaks/src/main/resources/cybercraft_tweaks.mixins.json`**
+- [x] **Step 3: Edit `minecraft/cybercraft-tweaks/src/main/resources/cybercraft_tweaks.mixins.json`**
 
 ```json
   "mixins": ["NoBlastBlocks", "NoDigging"],
@@ -11737,7 +11737,7 @@ public final class CyberCraftTweaks implements ModInitializer {
 ```json
   "mixins": ["NoBlastBlocks", "NoDigging", "SetHealth"],
 ```
-- [ ] **Step 4: Edit `minecraft/cybercraft-tweaks/src/main/resources/fabric.mod.json`**
+- [x] **Step 4: Edit `minecraft/cybercraft-tweaks/src/main/resources/fabric.mod.json`**
 
 ```json
   "version": "1.2.0",
@@ -11749,7 +11749,7 @@ public final class CyberCraftTweaks implements ModInitializer {
   "name": "CyberCraft Tweaks",
   "description": "SkyCraft adjusted for Cyberpunk 2077's Night City: nothing digs into the game's ground, so blasts leave no blocks floating above it; and V's health share carries into Minecraft's player as build mode starts.",
 ```
-- [ ] **Step 5: Edit `minecraft/cybercraft-tweaks/build.sh`**
+- [x] **Step 5: Edit `minecraft/cybercraft-tweaks/build.sh`**
 
 ```bash
 # Modrinth App already keeps for the CyberCraft instance (Minecraft 26.3 and the two of its libraries Fabric API's
@@ -11782,7 +11782,7 @@ for jar in "$minecraft" "$dfu" "$jspecify" "$loader" "$mixin" "$skycraft" build/
 ```bash
 for jar in "$minecraft" "$dfu" "$jspecify" "$slf4j" "$fastutil" "$loader" "$mixin" "$skycraft" build/deps/*.jar; do
 ```
-- [ ] **Step 6: Edit `minecraft/cybercraft-tweaks/README.md`**
+- [x] **Step 6: Edit `minecraft/cybercraft-tweaks/README.md`**
 
 ```markdown
   chunk drops it as the server loads it, and SkyCraft's sync takes that to clients.
@@ -11802,7 +11802,7 @@ blocks around it are the same afterwards as before.
 blocks around it are the same afterwards as before. `spikes/block-render/tools/mclink/blasts.txt` sets Minecraft's
 player's health to half, all and a twentieth of its max, and reads each back with `/data`.
 ```
-- [ ] **Step 7: Build CyberCraft Tweaks**
+- [x] **Step 7: Build CyberCraft Tweaks**
 
 ```bash
 cd /d/Cyberpunk-Minecraft/minecraft/cybercraft-tweaks && out=$(bash build.sh 2>&1); echo "$out" | tail -2; \
@@ -11812,7 +11812,7 @@ cd /d/Cyberpunk-Minecraft/minecraft/cybercraft-tweaks && out=$(bash build.sh 2>&
 Expected: `built build/cybercraft-tweaks-1.3.0.jar against 26.3-`, then `warnings: 0`, and
 `dev/cybercraft/tweaks/mixin/SetHealth.class`.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add minecraft/cybercraft-tweaks \
@@ -11843,14 +11843,14 @@ will take them, and Minecraft's player's health set through CyberCraft Tweaks 1.
 **Files:**
 - Modify: `docs/spikes/2026-10-05-npcs-and-combat-results.md`
 
-- [ ] **Step 1: Check that the game isn't running**
+- [x] **Step 1: Check that the game isn't running**
 
 ```bash
 tasklist | grep -i -c "cyberpunk2077.exe"
 ```
 Expected: `0`. If it's `1`, ask the user to quit the game: it would hold the mapping.
 
-- [ ] **Step 2: Install CyberCraft Tweaks 1.3.0, with the user's leave (Minecraft must be stopped)**
+- [x] **Step 2: Install CyberCraft Tweaks 1.3.0, with the user's leave (Minecraft must be stopped)**
 
 Ask the user to stop Minecraft if it's running, and whether 1.3.0 may replace 1.2.0 in the `CyberCraft` instance's mods.
 The old jar is renamed `.disabled`, as the Modrinth App disables a mod, so Fabric skips it and it can come back.
@@ -11864,7 +11864,7 @@ M="/c/Users/BLOXY/AppData/Roaming/ModrinthApp/profiles/CyberCraft/mods"; mv "$M/
 ```
 Expected: `cybercraft-tweaks-1.2.0.jar.disabled` and `cybercraft-tweaks-1.3.0.jar`.
 
-- [ ] **Step 3: Ask the user to start Minecraft**
+- [x] **Step 3: Ask the user to start Minecraft**
 
 The user starts the `CyberCraft` instance from the Modrinth App, and says when its title screen shows.
 ```bash
@@ -11872,7 +11872,7 @@ grep -E "cybercraft_tweaks|Mixin.*(error|fail)" /c/Users/BLOXY/AppData/Roaming/M
 ```
 Expected: Fabric's mod list with `cybercraft_tweaks 1.3.0`, and no mixin error.
 
-- [ ] **Step 4: Run step 5a's script**
+- [x] **Step 4: Run step 5a's script**
 
 ```bash
 L="/c/Users/BLOXY/AppData/Roaming/ModrinthApp/profiles/CyberCraft/logs/latest.log"; before=$(wc -l < "$L"); \
@@ -11895,18 +11895,18 @@ Give the command 6 minutes: it waits for the world, which the script enters. Exp
   Skyrim hit the player for 10.0 (2.0 Minecraft): health 20.0 -> 18.0`; then `… share 1.0: 18.0 -> 20.0`.
 - **The status:** `events: 1 explosions, 4 hits on actors, 0 deaths, …`, `0 inputs dropped`, and `exit: 0`.
 
-- [ ] **Step 5: Ask the user to stop Minecraft**
+- [x] **Step 5: Ask the user to stop Minecraft**
 
 Its window is hidden while `mclink` drives it, so the user stops it from the Modrinth App.
 
-- [ ] **Step 6: Record step 5a's results in `docs/spikes/2026-10-05-npcs-and-combat-results.md`**
+- [x] **Step 6: Record step 5a's results in `docs/spikes/2026-10-05-npcs-and-combat-results.md`**
 
 A "Step 5a" section, from `build/step5a/blasts.log` and `build/step5a/minecraft.log`: the versions, CyberCraft Tweaks
 1.3.0 among them; each check above with its numbers (each hit's damage against the formula, its distance and time after
 the blast, the push's time and hits, the health set and read back); anything that surprised, and what it means for step
 5b.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add docs/spikes/2026-10-05-npcs-and-combat-results.md \
@@ -11952,7 +11952,7 @@ The module's side of Part 3, in `scripts/BlockRender.reds`, version 6 (the spec'
 **Files:**
 - Modify: `scripts/BlockRender.reds`
 
-- [ ] **Step 1: Edit `scripts/BlockRender.reds`**
+- [x] **Step 1: Edit `scripts/BlockRender.reds`**
 
 ```swift
 // hides the game's crosshair, through Codeware where it's installed.
@@ -12287,7 +12287,7 @@ public class BlockRenderDrawAgain extends DelayCallback {
 // and to a blast's hits all it does to explosions, the NPC's explosion resistance included. One it dealt nothing says
 // why. Any thread.
 ```
-- [ ] **Step 2: Compile the module against the game's scripts, without and with Codeware**
+- [x] **Step 2: Compile the module against the game's scripts, without and with Codeware**
 
 ```bash
 cd /d/Cyberpunk-Minecraft/spikes/block-render && uv run --no-project python tools/check_reds.py E:/Cyberpunk2077 scripts | tail -1; \
@@ -12297,7 +12297,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && uv run --no-project python tool
 ```
 Expected: `compiled`, `without Codeware: exit 0` and `with Codeware: exit 0`.
 
-- [ ] **Step 3: Check that the compile catches a slip in `Push`, without and with Codeware**
+- [x] **Step 3: Check that the compile catches a slip in `Push`, without and with Codeware**
 
 ```bash
 cd /d/Cyberpunk-Minecraft/spikes/block-render && mkdir -p build/reds-slip \
@@ -12310,7 +12310,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && mkdir -p build/reds-slip \
 Expected: redscript's `[UNRESOLVED_METHOD]` at the slip's line, `BlockRender.reds:367:14`, then `failed` and
 `without Codeware: exit 1`; the same again, and `with Codeware: exit 1`.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -12336,7 +12336,7 @@ Nothing calls them until Task 46, and the module's own check, on its first call,
 **Files:**
 - Modify: `src/GameScript.h`, `src/GameScript.cpp`
 
-- [ ] **Step 1: Edit `src/GameScript.h`**
+- [x] **Step 1: Edit `src/GameScript.h`**
 
 ```cpp
 constexpr int32_t kModuleVersion = 5;  // BlockRenderNpcs.Version(), as this BlockRender needs it
@@ -12395,7 +12395,7 @@ struct BlastPush
 		kPushDead,
 		kVHealth,
 ```
-- [ ] **Step 2: Edit `src/GameScript.cpp`**
+- [x] **Step 2: Edit `src/GameScript.cpp`**
 
 ```cpp
 		{ "HideV", nullptr, { { "Bool" } }, { "Int32" } },
@@ -12517,7 +12517,7 @@ std::optional<int32_t> GameScript::BlastHit(uint64_t aEntity, double aAmount, co
 
 std::optional<int32_t> GameScript::Arm(bool aOn, std::string& aWhy)
 ```
-- [ ] **Step 3: Build and run the tests; they must pass**
+- [x] **Step 3: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -12527,7 +12527,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `448 test(s), 0 failure(s)`.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -12553,7 +12553,7 @@ The requests and the status for Part 3 (the spec's "Requests" and "Measurements 
 - Modify: `src/Requests.h`, `src/Requests.cpp`, `src/Status.h`, `src/Status.cpp`, `tests/TestRequests.cpp`,
   `tests/TestStatus.cpp`
 
-- [ ] **Step 1: Edit `tests/TestRequests.cpp`: `explode`**
+- [x] **Step 1: Edit `tests/TestRequests.cpp`: `explode`**
 
 ```cpp
 	CHECK(off && off->kind == cpmc::Request::Kind::Set && off->what == "npcs" && off->number == 0.0);
@@ -12579,7 +12579,7 @@ TEST(RequestsForBlasts)
 	CHECK_STR(error, "explode takes metres ahead of V, from 0 to 100, and Minecraft's radius, over 0 and up to 16 (TNT's is 4)");
 }
 ```
-- [ ] **Step 2: Edit `tests/TestStatus.cpp`: the blasts line, Minecraft's health and the bush rule**
+- [x] **Step 2: Edit `tests/TestStatus.cpp`: the blasts line, Minecraft's health and the bush rule**
 
 ```cpp
 	CHECK(Has(cpmc::FormatStatus(report), "v=shown: set hidev is 0"));
@@ -12621,7 +12621,7 @@ TEST(StatusWritesBlasts)
 	CHECK(Has(status, "0 unreadable; the bush rule leaves out sight-only shapes: 12 so far"));
 }
 ```
-- [ ] **Step 3: Build; it must fail**
+- [x] **Step 3: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -12630,7 +12630,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `error C2039: 'radius': is not a member of 'cpmc::Request'`.
 
-- [ ] **Step 4: Edit `src/Requests.h`**
+- [x] **Step 4: Edit `src/Requests.h`**
 
 ```cpp
 //   punch                      (spike 6: V's punch, what it's read from, and what hits are made with, into the log)
@@ -12667,7 +12667,7 @@ Expected: `error C2039: 'radius': is not a member of 'cpmc::Request'`.
 	uint32_t    id = 0;        // a hit's NPC: its number in SkyCraft's actor table
 	double      radius = 0.0;  // a blast's, as Minecraft gives one
 ```
-- [ ] **Step 5: Edit `src/Requests.cpp`**
+- [x] **Step 5: Edit `src/Requests.cpp`**
 
 ```cpp
 	}
@@ -12689,7 +12689,7 @@ Expected: `error C2039: 'radius': is not a member of 'cpmc::Request'`.
 	}
 	if (command == "mc")
 ```
-- [ ] **Step 6: Edit `src/Status.h`**
+- [x] **Step 6: Edit `src/Status.h`**
 
 ```cpp
 	uint64_t                       shapesUnreadable = 0;
@@ -12725,7 +12725,7 @@ Expected: `error C2039: 'radius': is not a member of 'cpmc::Request'`.
 // drive, v, positions, ground, solids, bodies, npcs, combat, blasts, ring, atlas, hud, latency, burst and processes); then
 // one structure line per structure:
 ```
-- [ ] **Step 7: Edit `src/Status.cpp`**
+- [x] **Step 7: Edit `src/Status.cpp`**
 
 ```cpp
 	                   aLink.controllerSearches, aLink.shapesKept, aLink.shapesLeft, aLink.shapesUnreadable);
@@ -12780,7 +12780,7 @@ std::string FormatBlasts(const LinkReport& aLink)
 	out += FormatCombat(aLink);
 	out += FormatBlasts(aLink);
 ```
-- [ ] **Step 8: Build and run the tests; they must pass**
+- [x] **Step 8: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -12790,7 +12790,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `450 test(s), 0 failure(s)`.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -12825,7 +12825,7 @@ The plugin's side of Part 3 (the spec's "The frame", "Part 3: explosions" and it
 **Files:**
 - Modify: `src/Plugin.cpp`, `CMakeLists.txt`
 
-- [ ] **Step 1: Edit `src/Plugin.cpp`**
+- [x] **Step 1: Edit `src/Plugin.cpp`**
 
 ```cpp
 // hidden, and with combat on V's unarmed weapon is drawn, so that hits carry it.
@@ -13272,7 +13272,7 @@ void ExplodeRequest(const cpmc::Request& aRequest)
 	report.blastKnock = g_blastKnock;
 	report.lastBlast = g_lastBlast;
 ```
-- [ ] **Step 2: Edit `CMakeLists.txt`: version 0.19.0**
+- [x] **Step 2: Edit `CMakeLists.txt`: version 0.19.0**
 
 ```cmake
 project(BlockRender VERSION 0.18.1 LANGUAGES C CXX)
@@ -13280,7 +13280,7 @@ project(BlockRender VERSION 0.18.1 LANGUAGES C CXX)
 ```cmake
 project(BlockRender VERSION 0.19.0 LANGUAGES C CXX)
 ```
-- [ ] **Step 3: Build and run the tests; they must pass**
+- [x] **Step 3: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -13290,7 +13290,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `450 test(s), 0 failure(s)`.
 
-- [ ] **Step 4: Check that BlockRender imports nothing from PhysX**
+- [x] **Step 4: Check that BlockRender imports nothing from PhysX**
 
 ```bash
 DUMPBIN="$(ls "/c/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/"*/bin/Hostx64/x64/dumpbin.exe | head -1)"
@@ -13299,7 +13299,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && MSYS_NO_PATHCONV=1 "$DUMPBIN" -
 ```
 Expected: `0`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -13321,7 +13321,7 @@ combat off): the line and the button showed as above, and neither with combat of
 **Files:**
 - Modify: `tools/blockrender_hud/init.lua`
 
-- [ ] **Step 1: Edit `tools/blockrender_hud/init.lua`**
+- [x] **Step 1: Edit `tools/blockrender_hud/init.lua`**
 
 ```lua
 -- bodies, the NPCs, combat, and V. Two folded sections hold the rest: "More controls" (the drawing mode, Minecraft's HUD,
@@ -13390,14 +13390,14 @@ local blasts = nil       -- the blasts line, with combat on: how many, and the l
             end
             if hideV ~= nil then
 ```
-- [ ] **Step 2: Check the overlay's syntax**
+- [x] **Step 2: Check the overlay's syntax**
 
 ```bash
 cd /d/Cyberpunk-Minecraft/spikes/block-render && luac -p tools/blockrender_hud/init.lua && echo ok
 ```
 Expected: `ok`.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -13445,7 +13445,7 @@ grep -E "SkyCraft: (Skyrim hit|hit|[0-9]+ Skyrim)|CyberCraft Tweaks|\[CHAT\]" "/
 **Files:**
 - Modify: `docs/spikes/2026-10-05-npcs-and-combat-results.md`
 
-- [ ] **Step 1: Deploy (the game must not be running)**
+- [x] **Step 1: Deploy (the game must not be running)**
 
 ```bash
 tasklist | grep -i -c "cyberpunk2077.exe"
@@ -13462,7 +13462,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default -DCP2
 ```
 Expected: `installed`. The second configure clears `CP2077_DIR` again.
 
-- [ ] **Step 2: In the game: the module and its natives**
+- [x] **Step 2: In the game: the module and its natives**
 
 Ask the user to start the `CyberCraft` instance, then the game, and to wait at the game's main menu. If a "REDScript
 compilation has failed" message box shows instead, ask the user to click OK and quit the game, and read redscript's log
@@ -13474,7 +13474,7 @@ grep -E "BlockRender|Codeware.Global|Compilation complete|ERROR" /e/Cyberpunk207
 Expected: the module's path and Codeware's among the files compiled, `Compilation complete`, and no `ERROR` line; in
 BlockRender's log, `BlockRender 0.19.0 loaded` and the seven natives added.
 
-- [ ] **Step 3: In the game: load, link, and combat on**
+- [x] **Step 3: In the game: load, link, and combat on**
 
 Ask the user to load the save on the busy pavement, and click Link. Then send `set combat 1`.
 Expected:
@@ -13483,7 +13483,7 @@ Expected:
 - in the status, `blasts=on: 0 taken, blast power 0.50; none yet`, and in the ground line `the bush rule leaves out
   sight-only shapes: … so far`; the overlay shows the Blasts line, and "TNT 5 m ahead" under "More controls".
 
-- [ ] **Step 4: In the game: the opening check, knockdowns**
+- [x] **Step 4: In the game: the opening check, knockdowns**
 
 Outside build mode, ask the user to face a person standing 4 to 6 m away, with others about, and to click "TNT 5 m
 ahead" (or send `explode 5 4`). Expected:
@@ -13498,13 +13498,13 @@ If D is 0, or the user saw nobody fall: send `set blastknock 1` (`set blastknock
 knocked down directly too`) and again, and note whether they fall now (the spec's risk 13). Ask what the people did
 after: fled, fought, called the police.
 
-- [ ] **Step 5: In the game: the opening check, the push**
+- [x] **Step 5: In the game: the opening check, the push**
 
 Ask the user to face a parked car, with bins or boxes by it, about 5 m away, and click "TNT 5 m ahead" again. Expected:
 the log's two lines as in Step 4; on screen, the car rocked or shoved, and the bins and boxes thrown. Ask the user what
 moved, and how far.
 
-- [ ] **Step 6: In the game: the opening check, Minecraft's health from V's**
+- [x] **Step 6: In the game: the opening check, Minecraft's health from V's**
 
 V's health must be below full: if the status's health says full, ask the user to let V take a little damage outside
 build mode, a fall from a few metres, say. Then ask the user to press F8. Expected:
@@ -13516,7 +13516,7 @@ build mode, a fall from a few metres, say. Then ask the user to press F8. Expect
 
 Then F8 again.
 
-- [ ] **Step 7: In the game: the opening check, a bush and a wall**
+- [x] **Step 7: In the game: the opening check, a bush and a wall**
 
 Ask the user to stand V in a bush, and send `shapes`. Expected, in the log, for the bush's foliage: `shapes: … sphere of
 actor …; the shape: sphere of radius … at (…); …; query filter 0:0:80000:0, simulation filter 0:0:0:0; the exporter
@@ -13524,7 +13524,7 @@ leaves it out, with sight-only shapes`; a capsule, if the bush has one, with its
 `shapes` again: the wall's shapes end `; the exporter keeps it`. Then in build mode: Minecraft's player walks through the
 bush, and not through the wall. Ask the user.
 
-- [ ] **Step 8: In the game: TNT among NPCs**
+- [x] **Step 8: In the game: TNT among NPCs**
 
 Ask the user where the TNT should come from:
 - **by hand:** TNT and a flint and steel in hotbar slots 8 and 9 (mouse 5 and 4), with the user's leave, to place
@@ -13547,33 +13547,33 @@ On screen: those near the TNT killed and thrown, those at the edge knocked down,
 health unmoved (the status's health line). Minecraft's hearts drop only if Minecraft's player was within the blast. Ask
 the user what they saw, and how it looked.
 
-- [ ] **Step 9: In the game: the blast power by feel**
+- [x] **Step 9: In the game: the blast power by feel**
 
 If the user wants, send `set blastpower 0.75` (`set blastpower 0.75: a blast's hits start at V's punch x Minecraft's
 damage^0.75: TNT's 57 at its centre 20.74 punches, its 1 at the edge one punch`) and set off another TNT, then `set
 blastpower 0.5`, or the value the user prefers, and note it.
 
-- [ ] **Step 10: In the game: the blades' heat after build mode**
+- [x] **Step 10: In the game: the blades' heat after build mode**
 
 Outside build mode, ask the user to draw the blades (slot 4) and see their heat, then press F8, and F8 again. Expected,
 as build mode ends: `combat: V's unarmed weapon put away: put away, and drawn again in a second, so that the game starts
 the effects it starts as it's drawn`; on screen, the blades put away and drawn again, with their heat. Ask the user.
 
-- [ ] **Step 11: In the game: combat off, and unlinking**
+- [x] **Step 11: In the game: combat off, and unlinking**
 
 Send `set combat 0`, then ask the user to click Unlink. Expected: `blasts=off: Minecraft's blasts are logged, not
 applied`; then `none listed: not linked`.
 
-- [ ] **Step 12: Ask the user to quit the game and stop Minecraft**
+- [x] **Step 12: Ask the user to quit the game and stop Minecraft**
 
-- [ ] **Step 13: Read the log once more**
+- [x] **Step 13: Read the log once more**
 
 ```bash
 L=$(ls -t /e/Cyberpunk2077/red4ext/logs | grep -i blockrender | head -1); grep -E "module:|combat:|build: V's|explosion at|blast|hit on NPC|shapes:|explode|set (blast|bush)" "/e/Cyberpunk2077/red4ext/logs/$L" | head -400
 ```
 Everything the steps above logged, for the results.
 
-- [ ] **Step 14: Record the results in `docs/spikes/2026-10-05-npcs-and-combat-results.md`**
+- [x] **Step 14: Record the results in `docs/spikes/2026-10-05-npcs-and-combat-results.md`**
 
 A "Step 5b" section: each check above with its outcome and numbers: the knockdowns, with and without `blastknock`, and
 what the people did; the explosion drawn or not, and its sound; the push on the car and the props; Minecraft's health as
@@ -13581,7 +13581,7 @@ build mode started; the bush and the wall, with `shapes`' words; the TNT, its hi
 started, what the pipeline dealt, the dead thrown and those knocked down; the blast power by feel, and the value kept;
 the blades' heat; and anything that surprised. Update the spike's answer at the top.
 
-- [ ] **Step 15: Commit**
+- [x] **Step 15: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add docs/spikes/2026-10-05-npcs-and-combat-results.md docs/superpowers/plans/2026-10-05-npcs-and-combat.md \
