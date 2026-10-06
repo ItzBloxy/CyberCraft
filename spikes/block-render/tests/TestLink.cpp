@@ -111,6 +111,9 @@ struct FakeMinecraft
 
 	void Explode(float aX, float aY, float aZ, float aRadius) { Event({ proto::kEvExplosion, 0, aX, aY, aZ, aRadius, 0, 0 }); }
 
+	// Spike 7: the world-entity table as SkyLink.writeWorldEntities leaves it.
+	void World(const proto::WorldEntities& aTable) { std::memcpy(base + proto::kOffWorldEntities, &aTable, sizeof aTable); }
+
 	proto::ActorTable Actors()
 	{
 		proto::ActorTable table;
@@ -152,6 +155,9 @@ struct Sink : LinkSink
 		huds.push_back({ aFrame.width, aFrame.height });
 		hudPixels = aFrame.pixels;
 	}
+	void Texture(const TextureImage& aTexture) override { textures.push_back({ aTexture.id, aTexture.width }); }
+	void Scene(const SceneMessage& aScene) override { scenes.push_back({ aScene.origin.x, aScene.batches.size(), aScene.vertexCount }); }
+	void WorldEntities(const WorldTable& aTable) override { worlds.push_back(aTable); }
 	void Log(const std::string& aLine) override { log.push_back(aLine); }
 
 	int Count(const std::string& aStart) const  // log lines starting with aStart
@@ -177,6 +183,15 @@ struct Sink : LinkSink
 	std::vector<proto::McEvent>                deaths;
 	std::vector<std::pair<uint32_t, uint32_t>> huds;
 	const uint8_t*                             hudPixels = nullptr;  // the last HUD image's
+	struct SeenScene
+	{
+		double   originX;
+		size_t   batches;
+		uint32_t vertices;
+	};
+	std::vector<std::pair<uint32_t, uint32_t>> textures;  // id and width
+	std::vector<SeenScene>                     scenes;
+	std::vector<WorldTable>                    worlds;  // one an update
 	std::vector<std::string>                   log;
 };
 
@@ -238,6 +253,28 @@ std::vector<uint8_t> SectionPayload(int32_t aX, uint32_t aVertices, uint32_t aCl
 	std::memcpy(payload.data() + 4, &zero, 4);
 	std::memcpy(payload.data() + 8, &zero, 4);
 	std::memcpy(payload.data() + 12, &aClaimed, 4);
+	return payload;
+}
+
+// Spike 7: a kRenTexture payload, aId of aSide x 1, as AvatarExporter.textureId sends it.
+std::vector<uint8_t> TexturePayload(uint32_t aId, uint32_t aSide)
+{
+	std::vector<uint8_t> payload(16 + aSide * 4, 0x7F);
+	const uint32_t       header[4] = { aId, aSide, 1, 0 };
+	std::memcpy(payload.data(), header, sizeof header);
+	return payload;
+}
+
+// A kRenScene payload from origin x aX, its one batch of texture aTexture holding aCount of its aVertices vertices.
+std::vector<uint8_t> ScenePayload(double aX, uint32_t aTexture, uint32_t aCount, uint32_t aVertices)
+{
+	std::vector<uint8_t> payload(32 + 16 + aVertices * sizeof(Vertex));
+	const double         origin[3] = { aX, 6.0, 2007.0 };
+	const uint32_t       counts[2] = { 1, aVertices };
+	const uint32_t       batch[4] = { aTexture, 0, aCount, 0 };
+	std::memcpy(payload.data(), origin, sizeof origin);
+	std::memcpy(payload.data() + 24, counts, sizeof counts);
+	std::memcpy(payload.data() + 32, batch, sizeof batch);
 	return payload;
 }
 
@@ -503,17 +540,17 @@ TEST(LinkStepsOverOtherMessagesAndKeepsToTheBudget)
 	minecraft.Send(proto::kRenAtlas, Atlas2x2());
 	for (int i = 0; i < 3; ++i)
 	{
-		minecraft.Send(proto::kRenScene, std::vector<uint8_t>(4000));
+		minecraft.Send(proto::kRenAtlasRegion, std::vector<uint8_t>(4000));
 		minecraft.Send(proto::kRenSection, SectionPayload(i, 3, 3));
 	}
 	LinkSettings settings;
 	settings.ringBudget = 100;  // the atlas (32 bytes) and one section (120 bytes) reach it
 	link.Update(At(1.0), settings, sink);
 	CHECK_EQ(sink.sections.size(), size_t(1));
-	CHECK_EQ(link.State().messages[proto::kRenScene], 1ull);  // stepped over, without counting toward the budget
+	CHECK_EQ(link.State().messages[proto::kRenAtlasRegion], 1ull);  // stepped over, without counting toward the budget
 	link.Update(At(1.1), kSettings, sink);
 	CHECK_EQ(sink.sections.size(), size_t(3));
-	CHECK_EQ(link.State().messages[proto::kRenScene], 3ull);
+	CHECK_EQ(link.State().messages[proto::kRenAtlasRegion], 3ull);
 	CHECK_EQ(link.State().messages[proto::kRenSection], 3ull);
 }
 
@@ -531,6 +568,91 @@ TEST(LinkRejectsABadPayloadAndCarriesOn)
 	CHECK_EQ(sink.sections.size(), size_t(1));
 	CHECK_EQ(sink.sections[0].x, 2);
 	CHECK_EQ(link.State().resyncs, 0ull);
+}
+
+TEST(LinkPassesOnTexturesAndScenesOnceTheAtlasIsSeen)
+{
+	FakeMinecraft minecraft;
+	Link          link(minecraft.base);
+	Sink          sink;
+	minecraft.Send(proto::kRenTexture, TexturePayload(1, 4));  // left from a link we never saw: its ids aren't this one's
+	minecraft.Send(proto::kRenScene, ScenePayload(-130.0, 1, 3, 3));
+	link.Update(At(1.0), kSettings, sink);
+	CHECK(sink.textures.empty());
+	CHECK(sink.scenes.empty());
+	CHECK_EQ(link.State().entitiesBeforeAtlas, 2ull);
+	minecraft.Send(proto::kRenClearAll, {});
+	minecraft.Send(proto::kRenAtlas, Atlas2x2());
+	minecraft.Send(proto::kRenTexture, TexturePayload(1, 8));
+	minecraft.Send(proto::kRenScene, ScenePayload(-120.0, 1, 6, 6));
+	link.Update(At(1.1), kSettings, sink);
+	CHECK_EQ(sink.textures.size(), size_t(1));
+	CHECK_EQ(sink.scenes.size(), size_t(1));
+	CHECK_EQ(link.State().entitiesBeforeAtlas, 2ull);
+	CHECK_EQ(link.State().messages[proto::kRenScene], 2ull);
+	if (sink.textures.size() != 1 || sink.scenes.size() != 1)
+	{
+		return;
+	}
+	CHECK_EQ(sink.textures[0].first, 1u);
+	CHECK_EQ(sink.textures[0].second, 8u);
+	CHECK_EQ(sink.scenes[0].originX, -120.0);
+	CHECK_EQ(sink.scenes[0].batches, size_t(1));
+	CHECK_EQ(sink.scenes[0].vertices, 6u);
+}
+
+TEST(LinkRejectsABadSceneAndCarriesOn)
+{
+	FakeMinecraft minecraft;
+	Link          link(minecraft.base);
+	Sink          sink;
+	minecraft.Send(proto::kRenAtlas, Atlas2x2());
+	minecraft.Send(proto::kRenScene, ScenePayload(-120.0, 0, 9, 6));  // its batch runs past its 6 vertices
+	minecraft.Send(proto::kRenTexture, TexturePayload(2, 4));
+	link.Update(At(1.0), kSettings, sink);
+	CHECK(sink.scenes.empty());
+	CHECK_EQ(link.State().rejected, 1ull);
+	CHECK(link.State().lastRejected.find("batch 0") != std::string::npos);
+	CHECK_EQ(sink.textures.size(), size_t(1));
+}
+
+TEST(LinkReadsTheWorldTableWhileMinecraftIsInItsWorld)
+{
+	FakeMinecraft minecraft;
+	Link          link(minecraft.base);
+	Sink          sink;
+	minecraft.Beat(77, 1000);
+	minecraft.State(proto::kMcInWorld);
+	proto::WorldEntities table{};
+	table.seq = 2;
+	table.count = 3;
+	table.entities[0].kind = proto::kWeItem;
+	table.entities[1].kind = 9;  // no such kind: left out
+	table.entities[2].kind = proto::kWeShadow;
+	table.hasSelection = 1;
+	minecraft.World(table);
+	link.Update(At(1.0), kSettings, sink);
+	CHECK_EQ(link.State().worldEntities, size_t(2));
+	CHECK_EQ(link.State().worldLeftOut, 1u);
+	CHECK(link.State().outline);
+	table.seq = 3;  // mid-write every time it's looked at: the last good table stays
+	minecraft.World(table);
+	link.Update(At(1.1), kSettings, sink);
+	CHECK_EQ(link.State().worldTorn, 1ull);
+	minecraft.State(0);  // out of its world: nothing of the table is kept
+	link.Update(At(1.2), kSettings, sink);
+	CHECK_EQ(link.State().worldEntities, size_t(0));
+	CHECK(!link.State().outline);
+	CHECK_EQ(sink.worlds.size(), size_t(3));  // one an update
+	if (sink.worlds.size() != 3)
+	{
+		return;
+	}
+	CHECK_EQ(sink.worlds[0].entities.size(), size_t(2));
+	CHECK(sink.worlds[0].outline.has_value());
+	CHECK_EQ(sink.worlds[1].entities.size(), size_t(2));
+	CHECK(sink.worlds[2].entities.empty());
+	CHECK(!sink.worlds[2].outline.has_value());
 }
 
 TEST(LinkKeepsMinecraftsSolids)

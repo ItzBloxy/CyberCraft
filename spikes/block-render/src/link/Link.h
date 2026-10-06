@@ -11,6 +11,7 @@
 #include "link/Rings.h"
 #include "link/Solids.h"
 #include "link/Ticks.h"
+#include "link/WorldTable.h"
 
 #include <array>
 #include <atomic>
@@ -26,8 +27,9 @@
 // adds build mode's drive (its spec's "Part 1"): one teleport, then Minecraft drives and the link says where V goes;
 // Night City's ground (its "Part 2"): the city's collision instead of the floor, read around the centre and sent as it
 // changes; and Minecraft's solid blocks by section (its "Part 3"), for V's bodies. Spike 6 writes Night City's NPCs into
-// SkyCraft's actor table, and passes on Minecraft's hits on them and its player's death. It works on the mapping's
-// memory, so the tests give it plain memory with a fake Minecraft.
+// SkyCraft's actor table, and passes on Minecraft's hits on them and its player's death. Spike 7 passes on Minecraft's
+// entity textures, its scene of entities and particles, and its world-entity table. It works on the mapping's memory,
+// so the tests give it plain memory with a fake Minecraft.
 namespace cpmc::link
 {
 // What Minecraft gets as the game's shape (set ground).
@@ -71,6 +73,9 @@ public:
 	virtual void HitActor(const proto::McEvent&) {}    // spike 6: Minecraft hit an NPC's stand-in this tick
 	virtual void PlayerDied(const proto::McEvent&) {}  // spike 6: Minecraft's player died, killed by formId, or 0
 	virtual void Hud(const HudFrame&) {}
+	virtual void Texture(const TextureImage&) {}      // spike 7: an entity texture, once the atlas has been seen
+	virtual void Scene(const SceneMessage&) {}        // spike 7: this Minecraft frame's entities and particles, likewise
+	virtual void WorldEntities(const WorldTable&) {}  // spike 7: every update; empty while Minecraft isn't in its world
 	virtual void Log(const std::string&) {}
 };
 
@@ -182,6 +187,12 @@ public:
 		uint64_t                     translucentDropped = 0;
 		size_t                       solidSections = 0;  // Minecraft's sections with solid blocks, kept (spike 5's "Part 3")
 		uint64_t                     solidBlocks = 0;    // and their solid blocks
+		uint64_t                     entitiesBeforeAtlas = 0;  // spike 7: textures and scenes from before the atlas, skipped
+		// Spike 7: the world-entity table, as the last update read it
+		size_t                       worldEntities = 0;  // its records that passed the checks
+		uint32_t                     worldLeftOut = 0;   // and those that didn't
+		uint64_t                     worldTorn = 0;      // updates that found it mid-write every time, since the start
+		bool                         outline = false;    // it has the targeted block's outline
 		// Events, input, commands and the HUD
 		uint64_t              explosions = 0;
 		uint64_t              hitEvents = 0;    // spike 6: kEvHitActor
@@ -229,6 +240,7 @@ private:
 	std::atomic<uint64_t> inputsDropped_{ 0 };
 	Status                status_;
 	Solids                solids_;
+	WorldTable            world_;  // the last good table read, while Minecraft is in its world
 	bool                  wasThere_ = false;
 	uint32_t              lastPid_ = 0;
 	bool                  wasInGame_ = false;

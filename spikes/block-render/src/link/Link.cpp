@@ -368,6 +368,28 @@ void Link::Update(const Frame& aFrame, const LinkSettings& aSettings, LinkSink& 
 		problemLoggedAt_ = aFrame.now;
 	}
 
+	// Spike 7: the world-entity table, read while Minecraft is in its world, where it writes the table each frame.
+	// Otherwise nothing of it is kept, so nothing stale is drawn.
+	if (status_.inWorld)
+	{
+		if (const auto table = ReadWorldEntities(base_))
+		{
+			world_ = CheckWorldTable(*table);
+		}
+		else
+		{
+			++status_.worldTorn;  // mid-write every time: the last good table stays
+		}
+	}
+	else
+	{
+		world_ = {};
+	}
+	status_.worldEntities = world_.entities.size();
+	status_.worldLeftOut = world_.leftOut;
+	status_.outline = world_.outline.has_value();
+	aSink.WorldEntities(world_);
+
 	if (aFrame.takeHud && there)
 	{
 		if (const auto frame = overlay_.Acquire())
@@ -434,8 +456,35 @@ bool Link::Take(const RingMessage& aMessage, const LinkSettings& aSettings, Link
 			reject();
 		}
 		return true;
+	case proto::kRenTexture:
+	case proto::kRenScene:
+		if (!status_.atlasSeen)
+		{
+			++status_.entitiesBeforeAtlas;  // from before Minecraft's clear: SkyCraft gives its ids again after it
+			return false;
+		}
+		if (aMessage.type == proto::kRenTexture)
+		{
+			if (const auto texture = ParseTexture(aMessage.payload, error))
+			{
+				aSink.Texture(*texture);
+			}
+			else
+			{
+				reject();
+			}
+		}
+		else if (const auto scene = ParseScene(aMessage.payload, error))
+		{
+			aSink.Scene(*scene);
+		}
+		else
+		{
+			reject();
+		}
+		return true;
 	default:
-		return false;  // atlas patches, lights, digging, textures, avatar, scene, ragdoll: stepped over
+		return false;  // atlas patches, lights, digging, avatar, ragdoll: stepped over
 	}
 }
 
