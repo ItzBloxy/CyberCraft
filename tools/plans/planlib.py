@@ -5,7 +5,8 @@ A step's title says what it does:
 - Edit `path`: the step's code blocks are (old, new) pairs, applied in order; each old block must occur exactly once.
 - Delete `path`: the file is deleted.
 - Copy `from` to `to`: the file is copied unchanged.
-Paths are relative to spikes/block-render/, except extern/... and docs/..., which are relative to the repo root.
+Paths are relative to spikes/block-render/, except extern/..., docs/... and minecraft/..., which are relative to the
+repo root.
 Files are written with LF line endings (the repo's text=auto takes care of the rest).
 """
 import re
@@ -14,7 +15,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 FENCE = re.compile(r"^(`{3,})[a-z]*\n(.*?)^\1[ \t]*$", re.M | re.S)
-PATH = re.compile(r"`([^`]+\.(?:h|c|cpp|txt|md|py|json|hlsl|lua|reds))`")
+PATH = re.compile(r"`([^`]+\.(?:h|c|cpp|txt|md|py|json|hlsl|lua|reds|java|sh))`")
 TASK = re.compile(r"^### Task (\d+):(.*)$", re.M)
 STEP = re.compile(r"^- \[[ x]\] \*\*Step (\d+): (.+?)\*\*\s*$", re.M)
 
@@ -48,7 +49,7 @@ def read_plan(plan_path):
 
 def target(repo, path):
     repo = Path(repo)
-    return repo / path if path.startswith(("extern/", "docs/")) else repo / "spikes" / "block-render" / path
+    return repo / path if path.startswith(("extern/", "docs/", "minecraft/")) else repo / "spikes" / "block-render" / path
 
 
 def is_file_step(step):

@@ -86,5 +86,21 @@ scratchpad, where the scratch copy was `verify/`, beside `plans/`, and the snaps
   `status.txt` in the current folder, and prints the lines and buttons the overlay shows: `lua hud_check.lua
   <path to init.lua>`.
 
+**Spike 6's Part 3 versions** replaced `planlib.py`, `gen_plan.py`, `run_plan.py`, `mutate.py`, `b.sh` and `fold.sh`,
+and added `assemble3.py`. Their paths point at that session's scratchpad, where the scratch copy was `verify/` beside
+`plans/`, with Part 3's tasks tagged `p3-t38` to `p3-t47`: adapt before reuse.
+- **`planlib.py` and `gen_plan.py`** take `minecraft/` paths from the repo's root, as they take `extern/` and `docs/`,
+  and Java and shell files.
+- **`run_plan.py`** runs a step titled "Build CyberCraft Tweaks" as it runs the module's compile: its bash block, and
+  every quoted text of its Expected paragraph must be in what it printed. Its log is `<mode>_p3.log`.
+- **`mutate.py`** has Part 3's list (Tasks 38 to 40 and 45, 38 mutations).
+- **`fold.sh`** works on `verify/` and the tags `p3-t<n>`. A task with no code (one with the user) needs a tag of its
+  own on the task before's commit first, as `p3-t42` was put on `p3-t41`'s.
+- **`assemble3.py`** puts a generated part after Task 37 and before "Found while planning", brings the plan's header and
+  "Before you start" up to Part 3, and adds "Found while planning Part 3" at the end.
+
+A step whose title starts with "Write", "Edit", "Delete" or "Copy" is a file step to all of these tools: a step that
+records results by hand is titled "Record …".
+
 The module's offline compile itself is `spikes/block-render/tools/check_reds.py`, with Codeware's scripts as an extra
 folder for the parts that need Codeware.

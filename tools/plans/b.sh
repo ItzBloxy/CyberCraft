@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Build and test the scratch copy of spikes/block-render. Usage: b.sh [project dir] [configure] [clean]
 S="$(cd "$(dirname "$0")" && pwd)"
-B="${1:-$S/verify/spikes/block-render}"
+B="${1:-$S/../verify/spikes/block-render}"
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
 cd "$B" || exit 1
 if [ "$2" = "configure" ] || [ ! -d build ]; then

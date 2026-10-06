@@ -8,8 +8,11 @@ those changes. Planning Part 1 changed or settled more, which "Changes while pla
 ("Changes from step 2's first run") and planning Part 2 ("Changes while planning Part 2"); the sections above include
 those too. A deep review of Part 2's plan, before step 4, changed how Minecraft's hits land, with the user's decisions:
 "Changes from the deep review of Part 2" says what and why, and the sections above include it. Step 4 then passed
-with three fixes to make, which the user chose how to make: "Changes from step 4", at the very end, says what they are,
-and the sections above include them.
+with three fixes to make, which the user chose how to make: "Changes from step 4" says what they are, and the sections
+above include them. Planning Part 3 found that the game measures an explosion's knockdowns from the hit's source object,
+and the user chose how Minecraft's blasts knock NPCs down instead, how hard their hits start, and to take the follow-ups
+Part 2 left with Part 3: "Changes while planning Part 3", at the very end, says what and why, and the sections above
+include it.
 
 ## Purpose
 
@@ -39,7 +42,8 @@ It has three parts:
 2. **Combat both ways:** Minecraft's hits land on NPCs as V's; in build mode the game's hits on V go to Minecraft's
    player, and Minecraft's death kills V.
 3. **Explosions:** Minecraft's blasts knock down and throw NPCs, and push cars and props, through the game's own
-   explosion code.
+   explosion code. Part 3 also takes the follow-ups Part 2 left: Minecraft's health from V's as build mode starts,
+   bushes out of Minecraft's collision, and the blades' heat after build mode.
 
 Each is tested against something real as soon as it's built (see "The steps").
 
@@ -86,7 +90,8 @@ Each is tested against something real as soon as it's built (see "The steps").
 - **Minecraft's fire on NPCs:** a hit's fire flag (Fire Aspect, flaming arrows) isn't carried over, and NPCs don't burn
   in Minecraft's lava or fire as SkyCraft's do.
 - **Vehicles as targets,** and anything Minecraft's player gets from a kill (loot, experience).
-- **Changes to SkyCraft's mod.** Protocol 11 stays. CyberCraft Tweaks changes only if Minecraft has to; none is planned.
+- **Changes to SkyCraft's mod.** Protocol 11 stays. CyberCraft Tweaks changes only if Minecraft has to: Part 3's
+  follow-up has it set Minecraft's player's health (1.3.0), which SkyCraft has no input for.
 - **Only these versions:** game 2.31, SkyCraft 0.1.2, Minecraft 26.3, and the PhysX DLLs spike 1 audited.
 
 ## Environment (checked on 2026-10-05)
@@ -162,7 +167,8 @@ From `combat/SkyCombat.java`, `combat/SkyrimActorEntity.java`, `client/ProxySync
   killing damage, or 0.
 - **Explosions** (`ServerExplosionMixin`): at the end of `ServerExplosion.explode`, after the blast has hurt every
   entity it reached, `kEvExplosion` with its centre and radius (the explosion's power: 4 for TNT). The stand-ins' hits
-  from it follow at that tick's end.
+  from it follow at that tick's end. A stand-in takes a blast's damage as any other (it doesn't ignore explosions), with
+  no knockback: a blast pushes an entity (`pushFromExplosion`) rather than knocking it back.
 - **Of a record, SkyCraft's Minecraft side reads** only the formId, the feet, yaw, size, name and dead flag. The health,
   level and other flags aren't read.
 
@@ -306,14 +312,52 @@ From the decompiled 2.31 scripts; every function named here was read there.
   - `gamedataAttackType`: `QuickMelee`, `StrongMelee`, `Melee`, `GuardBreak`, `WhipAttack`, `ChargedWhipAttack`,
     `Reflect`, `Ranged`, `Thrown`, `Direct`, `Hack`, `Explosion`, `PressureWave`, `Effect` and `ForceKill`.
 - **Explosions** (`cyberpunk/devices/explosive/ExplosiveDevice.swift`,
-  `cyberpunk/items/combat_gadgets/combatGadgetHelper.swift`, `cyberpunk/managers/rpgManager.swift`):
+  `cyberpunk/items/combat_gadgets/combatGadgetHelper.swift`, `…/combat_gadgets/mines/claymoreMine.swift`,
+  `…/combat_gadgets/fragGrenade.swift`, `cyberpunk/managers/rpgManager.swift`,
+  `core/gameplay/effectors/custom/initiateCyberwareExplosionEffector.swift`):
   - an exploding device makes its attack in `DoAttack`: `RPGManager.PrepareGameEffectAttack(game, instigator, source,
     attack record, position, hit flags)`, then `StartAttack`;
   - and its push in `DoPhysicsPulse`: `CombatGadgetHelper.SpawnPhysicalImpulse`, which runs the game effect
     `physicalImpulseSphere` with a radius and a position;
   - its effects come from its own effect resources (`SpawnVFXs`);
-  - `PrepareGameEffectAttack` takes the radius from the attack record and puts the hit flags in the effect's data;
-    `CombatGadgetHelper.SpawnAttack` sets a radius of its own.
+  - `PrepareGameEffectAttack` takes the radius from the attack record and puts the hit flags in the effect's data, where
+    they reach its hits: `CheckForQuickExit` reads a grenade's `CanDamageSelf` and a device's `FriendlyFire` there.
+    `CombatGadgetHelper.SpawnAttack` sets a radius of its own. Both take the position from their source object and set
+    it in the effect's shared data, where any point will do;
+  - a claymore explodes with `Attacks.FragGrenade` through `SpawnAttack`, from V, then `SpawnPhysicalImpulse`, its own
+    metadata event and `AudioSystem.PlayShockwave(n"explosion", position)`; the cyberware explosion the same, with an
+    effect event on its owner for its look. A frag grenade draws no explosion in script (`SpawnVisualEffectsOnDetonation`
+    draws only the piercing and smoke grenades'), so its look comes from its attack's game effect or its own entity,
+    which the scripts don't show;
+  - perks' explosions on a target (`TriggerAttackOnTargetEffect`, `TriggerAttackOnAttackEffect`) come from V as their
+    source too, at the target, and force a stagger with `SendForcedHitDataToAIBehavior`.
+- **How an NPC takes an explosion hit** (`damageSystem.swift`, `cyberpunk/NPC/components/hitReactionComponent.swift`):
+  - in the damage pipeline, `ProcessDamageReduction` applies the target's `ExplosionResistance` to a hit of type
+    `Explosion`; `ProcessDeviceExplosionDamageToTierNPC` overwrites one whose attack record's hit flags hold
+    `OverrideNPCDamageBasedOnTiers` with a share of the NPC's health; `CheckForQuickExit` stops a hit on its own
+    instigator; and `PostProcess` applies the attack record's status effects that apply at once (`ProcessStatusEffects`),
+    on a hit that deals no damage too, unless the target is immune, friendly to V, or blocked it;
+  - `ProcessPipeline` runs the hit reaction after `Process`, which a `DealNoDamage` hit skips; `GameObject.ReactToHitProcess`
+    then queues the hit for the NPC's hit reaction component (`EvaluateHit`), unless it's flagged `DisableNPCHitReaction`;
+  - a **strong explosion** (`IsStrongExplosion`: of type `Explosion` and not flagged `WeakExplosion`) is measured from the
+    hit's **source object**: within 3 m of it, or with enough of the hit **weapon's** `KnockdownImpulse` for the distance,
+    it knocks the NPC down, plays the explosion's reactions (`EAIHitIntensity.Explosion`, the whole body), and within
+    1.7 m gibs an NPC it killed (`ProcessExplosionDismembement`); any explosion death dismembers, by the game's presets;
+  - otherwise a knockdown needs the attack's hit reaction severity at 3 or more, or impulse and damage past the NPC's
+    thresholds (`GetReactionType`), and a hit with no weapon has no impulse (`GetPhysicalImpulse`);
+  - an NPC that dies with a `Knockdown` status effect on it ragdolls at once (`SendDataToAIBehavior`: `ForcedRagdoll`);
+    otherwise it plays a death animation (`AIDeathReactionsTask`);
+  - `ForcedHitReactionEvent`, queued on an NPC, forces a reaction (`OnForcedHitReaction`), and
+    `SendForcedHitDataToAIBehavior` sends one to its AI; `CreateForceRagdollEvent` and `CreateRagdollApplyImpulseEvent`
+    (`core/animation/animCommunication.swift`) are the global functions the hit reactions and death tasks ragdoll and
+    throw NPCs with.
+- **The melee state machine puts arm cyberware away** (`meleeTransitions.swift`): out of combat in a public zone, after a
+  second idle, `MeleePublicSafe` asks for `UnequipWeapon` once `timeToUnequipMeleeware` has gone in it. Nothing a script
+  calls resets that; the state machine's `InPublicZone` parameter (`PlayerPuppet.OnEnterPublicZone`) decides it, and
+  also how NPCs take V's drawn weapon.
+- **Drawing again, and later:** `EquipmentManipulationAction.ReequipWeapon` asks for the last weapon used
+  (`GetItemIDfromEquipmentManipulationAction`), not a fresh draw of the one held; `DelaySystem.DelayCallback` calls a
+  script's `DelayCallback` later (`DelayedAnimFeatureCall`, `equipment.swift`).
 - **Scriptable systems** (`core/systems/scriptableSystem.swift`): a script class extending `ScriptableSystem` gets
   `OnAttach`, `OnDetach` and `OnRestored`, and is found with `GameInstance.GetScriptableSystemsContainer(game).Get(name)`.
   Only fields marked `persistent` are saved. Many of the game's own systems are plain script classes like that
@@ -321,6 +365,23 @@ From the decompiled 2.31 scripts; every function named here was read there.
   so step 2's opening check confirms a mod's is made too.
 - **For later:** `NavigationSystem.AddObstacle(position, radius, height, agentSize) -> ref<NavigationObstacle>`
   (`core/systems/navigationSystem.swift`), for NPCs routing around blocks.
+
+### The game's data
+
+From the TweakDB sources REDmod ships in the game's folder (`tools/redmod/tweaks`; dated June 2025, before 2.31, so step
+5b confirms what it uses):
+- **Explosion attacks** (`attack/attacks.tweak`, `attack/explosions.tweak`): `Attacks.BaseExplosion` is of type
+  `Explosion`, with the game effect `explosions`, the hit flag `Explosion` and a range of 3.2. `Attacks.BaseFragExplosion`
+  adds the effect tag `frag_explosion`, the status effect `BaseStatusEffect.ExplosionStun` (0.5 s) at once, and the hit
+  flags `DetonateGrenades` and `FragGrenade`; the player's `Attacks.FragGrenade` adds a hit reaction severity of 1 to 3 and
+  `PlayerGrenadeDamageOverride`.
+- **The knockdown grenade's attack,** `Attacks.FragGrenadeKnockdown`: `BaseFragExplosion` with the status effect
+  `BaseStatusEffect.Knockdown` at once instead of the stun, and no hit flag that overrides an NPC's damage.
+- **`BaseStatusEffect.Knockdown`** (`status_effect/knockdowns.tweak`): of the type `Knockdown`, 2.5 s, with its own effect
+  and sound, run by the NPC's AI at priority 8.5 as unstoppable; not for a boss in a phase that forbids it, nor an NPC
+  with `KnockdownImmunity`, which is also its immunity stat.
+- **`weapons.E3_grenade`** (`weapons.tweak`): `damageRadius` 7 and `physicalImpulseRadius` 5, the claymore's and the
+  cyberware explosion's radii.
 
 ### redscript and RED4ext
 
@@ -366,7 +427,12 @@ From the user's jar:
   diamond's attack bonus is 3.0, so it does 1 + 3 + 3 = 7, at 1.6 attacks a second; Minecraft scales a hit down when the
   attack cooldown isn't full.
 - **Explosions:** `ServerExplosion.explode` works out the blocks, hurts the entities (`hurtEntities`), then breaks the
-  blocks and sets fires, and returns; SkyCraft's `kEvExplosion` comes at that return.
+  blocks and sets fires, and returns; SkyCraft's `kEvExplosion` comes at that return. `hurtEntities` takes each entity
+  whose position is within twice the radius of the centre, hurts it by `ExplosionDamageCalculator.getEntityDamageAmount`,
+  (i² + i) / 2 × 7 × 2r + 1 with i = (1 − d ÷ 2r) × the share of the entity the blast sees, and then pushes it. A primed
+  TNT explodes 0.0625 of its height above its feet with its `explosion_power`, 4 unless set, at most 128, and reads its
+  `fuse` as a short. So TNT does 57 at its centre to a stand-in in the open, 22 at 4 m, 5 at 7 m and 1 at the edge of its
+  8 m, and at least 1 to anything within them, however hidden.
 - **Creative mode:** a creative player takes no damage from what `hurtPlayer` makes, so the game's hits on V cost
   Minecraft's player nothing unless it's in survival.
 
@@ -379,7 +445,10 @@ SkyCraft's header (`extern/skycraft/skycraft_protocol.h`, version 11) stays unch
 - **The event ring, read:** `kEvHitActor` (1), `kEvPlayerDied` (2) and `kEvExplosion` (3). `kEvArrowStuck` (4) and
   `kEvSkillUse` (5) are drained and counted.
 - **The input ring, written:** `kInHurt` (7): `code` = the kind (melee 0, projectile 1, magic 2, other 3), `a` = the
-  damage × 100, `b` = the attacker's formId, `c` = the flags (blocked 1, power attack 2).
+  damage × 100, `b` = the attacker's formId, `c` = the flags (blocked 1, power attack 2). Part 3 adds a flag of
+  CyberCraft Tweaks' own, `0x100`, on a `kInHurt` with no damage, whose `b` is then V's health share × 10,000: SkyCraft's
+  `hurtPlayer` ignores a hurt with no damage, and CyberCraft Tweaks 1.3.0 sets Minecraft's player's health by it ("Part
+  3's follow-ups").
 
 ## Repository layout
 
@@ -397,13 +466,16 @@ spikes/block-render/
   src/CombatInbox.*          hits on V offered and our hits landed, from the pipeline's wraps, behind a lock (pure)
   src/ScriptTypes.*          the type checks GameScript and Puppet share
   src/link/Actors.*          NPC IDs, the nearest 256, their records, and the actor table (pure)
-  src/link/Combat.*          Minecraft's hits, V's hurts, deaths and blasts: amounts, encodings, sums, windows (pure)
+  src/link/Combat.*          Minecraft's hits, V's hurts, deaths and blasts: amounts, encodings, sums, windows, pushes, and
+                             V's health share for Minecraft (pure)
   src/physx/Characters.*     NPCs' capsules, for their sizes
-  src/link/Link.*            + kEvHitActor and kEvPlayerDied to the sink, the actor table, kInHurt
+  src/physx/Export.*         + the bush rule, and each primitive shape's own size and place for shapes
+  src/link/Link.*            + kEvHitActor and kEvPlayerDied to the sink, the actor table, kInHurt; the city started over
   src/Plugin.cpp, Requests.*, Status.*   + the requests, the status lines and the frame order
-  tools/mclink/              + the actor, actor-remove and hurt commands, and events printed
-  tools/blockrender_hud/init.lua         + the NPC and combat lines and buttons
+  tools/mclink/              + the actor, actor-remove, hurt and health commands, events printed, and blasts.txt
+  tools/blockrender_hud/init.lua         + the NPC, combat and blasts lines and buttons
   tests/                     + the new unit tests
+minecraft/cybercraft-tweaks/ + SetHealth: Minecraft's player's health set to V's share (1.3.0)
 ```
 
 The names are proposals; the plan settles them.
@@ -417,12 +489,15 @@ The names are proposals; the plan settles them.
   adds that folder to redscript's compile at load.
 - **The versions:** Part 1 deploys 0.17.0, Part 2 0.18.0 (0.18.1 with step 4's fixes), and Part 3 0.19.0, in the log
   line and in `Query`, which from now on takes its version from `kVersion`.
+- **CyberCraft Tweaks** is built by its own `build.sh` with the JDK alone, as in spike 5, and copied into the
+  CyberCraft instance's mods in place of the last, with Minecraft stopped: 1.3.0 for Part 3.
 
 ## The frame
 
 After `UpdateLink`, in `OnUpdate`, while linked and V is found:
-1. Minecraft's hits, deaths and blasts, as the sink collected them during the link's update, go through `Combat` in the
-   ring's order (a blast before its own hits), and with combat on, to the module.
+1. Minecraft's blasts, hits and deaths, as the sink collected them during the link's update, go through `Combat` in the
+   ring's order (a blast before its own hits), and with combat on, to the module; then each blast whose push is due, a
+   quarter second after it; then V's god mode, with V's health share to Minecraft's player as V's Immortal goes on.
 2. The module lists the NPCs, and the actor table is written.
 3. With combat on, V's hurts since the last frame go out as `kInHurt`.
 
@@ -654,36 +729,103 @@ The deep review of Part 2 added these, at the user's choice.
 
 ## Part 3: explosions
 
+Planning Part 3 changed how a blast knocks NPCs down, gave a blast's hits a power of their own, and took the follow-ups
+Part 2 left ("Changes while planning Part 3").
+
 ### The blast in the game
 
-For each `kEvExplosion`, with combat on, its centre goes into world axes (`WorldFromMc`), and its reach is twice its
-radius, in metres, as SkyCraft's is. The module (`Explode`) makes:
-- **the push:** the game effect `physicalImpulseSphere` at the centre, the reach as its radius, as
-  `SpawnPhysicalImpulse` runs it. It runs a quarter of a second after the blast, as SkyCraft waits, so the bodies of
-  NPCs the blast's hits killed are ragdolls by then, and it throws them too;
-- **knockdowns:** an explosion attack at the centre with the reach as its radius, as `SpawnAttack` makes one, from V and
-  flagged `DealNoDamage`. Its hit on V stops at `CheckForQuickExit`, and the game's hit reactions knock down or ragdoll
-  the NPCs it catches;
-- **the look:** an explosion effect at the centre.
+For each `kEvExplosion`, with combat on, linked and V found, `AcceptBlast` takes its centre into world axes
+(`WorldFromMc`) and its reach as twice its radius, in metres, as SkyCraft's is, the radius held to 16 at most (TNT's 4
+reaches 8 m); a centre or radius that isn't finite, or a radius that isn't over 0, isn't taken. At once, the module's
+`Explode`:
+- **knocks down what the blast reaches, as the game's knockdown grenade does:** that grenade's attack,
+  `Attacks.FragGrenadeKnockdown`, runs as a game effect at the centre, the reach as its radius and range, as
+  `CombatGadgetHelper.SpawnAttack` runs a claymore's: from V, as its instigator and source, and flagged `DealNoDamage`
+  and `WeakExplosion` under `n"BlockRender blast"`. Its hits deal nothing, but `PostProcess` still gives each NPC they
+  reach the record's `Knockdown` status effect, unless the NPC is immune to it, friendly to V or blocked the hit. Its
+  hit on V stops at `CheckForQuickExit`, V being its instigator. `WeakExplosion` keeps out the game's handling of strong
+  explosions, which would measure from V;
+- **sounds** as a claymore does: `AudioSystem.PlayShockwave(n"explosion", centre)`;
+- **looks** as the attack's game effect draws it, if it draws anything: the scripts draw no frag grenade's explosion, so
+  step 5b looks.
 
-Which attack record and which effect, and whether a hit that deals no damage still knocks an NPC down, are for Part 3's
-planning and step 5's opening check.
+An explosion of the game's own kind can't knock NPCs down here: the game measures a strong explosion from the hit's
+source object (`IsStrongExplosion`), and a blast made by script has no grenade or device to be its source, only V. An
+`Explosion` hit from V would knock down only NPCs within 3 m of V, wherever the blast was. The knockdown grenade's record
+knocks down by its status effect, which the pipeline gives wherever the source is. The user chose it.
+
+With `set blastknock 1`, `Explode` also gives each NPC on the list within the reach that status effect itself
+(`StatusEffectHelper.ApplyStatusEffect`), as SkyCraft's `KnockExplosion` knocks people down: the fallback, if the
+effect's hits don't (risk 13).
+
+### The push
+
+A quarter of a second after the blast (`kPushDelay`), as SkyCraft waits, the module's `Push` runs the game effect
+`physicalImpulseSphere` at the centre with the reach as its radius, as `CombatGadgetHelper.SpawnPhysicalImpulse` runs
+it. It pushes cars and loose things, and throws the bodies of NPCs the blast killed: knocked down as they died, they
+ragdolled at once (the game's `ForcedRagdoll`, for an NPC that dies with a `Knockdown` status effect on it). `Push` then
+counts the NPCs on the list within the reach, how many of them the game has knocked down (a `Knockdown` status effect,
+`ObjectHasStatusEffectOfType`), and how many are dead, for the log and the status. Each blast is pushed once
+(`Blasts::Pushes`); while V isn't found, the push is logged and not made.
 
 ### Blast hits
 
-Hits within 0.15 s after a blast, on NPCs within its reach by their last listed feet, are blast hits. The module applies
-them as hits of type `Explosion`, their direction from the blast's centre. So an NPC the blast kills dies of an
-explosion, and the game throws its body.
+Minecraft's hits within 0.15 s after a blast (`kBlastWindow`), on NPCs whose last listed feet are within its reach, are
+the blast's own: the newest blast's that holds them (`Blasts::HitOn`, which counts them for it). The module's
+`BlastHit` makes each as `Hit` makes Minecraft's other hits, through the same `Strike`, but with the knockdown grenade's
+record, of type `Explosion`; no weapon; its direction from the blast's centre; and flagged `WeakExplosion`. So:
+- **it starts at V's punch × Minecraft's damage to the blast power,** `set blastpower`, from 0 to 1, 0.5 by default: a
+  knob of its own, the user's choice, since a blast's damage runs far above a weapon's. At 0.5, for the user's V (a
+  punch of 104.87), TNT's 57 at its centre starts at 792, its 22 at 4 m at 492, its 5 at 7 m at 233, and its 1 at its
+  edge at one punch;
+- **the pipeline does to it what it does to explosions,** the NPC's `ExplosionResistance` among them; with no weapon, it
+  skips what reads one, the NPC's armour, the weapon's crits, blocks and the skill XP. An NPC it kills dies of an
+  explosion, which dismembers by the game's presets;
+- **after the damage it knocks the NPC down** (`PostProcess`), so one it kills dies knocked down, ragdolls at once, and
+  the push throws it.
 
-### Fallback
+Its landing, or why it dealt nothing, is logged as a blast hit's, and the status's last hit says it was a blast's.
 
-If a hit that deals no damage doesn't knock NPCs down, the module knocks down each NPC within reach itself, as SkyCraft's
-`KnockExplosion` does; with which of the game's calls, planning finds.
+### Part 3's follow-ups
 
-### Request
+The follow-ups Part 2 left (the results' "Asked for, after Part 2"), which the user chose to take with Part 3:
+- **Minecraft's health from V's:** as build mode starts with combat on, when V's Immortal goes on ("V's god mode"),
+  Minecraft's player's health is set to V's share of V's max health: V at 80% puts Minecraft's player at 16 of its 20.
+  SkyCraft's protocol has no input that sets health, so it goes as a `kInHurt` SkyCraft ignores: no damage, the kind
+  other, `b` the share × 10,000, and `c` the flag `0x100` (`HealthInput`). SkyCraft's `hurtPlayer` does nothing with a
+  damage that isn't over 0; CyberCraft Tweaks 1.3.0's `SetHealth` mixin, at its start, takes exactly that input, sets a
+  living player's health, up or down, and logs `CyberCraft Tweaks: Minecraft's player's health set to V's share …:
+  <before> -> <after>`. Without CyberCraft Tweaks 1.3.0 nothing happens. The module reads V's health share four times a
+  second, with V's max health. With combat off, the two healths stay apart, as the fights do.
+- **Bushes out of Minecraft's ground:** the exporter also leaves out the static scene-query shapes the **bush rule**
+  names by their filters (`set bushrule`): 1, the default, those whose query filter is the sight layer alone,
+  `0:0:80000:0`, as a bush's foliage was in step 4's fixes (spheres of about 2 m, with an all-zero simulation filter),
+  where the terrain's `0:0:449c080:0` has that layer among others; 2, those whose simulation filter is all zeros; 0,
+  nothing more, as before. Setting it reads the city again from the start, a clear with a new epoch
+  (`Link::RestartCity`), so Minecraft gets the ground without them. `shapes` says each primitive shape's own size and
+  place, not only its actor's bounds (a sphere's centre and radius, a capsule's ends and radius, a box's size and
+  centre), and whether the exporter leaves the shape out by the rule; the status's ground line counts what the rule has
+  left out.
+- **The blades' heat after build mode:** a weapon V held already as build mode started has nothing to be put back for,
+  so it came back without its heat, which `HideV` stopped and which isn't an effect that starts by itself. Now, when
+  build mode ends with V hidden, `Arm` puts such a weapon away and, a second later through the game's delay system
+  (`BlockRenderDrawAgain`), draws it again, since the game starts some of a weapon's effects only as it's drawn.
+- **The idle timer stays:** the melee state machine puts arm cyberware away after a while idle out of combat in a public
+  zone (`MeleePublicSafe`), and nothing a script calls resets that, short of the state machine's `InPublicZone`, which
+  also decides how NPCs take V's drawn weapon. `Arm` draws the blades again within a second (step 4's fixes), so it's
+  left as it is.
 
-`explode <metres> <radius>`: a blast that far ahead of V, at the height of V's feet, with a radius as Minecraft gives one
-(4 for TNT), as if it were Minecraft's, for step 5's opening check.
+### Requests and status
+
+- `explode <metres> <radius>`: a blast that far ahead of V, from 0 to 100 m, at the height of V's feet, with a radius
+  as Minecraft gives one, over 0 and up to 16 (4 for TNT), as if it were Minecraft's. It goes through all a blast of
+  Minecraft's does, so with no stand-in hit it knocks down, sounds and pushes, and deals nothing. For step 5b's opening
+  check, and the overlay's "TNT 5 m ahead".
+- `set blastpower <0 to 1>` (0.5), `set blastknock 0|1` (0) and `set bushrule 0|1|2` (1).
+- **The status's blasts line:** with combat on, the blasts taken, the blast power, whether knockdowns are given
+  directly too, and the last blast: its centre, reach and the NPCs within it, then after its push, those knocked down
+  and dead, and its own hits. The combat line says when Minecraft's health was last set, and the ground line what the
+  bush rule leaves out.
 
 ## The steps
 
@@ -754,13 +896,38 @@ BlockRender 0.18.1, with step 4's three fixes ("Changes from step 4"). The openi
 Then the fights again, now that Minecraft's weapons don't one-shot: blocks, dodges, the NPC's armour, staggers on crits
 and sprint hits, and the skill XP; and `set hitpower` at another value, to feel the difference.
 
-### Step 5: in the game, explosions (Part 3)
+### Step 5a: `mclink`, Minecraft's blasts and health (Part 3)
 
-BlockRender 0.19.0. The opening check: `explode` beside an NPC (knocked down?) and beside a parked car (pushed?), and the
-effect at the point. Then TNT among NPCs on a pavement, by a parked car, bins and boxes:
-- NPCs at the edge are knocked down, those in the middle killed and thrown;
-- the car and the props are pushed, and the effect shows where the TNT was;
-- V and Minecraft's player, in survival, are hurt only by Minecraft's own blast.
+The user installs CyberCraft Tweaks 1.3.0 in the CyberCraft instance's mods and starts Minecraft, and the agent runs
+`tools/mclink/blasts.txt`, at a fresh spot on the floor. Checks:
+- **A blast and its hits:** five stand-ins 1.5, 3, 5, 7 and 9 blocks from a point, and TNT there with no fuse. `mclink`
+  prints the explosion, reaching 8 m; then a hit on each of the four within it, each a blast's own, Minecraft's damage
+  falling off as 26.3's formula has it (about 42, 29, 15 and 5 on stand-ins the blast sees whole); none on the fifth;
+  and the push, a quarter second after, with four hits of its own.
+- **Nothing built or broken:** the blocks around the point match the sky's before and after (`/execute if blocks`),
+  CyberCraft Tweaks keeping the blast off the floor.
+- **The health:** in survival, `health 0.5`, `1` and `0.05` set Minecraft's player's health to 10, 20 and 1, each read
+  back with `/data get entity @s Health`, with CyberCraft Tweaks' line for each in Minecraft's log; a hurt after it, a
+  tenth, still takes 2.
+
+### Step 5b: in the game, explosions (Part 3)
+
+BlockRender 0.19.0, the module's version 6, with `set combat 1`, and Minecraft's player in survival with CyberCraft
+Tweaks 1.3.0. The opening check, on a pavement with NPCs, by a parked car, bins and boxes:
+- **`explode` beside an NPC** (the overlay's "TNT 5 m ahead"): whether the NPC is knocked down (the push's line counts
+  those knocked down), whether the game draws an explosion, and the sound; V isn't hurt or knocked down. If no NPC goes
+  down, `set blastknock 1` and again;
+- **`explode` beside the car and the props:** pushed?
+- **Minecraft's health:** with V below full health, build mode starts, and Minecraft's hearts show V's share;
+- **a bush and a wall,** `shapes` beside each: the bush's foliage left out by the rule, and the wall kept; in build mode
+  Minecraft's player walks through the bush, and not the wall.
+
+Then TNT, set off by Minecraft's player in build mode among NPCs:
+- NPCs at the edge knocked down, those nearer the middle killed and thrown, by blast hits that start where the blast
+  power says (the log against Minecraft's damage);
+- the car and the props pushed;
+- V's health doesn't move, and Minecraft's player is hurt only by Minecraft's own blast;
+- build mode ends with V's blades as they were, and their heat back a second after.
 
 ### Step 6: the results
 
@@ -775,15 +942,19 @@ plugin's folder or the overlay's. The new commands:
 |---|---|
 | `set npcs 0\|1` | NPCs into the actor table (1) |
 | `npcs` | Logs V's punch and max health; every listed NPC: ID, name, distance, size and where it came from, health, level, flags; and how many NPCs `GetTargetParts` finds within 80 m, with those the list lacks |
-| `set combat 0\|1` | Minecraft's hits on NPCs, the game's hits on V to Minecraft, V's god mode and unarmed weapon, deaths and blasts (0 until step 4 passes) |
+| `set combat 0\|1` | Minecraft's hits on NPCs, the game's hits on V to Minecraft, V's god mode and unarmed weapon, deaths and blasts, and V's health share to Minecraft as build mode starts (0 until step 4 passes) |
 | `hit <id> <damage> [strong]` | As if Minecraft hit NPC `<id>` for `<damage>` |
 | `punch` | Logs V's punch, what it's read from, the attack records, and whether V has it drawn |
 | `set hidev 0\|1` | V's meshes hidden in build mode (1, the default) or seen (0) |
 | `set hitpower <0 to 1>` | Where a hit starts: V's punch × Minecraft's damage to this power (0.5, the default: a fist one punch, a diamond sword 2.65) |
-| `explode <metres> <radius>` | A blast that far ahead of V, as if it were Minecraft's |
+| `explode <metres> <radius>` | A blast that far ahead of V (0 to 100 m), at the height of V's feet, with a radius over 0 and up to 16 (TNT's is 4), as if it were Minecraft's |
+| `set blastpower <0 to 1>` | Where a blast's own hits start: V's punch × Minecraft's damage to this power (0.5, the default: TNT's 57 at its centre 7.5 punches) |
+| `set blastknock 0\|1` | Each NPC within a blast's reach given the knockdown directly too (1), or left to the blast's attack (0, the default) |
+| `set bushrule 0\|1\|2` | What else the exporter leaves out of Minecraft's ground: nothing (0), sight-only shapes such as a bush's foliage (1, the default), or unsimulated shapes (2); the city is read again |
 
 The overlay gains the NPC and combat lines, and two buttons, NPCs and Combat; and, under "More controls", ones that
-send `npcs` and `punch`, and one that switches `set hidev`. Its build line says whether V is hidden.
+send `npcs` and `punch`, and one that switches `set hidev`. Its build line says whether V is hidden. Part 3 adds the
+blasts line, and under "More controls" a button that sends `explode 5 4`, "TNT 5 m ahead".
 
 ## Measurements and the status
 
@@ -793,11 +964,15 @@ send `npcs` and `punch`, and one that switches `set hidev`. Its build line says 
   hit power; hits queued, landed, and not applied by reason, ours and the pipeline's; the last hit (the NPC, Minecraft's
   damage, where it started, what was dealt and what the pipeline did to it, its health before and after); V's hurts
   taken, sent, summed, left to V and left to V as non-lethal, and the last (amount, share, Minecraft's damage, kind,
-  attack type, attacker); Immortal on or off, as the game last said; deaths; Minecraft's player dead, and for how long;
-  and why combat can't do all it should, while it can't.
+  attack type, attacker); when Minecraft's health was last set to V's share, and to what; Immortal on or off, as the
+  game last said; deaths; Minecraft's player dead, and for how long; and why combat can't do all it should, while it
+  can't.
 - **V's look:** hidden in build mode, with the meshes switched off, the effects stopped and whether the crosshair is
   hidden; or seen, and why.
-- **Blasts:** how many; the last (centre, reach, NPCs within it, blast hits).
+- **Blasts:** with combat on, how many; the blast power; whether knockdowns are given directly too; the last: its centre,
+  reach and the NPCs within it, then after its push those knocked down and dead, and its own hits. With combat off,
+  that they're only logged.
+- **The ground** (spike 5's line): also the bush rule, and how many shapes it has left out.
 - **Frame rates:** with NPCs and combat on and off.
 
 ## Safety
@@ -821,6 +996,13 @@ send `npcs` and `punch`, and one that switches `set hidev`. Its build line says 
   crosshair is shown again only if the module hid it; none of it is saved, so a load starts V as its save left it.
 - **Codeware is optional:** the module's parts that use it compile only where it's installed, so a missing Codeware
   can't fail the compile that every mod's scripts share (risk 9); `check_reds.py` compiles the module both ways.
+- **Blasts:** one is taken only with a finite centre and a radius over 0, held to 16; its attack deals no damage, and
+  its hit on V stops at `CheckForQuickExit`; its own hits are Minecraft's hits, checked and capped as any (a listed NPC,
+  finite, over 0, at most 1,000); its knockdowns and push are the game's own, run as the game's explosives run them.
+- **Minecraft's health** is only ever set to a share over 0 and up to 1 of its max, so setting it never kills; and only
+  by CyberCraft Tweaks, on an input SkyCraft ignores.
+- **The bush rule** only leaves shapes out of what Minecraft gets; the game's own collision is never touched, and
+  `set bushrule 0` gives Minecraft the ground as before.
 - **Off by default:** combat, until step 4 passes. NPCs are on, since listing them changes nothing in the game. Hiding V
   is on, since it changes only what's drawn, and only in build mode.
 - **Builds:** a deploy runs only when `tasklist` shows no `Cyberpunk2077.exe`.
@@ -839,6 +1021,13 @@ send `npcs` and `punch`, and one that switches `set hidev`. Its build line says 
 - **Codeware isn't installed:** V isn't hidden, nor V's effects and the crosshair, and the status says why.
 - **The crosshair container isn't found** among the HUD layer's game controllers: V is hidden without it, and the
   status says the crosshair isn't hidden.
+- **A blast while combat is off, unlinked or V isn't found,** or with a centre or radius that can't be used: logged, and
+  not applied. A push due while V isn't found: logged, and not made.
+- **The knockdown grenade's record or its game effect isn't there** (another game version): `Explode` says so and the
+  log says the blast had no knockdowns; its hits are dropped as having no attack record.
+- **V's health share isn't read yet** as build mode starts: Minecraft's health isn't set, and the log says why. Without
+  CyberCraft Tweaks 1.3.0, it's sent and nothing happens: BlockRender can't tell, so the status says only when it was
+  sent, and step 5a checks Minecraft's side.
 
 ## Testing
 
@@ -860,17 +1049,25 @@ send `npcs` and `punch`, and one that switches `set hidev`. Its build line says 
   endings and non-lethal hurts; V's switches for its weapon and meshes (on, off, refreshed, and lost with V); and the
   status's v line. Since step 4: where a hit starts by the hit power (0, 0.5, 1; a fist, a sword, the cap); and the v
   line's effects and crosshair.
-- **Part 3:** the blast window (0.15 s, the reach) and the centre in world axes.
+- **Part 3:** a blast into the game's axes (its centre, the reach twice the radius, held to 16, and none taken whose
+  centre or radius can't be used); the blast hits (within 0.15 s and the reach, by the NPC's feet in three dimensions,
+  the newest blast's, counted); the pushes (each once, a quarter second after, with its hits); the health input (the
+  share × 10,000, held to 0 to 1, 0 for one that isn't finite, and its flag apart from SkyCraft's); the bush rule
+  against the filters step 4's fixes found (a bush's foliage and its capsule, the terrain) and each rule's name; each
+  primitive shape's words (a sphere, an upright capsule's ends, a box, PhysX's origin added); the city started over (a
+  clear with a new epoch, read again at once, and once; nothing on the floor); `mclink`'s `health`; `explode`'s parse;
+  and the status's blasts line, Minecraft's health in the combat line and the bush rule in the ground line.
 
 ### `mclink`
 
-Steps 1 and 3, against the user's Minecraft. The new commands: `actor <id> <x> <y> <z> [yaw width height name]`,
+Steps 1, 3 and 5a, against the user's Minecraft. The new commands: `actor <id> <x> <y> <z> [yaw width height name]`,
 `actor-remove <id>|all` and `hurt <kind> <share> [attacker] [power]`, which goes through `Combat`'s sums and encoding;
-and events printed as they arrive.
+and events printed as they arrive. Part 3 adds `health <share>`, which sends `Combat`'s `HealthInput`, and prints which
+hits are a blast's own, by the made-up NPCs' feet, and each blast's push as it comes due.
 
 ### In the game
 
-Steps 2, 4, step 4's fixes, and 5. The module's code runs only in the game.
+Steps 2, 4, step 4's fixes, and 5b. The module's code runs only in the game.
 
 ## Risks
 
@@ -896,11 +1093,15 @@ Steps 2, 4, step 4's fixes, and 5. The module's code runs only in the game.
    (`tools/check_reds.py`), and the first deploy is still checked by starting the game to its menu and reading
    redscript's log, since the other mods' scripts are compiled with it there.
 10. **Minecraft's other damage reaches NPCs as V's:** a skeleton's arrow or the user's TNT hits a stand-in, and
-    `kEvHitActor` doesn't say who did it. Accepted, as SkyCraft does.
+    `kEvHitActor` doesn't say who did it. Accepted, as SkyCraft does. Since Part 3, a blast's hits are told apart by
+    their time and place, and land as the blast's own; a mob's blast, a creeper's, counts as a blast all the same.
 11. **Not every NPC has a capsule:** a drone's or a mech's collision may be something else, and it stays person-sized.
 12. **The list costs too much in crowds.** Measured in step 2. The slow fields are read at most four times a second an
     NPC.
-13. **A hit that deals no damage doesn't knock NPCs down** (Part 3): the fallback above.
+13. **The blast's attack doesn't knock NPCs down** (Part 3): its hits deal nothing, and the game might not give the
+    knockdown on such a hit from a game effect run by script, or a crowd's NPCs might not take it. Step 5b's opening
+    check reads the push's count of NPCs knocked down; the fallback is `set blastknock 1`, the status effect given
+    directly, and past that the game's forced reactions (`ForcedHitReactionEvent`, `CreateForceRagdollEvent`).
 14. **Accepted limits:** Minecraft's armour doesn't reduce hits from attackers more than 24 blocks away, or blasts;
     Minecraft's player walks through NPCs, and can hit a driver through a car, since cars aren't solid for Minecraft;
     NPCs walk through blocks. Minecraft's arrows land as V's melee hits, so an NPC's melee block and resistance apply to
@@ -920,6 +1121,21 @@ Steps 2, 4, step 4's fixes, and 5. The module's code runs only in the game.
     effects without switching their spawner off.
 20. **The crosshair container isn't among the HUD layer's game controllers.** The status says the crosshair isn't
     hidden; the next try is the other layers Codeware lists.
+21. **The blast isn't seen:** the knockdown grenade's game effect may draw no explosion when run by script, since the
+    scripts draw none for a frag grenade. The sound and the knockdowns still say where it was; accepted for the spike.
+22. **The push doesn't throw the bodies:** NPCs a blast hit killed may not be ragdolls a quarter second after, or the
+    impulse may not reach them. Step 5b watches; the push can come later (`kPushDelay`), and the game can force a
+    ragdoll and throw it (`CreateForceRagdollEvent`, `CreateRagdollApplyImpulseEvent`).
+23. **A blast's hits too strong or too weak:** at the blast power 0.5, TNT's centre starts at 792 for the user's V,
+    before the NPC's explosion resistance. `set blastpower` changes it in the game, as `set hitpower` did in step 4.
+24. **CyberCraft Tweaks' `SetHealth` doesn't take:** it targets SkyCraft 0.1.2's `SkyCombat.hurtPlayer` by name, as its
+    other mixins target SkyCraft's classes. Step 5a reads the health back with `/data`, and Minecraft's log shows the
+    mixin's line, or a mixin error at the start if it can't apply.
+25. **The bush rule leaves out something solid:** a railing or a pane whose query filter is the sight layer alone
+    would let Minecraft's player through it. Step 5b checks a wall, `shapes` says what the rule leaves out anywhere,
+    and `set bushrule 0` gives the old ground back.
+26. **The draw after build mode does something else:** the game might refuse it a second later (V in a vehicle, say),
+    or draw it while V is busy. Step 5b looks for the heat; at worst V draws the blades itself, as before.
 
 ## Found while writing
 
@@ -1281,3 +1497,84 @@ Left to the fixes' opening check in the game: whether the override makes V Immor
 Second Heart's own, if V has the implant; whether the heat is one of the blades' spawners' effects, and whether a kill
 reaches a spawner that is then switched off; and the name of the layer that holds the crosshair container, taken to be
 the HUD's (`inkHUDLayer`).
+
+## Changes while planning Part 3
+
+Part 3's plan (`docs/superpowers/plans/2026-10-05-npcs-and-combat.md`, Tasks 38 to 49) read what this spec's Part 3 left
+to planning, which attack record and which effect, and found that the knockdowns it counted on wouldn't come. The user
+then decided three questions. The sections above include the outcome.
+
+### What reading found
+
+1. **The knockdowns wouldn't come.** The spec had a blast's attack, an explosion from V that deals no damage, knock NPCs
+   down through the game's hit reactions. But the game measures a strong explosion, the kind that knocks down, from the
+   hit's source object (`IsStrongExplosion`), and a blast made by script has none of its own: from V, it would knock
+   down only NPCs within 3 m of V, wherever the blast was. Otherwise a knockdown needs a hit reaction severity of 3, or
+   impulse past the NPC's thresholds, and a hit with no weapon has no impulse.
+2. **The game knocks down at a distance with a status effect:** the knockdown grenade's attack,
+   `Attacks.FragGrenadeKnockdown`, gives `BaseStatusEffect.Knockdown` at once, and the pipeline gives an attack's status
+   effects in `PostProcess`, on a hit that deals no damage too, wherever its source is. An NPC that dies with that status
+   effect on it ragdolls at once.
+3. **A blast's damage is far above a weapon's:** by 26.3's formula, TNT does 57 at its centre to a stand-in in the open,
+   which at the hit power's square root starts at 7.5 punches, 792 for the user's V.
+4. **The sound and the push:** a claymore, which explodes as a game effect from V, plays `PlayShockwave(n"explosion",
+   …)` and runs `physicalImpulseSphere`. No script draws a frag grenade's explosion, so the look is the game effect's own,
+   if it has one.
+5. **The follow-ups:** SkyCraft's `hurtPlayer` ignores a hurt with no damage, and `InputBridge` passes every `kInHurt`
+   to it, so a flag of CyberCraft Tweaks' own can ride on one; `shapes` printed each actor's bounds, not each shape's;
+   the blades' heat isn't an effect that starts by itself, and comes back when the blades are drawn again; and the idle
+   timer is the melee state machine's `MeleePublicSafe`, which nothing a script calls resets.
+
+### What the user decided
+
+- **Knockdowns by the knockdown grenade:** its attack, run as a game effect at the blast's centre, from V and dealing no
+  damage; and Minecraft's hits within the blast made with the same record, so they knock down too. Knocking each NPC
+  down directly, as SkyCraft's `KnockExplosion` does, stays as the fallback (`set blastknock 1`).
+- **A blast power of its own,** `set blastpower`, 0.5 by default, apart from the hit power.
+- **The follow-ups with Part 3,** planned as its tasks and checked in the same game sessions as step 5.
+
+### What changed
+
+- **Part 3's section,** rewritten: the blast in the game, the push, blast hits, the follow-ups, and requests and
+  status. "The game's scripts" gains how an NPC takes an explosion hit and the melee state machine, and a new "The
+  game's data" holds the TweakDB records.
+- **The follow-ups:** Minecraft's health from V's (`HealthInput`, and CyberCraft Tweaks 1.3.0's `SetHealth`); the bush
+  rule and each shape's own size (`LeftOut`, `set bushrule`, `Link::RestartCity`); the blades drawn again after build
+  mode (`Arm`'s 3, `BlockRenderDrawAgain`); the idle timer left as it is.
+- **Step 5 is two:** 5a with `mclink`, a real TNT's blast and its hits on stand-ins, and the health set; 5b in the game.
+- **BlockRender 0.19.0, the module's version 6,** with `Explode`, `Push` and `BlastHit`, and `vHealth`, `pushDown` and
+  `pushDead`: 13 functions and 19 fields.
+- **Requests:** `set blastpower`, `set blastknock` and `set bushrule`, and `explode`'s ranges. **The status:** the
+  blasts line, Minecraft's health in the combat line, and the bush rule in the ground line. **The overlay:** the blasts
+  line and "TNT 5 m ahead".
+- **Risks** 10 and 13 are restated; 21 to 26 are new.
+
+### What was checked
+
+- **The game's scripts** (2.31): `damageSystem.swift` (`IsStrongExplosion`, `ProcessDamageReduction`'s explosion
+  resistance, `ProcessDeviceExplosionDamageToTierNPC`, `CheckForQuickExit`, `PostProcess` and `ProcessStatusEffects`);
+  `hitReactionComponent.swift` (the strong explosion's knockdown, `GetReactionType`, `GetPhysicalImpulse`, the
+  explosion's dismemberment, and the ragdoll of an NPC that dies knocked down); `combatGadgetHelper.swift`
+  (`SpawnAttack`, `SpawnPhysicalImpulse`), `claymoreMine.swift`, `fragGrenade.swift`, `ExplosiveDevice.swift`,
+  `rpgManager.swift`'s `PrepareGameEffectAttack` and the cyberware explosion's effector; `meleeTransitions.swift`'s
+  `MeleePublicSafe`; `equipment.swift`'s delayed calls and `DelaySystem.DelayCallback`; and `animCommunication.swift`'s
+  ragdoll events.
+- **The game's data:** REDmod's TweakDB sources in the game's folder: `attack/attacks.tweak`, `attack/explosions.tweak`,
+  `status_effect/knockdowns.tweak` and `weapons.tweak`.
+- **Minecraft 26.3's jar:** `ServerExplosion.hurtEntities`, `ExplosionDamageCalculator.getEntityDamageAmount`, and
+  `PrimedTnt`'s explosion (its height, its `explosion_power`, its `fuse` a short).
+- **SkyCraft's code:** `SkyCombat.hurtPlayer` and `InputBridge.hurt`, `ServerExplosionMixin`, and on its game side
+  `ApplyExplosion` and `KnockExplosion`.
+- **The code:** Tasks 38 to 41 and 43 to 47 written and run in a scratch clone: zero warnings, 450 tests, the module
+  compiling with and without Codeware and a slip failing it both ways, CyberCraft Tweaks built without a warning, the
+  overlay under Lua with CET stubbed, `mclink`'s self-check, and 38 mutations of the new code each failing its test; then
+  replayed from the plan's text in a fresh clone, every expected result met and each task's files identical to the
+  scratch clone's.
+
+### Not settled by reading
+
+Left to steps 5a and 5b: whether the knockdown grenade's attack, run by script as a game effect that deals no damage,
+knocks NPCs down, a crowd's included, and whether it draws an explosion; whether 2.31's TweakDB has its records as
+REDmod's older sources do; whether the push throws the bodies of NPCs a blast killed, and pushes cars; how much of each
+stand-in a blast on the floor sees; whether CyberCraft Tweaks' mixin applies in the running Minecraft; whether drawing
+the blades again brings their heat back; and whether the bush rule leaves bushes out and walls in.

@@ -12,6 +12,8 @@ expectation it states.
   from clean after a step changes a header.
 - "Run mclink without Minecraft": it must open the mapping, find Minecraft absent, and exit 0.
 - "Check the overlay's syntax": `luac -p` must accept the CET overlay.
+- "Compile the module …", "Check that the compile catches a slip …" and "Build CyberCraft Tweaks": the step's bash
+  block runs, and every quoted text of its Expected paragraph must be in what it printed.
 - "Build and run the tests; the new one(s) must fail": a clean build whose test output has the plan's expected lines.
 - "Deploy", "In the game" and "Record" steps are done by hand: the run stops at the first.
 - "Run the new tool's test; it must fail": pytest must stop on the plan's missing module. "Run the tools' tests; they
@@ -40,7 +42,7 @@ first = int(sys.argv[4]) if len(sys.argv) > 4 else 1
 last = int(sys.argv[5]) if len(sys.argv) > 5 else 10
 first_step = int(sys.argv[6]) if len(sys.argv) > 6 else 1
 project = repo / "spikes" / "block-render"
-log = open(HERE / f"{mode}_p2r.log", "a", encoding="utf-8")
+log = open(HERE / f"{mode}_p3.log", "a", encoding="utf-8")
 
 
 def say(text):
@@ -163,7 +165,7 @@ for step in planlib.read_plan(plan_path):
         if code != 0 or "KERNEL32.dll" not in imports or any("physx" in name.lower() for name in imports):
             fail(step, "dumpbin said:\n" + out[:1500])
         say(f"{label}: {len(imports)} DLLs imported, none of them PhysX's")
-    elif title.startswith(("Compile the module", "Check that the compile catches a slip")):
+    elif title.startswith(("Compile the module", "Check that the compile catches a slip", "Build CyberCraft Tweaks")):
         # The step's bash block, run in this repo, and every `text` of its Expected paragraph found in what it printed.
         script = re.search(r"```bash\n(.*?)```", step.body, re.S).group(1).replace("/d/Cyberpunk-Minecraft", repo.as_posix())
         code, out = run([shutil.which("bash"), "-c", script], project)

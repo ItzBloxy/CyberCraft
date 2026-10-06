@@ -5,7 +5,7 @@
 # with the user) has its tag on the same commit as the task before, and keeps it so.
 # Usage: fold.sh <first task> <last task> <task tag>=<fixup commit> ...   (on the branch whose head has the fixups)
 set -euo pipefail
-cd "$(dirname "$0")/verify3"
+cd "$(dirname "$0")/../verify"
 first="$1"; last="$2"; shift 2
 declare -A fix
 for pair in "$@"; do
@@ -16,15 +16,15 @@ branch="$(git branch --show-current)"
 # The commits after the last task's tag that aren't fixups, oldest first.
 fixups=" ${fix[*]:-} "
 rest=()
-for commit in $(git rev-list --reverse "t$last..HEAD"); do
+for commit in $(git rev-list --reverse "p3-t$last..HEAD"); do
 	[[ "$fixups" == *" $commit "* ]] || rest+=("$commit")
 done
-git checkout -q --detach "t$((first - 1))"
+git checkout -q --detach "p3-t$((first - 1))"
 declare -A made
 for ((n = first; n <= last; ++n)); do
-	tag="t$n"
-	if [ "$n" -gt "$first" ] && [ "$(git rev-parse "$tag")" = "$(git rev-parse "t$((n - 1))")" ]; then
-		made[$tag]="${made[t$((n - 1))]}"
+	tag="p3-t$n"
+	if [ "$n" -gt "$first" ] && [ "$(git rev-parse "$tag")" = "$(git rev-parse "p3-t$((n - 1))")" ]; then
+		made[$tag]="${made[p3-t$((n - 1))]}"
 		continue
 	fi
 	git cherry-pick "$tag" > /dev/null

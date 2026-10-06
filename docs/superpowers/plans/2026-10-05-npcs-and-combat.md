@@ -1,4 +1,4 @@
-# NPCs and Combat Implementation Plan, Parts 1 and 2 (steps 1 to 4)
+# NPCs and Combat Implementation Plan, Parts 1 to 3 (steps 1 to 5)
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 >
@@ -50,8 +50,11 @@ hide V in build mode; "The deep review of Part 2", at the end, says why. Step 4 
 to make, which Tasks 32 to 35 make and Task 36 checks in the game: hits start at V's punch × the square root of
 Minecraft's damage, V's Immortal is the game's override, and hiding V hides V's effects and the game's crosshair too;
 "Step 4's fixes", at the end, says why.
-**Part 3** is planned after step 4's fixes, as the spec says: Task 37 closes Part 2 and, at the user's choice, writes a
-handoff for planning Part 3 in a new session (`docs/superpowers/handoffs/2026-10-06-spike-6-part-3-planning.md`).
+**Part 3** (Tasks 38 to 49) makes Minecraft's blasts knock down and throw NPCs, and push cars and props, through the
+game's own explosion code, with the game's knockdown grenade's attack; and takes the follow-ups Part 2 left:
+Minecraft's health from V's as build mode starts, bushes out of Minecraft's ground, and the blades' heat after build
+mode. It was planned after step 4's fixes, from Task 37's handoff
+(`docs/superpowers/handoffs/2026-10-06-spike-6-part-3-planning.md`), and its own section below says how it's built.
 
 ---
 
@@ -99,17 +102,26 @@ handoff for planning Part 3 in a new session (`docs/superpowers/handoffs/2026-10
   commit, then replayed in a fresh clone from this plan's text: zero warnings, 440 tests, the files identical to the
   scratch clone's. Each new or changed test was broken once: 9 mutations, all caught. The module compiles against the
   game's own scripts both without and with Codeware's, and a slip in its Codeware parts fails only with Codeware's.
+- **Part 3, verified the same way:** Tasks 38 to 41 and 43 to 47 were written in a scratch clone, then replayed in a
+  fresh clone from this plan's text: zero warnings, 450 tests, the files identical to the scratch clone's. Each new or
+  changed test was broken once: 38 mutations, all caught. The module compiles against the game's own scripts both
+  without and with Codeware's, and a slip in `Push` fails it both ways. CyberCraft Tweaks 1.3.0 builds without a
+  warning. The overlay ran under Lua with CET's functions stubbed, with a blast before and after its push, and combat
+  off.
 - **Test counts:** 396 at the start. Then 403, 406 and 408 after Tasks 1 to 3, 412 after Task 5, and 414 after Task 8.
   Tasks 6, 7, 9 and 10 add none.
 - **What only Minecraft and the game can test:** the actor table against SkyCraft's real mod in Task 4, and the module
   and the NPCs in the game in Task 11; in Part 2, the hurts against SkyCraft's mod in Task 16, and combat in the game in
-  Tasks 31 and 36. All with the user.
+  Tasks 31 and 36; in Part 3, a real blast's hits and the health against SkyCraft's mod and CyberCraft Tweaks in Task
+  42, and blasts in the game in Task 48. All with the user.
 - **The user:**
   - **does everything in Minecraft, the Modrinth App and the game:** starting and stopping them, loading, moving,
     keys, clicks and screenshots. Never drive their mouse or keyboard: ask, then wait for them to say they're done;
-  - **approves downloads first.** Nothing in Parts 1 and 2 downloads anything.
-- **The game:** builds deploy only with `CP2077_DIR` set, which only the deploy steps set (Tasks 11, 31 and 36), with the
-  game closed, and clear straight after. `mclink` needs the game closed too, since the game would hold the mapping.
+  - **approves downloads first.** Nothing in Parts 1 to 3 downloads anything;
+  - **approves changes to their Minecraft instance:** Task 42 installs CyberCraft Tweaks 1.3.0 in place of 1.2.0.
+- **The game:** builds deploy only with `CP2077_DIR` set, which only the deploy steps set (Tasks 11, 31, 36 and 48),
+  with the game closed, and clear straight after. `mclink` needs the game closed too, since the game would hold the
+  mapping.
 - **redscript:** a script that doesn't compile at the game's start shows a message box, and that run the mods' scripts
   don't load, the other mods' included. Task 6's offline compile runs the game's own compiler library on the module,
   with its message box off, before anything is deployed. Don't run the game's `engine/tools/scc.exe` by hand: on a
@@ -10608,6 +10620,3000 @@ cd /d/Cyberpunk-Minecraft && git add docs/superpowers tools/plans \
 
 ---
 
+## Part 3: explosions, and Part 2's follow-ups (step 5)
+
+Part 3 makes Minecraft's blasts knock down and throw Night City's NPCs and push its cars and props, through the game's
+own explosion code (the spec's "Part 3: explosions"), and takes the follow-ups Part 2 left. It was planned after step
+4's fixes, from Task 37's handoff, with what Parts 1 and 2 found: Minecraft's hits start the game's whole damage
+pipeline as V's own punches do, at V's punch × Minecraft's damage to a power, and the pipeline runs on any thread, so
+its wraps read only the hit.
+
+Planning found that a blast made by script can't knock NPCs down as the spec had it: the game measures a strong
+explosion from the hit's source object, which for us is V. The user chose the game's knockdown grenade instead: its
+attack, `Attacks.FragGrenadeKnockdown`, runs as a game effect at the blast's centre, from V and dealing no damage, and
+the pipeline gives what it hits the grenade's `Knockdown` status effect wherever the source is. Minecraft's hits within
+the blast are made with the same record, of type `Explosion`, starting at V's punch × Minecraft's damage to a power of
+their own, `set blastpower` (0.5); an NPC they kill dies knocked down, ragdolls at once, and the push a quarter second
+later throws it. The user also chose to take the follow-ups with Part 3. The spec's "Changes while planning Part 3" says
+what and why.
+- **Task 38** makes the plain C++ of blasts: where each is in the game, which of Minecraft's hits are its own, when its
+  push is due; and V's health share for Minecraft's player as a `kInHurt` SkyCraft ignores.
+- **Task 39** leaves a bush's foliage out of Minecraft's ground by its filters (the bush rule), sizes each primitive
+  shape for `shapes`, and starts the city over when the rule changes.
+- **Task 40** gives `mclink` the health, a blast's own hits told by the made-up NPCs' feet, and each blast's push; and
+  step 5a's script, `blasts.txt`.
+- **Task 41** makes CyberCraft Tweaks 1.3.0, which sets Minecraft's player's health by that input. **Task 42** is step
+  5a, against Minecraft, without the game.
+- **Tasks 43 to 47** make the game's side: the module's `Explode`, `Push` and `BlastHit`, V's health share, and the
+  blades drawn again after build mode; `GameScript`'s calls; the `explode` request and the status; BlockRender 0.19.0's
+  frame and settings; and the overlay.
+- **Task 48** is step 5b, in the game. **Task 49** closes the spike.
+
+Test counts: 440 at the start of Part 3. Then 444 after Task 38, 447 after Task 39, 448 after Task 40, and 450 after
+Task 45. Tasks 41, 43, 44, 46 and 47 add none.
+
+## File map (Part 3)
+
+| File | Responsibility |
+|---|---|
+| `src/link/Combat.*` | A blast in the game's axes and its reach; the hits that are its own; its push, a quarter second after; V's health share as `kInHurt` with CyberCraft Tweaks' flag |
+| `src/physx/Export.*` | The bush rule, by a shape's filters; each primitive shape's own size and place, for `shapes` |
+| `src/link/Link.*` | The city started over when what the exporter keeps changes |
+| `tools/mclink/*` | `health`; a blast's own hits by the made-up NPCs' feet; each blast's push; step 5a's script `blasts.txt` |
+| `minecraft/cybercraft-tweaks/*` | 1.3.0: `SetHealth`, Minecraft's player's health set by a `kInHurt` of no damage with the flag `0x100` |
+| `scripts/BlockRender.reds` | Version 6: `Explode`, `Push` and `BlastHit` (with `Hit`, through `Strike`); V's health share; the blades drawn again after build mode |
+| `src/GameScript.*` | The module's three new calls, and V's health share and what `Push` found |
+| `src/Requests.*`, `src/Status.*` | `explode`; the blasts line, Minecraft's health in the combat line, the bush rule in the ground line |
+| `src/Plugin.cpp`, `CMakeLists.txt` | 0.19.0: blasts, their hits and pushes in `Fight`, V's health share as build mode starts, `explode`, `set blastpower`, `set blastknock` and `set bushrule` |
+| `tools/blockrender_hud/init.lua` | The blasts line, and "TNT 5 m ahead" |
+| `tests/` | `TestCombat`, `TestExport`, `TestLink`, `TestMcLinkScript`, `TestRequests` and `TestStatus` gain tests |
+
+---
+
+### Task 38: Minecraft's blasts in the game's axes, the hits that are their own, their pushes, and V's health share for Minecraft
+
+The plain C++ of blasts, in `link/Combat`, tested without the game (the spec's "The blast in the game", "The push",
+"Blast hits" and "Part 3's follow-ups"):
+- **`AcceptBlast`** takes a `kEvExplosion` as a blast: its centre, Minecraft's `a`, `b` and `c`, into world axes
+  (`WorldFromMc`), and its reach twice its radius, `d`, as SkyCraft's is, the radius held to 16 (`kBlastRadiusCap`: TNT's
+  is 4, a charged creeper's 6). A centre or radius that isn't finite, or a radius not over 0, isn't a blast.
+- **`Blasts`** keeps the last moments' blasts. `HitOn` says which blast a hit of Minecraft's on an NPC is the own hit of:
+  the newest that came within 0.15 s before it (`kBlastWindow`), with the NPC's last listed feet within its reach in a
+  straight line, height included; it counts the hit. `Pushes` gives each blast once, a quarter second after it
+  (`kPushDelay`), with its hits, and forgets it.
+- **`HealthInput`** is V's health share for Minecraft's player: a `kInHurt` of kind other with no damage, so SkyCraft's
+  own `hurtPlayer` leaves it alone, `b` the share × 10,000, rounded and held to 0 to 10,000, and `c` the flag `0x100`
+  (`kHurtSetHealth`), which CyberCraft Tweaks 1.3.0 reads (Task 41). A `static_assert` keeps the flag apart from
+  SkyCraft's own.
+- **`kBlastPower`**, 0.5, is where a blast's own hits start by default: V's punch × Minecraft's damage to that power
+  (Task 46's `set blastpower`).
+
+The tests use binary-exact times (0.0625, 0.125, 0.25, 0.375), so that a hit at exactly the window's end, or a push at
+exactly its delay, is tested as it reads.
+
+**Files:**
+- Modify: `src/link/Combat.h`, `src/link/Combat.cpp`, `tests/TestCombat.cpp`
+
+- [ ] **Step 1: Edit `tests/TestCombat.cpp`: blasts, their hits and pushes, and the health input**
+
+```cpp
+	event.weapon = proto::kWeaponBlade;
+```
+```cpp
+	event.weapon = proto::kWeaponBlade;
+	return event;
+}
+
+// Minecraft's blast at aX aY aZ (its axes), of radius aRadius.
+proto::McEvent Explosion(float aX, float aY, float aZ, float aRadius)
+{
+	proto::McEvent event{};
+	event.type = proto::kEvExplosion;
+	event.a = aX;
+	event.b = aY;
+	event.c = aZ;
+	event.d = aRadius;
+```
+```cpp
+	CHECK(!hide.Frame(false, true, 2.6).has_value());
+}
+```
+```cpp
+	CHECK(!hide.Frame(false, true, 2.6).has_value());
+}
+
+TEST(CombatTakesMinecraftsBlastsIntoTheGamesAxes)
+{
+	// TNT at Minecraft 620.5 6.25 2007.5, radius 4: its centre in the world's axes (x, -z, y), and a reach of twice the
+	// radius, as SkyCraft's.
+	const std::optional<Blast> blast = AcceptBlast(Explosion(620.5f, 6.25f, 2007.5f, 4.0f), 12.0);
+	CHECK(blast.has_value());
+	CHECK_NEAR(blast ? blast->centre.x : 0.0, 620.5, 1e-9);
+	CHECK_NEAR(blast ? blast->centre.y : 0.0, -2007.5, 1e-9);
+	CHECK_NEAR(blast ? blast->centre.z : 0.0, 6.25, 1e-9);
+	CHECK_NEAR(blast ? blast->reach : 0.0, 8.0, 1e-9);
+	CHECK_NEAR(blast ? blast->at : 0.0, 12.0, 1e-9);
+	CHECK_EQ(blast ? blast->hits : 1u, 0u);
+	// A radius past kBlastRadiusCap is held to it: TNT summoned with an explosion power of 100 reaches 32 m, not 200.
+	CHECK_NEAR(AcceptBlast(Explosion(620.5f, 6.25f, 2007.5f, 100.0f), 12.0).value_or(Blast{}).reach, 32.0, 1e-9);
+	// No radius, or a centre or radius that isn't finite: no blast.
+	CHECK(!AcceptBlast(Explosion(620.5f, 6.25f, 2007.5f, 0.0f), 12.0).has_value());
+	CHECK(!AcceptBlast(Explosion(620.5f, 6.25f, 2007.5f, std::numeric_limits<float>::quiet_NaN()), 12.0).has_value());
+	CHECK(!AcceptBlast(Explosion(std::numeric_limits<float>::infinity(), 6.25f, 2007.5f, 4.0f), 12.0).has_value());
+}
+
+TEST(CombatCountsHitsWithinABlastsWindowAndReach)
+{
+	Blasts blasts;
+	blasts.Add(*AcceptBlast(Explosion(0.0f, 0.0f, 0.0f, 4.0f), 0.0));  // at the world's origin, reach 8
+	// An NPC 7.9 m from the centre, hit 0.1 s after the blast: one of its hits. 8.1 m away: not.
+	const std::optional<Blast> hit = blasts.HitOn({ 7.9, 0.0, 0.0 }, 0.1);
+	CHECK(hit.has_value());
+	CHECK_EQ(hit ? hit->hits : 0u, 1u);
+	CHECK(!blasts.HitOn({ 8.1, 0.0, 0.0 }, 0.1).has_value());
+	// The reach is straight-line, height included: 6 east and 6 up is 8.49 m away. Exactly 8 is within it.
+	CHECK(!blasts.HitOn({ 6.0, 0.0, 6.0 }, 0.1).has_value());
+	CHECK(blasts.HitOn({ 0.0, 8.0, 0.0 }, 0.1).has_value());
+	// 0.15 s after the blast still counts; later doesn't, and nor does a hit from before it.
+	CHECK(blasts.HitOn({ 1.0, 0.0, 0.0 }, 0.15).has_value());
+	CHECK(!blasts.HitOn({ 1.0, 0.0, 0.0 }, 0.16).has_value());
+	CHECK(!blasts.HitOn({ 1.0, 0.0, 0.0 }, -0.01).has_value());
+	// Of two blasts, the newer counts the hit.
+	blasts.Add(*AcceptBlast(Explosion(0.0f, 0.0f, 0.0f, 4.0f), 0.125));
+	const std::optional<Blast> newer = blasts.HitOn({ 1.0, 0.0, 0.0 }, 0.13);
+	CHECK(newer.has_value());
+	CHECK(newer && newer->at == 0.125 && newer->hits == 1);
+	CHECK_EQ(blasts.Count(), uint64_t(2));
+}
+
+TEST(CombatPushesEachBlastOnceAQuarterSecondAfter)
+{
+	Blasts blasts;
+	blasts.Add(*AcceptBlast(Explosion(1.0f, 2.0f, 3.0f, 4.0f), 0.0));
+	blasts.HitOn({ 1.0, -3.0, 2.0 }, 0.0625);
+	blasts.HitOn({ 2.0, -3.0, 2.0 }, 0.125);
+	blasts.Add(*AcceptBlast(Explosion(4.0f, 5.0f, 6.0f, 3.0f), 0.125));
+	CHECK(blasts.Pushes(0.24).empty());
+	// The first's push, a quarter second after it, with its two hits; then the second's.
+	const std::vector<Blast> first = blasts.Pushes(0.25);
+	CHECK_EQ(first.size(), size_t(1));
+	CHECK_NEAR(first.empty() ? 0.0 : first[0].reach, 8.0, 1e-9);
+	CHECK_EQ(first.empty() ? 0u : first[0].hits, 2u);
+	CHECK(blasts.Pushes(0.3).empty());  // once
+	const std::vector<Blast> second = blasts.Pushes(0.375);
+	CHECK_EQ(second.size(), size_t(1));
+	CHECK_NEAR(second.empty() ? 0.0 : second[0].reach, 6.0, 1e-9);
+	CHECK(blasts.Pushes(5.0).empty());
+	CHECK_EQ(blasts.Count(), uint64_t(2));
+}
+
+TEST(CombatSetsMinecraftsHealthThroughCyberCraftTweaks)
+{
+	// V's health share, for Minecraft's player: kInHurt of no damage, so SkyCraft's own hurtPlayer leaves it, with
+	// CyberCraft Tweaks' flag, the share x 10,000 in b.
+	const proto::InputEvent half = HealthInput(0.5);
+	CHECK_EQ(half.type, uint16_t(proto::kInHurt));
+	CHECK_EQ(half.code, uint16_t(proto::kHurtOther));
+	CHECK_EQ(half.a, 0);
+	CHECK_EQ(half.b, 5000);
+	CHECK_EQ(half.c, int32_t(kHurtSetHealth));
+	CHECK_EQ(HealthInput(0.12345).b, 1235);  // rounded
+	CHECK_EQ(HealthInput(1.5).b, 10000);     // held to 0 to 1
+	CHECK_EQ(HealthInput(-0.5).b, 0);
+	CHECK_EQ(HealthInput(std::numeric_limits<double>::quiet_NaN()).b, 0);
+}
+```
+- [ ] **Step 2: Build; it must fail**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C" | sort -u | head -3
+```
+Expected: `error C2065: 'Blast': undeclared identifier`.
+
+- [ ] **Step 3: Edit `src/link/Combat.h`**
+
+```cpp
+#include <string>
+```
+```cpp
+#include <string>
+#include <vector>
+```
+```cpp
+// meshes go on and off. Pure: the tests give it hits and hurts of their own.
+```
+```cpp
+// meshes go on and off. Minecraft's blasts (spike 6's "Part 3"): where each is in the game, which hits are its own, and
+// when its push is due; and V's health share for Minecraft's player as build mode starts. Pure: the tests give it hits,
+// hurts and blasts of their own.
+```
+```cpp
+constexpr int    kHurtTicks = 11;          // Minecraft's ticks between kInHurts: within 10 it takes only the excess
+```
+```cpp
+constexpr int    kHurtTicks = 11;          // Minecraft's ticks between kInHurts: within 10 it takes only the excess
+constexpr double kBlastPower = 0.5;        // set blastpower's default: a blast hit starts at V's punch x damage^0.5
+constexpr double kBlastWindow = 0.15;      // seconds after a blast that Minecraft's hits within its reach are its own
+constexpr double kPushDelay = 0.25;        // seconds after a blast that it pushes: the NPCs it killed are ragdolls by then
+constexpr double kBlastRadiusCap = 16.0;   // Minecraft's radius, at most: TNT's is 4, a charged creeper's 6
+constexpr uint32_t kHurtSetHealth = 0x100;  // CyberCraft Tweaks 1.3.0: a kInHurt of no damage that sets Minecraft's
+                                            // player's health to b / 10,000 of its max
+```
+```cpp
+	double onAt_ = 0.0;     // when on was last called
+};
+}
+```
+```cpp
+	double onAt_ = 0.0;     // when on was last called
+};
+
+// One of Minecraft's blasts, in the game's terms.
+struct Blast
+{
+	Vec3d    centre;       // world axes
+	double   reach = 0.0;  // metres from the centre, straight-line: twice Minecraft's radius, as SkyCraft's
+	double   at = 0.0;     // when it came, seconds
+	uint32_t hits = 0;     // Minecraft's hits that are its own, so far
+};
+
+// A kEvExplosion at aNow as a blast: its centre, Minecraft's a, b and c, in world axes; its reach twice its radius, d, held
+// to kBlastRadiusCap. Nothing if the centre or the radius isn't finite, or the radius isn't over 0.
+std::optional<Blast> AcceptBlast(const proto::McEvent& aEvent, double aNow);
+
+// The last moments' blasts: which of Minecraft's hits are a blast's own, and when each blast's push is due.
+class Blasts
+{
+public:
+	void Add(const Blast& aBlast);
+	// The blast that Minecraft's hit at aNow, on an NPC whose last listed feet are aFeet (world axes), is the own hit of: the
+	// newest that came within kBlastWindow before aNow, with aFeet within its reach, its hit counted. Nothing if none.
+	std::optional<Blast> HitOn(const Vec3d& aFeet, double aNow);
+	// The blasts whose push is due at aNow, kPushDelay after each, oldest first, each once; they're forgotten then.
+	std::vector<Blast> Pushes(double aNow);
+	uint64_t           Count() const { return count_; }  // blasts since the start
+
+private:
+	std::vector<Blast> recent_;  // not pushed yet, oldest first
+	uint64_t           count_ = 0;
+};
+
+// V's health share for Minecraft's player, through CyberCraft Tweaks 1.3.0: kInHurt, kind other, with no damage (a = 0, so
+// SkyCraft's own hurtPlayer leaves it, and so does a SkyCraft without the mod), b = aShare x 10,000 rounded and held to 0 to
+// 10,000, and c = kHurtSetHealth.
+proto::InputEvent HealthInput(double aShare);
+}
+```
+- [ ] **Step 4: Edit `src/link/Combat.cpp`**
+
+```cpp
+	return kHurtTicks * tickMs / 1000.0;
+}
+}
+```
+```cpp
+	return kHurtTicks * tickMs / 1000.0;
+}
+
+// The set-health flag is a bit of its own, beside SkyCraft's blocked and power attack flags.
+static_assert((kHurtSetHealth & (proto::kHurtBlockedInSkyrim | proto::kHurtPowerAttack)) == 0);
+}
+```
+```cpp
+	return std::nullopt;
+}
+}
+```
+```cpp
+	return std::nullopt;
+}
+
+std::optional<Blast> AcceptBlast(const proto::McEvent& aEvent, double aNow)
+{
+	if (!std::isfinite(aEvent.a) || !std::isfinite(aEvent.b) || !std::isfinite(aEvent.c) || !std::isfinite(aEvent.d) || aEvent.d <= 0.0f)
+	{
+		return std::nullopt;
+	}
+	Blast blast;
+	blast.centre = WorldFromMc({ aEvent.a, aEvent.b, aEvent.c });
+	blast.reach = 2.0 * std::min(double(aEvent.d), kBlastRadiusCap);
+	blast.at = aNow;
+	return blast;
+}
+
+void Blasts::Add(const Blast& aBlast)
+{
+	recent_.push_back(aBlast);
+	++count_;
+}
+
+std::optional<Blast> Blasts::HitOn(const Vec3d& aFeet, double aNow)
+{
+	for (auto blast = recent_.rbegin(); blast != recent_.rend(); ++blast)
+	{
+		const double after = aNow - blast->at;
+		const double distance = std::hypot(aFeet.x - blast->centre.x, aFeet.y - blast->centre.y, aFeet.z - blast->centre.z);
+		if (after >= 0.0 && after <= kBlastWindow && distance <= blast->reach)
+		{
+			++blast->hits;
+			return *blast;
+		}
+	}
+	return std::nullopt;
+}
+
+std::vector<Blast> Blasts::Pushes(double aNow)
+{
+	std::vector<Blast> due;
+	std::erase_if(recent_, [&](const Blast& aBlast) {
+		if (aNow - aBlast.at < kPushDelay)
+		{
+			return false;
+		}
+		due.push_back(aBlast);
+		return true;
+	});
+	return due;
+}
+
+proto::InputEvent HealthInput(double aShare)
+{
+	proto::InputEvent input{};
+	input.type = proto::kInHurt;
+	input.code = proto::kHurtOther;
+	input.a = 0;
+	input.b = std::isfinite(aShare) ? int32_t(std::lround(std::clamp(aShare, 0.0, 1.0) * 10000.0)) : 0;
+	input.c = int32_t(kHurtSetHealth);
+	return input;
+}
+}
+```
+- [ ] **Step 5: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `444 test(s), 0 failure(s)`.
+
+- [ ] **Step 6: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "npcs-and-combat: Minecraft's blasts in the game's axes, the hits that are their own, their pushes a quarter second after, and V's health share for Minecraft's player" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 39: The bush rule, each shape's own size, and the city started over
+
+The second follow-up (the spec's "Part 3's follow-ups"): bushes out of Minecraft's ground.
+- **The bush rule.** The exporter keeps every static scene-query shape that isn't a trigger or a plane (`KeptShape`), so
+  a bush's foliage, which V walks through, was solid for Minecraft's player. Step 4's fixes found what it is: spheres of
+  about 2 m whose query filter is the sight layer alone, `0:0:80000:0`, with an all-zero simulation filter (the
+  results' "Asked for, after Part 2"). `LeftOut` leaves out, besides, what the rule names: `SightOnly`, the default,
+  those whose query filter is exactly the sight layer; `Unsimulated`, those whose simulation filter is all zeros;
+  `Nothing`, no more than before. The terrain's query filter, `0:0:449c080:0`, has the sight layer among others, so it
+  stays. `PhysxGround::Read` counts what the rule leaves out (`leftByRule`), and `Rule` and `SetRule` let Task 46's `set
+  bushrule` change it.
+- **Each shape's own size.** `shapes` printed each actor's bounds, which for a bush held its spheres and a capsule
+  together, so the capsule couldn't be sized. Now each sphere, capsule and box also gets its own words: a sphere's centre
+  and radius, a capsule's ends and radius (PhysX's capsules lie along their local x axis), a box's size and centre, in
+  world axes; and the line says whether the exporter leaves the shape out by the rule. The geometry getters are the
+  audited ones the exporter already reads shapes with (`docs/spikes/2026-10-01-physx-abi-audit.md`).
+- **The city started over.** `Link::RestartCity` has the city read again from the start at the next update, as when the
+  ground switches to it: a clear with a new epoch, then every region afresh, at once, since its collision is there
+  already. On the floor nothing is sent; the city starts over anyway when the ground switches to it.
+
+**Files:**
+- Modify: `src/physx/Export.h`, `src/physx/Export.cpp`, `src/link/Link.h`, `src/link/Link.cpp`, `tests/TestExport.cpp`,
+  `tests/TestLink.cpp`
+
+- [ ] **Step 1: Edit `tests/TestExport.cpp`: the bush rule, and each shape's words**
+
+```cpp
+TEST(ExportReadsNothingWithoutTheGame)
+```
+```cpp
+TEST(ExportLeavesOutWhatTheBushRuleSays)
+{
+	// A bush's foliage, as Task 36's shapes found it: query filter the sight layer alone, simulation filter all zeros. The
+	// terrain's heightfield and the bush's capsule have the sight layer among others, and real simulation filters.
+	const PxFilterData foliageQuery(0, 0, 0x80000, 0), foliageSimulation(0, 0, 0, 0);
+	const PxFilterData terrainQuery(0, 0, 0x449c080, 0), terrainSimulation(0x1c080, 0, 0x104a, 0);
+	const PxFilterData capsuleQuery(0, 0, 0x4484000, 0), capsuleSimulation(0x4004, 0, 0x1e0c, 0);
+	// Nothing: every static scene-query shape stays, as before.
+	CHECK(!LeftOut(foliageQuery, foliageSimulation, LeaveOut::Nothing));
+	// Sight-only, the default: the foliage goes, and the terrain and the capsule stay; so does a shape with the sight layer
+	// alone but another word set.
+	CHECK(LeftOut(foliageQuery, foliageSimulation, LeaveOut::SightOnly));
+	CHECK(!LeftOut(terrainQuery, terrainSimulation, LeaveOut::SightOnly));
+	CHECK(!LeftOut(capsuleQuery, capsuleSimulation, LeaveOut::SightOnly));
+	CHECK(!LeftOut(PxFilterData(1, 0, 0x80000, 0), foliageSimulation, LeaveOut::SightOnly));
+	// Unsimulated: whatever has an all-zero simulation filter goes, whatever its query filter.
+	CHECK(LeftOut(foliageQuery, foliageSimulation, LeaveOut::Unsimulated));
+	CHECK(LeftOut(terrainQuery, foliageSimulation, LeaveOut::Unsimulated));
+	CHECK(!LeftOut(terrainQuery, terrainSimulation, LeaveOut::Unsimulated));
+	// The exporter starts with the sight-only rule.
+	Session     session;
+	PhysxGround ground(session);
+	CHECK(ground.Rule() == LeaveOut::SightOnly);
+	ground.SetRule(LeaveOut::Nothing);
+	CHECK(ground.Rule() == LeaveOut::Nothing);
+	CHECK_STR(LeaveOutName(LeaveOut::SightOnly), "sight-only shapes");
+	CHECK_STR(LeaveOutName(LeaveOut::Unsimulated), "unsimulated shapes");
+	CHECK_STR(LeaveOutName(LeaveOut::Nothing), "nothing");
+}
+
+TEST(ExportDescribesEachPrimitiveShape)
+{
+	// PhysX's frame is the world less its origin; a capsule lies along its local x axis. Upright, as an NPC's controller
+	// stands: its local x turned to world z.
+	const Vec3d       origin{ 0.0, -2048.0, 0.0 };
+	const PxTransform upright(PxVec3(-26.0f, -176.0f, 7.0f), PxQuat(-PxHalfPi, PxVec3(0.0f, 1.0f, 0.0f)));
+	CHECK_STR(SphereWords(1.07f, PxTransform(PxVec3(-26.39f, -175.71f, 6.94f)), origin),
+	          "sphere of radius 1.07 at (-26.39, -2223.71, 6.94)");
+	CHECK_STR(CapsuleWords(0.3f, 0.5f, upright, origin), "capsule of radius 0.30 from (-26.00, -2224.00, 6.50) to (-26.00, -2224.00, 7.50)");
+	CHECK_STR(BoxWords(PxVec3(1.0f, 0.25f, 1.5f), PxTransform(PxVec3(10.0f, 20.0f, 30.0f)), origin), "box of 2.00 x 0.50 x 3.00 at (10.00, -2028.00, 30.00)");
+}
+
+TEST(ExportReadsNothingWithoutTheGame)
+```
+- [ ] **Step 2: Edit `tests/TestLink.cpp`: the city started over**
+
+```cpp
+TEST(LinkReadsTheCityAgainWhenVIsFoundAgain)
+```
+```cpp
+TEST(LinkStartsTheCityOverWhenWhatItKeepsChanges)
+{
+	FakeMinecraft                     minecraft;
+	Link                              link(minecraft.base, 0);
+	Sink                              sink;
+	Street                            street;
+	std::vector<std::vector<uint8_t>> payloads;
+	minecraft.Beat(77, 1000);
+	link.Update(At(1.0), City(), sink);  // the city, epoch 1, read once its collision has settled
+	link.ReadGround(2.5, street, 0.0);
+	CHECK(Finish(link, At(2.5), City(), sink));
+	minecraft.Collision(payloads);
+	CHECK_EQ(link.State().cityKnown, size_t(8));
+	// What the exporter keeps changes (set bushrule): at the next update the city starts over, with a clear and a new
+	// epoch, and every region is read again, at once, its collision being there already, V's batch first.
+	link.RestartCity();
+	link.Update(At(3.0), City(), sink);
+	payloads.clear();
+	const auto messages = minecraft.Collision(payloads);
+	CHECK(messages.size() == 1 && messages[0].type == proto::kColClear);
+	CHECK(payloads.size() == 1 && payloads[0] == std::vector<uint8_t>({ 2, 0, 0, 0 }));
+	CHECK(sink.Logged("the city starts over, as collision epoch 2"));
+	link.ReadGround(3.0, street, 0.0);
+	CHECK_EQ(street.boxes.size(), size_t(2));
+	CHECK_NEAR(street.boxes[1].low.x, street.boxes[0].low.x, 1e-9);
+	CHECK_NEAR(street.boxes[1].low.z, street.boxes[0].low.z, 1e-9);
+	// Once: the regions read again go out under epoch 2, with no second clear.
+	CHECK(Finish(link, At(3.0), City(), sink));
+	payloads.clear();
+	CHECK_EQ(minecraft.Collision(payloads).size(), size_t(16));
+	CHECK_EQ(link.State().collisionEpoch, 2u);
+	// On the floor nothing is sent: the city starts over anyway when the ground switches to it.
+	link.Update(At(3.1), kSettings, sink);
+	minecraft.Collision(payloads);
+	link.RestartCity();
+	link.Update(At(3.2), kSettings, sink);
+	payloads.clear();
+	CHECK(minecraft.Collision(payloads).empty());
+}
+
+TEST(LinkReadsTheCityAgainWhenVIsFoundAgain)
+```
+- [ ] **Step 3: Build; it must fail**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C" | sort -u | head -3
+```
+Expected: `error C2039: 'RestartCity': is not a member of 'cpmc::link::Link'`.
+
+- [ ] **Step 4: Edit `src/physx/Export.h`**
+
+```cpp
+bool KeptShape(AuditedClass aActor, physx::PxShapeFlags aFlags, physx::PxGeometryType::Enum aGeometry, bool aOurs);
+```
+```cpp
+bool KeptShape(AuditedClass aActor, physx::PxShapeFlags aFlags, physx::PxGeometryType::Enum aGeometry, bool aOurs);
+
+// What else the exporter leaves out, by the shape's filters (spike 6's follow-up, set bushrule): static scene-query shapes
+// that V walks through all the same. A bush's foliage is spheres of about 2 m whose query filter is the sight layer alone,
+// 0:0:80000:0, and whose simulation filter is all zeros (Task 36's shapes); the terrain's query filter, 0:0:449c080:0, has
+// that layer among others.
+enum class LeaveOut
+{
+	Nothing = 0,      // every static scene-query shape stays, as before
+	SightOnly = 1,    // those whose query filter is the sight layer alone go: the default
+	Unsimulated = 2,  // those whose simulation filter is all zeros go
+};
+constexpr uint32_t kSightLayer = 0x80000;  // the query filter's third word
+
+// Whether aRule leaves out a shape with the query filter aQuery and the simulation filter aSimulation.
+bool        LeftOut(const physx::PxFilterData& aQuery, const physx::PxFilterData& aSimulation, LeaveOut aRule);
+const char* LeaveOutName(LeaveOut aRule);  // "nothing", "sight-only shapes", "unsimulated shapes"
+
+// A primitive shape's own size and place, for the shapes request, whose actor bounds can hold several shapes (a bush's
+// capsule): its centre, or a capsule's axis from end to end (PhysX's capsules lie along their local x axis), in world axes.
+// aPose is the shape's, in PhysX's frame: the world less aOrigin.
+std::string SphereWords(float aRadius, const physx::PxTransform& aPose, const Vec3d& aOrigin);
+std::string CapsuleWords(float aRadius, float aHalfHeight, const physx::PxTransform& aPose, const Vec3d& aOrigin);
+std::string BoxWords(const physx::PxVec3& aHalfExtents, const physx::PxTransform& aPose, const Vec3d& aOrigin);
+```
+```cpp
+		uint64_t             left = 0;        // shapes the overlap gave that aren't kept: simulation-only, triggers, planes
+```
+```cpp
+		uint64_t             left = 0;        // shapes the overlap gave that aren't kept: simulation-only, triggers, planes
+		uint64_t             leftByRule = 0;  // of those, static scene-query shapes the rule (set bushrule) left out
+```
+```cpp
+	OwnActors&    Own() { return own_; }  // BlockRender's own, left out of what's read
+```
+```cpp
+	OwnActors&    Own() { return own_; }  // BlockRender's own, left out of what's read
+	// What else is left out, by the shapes' filters: sight-only shapes at first. The link reads the city again for a change.
+	void     SetRule(LeaveOut aRule) { rule_ = aRule; }
+	LeaveOut Rule() const { return rule_; }
+```
+```cpp
+	OwnActors                own_;
+```
+```cpp
+	OwnActors                own_;
+	LeaveOut                 rule_ = LeaveOut::SightOnly;
+```
+- [ ] **Step 5: Edit `src/physx/Export.cpp`**
+
+```cpp
+	return hits;
+}
+}
+```
+```cpp
+	return hits;
+}
+
+// A primitive shape's own size and place, for the shapes request, aPose being its pose in PhysX's frame; empty for meshes,
+// heightfields and the rest, which the actor's bounds describe.
+std::string PrimitiveWords(const PxShape& aShape, const PxTransform& aPose, const Vec3d& aOrigin)
+{
+	switch (aShape.getGeometryType())
+	{
+	case PxGeometryType::eSPHERE:
+	{
+		PxSphereGeometry sphere;
+		return aShape.getSphereGeometry(sphere) ? SphereWords(sphere.radius, aPose, aOrigin) : std::string();
+	}
+	case PxGeometryType::eCAPSULE:
+	{
+		PxCapsuleGeometry capsule;
+		return aShape.getCapsuleGeometry(capsule) ? CapsuleWords(capsule.radius, capsule.halfHeight, aPose, aOrigin) : std::string();
+	}
+	case PxGeometryType::eBOX:
+	{
+		PxBoxGeometry box;
+		return aShape.getBoxGeometry(box) ? BoxWords(box.halfExtents, aPose, aOrigin) : std::string();
+	}
+	default:
+		return {};
+	}
+}
+}
+```
+```cpp
+	       aGeometry != PxGeometryType::ePLANE && !aOurs;
+```
+```cpp
+	       aGeometry != PxGeometryType::ePLANE && !aOurs;
+}
+
+bool LeftOut(const PxFilterData& aQuery, const PxFilterData& aSimulation, LeaveOut aRule)
+{
+	switch (aRule)
+	{
+	case LeaveOut::SightOnly:
+		return aQuery.word0 == 0 && aQuery.word1 == 0 && aQuery.word2 == kSightLayer && aQuery.word3 == 0;
+	case LeaveOut::Unsimulated:
+		return aSimulation.word0 == 0 && aSimulation.word1 == 0 && aSimulation.word2 == 0 && aSimulation.word3 == 0;
+	default:
+		return false;
+	}
+}
+
+const char* LeaveOutName(LeaveOut aRule)
+{
+	switch (aRule)
+	{
+	case LeaveOut::SightOnly:
+		return "sight-only shapes";
+	case LeaveOut::Unsimulated:
+		return "unsimulated shapes";
+	default:
+		return "nothing";
+	}
+}
+
+std::string SphereWords(float aRadius, const PxTransform& aPose, const Vec3d& aOrigin)
+{
+	return std::format("sphere of radius {:.2f} at ({:.2f}, {:.2f}, {:.2f})", aRadius, aPose.p.x + aOrigin.x, aPose.p.y + aOrigin.y,
+	                   aPose.p.z + aOrigin.z);
+}
+
+std::string CapsuleWords(float aRadius, float aHalfHeight, const PxTransform& aPose, const Vec3d& aOrigin)
+{
+	const PxVec3 axis = aPose.q.rotate(PxVec3(aHalfHeight, 0.0f, 0.0f));
+	const PxVec3 from = aPose.p - axis;
+	const PxVec3 to = aPose.p + axis;
+	return std::format("capsule of radius {:.2f} from ({:.2f}, {:.2f}, {:.2f}) to ({:.2f}, {:.2f}, {:.2f})", aRadius, from.x + aOrigin.x,
+	                   from.y + aOrigin.y, from.z + aOrigin.z, to.x + aOrigin.x, to.y + aOrigin.y, to.z + aOrigin.z);
+}
+
+std::string BoxWords(const PxVec3& aHalfExtents, const PxTransform& aPose, const Vec3d& aOrigin)
+{
+	return std::format("box of {:.2f} x {:.2f} x {:.2f} at ({:.2f}, {:.2f}, {:.2f})", 2.0f * aHalfExtents.x, 2.0f * aHalfExtents.y,
+	                   2.0f * aHalfExtents.z, aPose.p.x + aOrigin.x, aPose.p.y + aOrigin.y, aPose.p.z + aOrigin.z);
+```
+```cpp
+		}
+		++report_.kept;
+```
+```cpp
+		}
+		if (LeftOut(hit.shape->getQueryFilterData(), hit.shape->getSimulationFilterData(), rule_))
+		{
+			++report_.left;
+			++report_.leftByRule;
+			continue;
+		}
+		++report_.kept;
+```
+```cpp
+		const PxBounds3 bounds = hit.actor->getWorldBounds(1.0f);
+		lines.push_back(std::format("{} {} of actor {}, actor bounds ({:.2f}, {:.2f}, {:.2f}) to ({:.2f}, {:.2f}, {:.2f}) in world axes; "
+		                            "{}{}{}; query filter {}, simulation filter {}{}{}",
+		                            kind, GeometryName(geometry), static_cast<const void*>(hit.actor), bounds.minimum.x + origin.x,
+		                            bounds.minimum.y + origin.y, bounds.minimum.z + origin.z, bounds.maximum.x + origin.x,
+		                            bounds.maximum.y + origin.y, bounds.maximum.z + origin.z,
+		                            flags.isSet(PxShapeFlag::eSIMULATION_SHAPE) ? "simulation" : "not simulation",
+		                            flags.isSet(PxShapeFlag::eSCENE_QUERY_SHAPE) ? ", scene query" : ", not scene query",
+		                            flags.isSet(PxShapeFlag::eTRIGGER_SHAPE) ? ", trigger" : "", FilterKey(hit.shape->getQueryFilterData()),
+		                            FilterKey(hit.shape->getSimulationFilterData()),
+		                            KeptShape(actor.cls, flags, geometry, ours) ? "; the exporter keeps it" : "",
+```
+```cpp
+		const PxBounds3    bounds = hit.actor->getWorldBounds(1.0f);
+		const PxFilterData query = hit.shape->getQueryFilterData();
+		const PxFilterData simulation = hit.shape->getSimulationFilterData();
+		const std::string  primitive = PrimitiveWords(*hit.shape, hit.actor->getGlobalPose() * hit.shape->getLocalPose(), origin);
+		const std::string  exported = !KeptShape(actor.cls, flags, geometry, ours) ? std::string()
+		                              : LeftOut(query, simulation, rule_)
+		                                  ? std::format("; the exporter leaves it out, with {}", LeaveOutName(rule_))
+		                                  : std::string("; the exporter keeps it");
+		lines.push_back(std::format("{} {} of actor {}, actor bounds ({:.2f}, {:.2f}, {:.2f}) to ({:.2f}, {:.2f}, {:.2f}) in world axes{}; "
+		                            "{}{}{}; query filter {}, simulation filter {}{}{}",
+		                            kind, GeometryName(geometry), static_cast<const void*>(hit.actor), bounds.minimum.x + origin.x,
+		                            bounds.minimum.y + origin.y, bounds.minimum.z + origin.z, bounds.maximum.x + origin.x,
+		                            bounds.maximum.y + origin.y, bounds.maximum.z + origin.z, primitive.empty() ? "" : "; the shape: " + primitive,
+		                            flags.isSet(PxShapeFlag::eSIMULATION_SHAPE) ? "simulation" : "not simulation",
+		                            flags.isSet(PxShapeFlag::eSCENE_QUERY_SHAPE) ? ", scene query" : ", not scene query",
+		                            flags.isSet(PxShapeFlag::eTRIGGER_SHAPE) ? ", trigger" : "", FilterKey(query), FilterKey(simulation), exported,
+```
+- [ ] **Step 6: Edit `src/link/Link.h`**
+
+```cpp
+	void ReadGround(double aNow, GroundSource& aSource, double aBudgetMs);
+```
+```cpp
+	void ReadGround(double aNow, GroundSource& aSource, double aBudgetMs);
+	// The city read again from the start at the next update, as when the ground switches to it: a clear with a new epoch,
+	// then every region afresh, for a change in what the source keeps (spike 6's follow-up, set bushrule). On the floor
+	// nothing is sent, the city starting over anyway when the ground switches to it.
+	void RestartCity() { cityRestart_ = true; }
+```
+```cpp
+	bool                              cityClear_ = false;  // a clear is due before the city's next regions
+```
+```cpp
+	bool                              cityClear_ = false;  // a clear is due before the city's next regions
+	bool                              cityRestart_ = false;  // RestartCity: the city starts over at the next update
+```
+- [ ] **Step 7: Edit `src/link/Link.cpp`**
+
+```cpp
+		aSink.Log(std::format("the ground is the {} now", GroundName(aSettings.ground)));
+```
+```cpp
+		aSink.Log(std::format("the ground is the {} now", GroundName(aSettings.ground)));
+	}
+	if (std::exchange(cityRestart_, false))
+	{
+		cityClear_ = true;
+		areas_.Reset(aFrame.now);
+		outbox_.clear();
+```
+- [ ] **Step 8: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `447 test(s), 0 failure(s)`.
+
+- [ ] **Step 9: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "npcs-and-combat: the exporter leaves out a bush's foliage by its filters, the shapes request sizes each primitive shape, and the link starts the city over when what it keeps changes" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 40: `mclink` tells a blast's own hits, says when each blast would push, and sets Minecraft's player's health
+
+Step 5a runs against the real Minecraft with `mclink`, before anything goes into the game, as steps 1 and 3 did:
+- **`health <share>`** sends Task 38's `HealthInput`, over 0 and up to 1, as the plugin will send V's share as build mode
+  starts; CyberCraft Tweaks 1.3.0 (Task 41) sets Minecraft's player's health by it.
+- **A blast's own hits:** each explosion is taken as the plugin takes it (`AcceptBlast`), and printed with its reach; a
+  hit on a made-up NPC within its window and reach, by the NPC's record's feet, is printed as the blast's own, with its
+  distance from the centre and its time after the blast, as the plugin will tell it by the NPC's last listed feet.
+- **Each blast's push** is printed as it comes due, a quarter second after the blast, with its hits.
+- **`tools/mclink/blasts.txt`** is step 5a's script, at a fresh spot on the floor, 160 blocks east of step 3's: five
+  stand-ins 1.5, 3, 5, 7 and 9 blocks from a point 10 blocks north of the stand-in V, and TNT at the point with no
+  fuse; the blocks around the point checked as all air before and after; then Minecraft's player's health set to a
+  half, all and a twentieth, each read back with `/data`, and a hurt after it. It ends at full health in survival, as
+  step 5b wants Minecraft's player.
+
+**Files:**
+- Create: `tools/mclink/blasts.txt`
+- Modify: `tools/mclink/McLinkScript.h`, `tools/mclink/McLinkScript.cpp`, `tools/mclink/Main.cpp`,
+  `tests/TestMcLinkScript.cpp`
+
+- [ ] **Step 1: Edit `tests/TestMcLinkScript.cpp`: `health`, and step 5a's script parses**
+
+```cpp
+	for (const char* name : { "step1.txt", "again.txt", "eye.txt", "drive.txt", "relink.txt", "city.txt", "npcs.txt", "hurts.txt" })
+```
+```cpp
+	for (const char* name : { "step1.txt", "again.txt", "eye.txt", "drive.txt", "relink.txt", "city.txt", "npcs.txt", "hurts.txt", "blasts.txt" })
+```
+```cpp
+TEST(ScriptParsesMadeUpNpcs)
+```
+```cpp
+TEST(ScriptParsesHealth)
+{
+	std::string error;
+	const auto  actions = ParseScript("health 0.5\nhealth 1\n", error);
+	CHECK(actions.has_value());
+	CHECK_EQ(actions ? actions->size() : 0, size_t(2));
+	if (actions && actions->size() == 2)
+	{
+		CHECK((*actions)[0].kind == Kind::Health);
+		CHECK_EQ((*actions)[0].numbers[0], 0.5);
+		CHECK_EQ((*actions)[1].numbers[0], 1.0);
+	}
+	CHECK(!ParseScript("health 0", error).has_value());  // a living V's share is over 0
+	CHECK(!ParseScript("health 1.5", error).has_value());
+	CHECK(!ParseScript("health", error).has_value());
+	CHECK(!ParseScript("health 0.5 0.5", error).has_value());
+}
+
+TEST(ScriptParsesMadeUpNpcs)
+```
+- [ ] **Step 2: Build; it must fail**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C" | sort -u | head -3
+```
+Expected: `error C2065: 'Health': undeclared identifier`.
+
+- [ ] **Step 3: Edit `tools/mclink/McLinkScript.h`**
+
+```cpp
+//                                  power for a power attack. It goes through the plugin's sums: at once, or in a sum
+```
+```cpp
+//                                  power for a power attack. It goes through the plugin's sums: at once, or in a sum
+//   health <share>                 Minecraft's player's health set to that share of its max, over 0 and up to 1, as the
+//                                  plugin sends V's as build mode starts (spike 6's follow-up): CyberCraft Tweaks 1.3.0 sets it
+```
+```cpp
+		Hurt,
+		Status,
+```
+```cpp
+		Hurt,
+		Health,
+		Status,
+```
+```cpp
+	                      // kind (proto::HurtKind), share and attacker
+```
+```cpp
+	                      // kind (proto::HurtKind), share and attacker; the health's share
+```
+- [ ] **Step 4: Edit `tools/mclink/McLinkScript.cpp`**
+
+```cpp
+		}
+		else if (verb == "floor" || verb == "status" || verb == "quit")
+```
+```cpp
+		}
+		else if (verb == "health")
+		{
+			action.kind = Action::Kind::Health;
+			if (!numbers(1) || action.numbers[0] <= 0.0 || action.numbers[0] > 1.0)
+			{
+				return fail("health takes a share of Minecraft's max health, over 0 and up to 1");
+			}
+		}
+		else if (verb == "floor" || verb == "status" || verb == "quit")
+```
+- [ ] **Step 5: Write `tools/mclink/blasts.txt`**
+
+```text
+# Spike 6's step 5a: Minecraft's blasts as BlockRender takes them, and V's health share set on Minecraft's player
+# through CyberCraft Tweaks 1.3.0, without the game. At a fresh spot on the floor, 160 blocks east of step 3's: five
+# stand-ins 1.5, 3, 5, 7 and 9 blocks from a point 10 blocks north of the stand-in V, each in its own direction, and TNT
+# at the point with no fuse. Its explosion comes first, then its hits on the four within its reach of 8, each a blast's
+# own, Minecraft's damage falling off with distance; none on the fifth; and the push a quarter second after. The blocks
+# around the point are all air before and after, so the blast built and broke nothing. Then the health, in survival:
+# half, all and a twentieth of Minecraft's 20, each read back with /data; and a hurt after it, which still hurts. It ends
+# at full health in survival, as step 5b wants Minecraft's player. Start Minecraft first, with CyberCraft Tweaks 1.3.0 in
+# its mods; this waits for its world.
+status
+wait-world 180
+at 680.5 6.14 2007.5
+look 180 0
+link on
+wait 3
+type /gamemode creative
+# 8 blocks each way around the point, from y 5 to 13, the same as the sky's at y 300: all air, "Test passed".
+type /execute if blocks 672 5 1989 688 13 2005 672 300 1989 all
+# The stand-ins, around the point 680.5 6.14 1997.5: east, south, west, north, and north-east, out of reach.
+actor 1 682.0 6.14 1997.5 0 0.6 1.8 One
+actor 2 680.5 6.14 2000.5 0 0.6 1.8 Two
+actor 3 675.5 6.14 1997.5 0 0.6 1.8 Three
+actor 4 680.5 6.14 1990.5 0 0.6 1.8 Four
+actor 5 686.86 6.14 1991.14 0 0.6 1.8 Five
+wait 2
+type /summon minecraft:tnt 680.5 6.14 1997.5 {fuse:0s}
+wait 3
+type /execute if blocks 672 5 1989 688 13 2005 672 300 1989 all
+status
+# The health. CyberCraft Tweaks logs each it sets; /data reads it back.
+type /gamemode survival
+health 0.5
+wait 1
+type /data get entity @s Health
+health 1
+wait 1
+type /data get entity @s Health
+health 0.05
+wait 1
+type /data get entity @s Health
+# A hurt after it still hurts: a tenth, other, takes 20 to 18. Then full health again.
+health 1
+wait 1
+hurt other 0.1
+wait 1
+type /data get entity @s Health
+health 1
+wait 1
+actor-remove all
+status
+quit
+```
+- [ ] **Step 6: Edit `tools/mclink/Main.cpp`**
+
+```cpp
+// and spike 6's steps 1 and 3. It runs BlockRender's link code against the real Minecraft, without the game
+```
+```cpp
+// and spike 6's steps 1, 3 and 5a. It runs BlockRender's link code against the real Minecraft, without the game
+```
+```cpp
+// blocks and its hits on the NPCs among it, and refuses to start while another game side uses the mapping.
+```
+```cpp
+// blocks and its hits on the NPCs among it, which of those hits are a blast's own, as the plugin tells them by the NPCs'
+// feet, and when each blast's push would come; and refuses to start while another game side uses the mapping.
+```
+```cpp
+		Say("explosion at {:.1f} {:.1f} {:.1f}, radius {:.1f}", aEvent.a, aEvent.b, aEvent.c, aEvent.d);
+```
+```cpp
+		const std::optional<Blast> blast = AcceptBlast(aEvent, Now());
+		Say("explosion at {:.2f} {:.2f} {:.2f}, radius {:.1f}{}", aEvent.a, aEvent.b, aEvent.c, aEvent.d,
+		    blast ? std::format(": a blast reaching {:.1f} m", blast->reach) : std::string(": not a blast the plugin takes"));
+		if (blast)
+		{
+			blasts.Add(*blast);
+		}
+```
+```cpp
+		Say("hit: actor {} for {:.2f}, knockback {:.2f} towards x {:.2f} z {:.2f}; {}", aEvent.formId, aEvent.a, aEvent.d, aEvent.b, aEvent.c,
+		    HitWords(aEvent));
+```
+```cpp
+		// A blast's own hit, as the plugin tells it: by the NPC's feet, which are the made-up NPC's record.
+		std::string blastWords;
+		const auto  actor = actors ? actors->find(aEvent.formId) : std::map<uint32_t, proto::ActorRecord>::const_iterator();
+		if (actors && actor != actors->end())
+		{
+			const Vec3d feet = WorldFromMc({ actor->second.x, actor->second.y, actor->second.z });
+			if (const std::optional<Blast> blast = blasts.HitOn(feet, Now()))
+			{
+				blastWords = std::format("; a blast's own, {:.2f} m from its centre, {:.3f} s after it",
+				                         std::hypot(feet.x - blast->centre.x, feet.y - blast->centre.y, feet.z - blast->centre.z),
+				                         Now() - blast->at);
+			}
+		}
+		Say("hit: actor {} for {:.2f}, knockback {:.2f} towards x {:.2f} z {:.2f}; {}{}", aEvent.formId, aEvent.a, aEvent.d, aEvent.b, aEvent.c,
+		    HitWords(aEvent), blastWords);
+```
+```cpp
+	std::vector<uint8_t> hud;
+```
+```cpp
+	std::vector<uint8_t> hud;
+	Blasts                                        blasts;            // Minecraft's, as the plugin takes them
+	const std::map<uint32_t, proto::ActorRecord>* actors = nullptr;  // the made-up NPCs, by number
+```
+```cpp
+		    aHurt.power ? ", power attack" : "", sent ? "" : "; DROPPED, the input ring is full");
+	};
+```
+```cpp
+		    aHurt.power ? ", power attack" : "", sent ? "" : "; DROPPED, the input ring is full");
+	};
+	report.actors = &actors;  // for telling a blast's own hits
+```
+```cpp
+			send(*due, "sent, summed");
+```
+```cpp
+			send(*due, "sent, summed");
+		}
+		for (const Blast& blast : report.blasts.Pushes(now))
+		{
+			Say("the blast at world {:.2f} {:.2f} {:.2f} would push now, {:.2f} s after it, with {} hits of its own", blast.centre.x,
+			    blast.centre.y, blast.centre.z, now - blast.at, blast.hits);
+```
+```cpp
+					    hurt.power ? ", power attack" : "");
+				}
+				break;
+```
+```cpp
+					    hurt.power ? ", power attack" : "");
+				}
+				break;
+			}
+			case Action::Kind::Health:
+			{
+				const proto::InputEvent input = HealthInput(action.numbers[0]);
+				Say("health: Minecraft's player to {:.4f} of its max, b = {}{}", action.numbers[0], input.b,
+				    link.Push(input) ? "" : "; DROPPED, the input ring is full");
+				break;
+```
+- [ ] **Step 7: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `448 test(s), 0 failure(s)`.
+
+- [ ] **Step 8: Run mclink without Minecraft**
+
+Minecraft and the game must not be running.
+```bash
+cd /d/Cyberpunk-Minecraft/spikes/block-render && printf 'status\nquit\n' > build/selfcheck.txt \
+  && ./build/RelWithDebInfo/mclink.exe build/selfcheck.txt; echo "exit: $?"
+```
+Expected: `the mapping: created (process …); waiting for Minecraft`, then the status with `Minecraft: absent` and
+`events: 0 explosions, 0 hits on actors, 0 deaths, 0 others; 0 actors in the table; …`. Then `exit: 0`.
+
+- [ ] **Step 9: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "npcs-and-combat: mclink tells a blast's own hits by the made-up NPCs' feet, says when each blast would push, and sets Minecraft's player's health, for step 5a's script" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 41: CyberCraft Tweaks 1.3.0 sets Minecraft's player's health to V's share
+
+SkyCraft's protocol has no input that sets the player's health, only `kInHurt`, and its `hurtPlayer` (at 0.1.2) does
+nothing with a hurt whose damage isn't over 0; `InputBridge` passes every `kInHurt` to it on the integrated server,
+unfiltered. So the health rides on a `kInHurt` of no damage (Task 38's `HealthInput`), which CyberCraft Tweaks, our own
+Fabric mod beside SkyCraft, takes:
+- **`SetHealth`**, a mixin at the head of SkyCraft's `SkyCombat.hurtPlayer`, as `NoDigging` targets SkyCraft's classes
+  by name: a hurt of no damage with the flag `0x100` (`CyberCraftTweaks.SET_HEALTH`) is cancelled before SkyCraft sees
+  it, and a living player's health is set to the share in its attacker's place, ÷ 10,000, of its max health, up or down;
+  the log says `CyberCraft Tweaks: Minecraft's player's health set to V's share …: <before> -> <after>`. Any other hurt
+  goes on as SkyCraft's.
+- **The logger:** `CyberCraftTweaks.LOG`, through slf4j, which Minecraft ships; `build.sh` adds slf4j to the classpath,
+  and fastutil, which `ServerPlayer`'s fields name.
+- **1.3.0,** in `fabric.mod.json`, with the README's new part and step 5a's test.
+
+`build.sh` builds it with the JDK alone, against the jars the Modrinth App keeps for the instance. Task 42 installs it.
+
+**Files:**
+- Create: `minecraft/cybercraft-tweaks/src/main/java/dev/cybercraft/tweaks/mixin/SetHealth.java`
+- Modify: `minecraft/cybercraft-tweaks/src/main/java/dev/cybercraft/tweaks/CyberCraftTweaks.java`,
+  `minecraft/cybercraft-tweaks/src/main/resources/cybercraft_tweaks.mixins.json`,
+  `minecraft/cybercraft-tweaks/src/main/resources/fabric.mod.json`, `minecraft/cybercraft-tweaks/build.sh`,
+  `minecraft/cybercraft-tweaks/README.md`
+
+- [ ] **Step 1: Write `minecraft/cybercraft-tweaks/src/main/java/dev/cybercraft/tweaks/mixin/SetHealth.java`**
+
+```java
+package dev.cybercraft.tweaks.mixin;
+
+import dev.cybercraft.tweaks.CyberCraftTweaks;
+import net.minecraft.server.level.ServerPlayer;
+import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+
+/**
+ * V's health, carried into Minecraft as build mode starts with combat on. BlockRender sends it as SkyCraft's kInHurt with
+ * no damage, which SkyCraft's own {@code hurtPlayer} leaves alone, with {@link CyberCraftTweaks#SET_HEALTH} among its
+ * flags and V's share of its health, times 10,000, where an attacker's form ID would be. This sets Minecraft's player's
+ * health to the same share of its own max health. Nothing else of SkyCraft's changes: a hurt with damage goes on as
+ * SkyCraft's, and without this mod the health input does nothing.
+ *
+ * <p>It targets SkyCraft 0.1.2's {@code dev.skycraft.combat.SkyCombat} by name, as {@link NoDigging} does.
+ */
+@Mixin(targets = "dev.skycraft.combat.SkyCombat", remap = false)
+public abstract class SetHealth {
+    @Inject(method = "hurtPlayer", at = @At("HEAD"), cancellable = true)
+    private static void cybercraft_tweaks$setHealth(ServerPlayer player, int kind, float skyrimDamage, int share, int flags, CallbackInfo info) {
+        if (skyrimDamage != 0.0F || (flags & CyberCraftTweaks.SET_HEALTH) == 0) {
+            return;
+        }
+        info.cancel();
+        if (!player.isAlive() || share <= 0) {
+            return;
+        }
+        float before = player.getHealth();
+        player.setHealth(Math.min(share, 10000) / 10000.0F * player.getMaxHealth());
+        CyberCraftTweaks.LOG.info("CyberCraft Tweaks: Minecraft's player's health set to V's share {}: {} -> {}", share / 10000.0F, before,
+            player.getHealth());
+    }
+}
+```
+- [ ] **Step 2: Edit `minecraft/cybercraft-tweaks/src/main/java/dev/cybercraft/tweaks/CyberCraftTweaks.java`**
+
+```java
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerChunkEvents;
+```
+```java
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerChunkEvents;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+```
+```java
+public final class CyberCraftTweaks implements ModInitializer {
+```
+```java
+public final class CyberCraftTweaks implements ModInitializer {
+    public static final Logger LOG = LoggerFactory.getLogger("cybercraft_tweaks");
+    /** In a kInHurt's flags, beside SkyCraft's blocked (1) and power attack (2): set the health instead ({@code SetHealth}). */
+    public static final int SET_HEALTH = 0x100;
+
+```
+- [ ] **Step 3: Edit `minecraft/cybercraft-tweaks/src/main/resources/cybercraft_tweaks.mixins.json`**
+
+```json
+  "mixins": ["NoBlastBlocks", "NoDigging"],
+```
+```json
+  "mixins": ["NoBlastBlocks", "NoDigging", "SetHealth"],
+```
+- [ ] **Step 4: Edit `minecraft/cybercraft-tweaks/src/main/resources/fabric.mod.json`**
+
+```json
+  "version": "1.2.0",
+  "name": "CyberCraft Tweaks",
+  "description": "SkyCraft adjusted for Cyberpunk 2077's Night City: nothing digs into the game's ground, so blasts leave no blocks floating above it.",
+```
+```json
+  "version": "1.3.0",
+  "name": "CyberCraft Tweaks",
+  "description": "SkyCraft adjusted for Cyberpunk 2077's Night City: nothing digs into the game's ground, so blasts leave no blocks floating above it; and V's health share carries into Minecraft's player as build mode starts.",
+```
+- [ ] **Step 5: Edit `minecraft/cybercraft-tweaks/build.sh`**
+
+```bash
+# Modrinth App already keeps for the CyberCraft instance (Minecraft 26.3 and the two of its libraries Fabric API's
+# signatures name, Fabric Loader, the mixin library, Fabric API's base, lifecycle-events and data-attachment modules,
+# and SkyCraft), and packs build/cybercraft-tweaks-<version>.jar.
+```
+```bash
+# Modrinth App already keeps for the CyberCraft instance (Minecraft 26.3 and four of its libraries: the two Fabric API's
+# signatures name, slf4j, which the mod logs with, and fastutil, which Minecraft's entities' fields name; Fabric Loader,
+# the mixin library, Fabric API's base, lifecycle-events and data-attachment modules, and SkyCraft), and packs
+# build/cybercraft-tweaks-<version>.jar.
+```
+```bash
+jspecify=$(grep -o 'org.jspecify:jspecify:[^" ,}]*' "${minecraft%.jar}.json" | head -1 | cut -d: -f3)
+dfu="$modrinth/meta/libraries/com/mojang/datafixerupper/$dfu/datafixerupper-$dfu.jar"
+jspecify="$modrinth/meta/libraries/org/jspecify/jspecify/$jspecify/jspecify-$jspecify.jar"
+```
+```bash
+jspecify=$(grep -o 'org.jspecify:jspecify:[^" ,}]*' "${minecraft%.jar}.json" | head -1 | cut -d: -f3)
+slf4j=$(grep -o 'org.slf4j:slf4j-api:[^" ,}]*' "${minecraft%.jar}.json" | head -1 | cut -d: -f3)
+fastutil=$(grep -o 'it.unimi.dsi:fastutil:[^" ,}]*' "${minecraft%.jar}.json" | head -1 | cut -d: -f3)
+dfu="$modrinth/meta/libraries/com/mojang/datafixerupper/$dfu/datafixerupper-$dfu.jar"
+jspecify="$modrinth/meta/libraries/org/jspecify/jspecify/$jspecify/jspecify-$jspecify.jar"
+slf4j="$modrinth/meta/libraries/org/slf4j/slf4j-api/$slf4j/slf4j-api-$slf4j.jar"
+fastutil="$modrinth/meta/libraries/it/unimi/dsi/fastutil/$fastutil/fastutil-$fastutil.jar"
+```
+```bash
+for jar in "$minecraft" "$dfu" "$jspecify" "$loader" "$mixin" "$skycraft" build/deps/*.jar; do
+```
+```bash
+for jar in "$minecraft" "$dfu" "$jspecify" "$slf4j" "$fastutil" "$loader" "$mixin" "$skycraft" build/deps/*.jar; do
+```
+- [ ] **Step 6: Edit `minecraft/cybercraft-tweaks/README.md`**
+
+```markdown
+  chunk drops it as the server loads it, and SkyCraft's sync takes that to clients.
+```
+```markdown
+  chunk drops it as the server loads it, and SkyCraft's sync takes that to clients.
+- **V's health carries into Minecraft as build mode starts** (`SetHealth`, from 1.3.0). With combat on, BlockRender
+  sends V's share of its health when build mode starts, as SkyCraft's `kInHurt` with no damage, `0x100` among its
+  flags, and the share × 10,000 where an attacker's form ID would be. SkyCraft's own `hurtPlayer` leaves a hurt with no
+  damage alone, so without this mod nothing happens; with it, Minecraft's player's health becomes the same share of its
+  max health, and Minecraft's log says so.
+```
+```markdown
+blocks around it are the same afterwards as before.
+```
+```markdown
+blocks around it are the same afterwards as before. `spikes/block-render/tools/mclink/blasts.txt` sets Minecraft's
+player's health to half, all and a twentieth of its max, and reads each back with `/data`.
+```
+- [ ] **Step 7: Build CyberCraft Tweaks**
+
+```bash
+cd /d/Cyberpunk-Minecraft/minecraft/cybercraft-tweaks && out=$(bash build.sh 2>&1); echo "$out" | tail -2; \
+  echo "warnings: $(echo "$out" | grep -c -i warning)"; \
+  unzip -l build/cybercraft-tweaks-1.3.0.jar | grep -o "dev/cybercraft/tweaks/mixin/SetHealth.class"
+```
+Expected: `built build/cybercraft-tweaks-1.3.0.jar against 26.3-`, then `warnings: 0`, and
+`dev/cybercraft/tweaks/mixin/SetHealth.class`.
+
+- [ ] **Step 8: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add minecraft/cybercraft-tweaks \
+  && git commit -q -m "cybercraft-tweaks 1.3.0: a kInHurt of no damage with flag 0x100 sets Minecraft's player's health to V's share" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 42: In Minecraft: step 5a
+
+Step 5a of the spec's "The steps", with the user: a real TNT's blast and its hits on stand-ins, taken as BlockRender
+will take them, and Minecraft's player's health set through CyberCraft Tweaks 1.3.0, from `mclink`, without the game.
+- **What the blast should do** (the spec's "Minecraft 26.3"): TNT of radius 4 hurts what is within 8 blocks of its
+  centre, 0.06 above its feet, by (i² + i) ÷ 2 × 7 × 8 + 1, with i = (1 − d ÷ 8) × the share of the stand-in it sees:
+  about 42, 29, 15 and 5 at 1.5, 3, 5 and 7 blocks for a stand-in it sees whole, and nothing at 9. Less means the
+  floor hid part of the stand-in. SkyCraft's stand-ins take it as any damage, with no knockback.
+- **What `mclink` should say:** the explosion first, reaching 8 m; each hit after it as a blast's own, within 0.15 s;
+  then the push, a quarter second after the blast, with four hits of its own.
+- **What CyberCraft Tweaks logs** for each health it sets: `CyberCraft Tweaks: Minecraft's player's health set to V's
+  share <share>: <before> -> <after>`. SkyCraft logs the hurt after it as in step 3.
+- **The world:** the script runs at a fresh spot on the floor, where nothing is built; with CyberCraft Tweaks the blast
+  leaves the floor as it was, and the script checks that the blocks around the point are all air before and after. It
+  leaves Minecraft's player in survival at full health, as step 5b wants it, and removes the stand-ins.
+- **If a check fails,** stop and find the cause with superpowers:systematic-debugging before going on. Fixes become new
+  tasks.
+
+**Files:**
+- Modify: `docs/spikes/2026-10-05-npcs-and-combat-results.md`
+
+- [ ] **Step 1: Check that the game isn't running**
+
+```bash
+tasklist | grep -i -c "cyberpunk2077.exe"
+```
+Expected: `0`. If it's `1`, ask the user to quit the game: it would hold the mapping.
+
+- [ ] **Step 2: Install CyberCraft Tweaks 1.3.0, with the user's leave (Minecraft must be stopped)**
+
+Ask the user to stop Minecraft if it's running, and whether 1.3.0 may replace 1.2.0 in the `CyberCraft` instance's mods.
+The old jar is renamed `.disabled`, as the Modrinth App disables a mod, so Fabric skips it and it can come back.
+```bash
+M="/c/Users/BLOXY/AppData/Roaming/ModrinthApp/profiles/CyberCraft/mods"; ls "$M" | grep -i cybercraft
+```
+Expected: `cybercraft-tweaks-1.2.0.jar`. Then:
+```bash
+M="/c/Users/BLOXY/AppData/Roaming/ModrinthApp/profiles/CyberCraft/mods"; mv "$M/cybercraft-tweaks-1.2.0.jar" "$M/cybercraft-tweaks-1.2.0.jar.disabled" \
+  && cp /d/Cyberpunk-Minecraft/minecraft/cybercraft-tweaks/build/cybercraft-tweaks-1.3.0.jar "$M/" && ls "$M" | grep -i cybercraft
+```
+Expected: `cybercraft-tweaks-1.2.0.jar.disabled` and `cybercraft-tweaks-1.3.0.jar`.
+
+- [ ] **Step 3: Ask the user to start Minecraft**
+
+The user starts the `CyberCraft` instance from the Modrinth App, and says when its title screen shows.
+```bash
+grep -E "cybercraft_tweaks|Mixin.*(error|fail)" /c/Users/BLOXY/AppData/Roaming/ModrinthApp/profiles/CyberCraft/logs/latest.log | head -5
+```
+Expected: Fabric's mod list with `cybercraft_tweaks 1.3.0`, and no mixin error.
+
+- [ ] **Step 4: Run step 5a's script**
+
+```bash
+L="/c/Users/BLOXY/AppData/Roaming/ModrinthApp/profiles/CyberCraft/logs/latest.log"; before=$(wc -l < "$L"); \
+  cd /d/Cyberpunk-Minecraft/spikes/block-render && mkdir -p build/step5a && cd build/step5a \
+  && ../RelWithDebInfo/mclink.exe ../../tools/mclink/blasts.txt | tee blasts.log; echo "exit: ${PIPESTATUS[0]}"; \
+  tail -n +$((before + 1)) "$L" | grep -E "SkyCraft: Skyrim hit|CyberCraft Tweaks|\[CHAT\]|Exception|Mixin" | tee minecraft.log
+```
+Give the command 6 minutes: it waits for the world, which the script enters. Expected, against the spec's "Step 5a":
+- **The blast:** `explosion at 680.50 6.… 1997.50, radius 4.0: a blast reaching 8.0 m`.
+- **Its hits:** `hit: actor 1 for …` with about 42 of Minecraft's damage and `knockback 0.00`, ending `; a blast's own,
+  1.50 m from its centre, 0.0… s after it`; then actors 2, 3 and 4, about 29, 15 and 5, at 3.00, 5.00 and 7.00 m; and
+  no hit on actor 5.
+- **The push:** `the blast at world 680.50 -1997.50 6.… would push now, 0.2… s after it, with 4 hits of its own`.
+- **Nothing built or broken:** Minecraft's chat says `Test passed` before the TNT and after it, with a count of 2601
+  each time.
+- **The health:** `health: Minecraft's player to 0.5000 of its max, b = 5000`, and CyberCraft Tweaks' `… set to V's
+  share 0.5: 20.0 -> 10.0`; then `… share 1.0: … -> 20.0` and `… share 0.05: 20.0 -> 1.0`; each `/data` reading the
+  same, with what Minecraft regenerated in the second between (step 3 saw half a point).
+- **A hurt after it:** `hurt sent at once: other 0.1000 of V's health, a = 1000, attacker 0` and SkyCraft's `SkyCraft:
+  Skyrim hit the player for 10.0 (2.0 Minecraft): health 20.0 -> 18.0`; then `… share 1.0: 18.0 -> 20.0`.
+- **The status:** `events: 1 explosions, 4 hits on actors, 0 deaths, …`, `0 inputs dropped`, and `exit: 0`.
+
+- [ ] **Step 5: Ask the user to stop Minecraft**
+
+Its window is hidden while `mclink` drives it, so the user stops it from the Modrinth App.
+
+- [ ] **Step 6: Record step 5a's results in `docs/spikes/2026-10-05-npcs-and-combat-results.md`**
+
+A "Step 5a" section, from `build/step5a/blasts.log` and `build/step5a/minecraft.log`: the versions, CyberCraft Tweaks
+1.3.0 among them; each check above with its numbers (each hit's damage against the formula, its distance and time after
+the blast, the push's time and hits, the health set and read back); anything that surprised, and what it means for step
+5b.
+
+- [ ] **Step 7: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add docs/spikes/2026-10-05-npcs-and-combat-results.md \
+  && git commit -q -m "npcs-and-combat: step 5a's results" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 43: The module knocks down what a blast reaches, makes its hits the blast's own, pushes, and draws the blades again
+
+The module's side of Part 3, in `scripts/BlockRender.reds`, version 6 (the spec's "Part 3: explosions"):
+- **`Explode(centre, reach, knock)`** knocks down what a blast reaches, as the game's knockdown grenade does: its
+  attack, `Attacks.FragGrenadeKnockdown`, made from V (`IAttack.Create` with V as instigator and source), run as a game
+  effect (`Attack_GameEffect.PrepareAttack`, then `StartAttack`) with the effect's shared data set as
+  `CombatGadgetHelper.SpawnAttack` sets a claymore's: the reach as its radius and range, the centre as its position, the
+  attack and its stat modifiers, and the hit flags `DealNoDamage` and `WeakExplosion` under `n"BlockRender blast"`. The
+  pipeline deals nothing, and still gives each NPC hit the record's `Knockdown` status effect (`PostProcess`); its hit
+  on V stops at `CheckForQuickExit`. Then the explosion's sound at the centre, `PlayShockwave(n"explosion", centre)`, as
+  a claymore plays it. With `knock` (Task 46's `set blastknock 1`), each NPC on BlockRender's list within reach also
+  gets the status effect directly (`StatusEffectHelper.ApplyStatusEffect`), the spec's fallback. 1: started; 0: V isn't
+  found; -1: no attack record or effect.
+- **`Push(centre, reach)`**, a quarter second later: the game effect `physicalImpulseSphere` at the centre with the
+  reach as its radius, as `CombatGadgetHelper.SpawnPhysicalImpulse` runs it (`CreateEffectStatic`, then `Run`). Then it
+  counts the NPCs on the list within reach, and in two new fields, `pushDown` and `pushDead`, those the game has knocked
+  down (`StatusEffectSystem.ObjectHasStatusEffectOfType(npc, Knockdown)`) and those dead. -1 if V isn't found.
+- **`BlastHit(id, amount, centre)`** makes one of Minecraft's hits within a blast the blast's own: as `Hit` makes hits,
+  with the same mark, so the pipeline's wraps start it and report it as any of ours, but with the knockdown grenade's
+  record, of type `Explosion`, no weapon, its direction from the blast's centre, and flagged `WeakExplosion`. After the
+  damage, the pipeline knocks the NPC down, so one it kills ragdolls at once. Same results as `Hit`.
+- **`Strike`** is what `Hit` and `BlastHit` share: the hit built as the game's `SendHitEvent` builds one, marked, its
+  direction from a given point, flagged a weak explosion if asked, and queued. `Hit`'s and the `ProcessPipeline` wrap's
+  comments now say where hits start: V's punch × Minecraft's damage to the hit power, or the blast power.
+- **V's health share**, a new field `vHealth`, read with V's max health four times a second (`GetStatPoolValue` with
+  `perc`, ÷ 100), for Minecraft's player as build mode starts (Task 46).
+- **The blades' heat after build mode:** `Arm(false)`, when V holds what it held before build mode and that's its
+  unarmed weapon, has nothing to put back, so the heat `HideV` stopped never came back (Task 36). Now, if `HideV` is
+  hiding V, it puts the weapon away and, a second later, draws it again through the game's delay system
+  (`BlockRenderDrawAgain`, a `DelayCallback` asking for weapon-wheel slot 4), since the game starts some of a weapon's
+  effects only as it's drawn. It returns 3 for that. SwitchV calls `Arm` before `HideV`, so `hiding` is still set when
+  build mode ends.
+
+**Files:**
+- Modify: `scripts/BlockRender.reds`
+
+- [ ] **Step 1: Edit `scripts/BlockRender.reds`**
+
+```swift
+// hides the game's crosshair, through Codeware where it's installed.
+```
+```swift
+// hides the game's crosshair, through Codeware where it's installed.
+//
+// Minecraft's blasts (spike 6's Part 3): Explode knocks down what is within a blast's reach, as the game's knockdown
+// grenade does, with the explosion's sound; BlastHit makes one of Minecraft's hits on an NPC within the reach into the
+// blast's own, of type Explosion and from its centre, which knocks the NPC down too; and Push, a quarter second later,
+// throws the bodies and loose things.
+```
+```swift
+  // whether V has it drawn; and V's max health. Read at most four times a second.
+```
+```swift
+  // whether V has it drawn; V's max health, and V's health as a share of it. Read at most four times a second.
+```
+```swift
+  public let vHealthMax: Float;
+```
+```swift
+  public let vHealthMax: Float;
+  public let vHealth: Float;
+```
+```swift
+  public let vCrosshair: Int32;
+
+  // The module's version, which BlockRender checks: 2 since the list moved into BlockRender, 3 with combat, 4 since hits
+  // go through the whole damage pipeline, with what V's unarmed slot draws, 5 since V's Immortal is the game's override,
+  // and HideV stops V's effects and hides the game's crosshair.
+  public final static func Version() -> Int32 {
+    return 5;
+```
+```swift
+  public let vCrosshair: Int32;
+  // What Push last found within the blast's reach, besides the NPCs it gives: how many of them the game has knocked down
+  // (a Knockdown status effect on them), and how many are dead.
+  public let pushDown: Int32;
+  public let pushDead: Int32;
+
+  // The module's version, which BlockRender checks: 2 since the list moved into BlockRender, 3 with combat, 4 since hits
+  // go through the whole damage pipeline, with what V's unarmed slot draws, 5 since V's Immortal is the game's override,
+  // and HideV stops V's effects and hides the game's crosshair, 6 with Minecraft's blasts and V's health share.
+  public final static func Version() -> Int32 {
+    return 6;
+```
+```swift
+  // One of Minecraft's hits on an NPC, as V's: amount is where the damage pipeline starts it, Minecraft's damage x V's
+  // punch, and strong picks the strong attack. Built as the game's SendHitEvent builds one, from V, with the attack record
+  // of what V punches with, and the weapon object of it if V has it drawn. 1: queued; 0: V isn't found; -1: the NPC is
+  // gone; -2: it's dead; -3: there's no attack record to make it with.
+```
+```swift
+  // One of Minecraft's hits on an NPC, as V's: amount is where the damage pipeline starts it, V's punch x Minecraft's
+  // damage to the hit power, and strong picks the strong attack. Built as the game's SendHitEvent builds one, from V, with
+  // the attack record of what V punches with, and the weapon object of it if V has it drawn (Strike). 1: queued; 0: V isn't
+  // found; -1: the NPC is gone; -2: it's dead; -3: there's no attack record to make it with.
+```
+```swift
+    let weapon: ref<WeaponObject> = this.PunchWeapon(player, game, item);
+```
+```swift
+    this.Strike(game, player, npc, record, this.PunchWeapon(player, game, item), amount, player.GetWorldPosition(), false);
+    return 1;
+  }
+
+  // One of Minecraft's hits on an NPC within a blast's reach, as the blast's own: amount is where the damage pipeline
+  // starts it, V's punch x Minecraft's damage to the blast power, and centre is the blast's, in world axes. Made as Hit
+  // makes hits (Strike), but with the game's knockdown grenade's attack record, Attacks.FragGrenadeKnockdown, of type
+  // Explosion: after the damage the pipeline knocks the NPC down with the record's status effect (PostProcess), so that one
+  // the hit kills ragdolls at once and the push throws it. With no weapon, from the blast's centre, and flagged a weak
+  // explosion: the game measures a strong one from the hit's source, V. 1: queued; 0: V isn't found; -1: the NPC is gone;
+  // -2: it's dead; -3: there's no attack record to make it with.
+  public final func BlastHit(id: EntityID, amount: Float, centre: Vector4) -> Int32 {
+    let game: GameInstance = this.GetGameInstance();
+    let player: ref<GameObject> = GameInstance.GetPlayerSystem(game).GetLocalPlayerMainGameObject();
+    if !IsDefined(player) {
+      return 0;
+    };
+    let npc: ref<NPCPuppet> = GameInstance.FindEntityByID(game, id) as NPCPuppet;
+    if !IsDefined(npc) {
+      return -1;
+    };
+    if npc.IsDead() {
+      return -2;
+    };
+    let record: ref<Attack_Record> = TweakDBInterface.GetAttackRecord(t"Attacks.FragGrenadeKnockdown");
+    if !IsDefined(record) || !IsDefined(record.AttackType()) {
+      return -3;
+    };
+    this.Strike(game, player, npc, record, null, amount, centre, true);
+    return 1;
+  }
+
+  // A blast of Minecraft's at centre (world axes), knocking down what is within reach metres of it, as the game's
+  // knockdown grenade does: its attack, Attacks.FragGrenadeKnockdown, run as a game effect at the centre with the reach as
+  // its radius, as CombatGadgetHelper.SpawnAttack runs one, from V and dealing no damage. The pipeline still knocks down
+  // whatever it hits with the record's status effect (PostProcess), unless immune or friendly to V, and its hit on V stops
+  // at CheckForQuickExit. Its hits are flagged weak explosions, as BlastHit's are. With the explosion's sound at the
+  // centre, as a claymore plays it. With knock, each NPC on BlockRender's list within reach also gets the record's status
+  // effect directly (risk 13's fallback). 1: started; 0: V isn't found; -1: there's no attack record or effect.
+  public final func Explode(centre: Vector4, reach: Float, knock: Bool) -> Int32 {
+    let game: GameInstance = this.GetGameInstance();
+    let player: ref<GameObject> = GameInstance.GetPlayerSystem(game).GetLocalPlayerMainGameObject();
+    if !IsDefined(player) {
+      return 0;
+    };
+    let record: ref<Attack_Record> = TweakDBInterface.GetAttackRecord(t"Attacks.FragGrenadeKnockdown");
+    if !IsDefined(record) {
+      return -1;
+    };
+```
+```swift
+    context.weapon = weapon;
+    let hit: ref<gameHitEvent> = new gameHitEvent();
+    hit.attackData = new AttackData();
+    hit.target = npc;
+    hit.attackData.SetAttackDefinition(IAttack.Create(context));
+    hit.attackData.SetInstigator(player);
+    hit.attackData.SetSource(player);
+    hit.attackData.SetWeapon(weapon);
+    hit.attackData.SetAttackType(record.AttackType().Type());
+    // Ours, with where it starts, on the hit itself, as the game marks its environment's attacks with hitFlag.None and a
+    // source name: the pipeline's wraps read it back on whichever thread runs it.
+    let mark: String = "BlockRender " + FloatToStringPrec(amount, 2);
+    hit.attackData.AddFlag(hitFlag.None, StringToName(mark));
+    let middle: Vector4 = npc.GetWorldPosition() + new Vector4(0.00, 0.00, 1.00, 0.00);
+    hit.hitPosition = middle;
+    hit.hitDirection = Vector4.Normalize(middle - player.GetWorldPosition());
+    let shape: HitShapeData;
+    shape.result.hitPositionEnter = middle;
+    shape.result.hitPositionExit = middle;
+    ArrayPush(hit.hitRepresentationResult.hitShapes, shape);
+    GameInstance.GetDamageSystem(game).QueueHitEvent(hit, npc);
+    return 1;
+```
+```swift
+    let attack: ref<Attack_GameEffect> = IAttack.Create(context) as Attack_GameEffect;
+    if !IsDefined(attack) {
+      return -1;
+    };
+    let effect: ref<EffectInstance> = attack.PrepareAttack(player);
+    if !IsDefined(effect) {
+      return -1;
+    };
+    let mods: array<ref<gameStatModifierData>>;
+    attack.GetStatModList(mods);
+    let flags: array<SHitFlag>;
+    let flag: SHitFlag;
+    flag.source = n"BlockRender blast";
+    flag.flag = hitFlag.DealNoDamage;
+    ArrayPush(flags, flag);
+    flag.flag = hitFlag.WeakExplosion;
+    ArrayPush(flags, flag);
+    let shared: ref<EffectSharedDataDef> = GetAllBlackboardDefs().EffectSharedData;
+    EffectData.SetFloat(effect.GetSharedData(), shared.radius, reach);
+    EffectData.SetFloat(effect.GetSharedData(), shared.range, reach);
+    EffectData.SetVector(effect.GetSharedData(), shared.position, centre);
+    EffectData.SetVariant(effect.GetSharedData(), shared.attack, ToVariant(attack));
+    EffectData.SetVariant(effect.GetSharedData(), shared.attackStatModList, ToVariant(mods));
+    EffectData.SetVariant(effect.GetSharedData(), shared.flags, ToVariant(flags));
+    attack.StartAttack();
+    GameInstance.GetAudioSystem(game).PlayShockwave(n"explosion", centre);
+    if knock {
+      let count: Int32 = BlockRenderNpcCount();
+      let i: Int32 = 0;
+      while i < count {
+        let npc: ref<NPCPuppet> = GameInstance.FindEntityByID(game, BlockRenderNpcAt(i)) as NPCPuppet;
+        if IsDefined(npc) && !npc.IsDead() && Vector4.Distance(npc.GetWorldPosition(), centre) <= reach {
+          StatusEffectHelper.ApplyStatusEffect(npc, t"BaseStatusEffect.Knockdown", player.GetEntityID());
+        };
+        i += 1;
+      };
+    };
+    return 1;
+  }
+
+  // A blast's push, a quarter second after it: the game effect physicalImpulseSphere at centre (world axes) with reach as
+  // its radius, as CombatGadgetHelper.SpawnPhysicalImpulse runs it, which throws the bodies of the NPCs the blast killed
+  // (knocked down as they died, they ragdolled at once) and pushes cars and loose things. Then the NPCs on BlockRender's
+  // list within reach: how many, and in pushDown and pushDead how many of them the game has knocked down (a Knockdown
+  // status effect) and how many are dead. -1 if V isn't found.
+  public final func Push(centre: Vector4, reach: Float) -> Int32 {
+    let game: GameInstance = this.GetGameInstance();
+    let player: ref<GameObject> = GameInstance.GetPlayerSystem(game).GetLocalPlayerMainGameObject();
+    this.pushDown = 0;
+    this.pushDead = 0;
+    if !IsDefined(player) {
+      return -1;
+    };
+    let effect: ref<EffectInstance> = GameInstance.GetGameEffectSystem(game).CreateEffectStatic(n"physicalImpulseSphere", n"None", player);
+    if IsDefined(effect) {
+      let shared: ref<EffectSharedDataDef> = GetAllBlackboardDefs().EffectSharedData;
+      EffectData.SetFloat(effect.GetSharedData(), shared.radius, reach);
+      EffectData.SetVector(effect.GetSharedData(), shared.position, centre);
+      effect.Run();
+    };
+    let near: Int32 = 0;
+    let count: Int32 = BlockRenderNpcCount();
+    let i: Int32 = 0;
+    while i < count {
+      let npc: ref<NPCPuppet> = GameInstance.FindEntityByID(game, BlockRenderNpcAt(i)) as NPCPuppet;
+      if IsDefined(npc) && Vector4.Distance(npc.GetWorldPosition(), centre) <= reach {
+        near += 1;
+        if npc.IsDead() {
+          this.pushDead += 1;
+        } else {
+          if StatusEffectSystem.ObjectHasStatusEffectOfType(npc, gamedataStatusEffectType.Knockdown) {
+            this.pushDown += 1;
+          };
+        };
+      };
+      i += 1;
+    };
+    return near;
+```
+```swift
+  // the wheel. Called again while on, it asks again if the weapon isn't drawn yet. 1: asked; 2: nothing to ask; 0: V isn't
+  // found; -1: V has no unarmed weapon; -2: there's no equipment system.
+```
+```swift
+  // the wheel. Called again while on, it asks again if the weapon isn't drawn yet. If V held its unarmed weapon already,
+  // and HideV has stopped its effects, putting back puts it away and draws it again a second later, since the game starts
+  // some of a weapon's effects only as it's drawn (the Thermal blades' heat). 1: asked; 2: nothing to ask; 3: put away,
+  // to be drawn again; 0: V isn't found; -1: V has no unarmed weapon; -2: there's no equipment system.
+```
+```swift
+    if held == this.armedFrom {
+```
+```swift
+    if held == this.armedFrom {
+      if this.hiding && ItemID.IsValid(held) && held == this.UnarmedItem(player) {
+        request.requestType = EquipmentManipulationAction.UnequipWeapon;
+        equipment.QueueRequest(request);
+        let again: ref<BlockRenderDrawAgain> = new BlockRenderDrawAgain();
+        again.player = player;
+        GameInstance.GetDelaySystem(game).DelayCallback(again, 1.00, false);
+        return 3;
+      };
+```
+```swift
+  // What V punches with: what V's unarmed slot draws (weapon-wheel slot 4: the game's GetMeleewareOrFistsItemID), V's arm
+```
+```swift
+  // A hit on npc's middle, built as the game's SendHitEvent builds one: from V, as its instigator and source, with record
+  // and weapon (or none), its direction from the point from (world axes); marked as ours, with where it starts, amount, on
+  // the hit itself, as the game marks its environment's attacks with hitFlag.None and a source name, so that the
+  // pipeline's wraps read it back on whichever thread runs it; flagged a weak explosion if weak; and queued.
+  private final func Strike(game: GameInstance, player: ref<GameObject>, npc: ref<NPCPuppet>, record: ref<Attack_Record>,
+    weapon: ref<WeaponObject>, amount: Float, from: Vector4, weak: Bool) -> Void {
+    let context: AttackInitContext;
+    context.record = record;
+    context.instigator = player;
+    context.source = player;
+    context.weapon = weapon;
+    let hit: ref<gameHitEvent> = new gameHitEvent();
+    hit.attackData = new AttackData();
+    hit.target = npc;
+    hit.attackData.SetAttackDefinition(IAttack.Create(context));
+    hit.attackData.SetInstigator(player);
+    hit.attackData.SetSource(player);
+    hit.attackData.SetWeapon(weapon);
+    hit.attackData.SetAttackType(record.AttackType().Type());
+    let mark: String = "BlockRender " + FloatToStringPrec(amount, 2);
+    hit.attackData.AddFlag(hitFlag.None, StringToName(mark));
+    if weak {
+      hit.attackData.AddFlag(hitFlag.WeakExplosion, n"BlockRender blast");
+    };
+    let middle: Vector4 = npc.GetWorldPosition() + new Vector4(0.00, 0.00, 1.00, 0.00);
+    hit.hitPosition = middle;
+    hit.hitDirection = Vector4.Normalize(middle - from);
+    let shape: HitShapeData;
+    shape.result.hitPositionEnter = middle;
+    shape.result.hitPositionExit = middle;
+    ArrayPush(hit.hitRepresentationResult.hitShapes, shape);
+    GameInstance.GetDamageSystem(game).QueueHitEvent(hit, npc);
+  }
+
+  // What V punches with: what V's unarmed slot draws (weapon-wheel slot 4: the game's GetMeleewareOrFistsItemID), V's arm
+```
+```swift
+    this.vHealthMax = GameInstance.GetStatPoolsSystem(game).GetStatPoolMaxPointValue(Cast<StatsObjectID>(player.GetEntityID()), gamedataStatPoolType.Health);
+```
+```swift
+    let stats: StatsObjectID = Cast<StatsObjectID>(player.GetEntityID());
+    let pools: ref<StatPoolsSystem> = GameInstance.GetStatPoolsSystem(game);
+    this.vHealthMax = pools.GetStatPoolMaxPointValue(stats, gamedataStatPoolType.Health);
+    this.vHealth = pools.GetStatPoolValue(stats, gamedataStatPoolType.Health, true) / 100.00;
+```
+```swift
+      this.punchDrawn = IsDefined(this.PunchWeapon(player, game, item));
+    };
+  }
+```
+```swift
+      this.punchDrawn = IsDefined(this.PunchWeapon(player, game, item));
+    };
+  }
+}
+
+// V's unarmed weapon drawn again, a second after Arm put it away as build mode ended, so that the game starts the effects it
+// starts as a weapon is drawn, which HideV stopped. The game's delay system calls it.
+public class BlockRenderDrawAgain extends DelayCallback {
+  public let player: wref<GameObject>;
+
+  public func Call() -> Void {
+    let player: ref<GameObject> = this.player;
+    if !IsDefined(player) {
+      return;
+    };
+    let equipment: ref<EquipmentSystem> = EquipmentSystem.GetInstance(player);
+    if !IsDefined(equipment) {
+      return;
+    };
+    let request: ref<EquipmentSystemWeaponManipulationRequest> = new EquipmentSystemWeaponManipulationRequest();
+    request.owner = player;
+    request.requestType = EquipmentManipulationAction.RequestWeaponSlot4;
+    request.equipAnimType = gameEquipAnimationType.Instant;
+    equipment.QueueRequest(request);
+  }
+```
+```swift
+// Our hits start the whole pipeline where Hit marked them, Minecraft's damage x V's punch, split across damage types as
+// the attack splits its own; the pipeline then does to them all it does to V's own punches, from the spread and V's crits,
+// perks and cyberware to the NPC's armour, resistances, blocks and dodges. One it dealt nothing says why. Any thread.
+```
+```swift
+// Our hits start the whole pipeline where Hit or BlastHit marked them, V's punch x Minecraft's damage to the hit power or
+// the blast power, split across damage types as the attack splits its own; the pipeline then does to them all it does to
+// V's own punches, from the spread and V's crits, perks and cyberware to the NPC's armour, resistances, blocks and dodges,
+// and to a blast's hits all it does to explosions, the NPC's explosion resistance included. One it dealt nothing says
+// why. Any thread.
+```
+- [ ] **Step 2: Compile the module against the game's scripts, without and with Codeware**
+
+```bash
+cd /d/Cyberpunk-Minecraft/spikes/block-render && uv run --no-project python tools/check_reds.py E:/Cyberpunk2077 scripts | tail -1; \
+  echo "without Codeware: exit ${PIPESTATUS[0]}"; \
+  uv run --no-project python tools/check_reds.py E:/Cyberpunk2077 scripts E:/Cyberpunk2077/red4ext/plugins/Codeware/Scripts | tail -1; \
+  echo "with Codeware: exit ${PIPESTATUS[0]}"
+```
+Expected: `compiled`, `without Codeware: exit 0` and `with Codeware: exit 0`.
+
+- [ ] **Step 3: Check that the compile catches a slip in `Push`, without and with Codeware**
+
+```bash
+cd /d/Cyberpunk-Minecraft/spikes/block-render && mkdir -p build/reds-slip \
+  && sed 's/StatusEffectSystem.ObjectHasStatusEffectOfType(npc,/StatusEffectSystem.ObjectHasStatusEffectOfKind(npc,/' scripts/BlockRender.reds > build/reds-slip/BlockRender.reds \
+  && uv run --no-project python tools/check_reds.py E:/Cyberpunk2077 build/reds-slip | grep -E "^compiled|^failed|UNRESOLVED"; \
+  echo "without Codeware: exit ${PIPESTATUS[0]}"; \
+  uv run --no-project python tools/check_reds.py E:/Cyberpunk2077 build/reds-slip E:/Cyberpunk2077/red4ext/plugins/Codeware/Scripts \
+    | grep -E "^compiled|^failed|UNRESOLVED"; echo "with Codeware: exit ${PIPESTATUS[0]}"
+```
+Expected: redscript's `[UNRESOLVED_METHOD]` at the slip's line, `BlockRender.reds:367:14`, then `failed` and
+`without Codeware: exit 1`; the same again, and `with Codeware: exit 1`.
+
+- [ ] **Step 4: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "npcs-and-combat: the module knocks down what a blast reaches as the game's knockdown grenade does, makes Minecraft's hits within it the blast's own, pushes a quarter second later, reads V's health share, and draws V's unarmed weapon again after build mode for its effects" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 44: `GameScript` calls the module's `Explode`, `Push` and `BlastHit`, and reads V's health share
+
+`GameScript` follows the module to version 6 (`kModuleVersion`):
+- **Three new functions,** each checked by its parameter and return types once, as the others are: `Explode(Vector4,
+  Float, Bool) -> Int32`, `Push(Vector4, Float) -> Int32` and `BlastHit(entEntityID, Float, Vector4) -> Int32`: 13 in
+  all. Their calls follow `Hit`'s: the check, the session's system through `Current()`, then `ExecuteFunction`, whose
+  untyped arguments take their types from the checked parameters (the SDK's `Utils-inl.hpp`). A point goes as a
+  `Vector4` with w 1, as the game's positions are (`PointOf`).
+- **Three new fields:** `pushDown` and `pushDead` (`Int32`), which `Push` reads back with what the module returned
+  (`BlastPush`), and `vHealth` (`Float`), which `List` reads with V's max health: 19 in all.
+
+Nothing calls them until Task 46, and the module's own check, on its first call, now wants version 6.
+
+**Files:**
+- Modify: `src/GameScript.h`, `src/GameScript.cpp`
+
+- [ ] **Step 1: Edit `src/GameScript.h`**
+
+```cpp
+constexpr int32_t kModuleVersion = 5;  // BlockRenderNpcs.Version(), as this BlockRender needs it
+```
+```cpp
+constexpr int32_t kModuleVersion = 6;  // BlockRenderNpcs.Version(), as this BlockRender needs it
+```
+```cpp
+	float                        vHealthMax = 0.0f;
+```
+```cpp
+	float                        vHealthMax = 0.0f;
+	float                        vHealth = 0.0f;      // V's health, as a share of its max
+};
+
+// What the module's Push found within a blast's reach, after its push: the NPCs on BlockRender's list there, how many of
+// them the game has knocked down, and how many are dead.
+struct BlastPush
+{
+	int32_t npcs = 0;
+	int32_t down = 0;
+	int32_t dead = 0;
+
+	bool operator==(const BlastPush&) const = default;
+```
+```cpp
+	std::string Punch();
+```
+```cpp
+	std::string Punch();
+	// Minecraft's blasts (spike 6's "Part 3"). A blast at aCentre (world axes) reaching aReach metres: the game's knockdown
+	// grenade's attack as a game effect there, and the explosion's sound; with aKnock, its knockdown on each NPC within reach
+	// directly too. The module's Explode says how it went (1 started, 0 V isn't found, -1 no attack record or effect).
+	std::optional<int32_t> Explode(const Vec3d& aCentre, double aReach, bool aKnock, std::string& aWhy);
+	// The blast's push, a quarter second after it, and what the module then finds within its reach (npcs -1: V isn't found).
+	std::optional<BlastPush> Push(const Vec3d& aCentre, double aReach, std::string& aWhy);
+	// One of Minecraft's hits on the NPC aEntity, as the own hit of the blast at aCentre: aAmount where the game's damage
+	// pipeline starts it. The module's BlastHit says what became of it, as Hit does.
+	std::optional<int32_t> BlastHit(uint64_t aEntity, double aAmount, const Vec3d& aCentre, std::string& aWhy);
+```
+```cpp
+		kHideV,
+```
+```cpp
+		kHideV,
+		kExplode,
+		kPush,
+		kBlastHit,
+```
+```cpp
+		kVCrosshair,
+```
+```cpp
+		kVCrosshair,
+		kPushDown,
+		kPushDead,
+		kVHealth,
+```
+- [ ] **Step 2: Edit `src/GameScript.cpp`**
+
+```cpp
+		{ "HideV", nullptr, { { "Bool" } }, { "Int32" } },
+```
+```cpp
+		{ "HideV", nullptr, { { "Bool" } }, { "Int32" } },
+		{ "Explode", nullptr, { { "Vector4" }, { "Float" }, { "Bool" } }, { "Int32" } },
+		{ "Push", nullptr, { { "Vector4" }, { "Float" } }, { "Int32" } },
+		{ "BlastHit", nullptr, { { "entEntityID" }, { "Float" }, { "Vector4" } }, { "Int32" } },
+```
+```cpp
+// In GameScript::Field's order: the fields List fills, and those HideV fills, and their types.
+```
+```cpp
+// In GameScript::Field's order: the fields List fills, those HideV fills and those Push fills, and their types.
+```
+```cpp
+		{ "vCrosshair", "Int32" },
+	};
+	return kFieldTypes;
+```
+```cpp
+		{ "vCrosshair", "Int32" },         { "pushDown", "Int32" },             { "pushDead", "Int32" },
+		{ "vHealth", "Float" },
+	};
+	return kFieldTypes;
+}
+
+// A point in world axes as the module takes one: a Vector4 with w 1, as the game's positions are.
+RED4ext::Vector4 PointOf(const Vec3d& aWorld)
+{
+	return { float(aWorld.x), float(aWorld.y), float(aWorld.z), 1.0f };
+```
+```cpp
+	list.vHealthMax = FieldOf<float>(*fields_[kVHealthMax], instance);
+```
+```cpp
+	list.vHealthMax = FieldOf<float>(*fields_[kVHealthMax], instance);
+	list.vHealth = FieldOf<float>(*fields_[kVHealth], instance);
+```
+```cpp
+std::optional<int32_t> GameScript::Arm(bool aOn, std::string& aWhy)
+```
+```cpp
+std::optional<int32_t> GameScript::Explode(const Vec3d& aCentre, double aReach, bool aKnock, std::string& aWhy)
+{
+	if (const std::string& missing = Check(); !missing.empty())
+	{
+		aWhy = missing;
+		return std::nullopt;
+	}
+	const Strong system = SessionSystem(*functions_[kCurrent], *class_, aWhy);
+	if (!system)
+	{
+		return std::nullopt;
+	}
+	RED4ext::Vector4     centre = PointOf(aCentre);
+	float                reach = float(aReach);
+	bool                 knock = aKnock;
+	int32_t              result = 0;
+	RED4ext::StackArgs_t args{ { nullptr, &centre }, { nullptr, &reach }, { nullptr, &knock } };
+	if (!RED4ext::ExecuteFunction(system.GetPtr(), functions_[kExplode], &result, args))
+	{
+		aWhy = "BlockRenderNpcs.Explode failed";
+		return std::nullopt;
+	}
+	return result;
+}
+
+std::optional<BlastPush> GameScript::Push(const Vec3d& aCentre, double aReach, std::string& aWhy)
+{
+	if (const std::string& missing = Check(); !missing.empty())
+	{
+		aWhy = missing;
+		return std::nullopt;
+	}
+	const Strong system = SessionSystem(*functions_[kCurrent], *class_, aWhy);
+	if (!system)
+	{
+		return std::nullopt;
+	}
+	RED4ext::Vector4     centre = PointOf(aCentre);
+	float                reach = float(aReach);
+	int32_t              npcs = 0;
+	RED4ext::StackArgs_t args{ { nullptr, &centre }, { nullptr, &reach } };
+	if (!RED4ext::ExecuteFunction(system.GetPtr(), functions_[kPush], &npcs, args))
+	{
+		aWhy = "BlockRenderNpcs.Push failed";
+		return std::nullopt;
+	}
+	RED4ext::IScriptable& instance = *system.GetPtr();
+	return BlastPush{ npcs, FieldOf<int32_t>(*fields_[kPushDown], instance), FieldOf<int32_t>(*fields_[kPushDead], instance) };
+}
+
+std::optional<int32_t> GameScript::BlastHit(uint64_t aEntity, double aAmount, const Vec3d& aCentre, std::string& aWhy)
+{
+	if (const std::string& missing = Check(); !missing.empty())
+	{
+		aWhy = missing;
+		return std::nullopt;
+	}
+	const Strong system = SessionSystem(*functions_[kCurrent], *class_, aWhy);
+	if (!system)
+	{
+		return std::nullopt;
+	}
+	RED4ext::ent::EntityID npc(aEntity);
+	float                  amount = float(aAmount);
+	RED4ext::Vector4       centre = PointOf(aCentre);
+	int32_t                result = 0;
+	RED4ext::StackArgs_t   args{ { nullptr, &npc }, { nullptr, &amount }, { nullptr, &centre } };
+	if (!RED4ext::ExecuteFunction(system.GetPtr(), functions_[kBlastHit], &result, args))
+	{
+		aWhy = "BlockRenderNpcs.BlastHit failed";
+		return std::nullopt;
+	}
+	return result;
+}
+
+std::optional<int32_t> GameScript::Arm(bool aOn, std::string& aWhy)
+```
+- [ ] **Step 3: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `448 test(s), 0 failure(s)`.
+
+- [ ] **Step 4: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "npcs-and-combat: GameScript calls the module's Explode, Push and BlastHit, and reads V's health share and what Push found, from module version 6" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 45: The `explode` request, and the status's blasts line, Minecraft's health and the bush rule
+
+The requests and the status for Part 3 (the spec's "Requests" and "Measurements and the status"):
+- **`explode <metres> <radius>`:** a blast that far ahead of V, from 0 to 100 m, with a radius as Minecraft gives one,
+  over 0 and up to 16 (TNT's is 4); Task 46 makes it as if it were Minecraft's. `Request` gains the radius. `set
+  blastpower`, `set blastknock` and `set bushrule` are `set`'s, which Task 46 checks.
+- **The blasts line,** after the combat line: with combat off, `blasts=off: Minecraft's blasts are logged, not applied`;
+  on, the blasts taken, the blast power, whether knockdowns are given directly too, and the last blast, which Task 46
+  writes: its centre, reach and the NPCs within it, then after its push those knocked down and dead, and its own hits.
+- **The combat line** says when Minecraft's health was last set to V's share, before V's Immortal; **the ground line**
+  says what the bush rule leaves out, and how many shapes so far.
+
+**Files:**
+- Modify: `src/Requests.h`, `src/Requests.cpp`, `src/Status.h`, `src/Status.cpp`, `tests/TestRequests.cpp`,
+  `tests/TestStatus.cpp`
+
+- [ ] **Step 1: Edit `tests/TestRequests.cpp`: `explode`**
+
+```cpp
+	CHECK(off && off->kind == cpmc::Request::Kind::Set && off->what == "npcs" && off->number == 0.0);
+}
+```
+```cpp
+	CHECK(off && off->kind == cpmc::Request::Kind::Set && off->what == "npcs" && off->number == 0.0);
+}
+
+TEST(RequestsForBlasts)
+{
+	std::string error;
+	const auto  tnt = cpmc::ParseRequest("explode 4 4", error);
+	CHECK(tnt && tnt->kind == cpmc::Request::Kind::Explode && tnt->number == 4.0 && tnt->radius == 4.0);
+	const auto creeper = cpmc::ParseRequest("explode 6.5 3", error);
+	CHECK(creeper && creeper->number == 6.5 && creeper->radius == 3.0);
+	CHECK(cpmc::ParseRequest("explode 0 16", error));  // at V's feet, and the biggest radius the plugin takes
+	for (const char* bad : { "explode", "explode 4", "explode -1 4", "explode 101 4", "explode 4 0", "explode 4 17", "explode 4 4 4",
+	                         "explode four 4" })
+	{
+		CHECK(!cpmc::ParseRequest(bad, error));
+	}
+	CHECK_STR(error, "explode takes metres ahead of V, from 0 to 100, and Minecraft's radius, over 0 and up to 16 (TNT's is 4)");
+}
+```
+- [ ] **Step 2: Edit `tests/TestStatus.cpp`: the blasts line, Minecraft's health and the bush rule**
+
+```cpp
+	CHECK(Has(cpmc::FormatStatus(report), "v=shown: set hidev is 0"));
+}
+```
+```cpp
+	CHECK(Has(cpmc::FormatStatus(report), "v=shown: set hidev is 0"));
+}
+
+TEST(StatusWritesBlasts)
+{
+	cpmc::StatusReport report;
+	cpmc::LinkReport   link;
+	report.link = link;
+	std::string status = cpmc::FormatStatus(report);
+	CHECK(Has(status, "blasts=off: Minecraft's blasts are logged, not applied"));
+	CHECK(status.find("combat=") < status.find("blasts=") && status.find("blasts=") < status.find("ring="));
+	link.combatOn = true;
+	report.link = link;
+	CHECK(Has(cpmc::FormatStatus(report), "blasts=on: 0 taken, blast power 0.50; none yet"));
+	link.blasts = 2;
+	link.blastPower = 1.0;
+	link.blastKnock = true;
+	link.lastBlast = "at world (680.50, -1997.50, 6.20), reaching 8.0 m: 5 NPCs within it, 4 hits of its own; after its push 2 "
+	                 "knocked down, 2 dead";
+	report.link = link;
+	CHECK(Has(cpmc::FormatStatus(report), "blasts=on: 2 taken, blast power 1.00, knockdowns applied directly too; the last at world "
+	                                      "(680.50, -1997.50, 6.20), reaching 8.0 m: 5 NPCs within it, 4 hits of its own; after its "
+	                                      "push 2 knocked down, 2 dead"));
+	// V's health share for Minecraft's player goes in the combat line, and the exporter's bush rule in the city's ground line.
+	link.lastHealth = "set to V's share 0.7500 when build mode last started";
+	link.ground = "city";
+	link.bushRule = "sight-only shapes";
+	link.shapesBush = 12;
+	report.link = link;
+	status = cpmc::FormatStatus(report);
+	CHECK(Has(status, "; Minecraft's health set to V's share 0.7500 when build mode last started; Immortal off; 0 deaths; Minecraft's "
+	                  "player alive"));
+	CHECK(Has(status, "0 unreadable; the bush rule leaves out sight-only shapes: 12 so far"));
+}
+```
+- [ ] **Step 3: Build; it must fail**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C" | sort -u | head -3
+```
+Expected: `error C2039: 'radius': is not a member of 'cpmc::Request'`.
+
+- [ ] **Step 4: Edit `src/Requests.h`**
+
+```cpp
+//   punch                      (spike 6: V's punch, what it's read from, and what hits are made with, into the log)
+```
+```cpp
+//   punch                      (spike 6: V's punch, what it's read from, and what hits are made with, into the log)
+//   explode <metres> <radius>  (spike 6's Part 3: a blast that far ahead of V, from 0 to 100, as if it were Minecraft's,
+//                               with its radius, over 0 and up to 16)
+```
+```cpp
+		Npcs,
+		Hit,
+		Punch,
+	};
+
+	Kind        kind = Kind::Log;
+```
+```cpp
+		Npcs,
+		Hit,
+		Punch,
+		Explode,
+	};
+
+	Kind        kind = Kind::Log;
+```
+```cpp
+	double      number = 0.0;  // the field's block count, the setting's value, the drive log's seconds, or a hit's damage
+	uint32_t    id = 0;        // a hit's NPC: its number in SkyCraft's actor table
+```
+```cpp
+	double      number = 0.0;  // the field's block count, the setting's value, the drive log's seconds, a hit's damage, or
+	                           // how far ahead of V a blast is
+	uint32_t    id = 0;        // a hit's NPC: its number in SkyCraft's actor table
+	double      radius = 0.0;  // a blast's, as Minecraft gives one
+```
+- [ ] **Step 5: Edit `src/Requests.cpp`**
+
+```cpp
+	}
+	if (command == "mc")
+```
+```cpp
+	}
+	if (command == "explode")
+	{
+		const std::optional<double> metres = arguments == 2 ? Number(words[1]) : std::nullopt;
+		const std::optional<double> radius = arguments == 2 ? Number(words[2]) : std::nullopt;
+		if (!metres || *metres < 0.0 || *metres > 100.0 || !radius || *radius <= 0.0 || *radius > 16.0)
+		{
+			return Fail(aError, "explode takes metres ahead of V, from 0 to 100, and Minecraft's radius, over 0 and up to 16 (TNT's is 4)");
+		}
+		Request request{ Request::Kind::Explode, {}, *metres };
+		request.radius = *radius;
+		return request;
+	}
+	if (command == "mc")
+```
+- [ ] **Step 6: Edit `src/Status.h`**
+
+```cpp
+	uint64_t                       shapesUnreadable = 0;
+```
+```cpp
+	uint64_t                       shapesUnreadable = 0;
+	std::string                    bushRule;                  // what else the exporter leaves out (set bushrule); empty: not said
+	uint64_t                       shapesBush = 0;            // shapes it left out so, since the start
+```
+```cpp
+	std::string           lastHurt;          // its amount and share, Minecraft's damage, kind, attack type and attacker
+```
+```cpp
+	std::string           lastHurt;          // its amount and share, Minecraft's damage, kind, attack type and attacker
+	std::string           lastHealth;        // V's health share last sent to Minecraft's player, and when; empty: none yet
+```
+```cpp
+	std::string           combatWhy;         // why combat can't do all it should, while it can't
+```
+```cpp
+	std::string           combatWhy;         // why combat can't do all it should, while it can't
+	// Minecraft's blasts (spike 6's "Part 3"), with combat on: the count is since the start
+	uint64_t    blasts = 0;          // taken
+	double      blastPower = 0.5;    // set blastpower (link::kBlastPower): a blast's hits start at V's punch x damage^this
+	bool        blastKnock = false;  // set blastknock 1: each NPC within reach gets the knockdown directly too
+	std::string lastBlast;           // its centre, reach, NPCs within it and its own hits; after its push, knocked down and dead
+```
+```cpp
+// drive, positions, ground, solids, bodies, npcs, ring, atlas, hud, latency, burst and processes); then one structure line
+// per structure:
+```
+```cpp
+// drive, v, positions, ground, solids, bodies, npcs, combat, blasts, ring, atlas, hud, latency, burst and processes); then
+// one structure line per structure:
+```
+- [ ] **Step 7: Edit `src/Status.cpp`**
+
+```cpp
+	                   aLink.controllerSearches, aLink.shapesKept, aLink.shapesLeft, aLink.shapesUnreadable);
+```
+```cpp
+	                   aLink.controllerSearches, aLink.shapesKept, aLink.shapesLeft, aLink.shapesUnreadable);
+	if (!aLink.bushRule.empty())
+	{
+		out += std::format("; the bush rule leaves out {}: {} so far", OneLine(aLink.bushRule), aLink.shapesBush);
+	}
+```
+```cpp
+	}
+	out += std::format("; Immortal {}; {} deaths; Minecraft's player {}", aLink.immortal ? "on" : "off", aLink.deaths,
+```
+```cpp
+	}
+	if (!aLink.lastHealth.empty())
+	{
+		out += "; Minecraft's health " + OneLine(aLink.lastHealth);
+	}
+	out += std::format("; Immortal {}; {} deaths; Minecraft's player {}", aLink.immortal ? "on" : "off", aLink.deaths,
+```
+```cpp
+		out += "; " + OneLine(aLink.combatWhy);
+	}
+	return out + "\n";
+}
+```
+```cpp
+		out += "; " + OneLine(aLink.combatWhy);
+	}
+	return out + "\n";
+}
+
+// Minecraft's blasts, with combat on: how many, where the hits start, and the last.
+std::string FormatBlasts(const LinkReport& aLink)
+{
+	if (!aLink.combatOn)
+	{
+		return "blasts=off: Minecraft's blasts are logged, not applied\n";
+	}
+	return std::format("blasts=on: {} taken, blast power {:.2f}{}; {}\n", aLink.blasts, aLink.blastPower,
+	                   aLink.blastKnock ? ", knockdowns applied directly too" : "",
+	                   aLink.lastBlast.empty() ? std::string("none yet") : "the last " + OneLine(aLink.lastBlast));
+}
+```
+```cpp
+	out += FormatCombat(aLink);
+```
+```cpp
+	out += FormatCombat(aLink);
+	out += FormatBlasts(aLink);
+```
+- [ ] **Step 8: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `450 test(s), 0 failure(s)`.
+
+- [ ] **Step 9: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "npcs-and-combat: the explode request, and the status's blasts line, V's health share for Minecraft in the combat line, and the bush rule in the ground line" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 46: BlockRender 0.19.0 lands Minecraft's blasts, their hits and pushes, and carries V's health into Minecraft
+
+The plugin's side of Part 3 (the spec's "The frame", "Part 3: explosions" and its follow-ups):
+- **Blasts in `Fight`,** in the ring's order with Minecraft's hits and deaths, a blast before its own hits: the sink's
+  `Explosion` now keeps the event for `Fight` (which logs it) beside the burst it starts. `BlastIn` logs `explosion at
+  Minecraft …`, and with combat on, linked and V found, takes it (`AcceptBlast`), counts the listed NPCs within its
+  reach, and calls the module's `Explode` at its centre with `set blastknock`; otherwise it says why not.
+- **Blast hits:** `HitOnNpc` asks `Blasts::HitOn` with the NPC's last listed feet (`ListedByEntity`); a blast's own hit
+  starts at V's punch × Minecraft's damage to `set blastpower` (0.5) and goes through the module's `BlastHit` with the
+  blast's centre; it's never strong. Its log lines say `a blast's own`, and its landing or ending is logged as a `blast
+  hit`.
+- **Pushes:** each frame, the blasts due a quarter second after go to the module's `Push` (`PushBlast`), which logs how
+  many NPCs are within reach, knocked down and dead, with the blast's own hits; while V isn't found, the push is logged
+  and not made.
+- **V's health share:** as V's Immortal goes on with build mode and combat (`g_godMode`), `CarryHealth` pushes
+  `HealthInput` with V's share as the module last read it, and the status's combat line says when.
+- **Settings:** `set blastpower` (0 to 1), `set blastknock` (0 or 1) and `set bushrule` (0, 1 or 2), which sets the
+  exporter's rule and starts the city over (`RestartCity`). `set combat`'s reply says what combat now does.
+- **`explode <metres> <radius>`** makes a `kEvExplosion` that far ahead of V, at the height of V's feet, in Minecraft's
+  axes, and puts it among this frame's events, so it goes through all that Minecraft's blasts do.
+- **`ArmWords`** says what `Arm`'s 3 means. **0.19.0,** in `kVersion` and CMake's project.
+
+**Files:**
+- Modify: `src/Plugin.cpp`, `CMakeLists.txt`
+
+- [ ] **Step 1: Edit `src/Plugin.cpp`**
+
+```cpp
+// hidden, and with combat on V's unarmed weapon is drawn, so that hits carry it.
+```
+```cpp
+// hidden, and with combat on V's unarmed weapon is drawn, so that hits carry it, and Minecraft's player takes V's health
+// share as build mode starts. Minecraft's blasts knock down what they reach as the game's knockdown grenade does, their own
+// hits land as explosions, and their push throws the bodies, cars and loose things.
+```
+```cpp
+constexpr const char* kVersion = "0.18.1";
+```
+```cpp
+constexpr const char* kVersion = "0.19.0";
+```
+```cpp
+std::vector<skycraft::proto::McEvent> g_events;              // Minecraft's hits and deaths this frame, in the ring's order
+```
+```cpp
+std::vector<skycraft::proto::McEvent> g_events;              // Minecraft's blasts, hits and deaths this frame, in the ring's order
+```
+```cpp
+	double   at = 0.0;
+```
+```cpp
+	double   at = 0.0;
+	bool     blast = false;  // a blast's own hit
+```
+```cpp
+std::string                     g_lastHurt;
+```
+```cpp
+std::string                     g_lastHurt;
+
+// Spike 6's Minecraft blasts (its spec's "Part 3"), and V's health share for Minecraft's player (its follow-up). Main
+// thread only.
+cpmc::link::Blasts g_blasts;                                 // the last moments' blasts: their own hits, their pushes
+double             g_blastPower = cpmc::link::kBlastPower;  // set blastpower: a blast's hits start at the punch x damage^this
+bool               g_blastKnock = false;  // set blastknock 1: each NPC within a blast's reach gets the knockdown directly too
+std::string        g_lastBlast;
+double             g_vHealth = 0.0;  // V's health share, as the module last read it
+std::string        g_lastHealth;
+```
+```cpp
+		::Log("explosion at Minecraft {:.1f} {:.1f} {:.1f}, radius {:.1f}", aEvent.a, aEvent.b, aEvent.c, aEvent.d);
+		g_burst.Start(cpmc::SteadySeconds(), "explosion");
+	}
+
+	// Spike 6: Minecraft's hits on NPCs and its player's death, kept in the ring's order for Fight, after the link's update.
+```
+```cpp
+		g_burst.Start(cpmc::SteadySeconds(), "explosion");
+		g_events.push_back(aEvent);  // Fight logs it
+	}
+
+	// Spike 6: Minecraft's blasts, hits on NPCs and its player's death, kept in the ring's order for Fight, after the link's
+	// update: a blast before its own hits.
+```
+```cpp
+	g_vHealthMax = g_npcList->vHealthMax;
+```
+```cpp
+	g_vHealthMax = g_npcList->vHealthMax;
+	g_vHealth = g_npcList->vHealth;
+```
+```cpp
+// One of Minecraft's hits on an NPC (spike 6's "Minecraft's hits on NPCs"): logged, and with combat on, made V's through
+// the module, starting the game's damage pipeline at V's punch x Minecraft's damage to the hit power.
+void HitOnNpc(const skycraft::proto::McEvent& aEvent, double aNow, bool aVFound)
+{
+	++g_npcHits;
+	const std::string hit = std::format("hit on NPC {} ({}) for {:.2f} of Minecraft's damage, knockback {:.2f}; {}", aEvent.formId,
+	                                    NpcName(aEvent.formId), aEvent.a, aEvent.d, cpmc::link::HitWords(aEvent));
+```
+```cpp
+// The NPC aEntity as the module last listed it; null if it isn't listed.
+const cpmc::link::NpcSample* ListedByEntity(uint64_t aEntity)
+{
+	if (!g_npcList)
+	{
+		return nullptr;
+	}
+	const auto npc = std::find_if(g_npcList->npcs.begin(), g_npcList->npcs.end(),
+	                              [&](const cpmc::link::NpcSample& aNpc) { return aNpc.entity == aEntity; });
+	return npc != g_npcList->npcs.end() ? &*npc : nullptr;
+}
+
+// One of Minecraft's hits on an NPC (spike 6's "Minecraft's hits on NPCs"): logged, and with combat on, made V's through
+// the module, starting the game's damage pipeline at V's punch x Minecraft's damage to the hit power. One within a blast's
+// window, on an NPC whose last listed feet are within the blast's reach, is the blast's own (its "Blast hits"): of type
+// Explosion, from the blast's centre, starting at V's punch x Minecraft's damage to the blast power.
+void HitOnNpc(const skycraft::proto::McEvent& aEvent, double aNow, bool aVFound)
+{
+	++g_npcHits;
+	std::string hit = std::format("hit on NPC {} ({}) for {:.2f} of Minecraft's damage, knockback {:.2f}; {}", aEvent.formId,
+	                              NpcName(aEvent.formId), aEvent.a, aEvent.d, cpmc::link::HitWords(aEvent));
+```
+```cpp
+	}
+	cpmc::link::HitDrop                     drop = cpmc::link::HitDrop::Count;
+	const std::optional<cpmc::link::NpcHit> accepted = cpmc::link::AcceptHit(aEvent, g_actorIds, aNow, g_punch, g_hitPower, drop);
+```
+```cpp
+	}
+	std::optional<cpmc::link::Blast> blast;
+	if (const std::optional<uint64_t> entity = g_actorIds.Entity(aEvent.formId, aNow))
+	{
+		if (const cpmc::link::NpcSample* npc = ListedByEntity(*entity))
+		{
+			blast = g_blasts.HitOn(npc->position, aNow);
+		}
+	}
+	if (blast)
+	{
+		hit += "; a blast's own";
+	}
+	const double                            power = blast ? g_blastPower : g_hitPower;
+	cpmc::link::HitDrop                     drop = cpmc::link::HitDrop::Count;
+	const std::optional<cpmc::link::NpcHit> accepted = cpmc::link::AcceptHit(aEvent, g_actorIds, aNow, g_punch, power, drop);
+```
+```cpp
+	const std::optional<int32_t> result = g_script.Hit(accepted->entity, accepted->amount, accepted->strong, why);
+```
+```cpp
+	const std::optional<int32_t> result = blast ? g_script.BlastHit(accepted->entity, accepted->amount, blast->centre, why)
+	                                            : g_script.Hit(accepted->entity, accepted->amount, accepted->strong, why);
+```
+```cpp
+	g_pendingHits.push_back({ accepted->entity, accepted->formId, accepted->damage, accepted->amount, aNow });
+	g_lastHit = std::format("NPC {} ({}): {:.2f} of Minecraft's damage, starting at {:.2f}{}; queued", accepted->formId,
+	                        NpcName(accepted->formId), accepted->damage, accepted->amount, accepted->strong ? ", strong" : "");
+	Log("{}: starting at {:.2f} = V's punch {:.2f} x {:.2f}^{:.2f}{}{}; queued", hit, accepted->amount, g_punch, accepted->damage,
+	    g_hitPower, accepted->strong ? ", strong" : "", g_punchDrawn ? "" : ", without V's weapon drawn");
+```
+```cpp
+	g_pendingHits.push_back({ accepted->entity, accepted->formId, accepted->damage, accepted->amount, aNow, blast.has_value() });
+	const bool strong = accepted->strong && !blast;
+	g_lastHit = std::format("NPC {} ({}): {:.2f} of Minecraft's damage{}, starting at {:.2f}{}; queued", accepted->formId,
+	                        NpcName(accepted->formId), accepted->damage, blast ? ", a blast's" : "", accepted->amount,
+	                        strong ? ", strong" : "");
+	Log("{}: starting at {:.2f} = V's punch {:.2f} x {:.2f}^{:.2f}{}{}; queued", hit, accepted->amount, g_punch, accepted->damage, power,
+	    strong ? ", strong" : "", blast || g_punchDrawn ? "" : ", without V's weapon drawn");
+}
+
+// One of Minecraft's blasts (spike 6's "The blast in the game"): with combat on, the game's knockdown grenade's attack and
+// the explosion's sound at its centre, in the game's axes, through the module; its push follows a quarter second after
+// (PushBlast).
+void BlastIn(const skycraft::proto::McEvent& aEvent, double aNow, bool aVFound)
+{
+	const std::string explosion =
+	    std::format("explosion at Minecraft {:.1f} {:.1f} {:.1f}, radius {:.1f}", aEvent.a, aEvent.b, aEvent.c, aEvent.d);
+	if (!g_combat)
+	{
+		return Log("{}; not applied: combat is off", explosion);
+	}
+	const std::optional<cpmc::link::Blast> blast = cpmc::link::AcceptBlast(aEvent, aNow);
+	if (!blast)
+	{
+		return Log("{}; not applied: its centre or radius isn't usable", explosion);
+	}
+	if (!aVFound)
+	{
+		return Log("{}; not applied: V isn't found", explosion);
+	}
+	g_blasts.Add(*blast);
+	size_t within = 0;
+	if (g_npcList)
+	{
+		for (const cpmc::link::NpcSample& npc : g_npcList->npcs)
+		{
+			within += std::hypot(npc.position.x - blast->centre.x, npc.position.y - blast->centre.y, npc.position.z - blast->centre.z) <=
+			          blast->reach;
+		}
+	}
+	const std::string where = std::format("at world ({:.2f}, {:.2f}, {:.2f}), reaching {:.1f} m", blast->centre.x, blast->centre.y,
+	                                      blast->centre.z, blast->reach);
+	std::string                  why;
+	const std::optional<int32_t> result = g_script.Explode(blast->centre, blast->reach, g_blastKnock, why);
+	std::string                  outcome = "there's no attack record or effect for its knockdowns";
+	if (!result)
+	{
+		outcome = "the module can't be called: " + why;
+	}
+	else if (*result == 1)
+	{
+		outcome = g_blastKnock ? "its knockdown attack and sound started, and each NPC within it knocked down directly"
+		                       : "its knockdown attack and sound started";
+	}
+	else if (*result == 0)
+	{
+		outcome = "V isn't found";
+	}
+	g_lastBlast = std::format("{}: {} NPCs within it; its push to come", where, within);
+	Log("{}: a blast {}, {} listed NPCs within it; {}", explosion, where, within, outcome);
+}
+
+// A blast's push, a quarter second after it (spike 6's "The blast in the game"), through the module, which then says what
+// is within the blast's reach: knocked down, and dead.
+void PushBlast(const cpmc::link::Blast& aBlast, double aNow, bool aVFound)
+{
+	const std::string where = std::format("at world ({:.2f}, {:.2f}, {:.2f}), reaching {:.1f} m", aBlast.centre.x, aBlast.centre.y,
+	                                      aBlast.centre.z, aBlast.reach);
+	std::string                    why = "V isn't found";
+	const std::optional<cpmc::BlastPush> push = aVFound ? g_script.Push(aBlast.centre, aBlast.reach, why) : std::nullopt;
+	if (!push || push->npcs < 0)
+	{
+		g_lastBlast = std::format("{}: {} hits of its own; not pushed: {}", where, aBlast.hits, push ? "V isn't found" : why);
+		return Log("blast {} not pushed: {}", where, push ? "V isn't found" : why);
+	}
+	g_lastBlast = std::format("{}: {} NPCs within it, {} hits of its own; after its push {} knocked down, {} dead", where, push->npcs,
+	                          aBlast.hits, push->down, push->dead);
+	Log("blast {} pushed, {:.2f} s after it: {} NPCs within it, {} knocked down, {} dead; {} hits of its own", where, aNow - aBlast.at,
+	    push->npcs, push->down, push->dead, aBlast.hits);
+}
+
+// V's health share to Minecraft's player as V's Immortal goes on, with build mode and combat (spike 6's follow-up), through
+// CyberCraft Tweaks 1.3.0: a SkyCraft without it leaves the input alone.
+void CarryHealth()
+{
+	if (!g_link || g_vHealth <= 0.0)
+	{
+		return Log("combat: Minecraft's health not set: {}", !g_link ? "the mapping isn't open" : "V's health isn't read yet");
+	}
+	const bool sent = g_link->Push(cpmc::link::HealthInput(g_vHealth));
+	g_lastHealth = std::format("set to V's share {:.4f} when build mode last started{}", g_vHealth, sent ? "" : ", but the input ring was full");
+	Log("combat: Minecraft's health {}", g_lastHealth);
+```
+```cpp
+		return aOn ? "V has it drawn" : "nothing to put back";
+```
+```cpp
+		return aOn ? "V has it drawn" : "nothing to put back";
+	case 3:
+		return "put away, and drawn again in a second, so that the game starts the effects it starts as it's drawn";
+```
+```cpp
+// Spike 6's combat, after the link's update and before the NPCs are listed (its spec's "The frame"): Minecraft's hits and
+// deaths in the ring's order; our hits the game has dealt, those it dealt nothing and why, and those it hasn't said
+// within kHitTrail; V's god mode, V's unarmed weapon and V's meshes; and whether V's hurts are taken.
+```
+```cpp
+// Spike 6's combat, after the link's update and before the NPCs are listed (its spec's "The frame"): Minecraft's blasts,
+// hits and deaths in the ring's order, a blast before its own hits, and the blasts' pushes as they come due; our hits the
+// game has dealt, those it dealt nothing and why, and those it hasn't said within kHitTrail; V's god mode, with V's health
+// share for Minecraft as it goes on, V's unarmed weapon and V's meshes; and whether V's hurts are taken.
+```
+```cpp
+		if (event.type == skycraft::proto::kEvHitActor)
+```
+```cpp
+		if (event.type == skycraft::proto::kEvExplosion)
+		{
+			BlastIn(event, aNow, vFound && g_linked);
+		}
+		else if (event.type == skycraft::proto::kEvHitActor)
+```
+```cpp
+			MinecraftDied(event, aNow, vFound);
+		}
+	}
+```
+```cpp
+			MinecraftDied(event, aNow, vFound);
+		}
+	}
+	for (const cpmc::link::Blast& blast : g_blasts.Pushes(aNow))
+	{
+		PushBlast(blast, aNow, vFound && g_linked);
+	}
+```
+```cpp
+		const double   start = pending != g_pendingHits.end() ? pending->amount : 0.0;
+```
+```cpp
+		const double   start = pending != g_pendingHits.end() ? pending->amount : 0.0;
+		const bool     blast = pending != g_pendingHits.end() && pending->blast;
+```
+```cpp
+		g_lastHit = std::format("NPC {} ({}): {:.2f} of Minecraft's damage, started at {:.2f}, {:.2f} dealt{}; {:.0f} -> {:.0f}", formId,
+		                        NpcName(formId), damage, start, landed.amount, how.empty() ? "" : " (" + how + ")", landed.before,
+		                        landed.after);
+		Log("hit on NPC {} landed: started at {:.2f}, {:.2f} dealt{}; its health {:.0f} -> {:.0f}", formId, start, landed.amount,
+		    how.empty() ? "" : " (" + how + ")", landed.before, landed.after);
+```
+```cpp
+		g_lastHit = std::format("NPC {} ({}): {:.2f} of Minecraft's damage{}, started at {:.2f}, {:.2f} dealt{}; {:.0f} -> {:.0f}", formId,
+		                        NpcName(formId), damage, blast ? ", a blast's" : "", start, landed.amount, how.empty() ? "" : " (" + how + ")",
+		                        landed.before, landed.after);
+		Log("{}hit on NPC {} landed: started at {:.2f}, {:.2f} dealt{}; its health {:.0f} -> {:.0f}", blast ? "blast " : "", formId, start,
+		    landed.amount, how.empty() ? "" : " (" + how + ")", landed.before, landed.after);
+```
+```cpp
+		const uint32_t formId = pending != g_pendingHits.end() ? pending->formId : g_actorIds.IdOf(ended.target).value_or(0);
+```
+```cpp
+		const uint32_t formId = pending != g_pendingHits.end() ? pending->formId : g_actorIds.IdOf(ended.target).value_or(0);
+		const bool     blast = pending != g_pendingHits.end() && pending->blast;
+```
+```cpp
+		Log("hit on NPC {} dealt nothing: {}", formId, why);
+```
+```cpp
+		Log("{}hit on NPC {} dealt nothing: {}", blast ? "blast " : "", formId, why);
+```
+```cpp
+		Log("hit on NPC {} (starting at {:.2f}) wasn't dealt by the game within {:.0f} s, nor said why", aHit.formId, aHit.amount,
+		    cpmc::link::kHitTrail);
+```
+```cpp
+		Log("{}hit on NPC {} (starting at {:.2f}) wasn't dealt by the game within {:.0f} s, nor said why", aHit.blast ? "blast " : "",
+		    aHit.formId, aHit.amount, cpmc::link::kHitTrail);
+```
+```cpp
+		Log("combat: V's Immortal {}: {}", *change ? "on" : "off", immortal ? ImmortalWords(*change, *immortal) : "not done: " + why);
+```
+```cpp
+		Log("combat: V's Immortal {}: {}", *change ? "on" : "off", immortal ? ImmortalWords(*change, *immortal) : "not done: " + why);
+		if (*change)
+		{
+			CarryHealth();
+		}
+```
+```cpp
+		return Report(g_combat ? "set combat 1: Minecraft's hits land on NPCs as V's; in build mode V is Immortal with its unarmed weapon "
+		                         "drawn, the game's hits on V go to Minecraft's player, and its death kills V"
+		                       : "set combat 0: Minecraft's hits are only logged, and V's health is V's");
+```
+```cpp
+		return Report(g_combat ? "set combat 1: Minecraft's hits and blasts land on NPCs as V's; in build mode V is Immortal with its "
+		                         "unarmed weapon drawn, Minecraft's player takes V's health share as build mode starts, the game's hits on V "
+		                         "go to Minecraft's player, and its death kills V"
+		                       : "set combat 0: Minecraft's hits and blasts are only logged, and V's health is V's");
+```
+```cpp
+		                          g_hitPower, g_hitPower, std::pow(7.0, g_hitPower)));
+```
+```cpp
+		                          g_hitPower, g_hitPower, std::pow(7.0, g_hitPower)));
+	}
+	if (aRequest.what == "blastpower")
+	{
+		if (aRequest.number < 0.0 || aRequest.number > 1.0)
+		{
+			return Report("set blastpower: from 0 to 1, the power of Minecraft's damage that V's punch is multiplied by for a blast's own "
+			              "hits: 0.5, the default, is the square root");
+		}
+		g_blastPower = aRequest.number;
+		return Report(std::format("set blastpower {:.2f}: a blast's hits start at V's punch x Minecraft's damage^{:.2f}: TNT's 57 at its "
+		                          "centre {:.2f} punches, its 1 at the edge one punch",
+		                          g_blastPower, g_blastPower, std::pow(57.0, g_blastPower)));
+	}
+	if (aRequest.what == "blastknock")
+	{
+		if (aRequest.number != 0.0 && aRequest.number != 1.0)
+		{
+			return Report("set blastknock: 1 knocks down each NPC within a blast's reach directly too, with the knockdown grenade's status "
+			              "effect; 0 leaves knockdowns to the blast's attack");
+		}
+		g_blastKnock = aRequest.number == 1.0;
+		return Report(g_blastKnock ? "set blastknock 1: each NPC within a blast's reach is knocked down directly too"
+		                           : "set blastknock 0: the blast's attack knocks NPCs down");
+	}
+	if (aRequest.what == "bushrule")
+	{
+		if (aRequest.number != 0.0 && aRequest.number != 1.0 && aRequest.number != 2.0)
+		{
+			return Report("set bushrule: what else the city's shape leaves out for Minecraft: 0 nothing, 1 sight-only shapes (a bush's "
+			              "foliage, the default), 2 unsimulated shapes");
+		}
+		g_ground.SetRule(cpmc::px::LeaveOut(int(aRequest.number)));
+		if (g_link)
+		{
+			g_link->RestartCity();
+		}
+		return Report(std::format("set bushrule {:.0f}: the city's shape leaves out {}, and Minecraft gets it again", aRequest.number,
+		                          cpmc::px::LeaveOutName(g_ground.Rule())));
+```
+```cpp
+// box on|off (spike 5's step 4): a test box 3 m ahead of V, made as the bodies for blocks are, before any block is.
+```
+```cpp
+// explode <metres> <radius> (spike 6's step 5b): a blast that far ahead of V, at the height of V's feet, as if it were
+// Minecraft's, through all that Minecraft's blasts go through. With no stand-in hit by it, it knocks down, pushes and
+// sounds, and deals nothing.
+void ExplodeRequest(const cpmc::Request& aRequest)
+{
+	const std::optional<cpmc::PlayerPose> pose = cpmc::LocatePlayer();
+	if (!pose)
+	{
+		return Report("explode: there's no player");
+	}
+	const double      flat = std::hypot(double(pose->forward.x), double(pose->forward.y));
+	const double      east = flat > 1e-6 ? pose->forward.x / flat : 0.0;
+	const double      north = flat > 1e-6 ? pose->forward.y / flat : 1.0;
+	const cpmc::Vec3d centre{ pose->feet.x + east * aRequest.number, pose->feet.y + north * aRequest.number, pose->feet.z };
+	const cpmc::Vec3d mc = cpmc::McFromWorld(centre);
+	skycraft::proto::McEvent event{};
+	event.type = skycraft::proto::kEvExplosion;
+	event.a = float(mc.x);
+	event.b = float(mc.y);
+	event.c = float(mc.z);
+	event.d = float(aRequest.radius);
+	g_events.push_back(event);
+	Report(std::format("explode: as if Minecraft blew up {:.1f} m ahead of V, at world ({:.2f}, {:.2f}, {:.2f}), radius {:.1f}; the log "
+	                   "says how it went",
+	                   aRequest.number, centre.x, centre.y, centre.z, aRequest.radius));
+}
+
+// box on|off (spike 5's step 4): a test box 3 m ahead of V, made as the bodies for blocks are, before any block is.
+```
+```cpp
+		Report("punch: V's punch, what it's read from, and what hits are made with, in the log");
+		break;
+	}
+```
+```cpp
+		Report("punch: V's punch, what it's read from, and what hits are made with, in the log");
+		break;
+	case cpmc::Request::Kind::Explode: ExplodeRequest(*request); break;
+	}
+```
+```cpp
+	report.shapesUnreadable = physx.unreadable;
+```
+```cpp
+	report.shapesUnreadable = physx.unreadable;
+	report.bushRule = cpmc::px::LeaveOutName(g_ground.Rule());
+	report.shapesBush = physx.leftByRule;
+```
+```cpp
+	report.lastHurt = g_lastHurt;
+```
+```cpp
+	report.lastHurt = g_lastHurt;
+	report.lastHealth = g_lastHealth;
+```
+```cpp
+	report.combatWhy = CombatWhy();
+```
+```cpp
+	report.combatWhy = CombatWhy();
+	report.blasts = g_blasts.Count();
+	report.blastPower = g_blastPower;
+	report.blastKnock = g_blastKnock;
+	report.lastBlast = g_lastBlast;
+```
+- [ ] **Step 2: Edit `CMakeLists.txt`: version 0.19.0**
+
+```cmake
+project(BlockRender VERSION 0.18.1 LANGUAGES C CXX)
+```
+```cmake
+project(BlockRender VERSION 0.19.0 LANGUAGES C CXX)
+```
+- [ ] **Step 3: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `450 test(s), 0 failure(s)`.
+
+- [ ] **Step 4: Check that BlockRender imports nothing from PhysX**
+
+```bash
+DUMPBIN="$(ls "/c/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/"*/bin/Hostx64/x64/dumpbin.exe | head -1)"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && MSYS_NO_PATHCONV=1 "$DUMPBIN" -imports -nologo build\\RelWithDebInfo\\BlockRender.dll \
+  | grep -ci "physx"
+```
+Expected: `0`.
+
+- [ ] **Step 5: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "npcs-and-combat: BlockRender 0.19.0 lands Minecraft's blasts through the module, their own hits as explosions, pushes them a quarter second after, carries V's health share into Minecraft as build mode starts, and sets the bush rule" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 47: The overlay shows Minecraft's blasts, and sets one off 5 m ahead of V
+
+The overlay (`tools/blockrender_hud/init.lua`) reads the status's blasts line: with combat on, a "Blasts:" line after
+the combat line, with the blasts taken, and of the last, the NPCs within it, its own hits, and those knocked down and
+dead after its push. Under "More controls", while the line is there, "TNT 5 m ahead" sends `explode 5 4`: a blast of
+TNT's radius, 5 m ahead of V, for step 5b's opening check. While planning, `hud_check.lua` (`tools/plans`) ran the
+overlay under Lua with CET's functions stubbed against three sample statuses (a blast before its push, after it, and
+combat off): the line and the button showed as above, and neither with combat off.
+
+**Files:**
+- Modify: `tools/blockrender_hud/init.lua`
+
+- [ ] **Step 1: Edit `tools/blockrender_hud/init.lua`**
+
+```lua
+-- bodies, the NPCs, combat, and V. Two folded sections hold the rest: "More controls" (the drawing mode, Minecraft's HUD,
+-- commands typed into Minecraft, the drive log, the ground and its shapes, the NPCs' list, V's punch, and V hidden or
+-- seen in build mode) and "Full status" (every status line, and the frame time).
+```
+```lua
+-- bodies, the NPCs, combat, Minecraft's blasts, and V. Two folded sections hold the rest: "More controls" (the drawing
+-- mode, Minecraft's HUD, commands typed into Minecraft, the drive log, the ground and its shapes, the NPCs' list, V's
+-- punch, V hidden or seen in build mode, and a blast ahead of V) and "Full status" (every status line, and the frame
+-- time).
+```
+```lua
+local combatOn = nil     -- whether Minecraft's hits land as V's and V's hurts go to Minecraft: "on" or "off"
+```
+```lua
+local combatOn = nil     -- whether Minecraft's hits land as V's and V's hurts go to Minecraft: "on" or "off"
+local blasts = nil       -- the blasts line, with combat on: how many, and the last's NPCs within it, its own hits, and
+                         -- those knocked down and dead after its push
+```
+```lua
+    combatOn = nil
+```
+```lua
+    combatOn = nil
+    blasts = nil
+```
+```lua
+                .. (dead and (", Minecraft's player " .. dead) or "")
+```
+```lua
+                .. (dead and (", Minecraft's player " .. dead) or "")
+        end
+        local blastCount = line:match("^blasts=on: (%d+) taken")
+        if blastCount ~= nil then
+            local within = line:match("; the last [^;]*: (%d+) NPCs within it")
+            local own = line:match("(%d+) hits of its own")
+            local down, dead = line:match("after its push (%d+) knocked down, (%d+) dead")
+            blasts = blastCount .. " taken" .. (within and ("; the last: " .. within .. " NPCs within it") or "")
+                .. (own and (", " .. own .. " hits of its own") or "")
+                .. (down and (", " .. down .. " knocked down, " .. dead .. " dead") or "")
+```
+```lua
+        end
+        if player ~= nil then
+```
+```lua
+        end
+        if blasts ~= nil then
+            ImGui.Text("Blasts: " .. blasts)
+        end
+        if player ~= nil then
+```
+```lua
+            end
+            if hideV ~= nil then
+```
+```lua
+            end
+            if blasts ~= nil then
+                ImGui.Text("Blasts:")
+                ImGui.SameLine()
+                if ImGui.Button("TNT 5 m ahead") then
+                    request("explode 5 4")
+                end
+            end
+            if hideV ~= nil then
+```
+- [ ] **Step 2: Check the overlay's syntax**
+
+```bash
+cd /d/Cyberpunk-Minecraft/spikes/block-render && luac -p tools/blockrender_hud/init.lua && echo ok
+```
+Expected: `ok`.
+
+- [ ] **Step 3: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "npcs-and-combat: the overlay shows Minecraft's blasts and sets one off 5 m ahead of V" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 48: In the game: step 5b
+
+Step 5b of the spec's "The steps", with the user, on BlockRender 0.19.0 with `set combat 1`, linked to SkyCraft's
+Minecraft with CyberCraft Tweaks 1.3.0, its player in survival. The opening checks come first, with `explode` rather
+than TNT, and settle what Part 3 left to the game (the spec's "Changes while planning Part 3" and risks 13 and 21 to
+26):
+- **knockdowns:** whether the knockdown grenade's attack, run by script and dealing no damage, knocks NPCs down, a
+  crowd's included, and whether the game draws an explosion; if no NPC goes down, `set blastknock 1`;
+- **the push:** a parked car, bins and boxes pushed;
+- **Minecraft's health from V's** as build mode starts;
+- **the bush rule:** a bush's foliage left out of Minecraft's ground, and a wall kept.
+
+Then TNT among NPCs, set off in build mode: the stand-ins it hurts take blast hits that start where the blast power
+says, those near it killed and thrown, those at the edge knocked down, the car and the props pushed, and Minecraft's
+player hurt only by Minecraft's own blast. Last, the blades' heat back after build mode.
+
+**Where:** step 2's busy pavement, or another spot with people standing about, a parked car, bins and boxes, away from
+anything built in Minecraft there. A blast's knockdowns are V's attacks: people flee, and the police may come. Nothing
+of it lasts unless the user saves; load the save again when done.
+
+**What isn't drawn:** the stand-ins, as before; and lit TNT, which is an entity, and BlockRender draws Minecraft's blocks,
+not its entities: a TNT block placed is drawn, and vanishes when lit, going off 4 s later where it was.
+
+FreeFly (F7) stays off. Note what you see as you go: Step 14 records it. If the game freezes, read the logs and the
+newest folder in `%LOCALAPPDATA%\REDEngine\ReportQueue`, and force-close it only when the user asks. If a check fails,
+stop and find the cause with superpowers:systematic-debugging before going on. Fixes become new tasks. In build mode
+Minecraft's death kills V: watch its hearts (the user has golden apples in slot 6 and golden carrots in slot 7). CET's
+overlay key ends build mode, so CET's console is for checks outside it.
+
+The commands of Task 31 come back: sending a request, the log's newest lines, the status, and Minecraft's log, whose
+grep gains CyberCraft Tweaks' lines:
+```bash
+grep -E "SkyCraft: (Skyrim hit|hit|[0-9]+ Skyrim)|CyberCraft Tweaks|\[CHAT\]" "/c/Users/BLOXY/AppData/Roaming/ModrinthApp/profiles/CyberCraft/logs/latest.log" | tail -10
+```
+
+**Files:**
+- Modify: `docs/spikes/2026-10-05-npcs-and-combat-results.md`
+
+- [ ] **Step 1: Deploy (the game must not be running)**
+
+```bash
+tasklist | grep -i -c "cyberpunk2077.exe"
+```
+Expected: `0`. If it's `1`, ask the user to quit the game first, because a running game locks the DLL.
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+P=/e/Cyberpunk2077/red4ext/plugins/BlockRender; H=/e/Cyberpunk2077/bin/x64/plugins/cyber_engine_tweaks/mods/blockrender_hud
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default -DCP2077_DIR=E:/Cyberpunk2077 > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C|error MSB"; \
+  "$CMAKE" --preset default -DCP2077_DIR= > /dev/null; \
+  cmp build/RelWithDebInfo/BlockRender.dll "$P/BlockRender.dll" && cmp scripts/BlockRender.reds "$P/Scripts/BlockRender.reds" \
+  && cmp tools/blockrender_hud/init.lua "$H/init.lua" && echo installed
+```
+Expected: `installed`. The second configure clears `CP2077_DIR` again.
+
+- [ ] **Step 2: In the game: the module and its natives**
+
+Ask the user to start the `CyberCraft` instance, then the game, and to wait at the game's main menu. If a "REDScript
+compilation has failed" message box shows instead, ask the user to click OK and quit the game, and read redscript's log
+for why. Otherwise:
+```bash
+grep -E "BlockRender|Codeware.Global|Compilation complete|ERROR" /e/Cyberpunk2077/r6/logs/redscript_rCURRENT.log; \
+  L=$(ls -t /e/Cyberpunk2077/red4ext/logs | grep -i blockrender | head -1); grep -E "loaded|natives:" "/e/Cyberpunk2077/red4ext/logs/$L"
+```
+Expected: the module's path and Codeware's among the files compiled, `Compilation complete`, and no `ERROR` line; in
+BlockRender's log, `BlockRender 0.19.0 loaded` and the seven natives added.
+
+- [ ] **Step 3: In the game: load, link, and combat on**
+
+Ask the user to load the save on the busy pavement, and click Link. Then send `set combat 1`.
+Expected:
+- in the log, `module: found BlockRenderNpcs version 6, its 13 functions, the 19 fields List fills, and BlockRender's 7
+  natives`;
+- in the status, `blasts=on: 0 taken, blast power 0.50; none yet`, and in the ground line `the bush rule leaves out
+  sight-only shapes: … so far`; the overlay shows the Blasts line, and "TNT 5 m ahead" under "More controls".
+
+- [ ] **Step 4: In the game: the opening check, knockdowns**
+
+Outside build mode, ask the user to face a person standing 4 to 6 m away, with others about, and to click "TNT 5 m
+ahead" (or send `explode 5 4`). Expected:
+- the reply `explode: as if Minecraft blew up 5.0 m ahead of V, at world (…), radius 4.0; the log says how it went`;
+- in the log, `explosion at Minecraft …, radius 4.0: a blast at world (…), reaching 8.0 m, N listed NPCs within it; its
+  knockdown attack and sound started`, then a quarter second later `blast at world (…) pushed, 0.2… s after it: N NPCs
+  within it, D knocked down, 0 dead; 0 hits of its own`;
+- on screen: the people within 8 m of the point knocked down, D of them; the explosion's sound; and whether an explosion
+  is drawn. V, within the reach too, isn't hurt (V's health in the status doesn't move) or knocked down.
+
+If D is 0, or the user saw nobody fall: send `set blastknock 1` (`set blastknock 1: each NPC within a blast's reach is
+knocked down directly too`) and again, and note whether they fall now (the spec's risk 13). Ask what the people did
+after: fled, fought, called the police.
+
+- [ ] **Step 5: In the game: the opening check, the push**
+
+Ask the user to face a parked car, with bins or boxes by it, about 5 m away, and click "TNT 5 m ahead" again. Expected:
+the log's two lines as in Step 4; on screen, the car rocked or shoved, and the bins and boxes thrown. Ask the user what
+moved, and how far.
+
+- [ ] **Step 6: In the game: the opening check, Minecraft's health from V's**
+
+V's health must be below full: if the status's health says full, ask the user to let V take a little damage outside
+build mode, a fall from a few metres, say. Then ask the user to press F8. Expected:
+- in the log, `combat: V's Immortal on: …` and `combat: Minecraft's health set to V's share 0.… when build mode last
+  started`, the share V's health over its max;
+- in Minecraft's log, `CyberCraft Tweaks: Minecraft's player's health set to V's share 0.…: <before> -> <after>`, after
+  being that share of 20;
+- Minecraft's hearts in build mode showing it: ask the user.
+
+Then F8 again.
+
+- [ ] **Step 7: In the game: the opening check, a bush and a wall**
+
+Ask the user to stand V in a bush, and send `shapes`. Expected, in the log, for the bush's foliage: `shapes: … sphere of
+actor …; the shape: sphere of radius … at (…); …; query filter 0:0:80000:0, simulation filter 0:0:0:0; the exporter
+leaves it out, with sight-only shapes`; a capsule, if the bush has one, with its own size and ends. Then beside a wall,
+`shapes` again: the wall's shapes end `; the exporter keeps it`. Then in build mode: Minecraft's player walks through the
+bush, and not through the wall. Ask the user.
+
+- [ ] **Step 8: In the game: TNT among NPCs**
+
+Ask the user where the TNT should come from:
+- **by hand:** TNT and a flint and steel in hotbar slots 8 and 9 (mouse 5 and 4), with the user's leave, to place
+  among the people and light: `mc /item replace entity @s hotbar.7 with minecraft:tnt 16`, then `mc /item replace entity
+  @s hotbar.8 with minecraft:flint_and_steel`;
+- **by command:** summoned 6 blocks ahead of Minecraft's player, level, with a 3-second fuse: `mc /execute rotated ~ 0
+  positioned ^ ^ ^6 run summon minecraft:tnt ~ ~ ~ {fuse:60s}`.
+
+In build mode, with people about and the car near, ask the user to set it off and step back more than 8 blocks: within
+them, Minecraft's own blast hurts Minecraft's player too. Expected, in the log:
+- the explosion line, with the listed NPCs within it;
+- for each stand-in the blast hurt, `hit on NPC N (…) for X of Minecraft's damage, knockback 0.00; …; a blast's own:
+  starting at Y = V's punch 104.87 x X^0.50; queued`, X falling off with distance (57 at the centre, about 22 at 4 m,
+  1 at 8 m, less where something hid the stand-in);
+- their landings, `blast hit on NPC N landed: started at Y, … dealt…; its health … -> …`, or `blast hit on NPC N dealt
+  nothing: …`;
+- the push line, with those knocked down and dead, and the blast's own hits.
+
+On screen: those near the TNT killed and thrown, those at the edge knocked down, the car and the props pushed, and V's
+health unmoved (the status's health line). Minecraft's hearts drop only if Minecraft's player was within the blast. Ask
+the user what they saw, and how it looked.
+
+- [ ] **Step 9: In the game: the blast power by feel**
+
+If the user wants, send `set blastpower 0.75` (`set blastpower 0.75: a blast's hits start at V's punch x Minecraft's
+damage^0.75: TNT's 57 at its centre 20.74 punches, its 1 at the edge one punch`) and set off another TNT, then `set
+blastpower 0.5`, or the value the user prefers, and note it.
+
+- [ ] **Step 10: In the game: the blades' heat after build mode**
+
+Outside build mode, ask the user to draw the blades (slot 4) and see their heat, then press F8, and F8 again. Expected,
+as build mode ends: `combat: V's unarmed weapon put away: put away, and drawn again in a second, so that the game starts
+the effects it starts as it's drawn`; on screen, the blades put away and drawn again, with their heat. Ask the user.
+
+- [ ] **Step 11: In the game: combat off, and unlinking**
+
+Send `set combat 0`, then ask the user to click Unlink. Expected: `blasts=off: Minecraft's blasts are logged, not
+applied`; then `none listed: not linked`.
+
+- [ ] **Step 12: Ask the user to quit the game and stop Minecraft**
+
+- [ ] **Step 13: Read the log once more**
+
+```bash
+L=$(ls -t /e/Cyberpunk2077/red4ext/logs | grep -i blockrender | head -1); grep -E "module:|combat:|build: V's|explosion at|blast|hit on NPC|shapes:|explode|set (blast|bush)" "/e/Cyberpunk2077/red4ext/logs/$L" | head -400
+```
+Everything the steps above logged, for the results.
+
+- [ ] **Step 14: Record the results in `docs/spikes/2026-10-05-npcs-and-combat-results.md`**
+
+A "Step 5b" section: each check above with its outcome and numbers: the knockdowns, with and without `blastknock`, and
+what the people did; the explosion drawn or not, and its sound; the push on the car and the props; Minecraft's health as
+build mode started; the bush and the wall, with `shapes`' words; the TNT, its hits against the formula and where they
+started, what the pipeline dealt, the dead thrown and those knocked down; the blast power by feel, and the value kept;
+the blades' heat; and anything that surprised. Update the spike's answer at the top.
+
+- [ ] **Step 15: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add docs/spikes/2026-10-05-npcs-and-combat-results.md docs/superpowers/plans/2026-10-05-npcs-and-combat.md \
+  && git commit -q -m "npcs-and-combat: step 5b in the game" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 49: Close the spike
+
+- [ ] **Step 1: The spike's answer, and "How Part 3 went"**
+
+At the top of the results, the spike's answer to its question, with Part 3's: whether Minecraft's explosions knock down
+and throw NPCs and push cars and props, and what is left. At the end of this plan, after "Found while planning Part 3":
+"How Part 3 went", what ran as written, what changed, and what steps 5a and 5b found.
+
+- [ ] **Step 2: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add docs \
+  && git commit -q -m "npcs-and-combat: spike 6 closed" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+- [ ] **Step 3: Finish the branch**
+
+Use superpowers:finishing-a-development-branch. The user has chosen a local fast-forward merge of the spike's branch
+into `main` each time so far: ask again. Ask before deleting branch `spike/player-puppeting` (spike 2's handoff).
+
+---
+
 ## Found while planning
 
 The spec's "Changes while planning" records these too.
@@ -10871,3 +13877,32 @@ Part 2 ran from 18:11 on 2026-10-05, when it was planned, to 02:23 on 2026-10-06
   - the user asked for two follow-ups, to come after Part 2 or with Part 3 as the user chooses: Minecraft's health set
     to V's share when build mode starts, and bushes kept out of the city's collision for Minecraft (the results' "Asked
     for, after Part 2").
+
+## Found while planning Part 3
+
+The spec's "Changes while planning Part 3" records these too, with the user's decisions.
+- **The knockdowns come from the knockdown grenade.** The game measures a strong explosion, the kind that knocks down,
+  from the hit's source object (`IsStrongExplosion`), and a blast made by script has only V as its source, so an
+  `Explosion` hit would knock down only NPCs within 3 m of V. The knockdown grenade's attack,
+  `Attacks.FragGrenadeKnockdown`, gives `BaseStatusEffect.Knockdown` at once, and the pipeline gives an attack's status
+  effects in `PostProcess`, on a hit that deals no damage too. The user chose it, for the blast's attack and for its own
+  hits; `set blastknock 1` gives the status effect directly, as the fallback.
+- **A blast power of its own.** TNT does 57 of Minecraft's damage at its centre, which at the hit power's square root
+  starts at 792 for the user's V. The user chose a knob apart from the hit power, `set blastpower`, 0.5 by default.
+- **The follow-ups with Part 3,** at the user's choice: Minecraft's health from V's through a `kInHurt` of no damage and
+  CyberCraft Tweaks 1.3.0, since SkyCraft's `hurtPlayer` ignores such a hurt and `InputBridge` passes every `kInHurt` to
+  it; the bush rule by a shape's filters, with each shape's own size for `shapes`; the blades drawn again a second after
+  build mode; and the idle timer left as it is, since nothing a script calls resets it.
+- **The game effect is set up as a claymore's:** `Explode` sets the effect's radius, range, position, attack, stat
+  modifiers and hit flags, as `CombatGadgetHelper.SpawnAttack` does; the sound is `PlayShockwave(n"explosion", …)`, as a
+  claymore plays it; the push is `physicalImpulseSphere`, as `SpawnPhysicalImpulse` runs it.
+- **Step 5 is two:** 5a with `mclink` against Minecraft, a real TNT's hits on stand-ins and the health set, before
+  anything goes into the game; 5b in the game.
+- **The city starts over without a check for its ground:** a mutation found that `RestartCity`'s check changed nothing,
+  since only the city writes its regions, and switching to the city starts it over anyway. The check went, and the test
+  now also checks that the city starts over once.
+- **Step 5a's script** checks that the blocks around its blast are all air before and after, and leaves Minecraft's
+  player in survival at full health, as step 5b wants it.
+- **The module is version 6:** 13 functions, 19 fields, and the same seven natives.
+- **The plan's tools** (`tools/plans`): `planlib.py` and `gen_plan.py` take `minecraft/` paths, and Java and shell
+  files; `run_plan.py` runs "Build CyberCraft Tweaks" steps as it runs the module's compile.

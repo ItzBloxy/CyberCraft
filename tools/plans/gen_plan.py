@@ -3,7 +3,8 @@ file, exactly.
 
     uv run --no-project python gen_plan.py <skeleton.md>... <out.md>
 
-Paths are relative to spikes/block-render/, except extern/... and docs/..., which are relative to the repo's root.
+Paths are relative to spikes/block-render/, except extern/..., docs/... and minecraft/..., which are relative to the
+repo's root.
 
 Files come from the verified scratch clone, unless a line "@@SOURCE <commit>@@" says otherwise: from there on, files
 come from that commit of the real repo, until the next such line ("@@SOURCE verify@@" goes back to the clone). A
@@ -24,13 +25,13 @@ from pairs import make_pairs  # noqa: E402
 
 CLONE = Path(os.environ.get("GEN_CLONE", Path(__file__).parent.parent / "verify"))
 SNAPSHOTS = Path(__file__).parent / "snap8"
-REPO = CLONE  # spike 6s Part 2 review: the tasks are tagged p2r-t23 to p2r-t30 in the verified clone
+REPO = CLONE  # spike 6's Part 3: the tasks are tagged p3-t38 to p3-t47 in the verified clone
 LANGUAGES = {".h": "cpp", ".cpp": "cpp", ".c": "c", ".hlsl": "hlsl", ".lua": "lua", ".py": "python", ".json": "json",
-             ".md": "markdown", ".txt": "cmake", ".reds": "swift"}
+             ".md": "markdown", ".txt": "cmake", ".reds": "swift", ".java": "java", ".sh": "bash"}
 
 
 def repo_path(path):
-    return path if path.startswith(("extern/", "docs/")) else f"spikes/block-render/{path}"
+    return path if path.startswith(("extern/", "docs/", "minecraft/")) else f"spikes/block-render/{path}"
 
 
 def read(path, source):
