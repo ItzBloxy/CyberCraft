@@ -1,7 +1,7 @@
 // mclink: a console stand-in for Cyberpunk's side of SkyCraft's protocol, for spike 4's step 1, spike 5's steps 1 and 3,
-// and spike 6's steps 1, 3 and 5a. It runs BlockRender's link code against the real Minecraft, without the game
-// (docs/superpowers/specs/2026-10-02-minecraft-link-design.md, 2026-10-03-collision-and-movement-design.md and
-// 2026-10-05-npcs-and-combat-design.md).
+// spike 6's steps 1, 3 and 5a, and spike 7's step 0. It runs BlockRender's link code against the real Minecraft, without
+// the game (docs/superpowers/specs/2026-10-02-minecraft-link-design.md, 2026-10-03-collision-and-movement-design.md,
+// 2026-10-05-npcs-and-combat-design.md and 2026-10-06-minecraft-entities-design.md).
 //
 //     mclink.exe <script.txt>
 //
@@ -9,7 +9,8 @@
 // drive puts it, as the plugin teleports V. With the city's ground, Night City's shape comes from a dump spike 1 saved.
 // Made-up NPCs go into SkyCraft's actor table, as the plugin writes the game's. It reports what Minecraft sends, its solid
 // blocks and its hits on the NPCs among it, which of those hits are a blast's own, as the plugin tells them by the NPCs'
-// feet, and when each blast's push would come; and refuses to start while another game side uses the mapping.
+// feet, and when each blast's push would come; its entity textures, scenes and world-entity table; and refuses to start
+// while another game side uses the mapping.
 #include "DumpObj.h"
 #include "McLinkScript.h"
 
@@ -28,6 +29,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <filesystem>
 #include <format>
 #include <fstream>
 #include <map>
@@ -67,6 +69,64 @@ bool WriteDds(const std::string& aPath, uint32_t aWidth, uint32_t aHeight, const
 	return bool(out);
 }
 
+// Spike 7: a scene as step 0 reports it, with how many of each batch's vertices have block light 15, which the plugin
+// takes as glowing (the spec's "Step A: into the G-buffer").
+struct SceneSummary
+{
+	struct Batch
+	{
+		SceneBatch batch;
+		uint32_t   glow = 0;
+	};
+	Vec3d              origin;
+	std::vector<Batch> batches;
+	uint32_t           vertices = 0;
+	uint32_t           glow = 0;
+	uint32_t           translucent = 0;  // vertices in translucent batches
+	uint64_t           bytes = 0;        // the message's payload
+};
+
+SceneSummary Summarize(const SceneMessage& aScene)
+{
+	SceneSummary summary;
+	summary.origin = aScene.origin;
+	summary.vertices = aScene.vertexCount;
+	summary.bytes = sizeof(proto::RenScene) + aScene.batches.size() * sizeof(proto::RenBatch) + aScene.vertices.size();
+	const std::vector<Vertex> vertices = SceneVertices(aScene);
+	for (const SceneBatch& batch : aScene.batches)
+	{
+		SceneSummary::Batch entry{ batch };
+		for (uint32_t i = batch.first; i < batch.first + batch.count; ++i)
+		{
+			entry.glow += (vertices[i].light & 0xFF) >= 15 ? 1 : 0;
+		}
+		summary.glow += entry.glow;
+		summary.translucent += (batch.flags & 1) ? batch.count : 0;
+		summary.batches.push_back(entry);
+	}
+	return summary;
+}
+
+// The world-entity table's records counted by kind, and its outline: "2 items, 1 shadow; an outline", or "nothing".
+std::string WorldWords(const WorldTable& aTable)
+{
+	std::map<std::string, int> kinds;
+	for (const proto::WorldEntity& record : aTable.entities)
+	{
+		++kinds[WorldKindName(record.kind)];
+	}
+	std::string words;
+	for (const auto& [kind, count] : kinds)
+	{
+		words += std::format("{}{} {}{}", words.empty() ? "" : ", ", count, kind, count == 1 ? "" : "s");
+	}
+	if (aTable.outline)
+	{
+		words += words.empty() ? "an outline" : "; an outline";
+	}
+	return words.empty() ? "nothing" : words;
+}
+
 // What Minecraft sends, reported as it comes.
 struct Report : LinkSink
 {
@@ -87,7 +147,32 @@ struct Report : LinkSink
 		}
 	}
 
-	void ClearAll() override { Say("clear all"); }
+	void ClearAll() override
+	{
+		Say("clear all");
+		textures.clear();  // SkyCraft sends its textures again, its ids from 1
+	}
+
+	// Spike 7: each entity texture, kept to be saved.
+	void Texture(const TextureImage& aTexture) override
+	{
+		textures[aTexture.id] = { aTexture.width, aTexture.height, { aTexture.rgba.begin(), aTexture.rgba.end() } };
+		Say("texture {}: {} x {}, {:.2f} MB", aTexture.id, aTexture.width, aTexture.height, double(aTexture.rgba.size()) / 1048576.0);
+	}
+
+	// Spike 7: the newest scene, summed up, and the largest since the last report.
+	void Scene(const SceneMessage& aScene) override
+	{
+		scene = Summarize(aScene);
+		++scenes;
+		sceneBytes += scene.bytes;
+		if (scene.bytes > largest.bytes)
+		{
+			largest = scene;
+		}
+	}
+
+	void WorldEntities(const WorldTable& aTable) override { world = aTable; }
 
 	void Explosion(const proto::McEvent& aEvent) override
 	{
@@ -200,7 +285,48 @@ struct Report : LinkSink
 	std::vector<uint8_t> hud;
 	Blasts                                        blasts;            // Minecraft's, as the plugin takes them
 	const std::map<uint32_t, proto::ActorRecord>* actors = nullptr;  // the made-up NPCs, by number
+	struct KeptTexture
+	{
+		uint32_t             width = 0;
+		uint32_t             height = 0;
+		std::vector<uint8_t> rgba;
+	};
+	std::map<uint32_t, KeptTexture> textures;  // by id
+	SceneSummary                    scene;     // the newest
+	SceneSummary                    largest;   // the largest since the last report
+	uint64_t                        scenes = 0;
+	uint64_t                        sceneBytes = 0;
+	WorldTable                      world;  // the newest
 };
+
+// Spike 7's step 0: the newest scene, batch by batch, and the world-entity table, record by record.
+void PrintScene(const Report& aReport)
+{
+	const SceneSummary& s = aReport.scene;
+	Say("scene: origin {:.0f} {:.0f} {:.0f}; {} batches, {} vertices ({} glow, {} translucent), {:.2f} MB", s.origin.x, s.origin.y, s.origin.z,
+	    s.batches.size(), s.vertices, s.glow, s.translucent, double(s.bytes) / 1048576.0);
+	for (size_t b = 0; b < s.batches.size(); ++b)
+	{
+		const SceneBatch& batch = s.batches[b].batch;
+		const auto        texture = aReport.textures.find(batch.texture);
+		const std::string what = batch.texture == 0                    ? std::string("the atlas")
+		                         : texture != aReport.textures.end() ? std::format("texture {} ({} x {})", batch.texture, texture->second.width,
+		                                                                            texture->second.height)
+		                                                               : std::format("texture {} (not received)", batch.texture);
+		Say("  batch {}: {}, {} vertices from {}{}, {} glow", b, what, batch.count, batch.first, (batch.flags & 1) ? ", translucent" : "",
+		    s.batches[b].glow);
+	}
+	Say("world: {}", WorldWords(aReport.world));
+	for (const proto::WorldEntity& record : aReport.world.entities)
+	{
+		Say("  {} {} at {:.2f} {:.2f} {:.2f}, yaw {:.1f}, pitch {:.1f}, scale {:.2f}", WorldKindName(record.kind), record.id, record.x, record.y,
+		    record.z, record.yaw, record.pitch, record.scale);
+	}
+	if (const auto& box = aReport.world.outline)
+	{
+		Say("  outline from {:.3f} {:.3f} {:.3f} to {:.3f} {:.3f} {:.3f}", (*box)[0], (*box)[1], (*box)[2], (*box)[3], (*box)[4], (*box)[5]);
+	}
+}
 
 // Minecraft's solid blocks: all of them, and in the 3 x 3 x 3 sections around the stand-in V's, where V's bodies would go.
 void PrintSolids(const Solids& aSolids, const Vec3d& aFeet)
@@ -252,6 +378,10 @@ void PrintStatus(const Link& aLink, const Report& aReport, const Vec3d& aFeet)
 	Say("events: {} explosions, {} hits on actors, {} deaths, {} others; {} actors in the table; {} inputs dropped; {} commands waiting; "
 	    "{} HUD images, {} refused",
 	    s.explosions, s.hitEvents, s.deathEvents, s.otherEvents, s.actors, s.inputsDropped, s.commandsWaiting, s.hudImages, s.hudRefused);
+	Say("entities: {} scenes and {} textures, {} of them from before the atlas; {} textures kept; the world table: {} records, {} left out, "
+	    "{} updates found it mid-write{}",
+	    s.messages[proto::kRenScene], s.messages[proto::kRenTexture], s.entitiesBeforeAtlas, aReport.textures.size(), s.worldEntities,
+	    s.worldLeftOut, s.worldTorn, s.outline ? "; an outline" : "");
 	Say("drive: {}, teleport {} applied of {}; V's eye height {:.2f}; render delay {:.1f} ms, {} frames waited for a tick, {} targets skipped",
 	    DriveStateName(s.drive), s.teleportAck, s.teleportSeq, s.eyeHeight, s.renderDelayMs, s.waitedFrames, s.driveSkipped);
 	Say("ground: the {}, epoch {}; {}; {} batches read ({} unread), {} regions sent ({} triangles); the worker: {} threads, {} regions "
@@ -376,6 +506,8 @@ int main(int aArgc, char** aArgv)
 	uint64_t reportedFrames = 0;
 	uint64_t reportedBytes = 0;
 	uint64_t reportedHuds = 0;
+	uint64_t reportedScenes = 0;
+	uint64_t reportedSceneBytes = 0;
 	for (double tick = Now();; tick += kFrame)
 	{
 		const double now = Now();
@@ -438,10 +570,27 @@ int main(int aArgc, char** aArgv)
 			Say("Minecraft {}: {:.0f} frames/s; the render ring {:.2f} MB/s; {} sections so far; {:.0f} HUD images/s",
 			    state.minecraft ? "there" : "absent", double(state.minecraftFrames - reportedFrames) / seconds,
 			    double(state.drainedBytes - reportedBytes) / 1048576.0 / seconds, report.sections, double(report.huds - reportedHuds) / seconds);
+			if (report.scenes != reportedScenes)
+			{
+				uint64_t textureBytes = 0;
+				for (const auto& [id, texture] : report.textures)
+				{
+					textureBytes += texture.rgba.size();
+				}
+				const SceneSummary& top = report.largest;
+				Say("scenes: {:.0f}/s, {:.2f} MB/s; the largest since the last line {:.2f} MB, {} vertices ({} glow, {} translucent) in {} "
+				    "batches; {} textures ({:.2f} MB); world: {}",
+				    double(report.scenes - reportedScenes) / seconds, double(report.sceneBytes - reportedSceneBytes) / 1048576.0 / seconds,
+				    double(top.bytes) / 1048576.0, top.vertices, top.glow, top.translucent, top.batches.size(), report.textures.size(),
+				    double(textureBytes) / 1048576.0, WorldWords(report.world));
+				report.largest = {};
+			}
 			lastReport = now;
 			reportedFrames = state.minecraftFrames;
 			reportedBytes = state.drainedBytes;
 			reportedHuds = report.huds;
+			reportedScenes = report.scenes;
+			reportedSceneBytes = report.sceneBytes;
 		}
 
 		if (next >= script->size())
@@ -553,6 +702,19 @@ int main(int aArgc, char** aArgv)
 				break;
 			}
 			case Action::Kind::Status: PrintStatus(link, report, feet); break;
+			case Action::Kind::Scene: PrintScene(report); break;
+			case Action::Kind::SaveTextures:
+			{
+				std::error_code ignored;
+				std::filesystem::create_directories(action.text, ignored);
+				size_t saved = 0;
+				for (const auto& [id, texture] : report.textures)
+				{
+					saved += WriteDds(std::format("{}\\texture-{}.dds", action.text, id), texture.width, texture.height, texture.rgba.data()) ? 1 : 0;
+				}
+				Say("{} of {} textures saved in {}", saved, report.textures.size(), action.text);
+				break;
+			}
 			case Action::Kind::Type:
 				if (!link.Type(action.text, error))
 				{

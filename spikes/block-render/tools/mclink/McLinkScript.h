@@ -38,6 +38,8 @@
 //                                  power for a power attack. It goes through the plugin's sums: at once, or in a sum
 //   health <share>                 Minecraft's player's health set to that share of its max, over 0 and up to 1, as the
 //                                  plugin sends V's as build mode starts (spike 6's follow-up): CyberCraft Tweaks 1.3.0 sets it
+//   scene                          print the newest scene, batch by batch (spike 7's step 0), and the world-entity table
+//   save-textures <folder>         save every entity texture received so far as <folder>\texture-<id>.dds
 //   status                         print the link's state
 //   quit                           stop here
 namespace cpmc::mclink
@@ -70,6 +72,8 @@ struct Action
 		ActorRemove,
 		Hurt,
 		Health,
+		Scene,
+		SaveTextures,
 		Status,
 		Quit,
 	};
@@ -79,7 +83,7 @@ struct Action
 	                      // actor's number, x, y, z, yaw, width and height; the actor to remove, or 0 for all; a hurt's
 	                      // kind (proto::HurtKind), share and attacker; the health's share
 	bool        on = false;  // link, build and hud; a hurt's power attack
-	std::string text;        // the command, the file, the ground, or an actor's name
+	std::string text;        // the command, the file, the folder, the ground, or an actor's name
 	int         line = 0;
 };
 

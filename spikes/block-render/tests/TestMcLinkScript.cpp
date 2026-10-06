@@ -11,7 +11,8 @@ using Kind = Action::Kind;
 TEST(ScriptsInTheRepoParse)
 {
 	// The tests run in spikes/block-render, where the scripts are.
-	for (const char* name : { "step1.txt", "again.txt", "eye.txt", "drive.txt", "relink.txt", "city.txt", "npcs.txt", "hurts.txt", "blasts.txt" })
+	for (const char* name : { "step1.txt", "again.txt", "eye.txt", "drive.txt", "relink.txt", "city.txt", "npcs.txt", "hurts.txt", "blasts.txt",
+	                          "entities.txt" })
 	{
 		std::ifstream     in(std::string("tools/mclink/") + name, std::ios::binary);
 		std::stringstream text;
@@ -163,6 +164,24 @@ TEST(ScriptParsesHurts)
 	CHECK(!ParseScript("hurt melee 0.1 3 hard", error).has_value());
 	CHECK(!ParseScript("hurt melee", error).has_value());
 	CHECK(!ParseScript("hurt melee 0.1 3 power extra", error).has_value());
+}
+
+TEST(ScriptParsesScenesAndTextures)
+{
+	std::string error;
+	const auto  actions = ParseScript("scene\nsave-textures build\\step0\\textures\n", error);
+	CHECK(actions.has_value());
+	CHECK_EQ(actions ? actions->size() : 0, size_t(2));
+	if (actions && actions->size() == 2)
+	{
+		CHECK((*actions)[0].kind == Kind::Scene);
+		CHECK((*actions)[1].kind == Kind::SaveTextures);
+		CHECK_STR((*actions)[1].text, "build\\step0\\textures");
+	}
+	CHECK(!ParseScript("scene now", error).has_value());
+	CHECK_STR(error, "line 1: scene takes nothing: \"scene now\"");
+	CHECK(!ParseScript("save-textures", error).has_value());
+	CHECK_STR(error, "line 1: save-textures takes a folder: \"save-textures\"");
 }
 
 TEST(ScriptParsesHealth)

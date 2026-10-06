@@ -265,9 +265,21 @@ std::optional<std::vector<Action>> ParseScript(std::string_view aText, std::stri
 				return fail("health takes a share of Minecraft's max health, over 0 and up to 1");
 			}
 		}
-		else if (verb == "floor" || verb == "status" || verb == "quit")
+		else if (verb == "save-textures")
 		{
-			action.kind = verb == "floor" ? Action::Kind::Floor : verb == "status" ? Action::Kind::Status : Action::Kind::Quit;
+			action.kind = Action::Kind::SaveTextures;
+			action.text = std::string(rest);
+			if (action.text.empty())
+			{
+				return fail("save-textures takes a folder");
+			}
+		}
+		else if (verb == "floor" || verb == "scene" || verb == "status" || verb == "quit")
+		{
+			action.kind = verb == "floor"    ? Action::Kind::Floor
+			              : verb == "scene"  ? Action::Kind::Scene
+			              : verb == "status" ? Action::Kind::Status
+			                                 : Action::Kind::Quit;
 			if (words.size() != 1)
 			{
 				return fail(std::format("{} takes nothing", verb));
