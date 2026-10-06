@@ -14167,26 +14167,26 @@ knocked down, and the crowd fleeing. Ask the user what they saw.
 If gangers, police or a drone are within reach of a blast, from TNT or "TNT 5 m ahead", note whether they fall, or the
 log counts them immune. Otherwise skip this step, and say so in the results.
 
-- [ ] **Step 7: In the game: combat off, unlinking, and quitting**
+- [x] **Step 7: In the game: combat off, unlinking, and quitting**
 
 Send `set combat 0`, then ask the user to click Unlink, quit the game and stop Minecraft. Expected: `blasts=off:
 Minecraft's blasts are logged, not applied`; the game quits normally (`25 vtable entries restored`).
 
-- [ ] **Step 8: Read the log once more**
+- [x] **Step 8: Read the log once more**
 
 ```bash
 L=$(ls -t /e/Cyberpunk2077/red4ext/logs | grep -i blockrender | head -1); grep -E "module:|explosion at|blast|hit on NPC|set blast|explode" "/e/Cyberpunk2077/red4ext/logs/$L" | head -400
 ```
 Everything the steps above logged, for the results.
 
-- [ ] **Step 9: Record the results in `docs/spikes/2026-10-05-npcs-and-combat-results.md`**
+- [x] **Step 9: Record the results in `docs/spikes/2026-10-05-npcs-and-combat-results.md`**
 
 A "Step 5b's fix" section: each check above with its outcome and numbers: the forced knockdowns, with the log's counts
 and what the user saw; `set blastknock 0`; the crowd, and any police; the TNT; other NPCs, or that none were about; the
 Fun controls, from Task 53; and anything that surprised. Update the spike's answer at the top, and add Minecraft's
 inventory and its game mode switcher under "Asked for, after Part 3" (the spec's "Asked for during step 5b's fix").
 
-- [ ] **Step 10: Commit**
+- [x] **Step 10: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add docs/spikes/2026-10-05-npcs-and-combat-results.md docs/superpowers/plans/2026-10-05-npcs-and-combat.md \
@@ -14220,7 +14220,7 @@ its record takes this task's outcome.
 **Files:**
 - Modify: `tools/blockrender_hud/init.lua`
 
-- [ ] **Step 1: Edit `tools/blockrender_hud/init.lua`**
+- [x] **Step 1: Edit `tools/blockrender_hud/init.lua`**
 
 ```lua
 -- combat), and a line each for the last request's reply, build mode (F8) with its drive and whether V is hidden, the
@@ -14358,14 +14358,14 @@ registerForEvent("onUpdate", function(delta)
 
         if ImGui.CollapsingHeader("Full status") then
 ```
-- [ ] **Step 2: Check the overlay's syntax**
+- [x] **Step 2: Check the overlay's syntax**
 
 ```bash
 cd /d/Cyberpunk-Minecraft/spikes/block-render && luac -p tools/blockrender_hud/init.lua && echo ok
 ```
 Expected: `ok`.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -14373,7 +14373,7 @@ cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
        -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
 ```
 
-- [ ] **Step 4: In the game: the overlay installed, with the game running**
+- [x] **Step 4: In the game: the overlay installed, with the game running**
 
 ```bash
 H=/e/Cyberpunk2077/bin/x64/plugins/cyber_engine_tweaks/mods/blockrender_hud
@@ -14384,7 +14384,7 @@ Expected: `installed`. Only the overlay's file: BlockRender's DLL and the module
 them. Then ask the user to open CET's overlay and click Reload All Mods. Expected: BlockRender's window comes back, with
 "Fun" after "More controls".
 
-- [ ] **Step 5: In the game: the Fun buttons**
+- [x] **Step 5: In the game: the Fun buttons**
 
 Outside build mode, with CET's overlay open, ask the user to click in "Fun", letting each button's requests go before
 the next (the waiting line gone): Creative, then Survival; "TNT (8)"; then, with a hotbar slot selected whose item may

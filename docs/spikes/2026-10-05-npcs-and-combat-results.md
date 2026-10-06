@@ -4,7 +4,7 @@ Spike 6 brings Night City's NPCs into Minecraft as SkyCraft's stand-ins (Part 1)
 Minecraft's explosions in the game (Part 3). Step 1 ran SkyCraft's actor table with `mclink`, without Cyberpunk; later
 steps add their sections as they run, and the spike's answer goes at the top once step 2 is in.
 
-## The answer so far (Parts 1 to 3, after step 5b's first run)
+## The answer so far (Parts 1 to 3, after step 5b's fix)
 
 **Part 1, yes: Night City's NPCs are in Minecraft as SkyCraft's stand-ins, where the game puts them.** On a busy
 pavement, every NPC within 80 m was listed, and the game's own targeting never found one the list lacked. A stone
@@ -28,16 +28,19 @@ those ran out, Minecraft's death killed V. One part can't work for the user's V:
 Mortal god modes that quests left behind, and the game refuses even the override Second Heart uses, so in build mode
 the damage wrap is V's only guard; it has held for every hit.
 
-**Part 3, mostly: Minecraft's blasts reach Night City through the game's own explosion code.** In step 5a a real TNT's
+**Part 3, yes: Minecraft's blasts reach Night City through the game's own explosion code.** In step 5a a real TNT's
 hits on stand-ins came back as the formula says, each told as the blast's own. In the game, a blast shows the game's
-explosion effect and sound, pushes and damages cars and props, and its own hits land as explosions: a chain of TNT
-started its hits at V's punch × the square root of Minecraft's damage, the pipeline dealt about half, killed two
-residents of 543 and 594 health, and the pushes threw their bodies; the user found it worked "perfectly". One part
-doesn't work yet: living NPCs aren't knocked down. The game gives them the knockdown grenade's status effect, but a crowd
-NPC falls only when its AI gets a knockdown reaction, which our weak, damageless hits never reach; the game's own forced
-reaction knocked one down in CET's console, so that's the fix. The follow-ups work: Minecraft's hearts take V's share as
-build mode starts, a bush is out of Minecraft's ground while walls stay, and the blades' heat comes back after build
-mode.
+explosion effect and sound, pushes and damages cars and props, knocks down every NPC within its reach that the game
+lets fall, and panics the crowd. Its own hits land as explosions, starting at V's punch × the square root of
+Minecraft's damage, the pipeline dealing about half, and they kill residents and gangers, whose bodies the pushes throw.
+The knockdowns took a fix after step 5b: the knockdown grenade's status effect fells NPCs in combat, but plays nothing
+on a crowd NPC, so each blast now sends every living NPC within it the game's own forced knockdown reaction, and tells
+the crowd with the game's explosion stimulus. In its check, every NPC within a blast fell but a friendly one, which the
+game kept from both the knockdown and the damage (61 forced knockdowns over 26 blasts); those the blast didn't kill got
+up again, the crowd fled, and no wanted level came. The follow-ups work: Minecraft's
+hearts take V's share as build mode starts (one way, as the user chose), a bush is out of Minecraft's ground while walls
+stay, and the blades' heat comes back after build mode. The overlay's Fun controls, asked for during the check, let the
+user switch Minecraft's game mode and restock without the agent.
 
 ## Step 1: made-up NPCs in SkyCraft's actor table, with `mclink`, without Cyberpunk
 
@@ -606,3 +609,83 @@ crowd doesn't panic at a blast, and the health carries only into Minecraft.
   blast of ours broadcasts none. For the user to decide.
 - **The health carries one way:** for the user to decide whether Minecraft's health should come back to V as build mode
   ends, or V's own health stop regenerating in build mode.
+
+## Step 5b's fix: in the game, explosions again
+
+Date: 2026-10-06, 18:29 to 20:15. BlockRender 0.19.1 at `bd7acca` (module version 7: the plan's Tasks 49 to 51, which
+ran as written, each commit's code identical to the version tested before), with Minecraft 26.3, SkyCraft 0.1.2 and
+CyberCraft Tweaks 1.3.0, and V as before. On step 5b's pavement, with residents about, and gangers who fought V. The user
+ran both games; the agent sent the requests and read the logs and the status. The user chose, after step 5b, to leave
+the health one way. Plan: Task 52, and Task 53 during it.
+
+### Verdict
+
+**Step 5b's fix: pass.** Every living NPC within a blast falls, away from it, by the game's forced reaction, and gets up
+again unless the blast kills it; the crowd flees, and no wanted level comes; TNT still kills. With `set blastknock 0` the
+crowd stays standing, while gangers fighting V still fall: the knockdown grenade's status effect alone fells NPCs in
+combat. The game kept a friendly NPC from both the knockdown and the damage. The overlay's Fun controls, asked for during
+the check, worked.
+
+### The checks
+
+- **The module (Steps 2 and 3).** redscript compiled `BlockRender.reds` with Codeware's scripts, with no error;
+  `BlockRender 0.19.1 loaded` and its seven natives; `module: found BlockRenderNpcs version 7, its 13 functions, the 22
+  fields List fills, and BlockRender's 7 natives`. After `set combat 1`, `blasts=on: 0 taken, blast power 0.50; none
+  yet`.
+- **The forced knockdowns (Step 4).** "TNT 5 m ahead" five times among residents, with 14, 11, 8, 7 and 6 listed NPCs
+  within: each time `N knocked down by the game's forced reaction, 0 immune to it; the crowd told, from the NPC nearest
+  it`, all within knocked down, and the push 0.25 to 0.27 s after. The user: "Works perfectly". Everyone fell and got up
+  again, so the knockdown, sent as the blast's attack starts, plays out: the attack's hits don't cut it short. The crowd
+  ran (the nearest resident 41 m away after), and V got no wanted level.
+- **`set blastknock 0` (Step 4).** The reply `set blastknock 0: a blast knocks no NPC down; its attack, sound, own hits
+  and push stay`, and in the status `blast power 0.50, the forced knockdowns off`. Nine blasts, each `…; the forced
+  knockdowns off; the crowd told, …`: the fleeing residents stayed standing, but the gangers fighting V still fell and
+  got up. The pushes counted those with the knockdown's status effect: 8 of 8 and 4 of 4 where the gangers were; 0 of 4,
+  2 and 1 elsewhere; then 0 of 11, 1 of 6, 9 of 9 and 5 of 5. So the grenade's status effect alone knocks down NPCs in
+  combat, whose AI acts on it, while the crowd needs the forced reaction; the reply's "knocks no NPC down" holds for the
+  crowd only. Then `set blastknock 1`.
+- **TNT (Step 5).** From hotbar slot 8 in build mode, among four NPCs of 431 to 449 health, which the log names NC
+  Residents and one Zane Gardner: all four knocked down by the forced reaction, and their blast hits landed as in step
+  5b, Minecraft's damage 6.90 to 39.88 starting at 275.44 to 662.26, the pipeline dealing 207.29 to 361.11, one a
+  critical. None died, and the push counted the four knocked down. The user: "working nicely". Two minutes later three of
+  them, hurt, were among the gangers below.
+- **Gangers (Step 6).** Four more TNT among the gangers fighting V, nine blasts with the chains: every NPC within reach
+  knocked down, none immune. The user: "Gangers fell and got up, a couple did die". Blast hits killed four, each NPC's
+  health at a hit being its health before less what the earlier hits dealt: Zane Gardner 438, then 77 after 361.11, then
+  killed by 182.92. So the pipeline's dealt amounts all land. Then, elsewhere, one TNT killed three residents of 78
+  health (376.02, 201.61 critical, and 320.65 dealt), and the push after had them dead within its reach.
+- **A friendly NPC.** In the user's own play, four TNT beside a named NPC friendly to V (`LocKey#47098`): each time `0
+  knocked down by the game's forced reaction, 1 immune to it`, and its blast hit `dealt nothing: friendly to V`. V's
+  punch read 25.00 there, not 104.87, for a reason the log doesn't give.
+- **Deaths in build mode,** in the user's play. A ganger's SMG fire, about ten hits a second at 0.36 of Minecraft's 20
+  each, took Minecraft's last hearts, and Minecraft's death killed V, as in Part 2. After the load, build mode started
+  with V about 47 m above the street (Minecraft y 52, falling): Minecraft's player was let go 1.48 s later, died of the
+  fall, and killed V again. That's survival's fall damage, as expected.
+- **The Fun controls (Task 53).** Installed with the game running, and loaded by CET's Reload All Mods. 19 commands
+  typed through the queue, a second apart where buttons came in a row, none `not typed`, and Minecraft replied to
+  each: `Replaced 1 slot(s) on ItzBloxy with [TNT]`, `[Flint and Steel]`, `[Golden Carrot]` and `[Golden Apple]`, the
+  four diamond armor pieces, `[Diamond Sword]`, `[Oak Planks]` and `[Crossbow]`, with `Gave 64 [Arrow] to ItzBloxy`;
+  `Applied effect Instant Health to ItzBloxy`; `Set own game mode to Creative Mode`, then `Survival Mode`; and four
+  `[Air]`, the armor off. The user: "all buttons gave the items".
+- **Combat off, unlinking and quitting (Step 7).** `blasts=off: Minecraft's blasts are logged, not applied`; the game
+  quit normally (`25 vtable entries restored`), with no new crash report.
+- **The log, in all:** 35 blasts, 26 with the forced knockdowns on and 9 off; 61 forced knockdowns, 4 immune (the
+  friendly NPC); the crowd told 29 times, and 6 times no listed NPC within 30 m; 35 pushes, 0.25 to 0.27 s after; 19
+  blast hits, 15 landed, 9 of them kills, and 4 dealt nothing, friendly to V.
+
+### What it means
+
+- **Blasts knock down every NPC the game lets fall:** the crowd by the forced reaction, NPCs in combat by the status
+  effect as well, and friendly ones not at all, as the game wants.
+- **The crowd panics at a blast,** with V as its instigator, and that alone brings no wanted level.
+- **`set blastknock 0`'s reply overstates:** it stops the forced knockdowns, not the grenade's own on NPCs in combat. Left
+  as it is: it's a switch for checks.
+
+### Asked for, after Part 3
+
+- **Minecraft's inventory, and its game mode switcher (F3+F4), in build mode,** asked for during this check (the spec's
+  "Asked for during step 5b's fix"). SkyCraft's mod already takes a cursor and keys for Minecraft's screens, and the HUD
+  image already shows them. The game's side would need E, F3 and F4 forwarded and hidden from the game; Esc to close a
+  Minecraft screen; the mouse made Minecraft's cursor while a screen is open, hidden from the game; and a cursor drawn.
+  The switcher's spectator mode would drag V through walls, since in build mode V follows Minecraft's player. For a
+  spike of its own.
