@@ -836,19 +836,32 @@ The follow-ups Part 2 left (the results' "Asked for, after Part 2"), which the u
 
 Asked for during step 5b's fix's check ("Asked for during step 5b's fix"), so that the user can switch Minecraft's game
 mode and restock during in-game sessions without the agent. A **Fun** header in the overlay, after More controls, whose
-buttons each send one `mc` request: a command BlockRender types into Minecraft's chat, as the Type buttons' are.
+buttons type Minecraft commands into its chat, one `mc` request each, as the Type buttons' are. Without Minecraft's
+inventory screen, an item given past the hotbar is out of reach, so items go into chosen slots, replacing what is there
+(`/item replace`):
 - **Mode:** Creative and Survival (`/gamemode creative`, `/gamemode survival`). No spectator: in build mode V follows
   Minecraft's player, which would fly through Night City's walls.
-- **Hotbar:** the slots the user keeps these in, replacing what is there: 64 golden apples in slot 6, 64 golden carrots
-  in 7, 64 TNT in 8 and a flint and steel in 9 (`/item replace entity @s hotbar.<slot - 1> with minecraft:<item>
-  <count>`).
+- **Your slots,** where the user keeps these: 64 golden apples in slot 6, 64 golden carrots in 7, 64 TNT in 8, and a
+  flint and steel in 9 (`hotbar.<slot - 1>`).
+- **In hand,** the hotbar slot Minecraft's player has selected (`weapon.mainhand`):
+  - blocks, 64 each: stone bricks, oak planks, bricks, white concrete and glass;
+  - tools: a diamond pickaxe, axe and shovel;
+  - weapons: a diamond sword, a mace, a trident, and a crossbow and a bow, each of those two with 64 arrows given
+    (`/give`), since they take arrows from anywhere.
+- **Armor:** a diamond helmet, chestplate, leggings and boots put on (`armor.head` to `armor.feet`), four commands; or
+  all four taken off (`minecraft:air`), to try V's hurts in build mode with and without.
 - **Heal:** Minecraft's player's health full: `/effect give @s minecraft:instant_health 1 3`, which heals 32.
 
-The overlay shows BlockRender's reply as its last request: the command being typed, or that there's no link. Minecraft
-replies in its chat, which the HUD shows in build mode, and BlockRender's log says each command typed, or not typed and
-why: Minecraft not in its world, or a Minecraft screen open. Only the overlay changes, so it's installed while the game
-runs: `init.lua` copied into CET's folder, then CET's Reload All Mods. That's the one install with the game running, as
-the user chose: the game holds BlockRender's DLL, and nothing holds the overlay's file.
+BlockRender reads one request a second from the overlay's folder, and deletes it as it reads it, so a request written
+before then replaced the one waiting. Now every request of the overlay's goes through a queue: the next is written only
+once BlockRender has read the last, so a button of several commands sends them in order, about one a second, and no click
+is lost; a line says how many wait. The overlay shows BlockRender's reply as its last request: the command being typed,
+or that there's no link. Minecraft replies in its chat, which the HUD shows in build mode, and BlockRender's log says each
+command typed, or not typed and why: Minecraft not in its world, or a Minecraft screen open.
+
+Only the overlay changes, so it's installed while the game runs: `init.lua` copied into CET's folder, then CET's Reload
+All Mods. That's the one install with the game running, as the user chose: the game holds BlockRender's DLL, and nothing
+holds the overlay's file.
 
 ### Requests and status
 
@@ -1708,7 +1721,7 @@ things. The sections above include the outcome.
 
 1. **Minecraft's inventory, and its game mode switcher, in build mode,** worked from Cyberpunk.
 2. **A Fun header in the overlay:** food, creative, more TNT and a flint and steel, and other supplies, so that in-game
-   sessions need no agent to restock.
+   sessions need no agent to restock; then, once the first design was written, blocks, armor, tools and weapons too.
 
 ### What reading found
 
@@ -1730,9 +1743,10 @@ things. The sections above include the outcome.
 
 - **The inventory and the switcher wait for a spike of their own,** after this one; the results' "Asked for, after Part
   3" keeps them.
-- **The Fun controls now:** one command per button, in the overlay alone, installed while the game runs; not kits of
-  several commands, which would need a queue in the overlay, or named sets in BlockRender and so a rebuild and a
-  restart.
+- **The Fun controls now,** in the overlay alone, installed while the game runs, rather than as named sets in
+  BlockRender, which would need a rebuild and a restart. First one command per button; then, with armor's four pieces
+  and the arrows, buttons of several commands, sent through a queue in the overlay, which also keeps quick clicks from
+  replacing each other; items into the selected slot, since one given past the hotbar would be out of reach.
 
 ### What changed
 
