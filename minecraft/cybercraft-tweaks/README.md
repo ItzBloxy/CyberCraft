@@ -74,5 +74,9 @@ blocks around it are the same afterwards as before. `spikes/block-render/tools/m
 player's health to half, all and a twentieth of its max, and reads each back with `/data`.
 `spikes/block-render/tools/mclink/emissive.txt` summons a spider, an enderman, a warden and a charged creeper: with the
 mod, every vertex of their emissive layers' batches glows (block light 15), and their bodies' don't.
+`spikes/block-render/tools/mclink/blended.txt` summons a slime, an allay, a vex, a breeze, a warden, a charged creeper
+and a piglin: with the mod, their blended layers' batches come translucent, the armour's additive too, and BlockRender
+draws the slime's outer layer, the allay, the vex, the breeze's wind and eyes and the warden's layers blended, and the
+piglin, opaque, as a model.
 `spikes/block-render/tools/mclink/entities.txt` prints each scene's batches in the order they come: with the mod, a
 villager's body comes before its biome's clothes, those before its profession's, and those before its level's badge.
