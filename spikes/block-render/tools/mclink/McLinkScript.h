@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -40,6 +41,13 @@
 //                                  plugin sends V's as build mode starts (spike 6's follow-up): CyberCraft Tweaks 1.3.0 sets it
 //   scene                          print the newest scene, batch by batch (spike 7's step 0), and the world-entity table
 //   save-textures <folder>         save every entity texture received so far as <folder>\texture-<id>.dds
+//   cursor <x> <y>                 Minecraft's cursor to that pixel of its HUD image, its window's (spike 8's step 0)
+//   text <text>                    each character to the line's end typed into Minecraft's open screen, as kInText
+//   pause                          open Minecraft's pause menu (kInOpenMenu)
+//   wait-screen open|closed [seconds]
+//                                  until Minecraft says a screen is open, or that none is (5 s unless given)
+//   hud-box <x0> <y0> <x1> <y1>    wait for the next HUD image (5 s at most), and print the box's mean colour, the far
+//                                  edges left out
 //   status                         print the link's state
 //   quit                           stop here
 namespace cpmc::mclink
@@ -74,6 +82,11 @@ struct Action
 		Health,
 		Scene,
 		SaveTextures,
+		Cursor,
+		Text,
+		Pause,
+		WaitScreen,
+		HudBox,
 		Status,
 		Quit,
 	};
@@ -81,12 +94,17 @@ struct Action
 	Kind   kind = Kind::Quit;
 	double numbers[7]{};  // seconds; x, y, z; yaw and pitch; the scancode; the button (1 left, 2 middle, 3 right); an
 	                      // actor's number, x, y, z, yaw, width and height; the actor to remove, or 0 for all; a hurt's
-	                      // kind (proto::HurtKind), share and attacker; the health's share
-	bool        on = false;  // link, build and hud; a hurt's power attack
-	std::string text;        // the command, the file, the folder, the ground, or an actor's name
+	                      // kind (proto::HurtKind), share and attacker; the health's share; the cursor's x and y; a
+	                      // box's x0, y0, x1 and y1
+	bool        on = false;  // link, build and hud; a hurt's power attack; wait-screen open
+	std::string text;        // the command, the file, the folder, the ground, an actor's name, or the text to type
 	int         line = 0;
 };
 
 // The script's actions, or nothing with aError naming the first bad line.
 std::optional<std::vector<Action>> ParseScript(std::string_view aText, std::string& aError);
+
+// UTF-8 text's code points, or nothing if it isn't well-formed UTF-8: no overlong forms, surrogates, or code points
+// past U+10FFFF.
+std::optional<std::vector<uint32_t>> CodePoints(std::string_view aUtf8);
 }

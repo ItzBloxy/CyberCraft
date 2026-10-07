@@ -141,6 +141,7 @@ endif()
 add_executable(mclink
 	tools/mclink/Main.cpp
 	tools/mclink/DumpObj.cpp
+	tools/mclink/HudBox.cpp
 	tools/mclink/McLinkScript.cpp
 )
 target_include_directories(mclink PRIVATE tools/mclink)
@@ -224,7 +225,9 @@ add_executable(render_tests
 	tests/TestEntities.cpp
 	tests/TestEntityTextures.cpp
 	tests/TestSnapshots.cpp
+	tests/TestHudBox.cpp
 	tools/mclink/DumpObj.cpp
+	tools/mclink/HudBox.cpp
 	tools/mclink/McLinkScript.cpp
 )
 target_include_directories(render_tests PRIVATE tools/mclink)

@@ -1,5 +1,7 @@
 #include "McLinkScript.h"
 
+#include <skycraft_protocol.h>
+
 #include <algorithm>
 #include <array>
 #include <charconv>
@@ -49,6 +51,47 @@ bool WholeId(double aValue)
 {
 	return aValue >= 1.0 && aValue <= 4294967295.0 && aValue == std::floor(aValue);
 }
+
+// A whole number from 0 to aMost.
+bool WholeUpTo(double aValue, double aMost)
+{
+	return aValue >= 0.0 && aValue <= aMost && aValue == std::floor(aValue);
+}
+
+namespace proto = skycraft::proto;
+}
+
+std::optional<std::vector<uint32_t>> CodePoints(std::string_view aUtf8)
+{
+	constexpr uint32_t    kSmallest[5] = { 0, 0, 0x80, 0x800, 0x10000 };  // by length: anything below is overlong
+	std::vector<uint32_t> points;
+	size_t                at = 0;
+	while (at < aUtf8.size())
+	{
+		const uint8_t lead = uint8_t(aUtf8[at]);
+		const size_t  length = lead < 0x80 ? 1 : (lead & 0xE0) == 0xC0 ? 2 : (lead & 0xF0) == 0xE0 ? 3 : (lead & 0xF8) == 0xF0 ? 4 : 0;
+		if (length == 0 || at + length > aUtf8.size())
+		{
+			return std::nullopt;
+		}
+		uint32_t point = length == 1 ? lead : lead & (0x7Fu >> length);
+		for (size_t i = 1; i < length; ++i)
+		{
+			const uint8_t next = uint8_t(aUtf8[at + i]);
+			if ((next & 0xC0) != 0x80)
+			{
+				return std::nullopt;
+			}
+			point = point << 6 | (next & 0x3Fu);
+		}
+		if (point < kSmallest[length] || point > 0x10FFFF || (point >= 0xD800 && point <= 0xDFFF))
+		{
+			return std::nullopt;
+		}
+		points.push_back(point);
+		at += length;
+	}
+	return points;
 }
 
 std::optional<std::vector<Action>> ParseScript(std::string_view aText, std::string& aError)
@@ -274,10 +317,55 @@ std::optional<std::vector<Action>> ParseScript(std::string_view aText, std::stri
 				return fail("save-textures takes a folder");
 			}
 		}
-		else if (verb == "floor" || verb == "scene" || verb == "status" || verb == "quit")
+		else if (verb == "cursor")
+		{
+			action.kind = Action::Kind::Cursor;
+			if (!numbers(2) || !WholeUpTo(action.numbers[0], proto::kMaxOverlayW - 1) || !WholeUpTo(action.numbers[1], proto::kMaxOverlayH - 1))
+			{
+				return fail("cursor takes whole HUD pixels, x from 0 to 3839 and y from 0 to 2159");
+			}
+		}
+		else if (verb == "text")
+		{
+			action.kind = Action::Kind::Text;
+			action.text = std::string(rest);
+			const auto points = CodePoints(action.text);
+			if (action.text.empty() || !points ||
+			    std::any_of(points->begin(), points->end(), [](uint32_t aPoint) { return aPoint < 0x20 || aPoint == 0x7F; }))
+			{
+				return fail("text takes printable UTF-8");
+			}
+		}
+		else if (verb == "wait-screen")
+		{
+			action.kind = Action::Kind::WaitScreen;
+			action.numbers[0] = 5;
+			action.on = words.size() >= 2 && words[1] == "open";
+			bool ok = (words.size() == 2 || words.size() == 3) && (action.on || words[1] == "closed");
+			if (ok && words.size() == 3)
+			{
+				ok = Number(words[2], action.numbers[0]) && action.numbers[0] > 0;
+			}
+			if (!ok)
+			{
+				return fail("wait-screen takes open or closed, then an optional number of seconds");
+			}
+		}
+		else if (verb == "hud-box")
+		{
+			action.kind = Action::Kind::HudBox;
+			if (!numbers(4) || !WholeUpTo(action.numbers[0], proto::kMaxOverlayW) || !WholeUpTo(action.numbers[1], proto::kMaxOverlayH) ||
+			    !WholeUpTo(action.numbers[2], proto::kMaxOverlayW) || !WholeUpTo(action.numbers[3], proto::kMaxOverlayH) ||
+			    action.numbers[0] >= action.numbers[2] || action.numbers[1] >= action.numbers[3])
+			{
+				return fail("hud-box takes whole HUD pixels x0 y0 x1 y1, x0 below x1 up to 3840, y0 below y1 up to 2160");
+			}
+		}
+		else if (verb == "floor" || verb == "scene" || verb == "pause" || verb == "status" || verb == "quit")
 		{
 			action.kind = verb == "floor"    ? Action::Kind::Floor
 			              : verb == "scene"  ? Action::Kind::Scene
+			              : verb == "pause"  ? Action::Kind::Pause
 			              : verb == "status" ? Action::Kind::Status
 			                                 : Action::Kind::Quit;
 			if (words.size() != 1)

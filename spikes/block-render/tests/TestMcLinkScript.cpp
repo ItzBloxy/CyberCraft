@@ -237,6 +237,90 @@ TEST(ScriptParsesMadeUpNpcs)
 	CHECK_STR(error, "line 1: actor-remove takes a number from 1 to 4294967295, or all: \"actor-remove some\"");
 }
 
+TEST(ScriptParsesScreenActions)
+{
+	std::string error;
+	const auto  actions = ParseScript("cursor 496 244\ntext /say step0 \xC3\xA6\xC3\xB8\xC3\xA5 @  \npause\nwait-screen open\n"
+	                                  "wait-screen closed 3\nhud-box 484 268 508 292\n",
+	                                  error);
+	CHECK(actions.has_value());
+	CHECK_EQ(actions ? actions->size() : 0, size_t(6));
+	if (!actions || actions->size() != 6)
+	{
+		return;
+	}
+	const auto& a = *actions;
+	CHECK(a[0].kind == Kind::Cursor);
+	CHECK_EQ(a[0].numbers[0], 496.0);
+	CHECK_EQ(a[0].numbers[1], 244.0);
+	CHECK(a[1].kind == Kind::Text);
+	CHECK_STR(a[1].text, "/say step0 \xC3\xA6\xC3\xB8\xC3\xA5 @");  // as written, but for the line's ends
+	CHECK(a[2].kind == Kind::Pause);
+	CHECK(a[3].kind == Kind::WaitScreen);
+	CHECK(a[3].on);
+	CHECK_EQ(a[3].numbers[0], 5.0);  // seconds, unless given
+	CHECK(a[4].kind == Kind::WaitScreen);
+	CHECK(!a[4].on);
+	CHECK_EQ(a[4].numbers[0], 3.0);
+	CHECK(a[5].kind == Kind::HudBox);
+	CHECK_EQ(a[5].numbers[0], 484.0);
+	CHECK_EQ(a[5].numbers[1], 268.0);
+	CHECK_EQ(a[5].numbers[2], 508.0);
+	CHECK_EQ(a[5].numbers[3], 292.0);
+}
+
+TEST(ScriptRejectsBadScreenActions)
+{
+	std::string error;
+	CHECK(ParseScript("cursor 0 0\ncursor 3839 2159\n", error).has_value());  // the corners of the largest HUD image
+	CHECK(!ParseScript("cursor 3840 0", error).has_value());
+	CHECK(!ParseScript("cursor 0 2160", error).has_value());
+	CHECK(!ParseScript("cursor -1 0", error).has_value());
+	CHECK(!ParseScript("cursor 2.5 0", error).has_value());
+	CHECK(!ParseScript("cursor 1", error).has_value());
+	CHECK_STR(error, "line 1: cursor takes whole HUD pixels, x from 0 to 3839 and y from 0 to 2159: \"cursor 1\"");
+	CHECK(!ParseScript("text", error).has_value());
+	CHECK(!ParseScript("text \xC3\x28", error).has_value());  // not UTF-8
+	CHECK(!ParseScript("text a\x7F", error).has_value());     // a control character
+	CHECK_STR(error, "line 1: text takes printable UTF-8: \"text a\x7F\"");
+	CHECK(!ParseScript("pause now", error).has_value());
+	CHECK(!ParseScript("wait-screen", error).has_value());
+	CHECK(!ParseScript("wait-screen ajar", error).has_value());
+	CHECK(!ParseScript("wait-screen open 0", error).has_value());
+	CHECK_STR(error, "line 1: wait-screen takes open or closed, then an optional number of seconds: \"wait-screen open 0\"");
+	CHECK(ParseScript("hud-box 0 0 3840 2160", error).has_value());
+	CHECK(!ParseScript("hud-box 10 10 10 20", error).has_value());  // no width
+	CHECK(!ParseScript("hud-box 10 20 20 10", error).has_value());
+	CHECK(!ParseScript("hud-box 0 0 3841 10", error).has_value());
+	CHECK(!ParseScript("hud-box 0 0 10", error).has_value());
+	CHECK_STR(error, "line 1: hud-box takes whole HUD pixels x0 y0 x1 y1, x0 below x1 up to 3840, y0 below y1 up to 2160: \"hud-box 0 0 10\"");
+}
+
+TEST(CodePointsDecodeUtf8)
+{
+	// a, æ (2 bytes), € (3 bytes), 🙂 (4 bytes)
+	const auto points = CodePoints("a\xC3\xA6\xE2\x82\xAC\xF0\x9F\x99\x82");
+	CHECK(points.has_value());
+	CHECK_EQ(points ? points->size() : 0, size_t(4));
+	if (points && points->size() == 4)
+	{
+		CHECK_EQ((*points)[0], uint32_t(0x61));
+		CHECK_EQ((*points)[1], uint32_t(0xE6));
+		CHECK_EQ((*points)[2], uint32_t(0x20AC));
+		CHECK_EQ((*points)[3], uint32_t(0x1F642));
+	}
+	CHECK(!CodePoints("\xC3").has_value());              // cut short
+	CHECK(!CodePoints("\xC3\x28").has_value());          // a bad continuation
+	CHECK(!CodePoints("\xC3\xC3").has_value());          // a lead where a continuation must be
+	CHECK(!CodePoints("\x80").has_value());              // a continuation first
+	CHECK(!CodePoints("\xC0\xAF").has_value());          // overlong
+	CHECK(!CodePoints("\xE0\x80\xAF").has_value());      // overlong
+	CHECK(!CodePoints("\xED\xA0\x80").has_value());      // a surrogate
+	CHECK(!CodePoints("\xF4\x90\x80\x80").has_value());  // past U+10FFFF
+	CHECK(!CodePoints("\xF8\x88\x80\x80\x80").has_value());
+	CHECK(CodePoints("").has_value() && CodePoints("")->empty());
+}
+
 TEST(ScriptParsesTheGround)
 {
 	std::string error;
