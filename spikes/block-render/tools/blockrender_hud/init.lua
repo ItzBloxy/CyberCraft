@@ -3,12 +3,12 @@
 -- frame time as CET sees it, which works without BlockRender too and goes into frames.txt here as well. It asks
 -- BlockRender for things through blockrender.request in this folder.
 -- Kept small: one row of buttons (link, Minecraft's blocks as bodies, step 4's test box, the turn, NPCs in Minecraft,
--- combat), and a line each for the last request's reply and the requests waiting to be sent, build mode (F8) with its
--- drive and whether V is hidden, the bodies, the NPCs, combat, Minecraft's blasts, and V. Three folded sections hold the
--- rest: "More controls" (the drawing mode, Minecraft's HUD, commands typed into Minecraft, the drive log, the ground and
--- its shapes, the NPCs' list, V's punch, V hidden or seen in build mode, and a blast ahead of V), "Fun" (Minecraft's game
--- mode, items for the hotbar and the hand, armor, and a heal, typed into Minecraft's chat) and "Full status" (every status
--- line, and the frame time).
+-- combat, Minecraft's entities), and a line each for the last request's reply and the requests waiting to be sent, build
+-- mode (F8) with its drive and whether V is hidden, the bodies, the NPCs, combat, Minecraft's blasts, its entities, and
+-- V. Three folded sections hold the rest: "More controls" (the drawing mode, Minecraft's HUD, commands typed into
+-- Minecraft, the drive log, the ground and its shapes, the NPCs' list, V's punch, V hidden or seen in build mode, and a
+-- blast ahead of V), "Fun" (Minecraft's game mode, items for the hotbar and the hand, armor, a heal, and things to spawn
+-- ahead and clear again, typed into Minecraft's chat) and "Full status" (every status line, and the frame time).
 -- Delete this folder to remove it.
 local status = nil       -- status.txt's lines, except the structures
 local structures = {}    -- { name, min = { x, y, z }, max = { x, y, z } }, in world coordinates
@@ -29,6 +29,8 @@ local combat = nil       -- the combat line: on or off; V's weapon drawn or not;
 local combatOn = nil     -- whether Minecraft's hits land as V's and V's hurts go to Minecraft: "on" or "off"
 local blasts = nil       -- the blasts line, with combat on: how many, and the last's NPCs within it, its own hits, and
                          -- those knocked down and dead after its push
+local entities = nil     -- the entities line (spike 7): on or off, scenes a second, frames drawn, textures, the nearest mob
+local entitiesOn = nil   -- whether Minecraft's entities are drawn: "on" or "off"
 local vLook = nil        -- the v line: V hidden in build mode, or seen and why
 local hideV = nil        -- whether V's meshes are hidden in build mode: "on" or "off"
 local reply = nil        -- the request line: what BlockRender made of the last request, cut short
@@ -68,6 +70,38 @@ local function wear(head, chest, legs, feet)
     }
 end
 
+-- Spike 7's Spawn rows: Minecraft's things ahead of its player, level, each tagged sp7, and each block placed with a
+-- marker tagged sp7b, so Clear removes them all and spares the NPCs' stand-ins. Each kind has its own distance, so none
+-- lands on another: the dropped items and the sand 3 blocks ahead, the mobs 5, the block entities 8 and the herd 11 and
+-- 13. The mobs have no loot and the sand vanishes where it lands, so nothing is left behind. A TNT's blast breaks the
+-- placed blocks and drops them, so Clear comes before any TNT.
+local function ahead(where)
+    return "/execute rotated ~ 0 positioned " .. where .. " run "
+end
+
+local function mob(where, kind, extra, at)
+    return ahead(where) .. "summon minecraft:" .. kind .. " " .. (at or "~ ~ ~")
+        .. ' {Tags:["sp7"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty"' .. (extra or "") .. "}"
+end
+
+local herd = {}  -- ten pigs, two rows of five
+for _, row in ipairs({ "^11", "^13" }) do
+    for _, across in ipairs({ "^-4", "^-2", "^", "^2", "^4" }) do
+        table.insert(herd, mob(across .. " ^ " .. row, "pig"))
+    end
+end
+
+-- Side by side, 3 blocks apart, each block with its marker, and a torch for its flame. A bed is two blocks: its head goes
+-- north of its foot, which the gap keeps off its neighbours.
+local blockEntities = {}
+for _, placed in ipairs({ { "^-6", "~ ~ ~", "chest" }, { "^-3", "~ ~ ~", "red_bed[facing=north,part=foot]" },
+    { "^-3", "~ ~ ~-1", "red_bed[facing=north,part=head]" }, { "^", "~ ~ ~", "oak_sign" },
+    { "^3", "~ ~ ~", 'white_banner{patterns:[{pattern:"minecraft:stripe_top",color:"red"},{pattern:"minecraft:creeper",color:"black"}]}' },
+    { "^6", "~ ~ ~", "torch" } }) do
+    table.insert(blockEntities, ahead(placed[1] .. " ^ ^8") .. "setblock " .. placed[2] .. " minecraft:" .. placed[3])
+    table.insert(blockEntities, ahead(placed[1] .. " ^ ^8") .. "summon minecraft:marker " .. placed[2] .. ' {Tags:["sp7b"]}')
+end
+
 local fun = {
     { label = "Mode:", buttons = {
         { label = "Creative", commands = { "/gamemode creative" } },
@@ -104,6 +138,33 @@ local fun = {
     } },
     { label = "Health:", buttons = {
         { label = "Heal", commands = { "/effect give @s minecraft:instant_health 1 3" } },
+    } },
+    -- A slime hops on its own with no path, which a pig won't do on the city's ground; Size 0 is the smallest, which
+    -- doesn't split when it dies.
+    { label = "Mobs, 5 m ahead:", buttons = {
+        { label = "Pig", commands = { mob("^ ^ ^5", "pig") } },
+        { label = "Villager", commands = { mob("^-2 ^ ^5", "villager",
+            ',VillagerData:{type:"minecraft:plains",profession:"minecraft:farmer",level:2}') } },
+        { label = "Spider", commands = { mob("^2 ^ ^5", "spider", ",NoAI:1b") } },
+        { label = "Blaze", commands = { mob("^4 ^ ^5", "blaze", ",NoAI:1b", "~ ~1 ~") } },
+        { label = "Slime", commands = { mob("^-4 ^ ^5", "slime", ",Size:0") } },
+    } },
+    -- The sand drops from 12 blocks up and vanishes where it lands (CancelDrop), even on a block, and drops no item if it
+    -- falls out of the world (DropItem).
+    { label = "More, ahead:", buttons = {
+        { label = "10 pigs", commands = herd },
+        { label = "Falling sand", commands = { ahead("^ ^ ^3") .. "summon minecraft:falling_block ~ ~12 ~ "
+            .. '{BlockState:"minecraft:sand",DropItem:0b,CancelDrop:1b,Tags:["sp7"]}' } },
+        { label = "Block entities", commands = blockEntities },
+        { label = "Dropped items", commands = {
+            ahead("^-1 ^ ^3") .. 'summon minecraft:item ~ ~1 ~ {Item:{id:"minecraft:diamond",count:1},PickupDelay:32767,Tags:["sp7"]}',
+            ahead("^1 ^ ^3") .. 'summon minecraft:item ~ ~1 ~ {Item:{id:"minecraft:grass_block",count:1},PickupDelay:32767,Tags:["sp7"]}',
+        } },
+    } },
+    -- Strict: no block updates, so neither half of the bed breaks the other with a drop.
+    { label = "Spawned:", buttons = {
+        { label = "Clear", commands = { "/execute at @e[tag=sp7b] run setblock ~ ~ ~ minecraft:air strict",
+            "/kill @e[tag=sp7]", "/kill @e[tag=sp7b]" } },
     } },
 }
 
@@ -174,6 +235,8 @@ local function readStatus()
     combat = nil
     combatOn = nil
     blasts = nil
+    entities = nil
+    entitiesOn = nil
     vLook = nil
     hideV = nil
     reply = nil
@@ -248,6 +311,16 @@ local function readStatus()
             blasts = blastCount .. " taken" .. (within and ("; the last: " .. within .. " NPCs within it") or "")
                 .. (own and (", " .. own .. " hits of its own") or "")
                 .. (down and (", " .. down .. " knocked down, " .. dead .. " dead") or "")
+        end
+        local entityState = line:match("^entities=(%a+)")
+        if entityState ~= nil then
+            entitiesOn = entityState
+            local scenes = line:match("^entities=%a+: (%d+ scenes a second)")
+            local drawn = line:match("; drawn in (%d+ frames)")
+            local textures = line:match("; (%d+ textures) %(")
+            local nearest = line:match("; the nearest mob ([%d.]+ m) away")
+            entities = entityState .. (scenes and (", " .. scenes) or "") .. (drawn and (", drawn in " .. drawn) or "")
+                .. (textures and (", " .. textures) or "") .. (nearest and (", the nearest mob " .. nearest .. " away") or "")
         end
         if name ~= nil then
             table.insert(structures, {
@@ -360,6 +433,12 @@ registerForEvent("onDraw", function()
                 request("set combat " .. (combatOn == "on" and 0 or 1))
             end
         end
+        if entitiesOn ~= nil then
+            ImGui.SameLine()
+            if ImGui.Button("Entities: " .. entitiesOn .. "###entities") then
+                request("set entities " .. (entitiesOn == "on" and 0 or 1))
+            end
+        end
         if status == nil then
             ImGui.Text("no status.txt yet: is BlockRender loaded?")
         end
@@ -384,6 +463,9 @@ registerForEvent("onDraw", function()
         end
         if blasts ~= nil then
             ImGui.Text("Blasts: " .. blasts)
+        end
+        if entities ~= nil then
+            ImGui.Text("Entities: " .. entities)
         end
         if player ~= nil then
             ImGui.Text(player)

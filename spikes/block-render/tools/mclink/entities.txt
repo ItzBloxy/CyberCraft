@@ -31,7 +31,7 @@ wait 3
 scene
 # A falling sand, dropped from 12 blocks up so a scene catches it in the air. Minecraft has no block under the city's
 # ground, so the sand can't land as one: it would drop as an item, which DropItem stops.
-type /execute rotated ~ 0 positioned ^-4 ^ ^5 run summon minecraft:falling_block ~ ~12 ~ {BlockState:{Name:"minecraft:sand"},DropItem:0b,Tags:["sp7"]}
+type /execute rotated ~ 0 positioned ^-4 ^ ^5 run summon minecraft:falling_block ~ ~12 ~ {BlockState:"minecraft:sand",DropItem:0b,Tags:["sp7"]}
 wait 0.5
 scene
 wait 3

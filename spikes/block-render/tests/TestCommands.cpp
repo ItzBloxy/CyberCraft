@@ -31,7 +31,10 @@ TEST(CommandsNamedSetsAreValidCommands)
 	}
 	CHECK_EQ(NamedCommands("tnt-cube")->size(), size_t(3));
 	CHECK_STR(NamedCommands("tnt-cube")->front(), "/gamemode creative");
-	CHECK_STR(NamedCommands("tnt-ahead")->at(1), "/execute rotated ~ 0 positioned ^ ^ ^4 run setblock ~ ~-1 ~ stone");  // TNT needs a block under it
+	CHECK_EQ(NamedCommands("tnt-ahead")->size(), size_t(4));
+	// TNT needs a block under it: obsidian, which its blast can't break, so nothing drops; a marker lets Clear remove it.
+	CHECK_STR(NamedCommands("tnt-ahead")->at(1), "/execute rotated ~ 0 positioned ^ ^ ^4 run setblock ~ ~-1 ~ obsidian");
+	CHECK_STR(NamedCommands("tnt-ahead")->at(2), "/execute rotated ~ 0 positioned ^ ^ ^4 run summon marker ~ ~-1 ~ {Tags:[\"sp7b\"]}");
 	CHECK(!NamedCommands("explode").has_value());
 }
 

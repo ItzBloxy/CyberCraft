@@ -25,8 +25,11 @@ std::optional<std::vector<std::string>> NamedCommands(std::string_view aName)
 	// "Ahead" is level: ^ ^ ^N follows the look's pitch too, which would put these underground whenever V looks down.
 	if (aName == "tnt-ahead")
 	{
-		// On a stone block: only the player collides with the floor's triangles, so a TNT in the air falls into the void.
-		return std::vector<std::string>{ "/gamemode creative", "/execute rotated ~ 0 positioned ^ ^ ^4 run setblock ~ ~-1 ~ stone",
+		// On a block: only the player collides with the floor's triangles, so a TNT in the air falls into the void. Obsidian,
+		// since a TNT blast drops every block it breaks, and TNT can't break obsidian; with a marker tagged sp7b, so the
+		// overlay's Clear removes it after (spike 7).
+		return std::vector<std::string>{ "/gamemode creative", "/execute rotated ~ 0 positioned ^ ^ ^4 run setblock ~ ~-1 ~ obsidian",
+			                             "/execute rotated ~ 0 positioned ^ ^ ^4 run summon marker ~ ~-1 ~ {Tags:[\"sp7b\"]}",
 			                             "/execute rotated ~ 0 positioned ^ ^ ^4 run summon tnt" };
 	}
 	if (aName == "wall")
