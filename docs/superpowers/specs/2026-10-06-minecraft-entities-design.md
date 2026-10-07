@@ -6,8 +6,9 @@ writing it out added to what was agreed. Then revised after a deep self-review, 
 source and walked through step 0 and run A as the user would play them: "Changes from the deep review", at the end,
 lists what changed and what was checked. Planning Part 1 settled more, which "Changes while planning Part 1" lists,
 and a read before executing it corrected step 0's script ("Changes before executing Part 1"). Step 0's results, and
-planning Part 2 from them, settled more: "Changes while planning Part 2", and "Changes while executing Part 2". The
-sections above already include all of those changes.
+planning Part 2 from them, settled more: "Changes while planning Part 2", and "Changes while executing Part 2". Parts 3
+and 4 each have theirs. Run C, and the user's choices after it, brought Part 5: "Changes while designing Part 5". The
+sections below already include all of those changes.
 
 ## Purpose
 
@@ -37,9 +38,14 @@ steps"):
    and DLSS's bias hint under the particles, which have no motion vectors of their own. Run A found step A's emission
    works, so there's no unlit glow.
 3. **Step C, where a step shows a need: the Minecraft side.** CyberCraft Tweaks keeps Minecraft's draw order for
-   layered models (villagers' clothes, spider eyes) and marks emissive render types, which SkyCraft's capture drops.
-   Step 0 showed the draw order is needed, so it comes before step A; run B saw a spider's eyes unlit at night, so the
-   emissive mark is Part 4.
+   layered models (villagers' clothes, spider eyes), and marks the emissive render types and the blended ones, which
+   SkyCraft's capture drops. Step 0 showed the draw order is needed, so it comes before step A; run B saw a spider's
+   eyes unlit at night, so the emissive mark is Part 4; run C saw the warden's glowing layers and a charged creeper's
+   armour drawn solid, so the blended mark is Part 5, with step B's forward list drawing what it marks.
+
+Part 5 also brings in two things the first design left out, at the user's request: the translucent entity parts (a
+slime's outer layer, allays, vexes), blended as Minecraft blends them, and animated textures (lava, fire, sea lanterns
+and the rest), applied to the atlas as Minecraft plays them.
 
 ## Decisions from the brainstorm
 
@@ -78,12 +84,20 @@ steps"):
 - **Testable steps first.** `mclink` reads what Minecraft really sends before anything is drawn (step 0); step A is
   checked in the game before step B is built; step C is built only where a step shows it's needed (its draw order, after
   step 0).
+- **Part 5, after run C** (the user's choices):
+  - the layers Minecraft blends are blended here too: the mod marks them, and step B's forward list draws the ones that
+    are really see-through (the approach chosen over dithering them into the G-buffer, which would let the game light
+    them but shimmer at low alphas under DLSS, and couldn't add the creeper's armour);
+  - the translucent entity parts come in, lit by Minecraft's light as the particles are;
+  - animated textures come in;
+  - the energy swirl's scrolling stays out: the armour is drawn still, as is a breeze's wind, which scrolls the same
+    way.
 
 ## Non-goals
 
 - **Solid entities** for V, cars or NPCs.
-- **Animated textures** (`kRenAtlasRegion`, drained and counted as now): entities and particles that use an animated
-  sprite show its first frame, as blocks do.
+- **Animated entity textures:** entity textures and the particles' atlas show their first frame, since SkyCraft sends
+  them once; the combined atlas animates (Part 5).
 - **Translucent blocks** (water, stained glass, ice): sections still drop their translucent triangles, unless
   `set translucent 1` keeps them as cut-outs, as now.
 - **Minecraft's lights** (`kRenLights`) and **sun shadows** for anything of Minecraft's: entities aren't in the game's
@@ -94,8 +108,14 @@ steps"):
   and custom geometry (beacon beams, guardian beams). SkyCraft's own contact shadows (`kWeShadow`) wait for run A's
   check of the game's ambient occlusion.
 - **Arrows stuck in NPCs** (`kEvArrowStuck`, drained and counted as now): an arrow that hits an NPC's stand-in vanishes.
-- **Translucent entity parts** (a slime's outer layer; allays and vexes, which Minecraft draws translucent): SkyCraft
-  captures every model as a cut-out.
+- **Translucent items and blocks drawn as entities** (a mob holding a stained-glass pane, glass moved by a piston):
+  SkyCraft's item, block-model and moving-block paths mark everything solid, so they stay cut-outs. Entity models'
+  translucent layers are blended (Part 5).
+- **Scrolling textures:** a charged creeper's and the wither's armour is drawn added, and a breeze's wind blended, as
+  Minecraft draws them, but still: SkyCraft's capture doesn't apply their render types' moving texture offsets (the
+  user's choice, Part 5).
+- **The game's light on blended layers:** what's drawn before DLSS is lit by Minecraft's light, as the particles are;
+  the game's lamps and reflections reach only what goes into the G-buffer.
 - **Changes to SkyCraft's mod.** Protocol 11 stays. CyberCraft Tweaks changes only in step C, and only where a step
   shows the need.
 - **Only these versions:** game 2.31, SkyCraft 0.1.2, Minecraft 26.3, Fabric Loader 0.19.5.
@@ -185,6 +205,11 @@ Each fact below was read in its source:
   - **flags:** every model, item, block model and moving block is `SOLID` (`1 | 8 | 7 << 4`: cut-out, no mipmaps, lit
     by the triangle's own normal), its batch not translucent; particles are `PARTICLE` (`1 | 8`) or, for a layer
     Minecraft draws blended, `PARTICLE_BLENDED` (`2 | 8`), whose batch is flagged translucent (bit 0);
+  - **how a batch is made** (`AvatarExporter.batch`): it's keyed by `texture << 16 | uvMode << 8 | flags`, so the
+    flags hold 8 bits; it's translucent when the flags' bit 1 is set; every vertex added to it carries its flags, and
+    its `RenBatch.flags` is 1 when translucent (bits 8 to 11 the ragdoll's part). `submitModel` alone picks its batch by
+    render type (`batchFor`: skipped for `glint`, `outline` and `shadow`, else `SOLID`); items, block models and moving
+    blocks pass `SOLID` themselves. Each of Minecraft's quads goes as two triangles in a row (`writeQuad`);
   - **overlays:** Minecraft's red hurt flash becomes a red tint in the vertex colour; its white flash (lit TNT about to
     go) becomes full light, `0xF000F0`;
   - **`order(int)` returns the collector itself,** so Minecraft's draw order between layers is lost.
@@ -196,6 +221,12 @@ Each fact below was read in its source:
   changes nothing.
 - **The ring:** a scene goes with `tryWriteRender` (dropped if the ring is full; the next frame replaces it); a texture
   with `writeRender` (waits up to 1 s for room).
+- **Animated sprites** (`SkyAtlas.animate`, each Minecraft frame from `WorldExporter.frame`): each animated sprite of
+  the combined atlas whose frame, or for one that interpolates its blend, changed since it was last sent goes as a
+  `kRenAtlasRegion` patch, at the frame for the world's game time: the sprite's cell with its border, the frame's edge
+  pixels repeated into the border, as the first atlas has them. One the ring can't take is tried again the next frame
+  (`tryWriteRender`). The CyberCraft instance sends about 800 patches a second, 9.3 KB each on average (7 to 8 MB a
+  second, in spikes 4 to 7). Entity textures and the particles' atlas go once, at their first frames.
 - **The world-entity table** (`WorldExporter.exportEntities`, `SkyLink.writeWorldEntities`): `seq` is made odd, the
   records written, then made even. Up to 160 records within 96 blocks of the player's eye:
   - **arrows** (`kWeArrow`): the position, yaw and pitch; `uv[0]` the side view and `uv[1]` the back plate of the
@@ -260,6 +291,38 @@ Read from the jar:
   `order(1)` and each pattern at `order(i + 2)`, all in one atlas (`textures/atlas/banner_patterns.png`).
 - **The outline:** black at alpha 102 (40%), `max(2.5, window width / 1920 × 2.5)` pixels wide: 3.3 at 2560 wide, about
   2.2 at the render width of 1707.
+- **Blended render types** (Part 5, from `RenderPipelines`' and `RenderTypes`' bytecode):
+  - **by alpha** (`TRANSLUCENT`: `SRC_ALPHA, ONE_MINUS_SRC_ALPHA`): `entity_translucent`, `entity_translucent_emissive`,
+    `eyes`, `banner_pattern`, `breeze_wind`, `wolf_armor_cracks`, `item_translucent` and
+    `entity_translucent_cull_item_target`; **added** (`ADDITIVE`: `ONE, ONE`): `energy_swirl` alone;
+  - the ones step C marks cull nothing (`entity_translucent`, `entity_translucent_emissive`, `breeze_wind`,
+    `wolf_armor_cracks`' `armor_translucent` and `energy_swirl`'s snippet set `withCull(false)`), as the forward list
+    doesn't; `entity_translucent_cull` keeps the default culling. `entity_translucent`, `entity_translucent_emissive`,
+    `breeze_wind` and `energy_swirl` sort their quads on upload (`sortOnUpload`);
+  - `entity_translucent` is the render type of allays, vexes, breezes, wind charges, players' skins and skulls, a
+    slime's outer layer and horse markings (`AllayModel`, `VexModel`, `SlimeOuterLayer`, `HorseMarkingLayer` and the
+    rest); `entity_translucent_emissive` that of the warden's glowing layers (`WardenRenderer`) and the breeze's eyes
+    (`BreezeEyesLayer`, `RenderTypes.breezeEyes`). The creaking's and the copper golem's glowing eyes are `eyes`, as the
+    spider's are (`CreakingRenderer` and `CopperGolemRenderer` pass `RenderTypes::eyes`).
+- **Entity shading** (`entity.vsh`, `entity.fsh`, `light.glsl`):
+  - **per face** (`PER_FACE_LIGHTING`: `entity_translucent` and `entity_translucent_emissive`): a face's colour times
+    `min(1, (max(0, L0·n) + max(0, L1·n)) × 0.6 + 0.4)`, a back face's with −n, where L0 and L1 are, in the overworld,
+    `normalize(0.2, 1, −0.7)` and `normalize(−0.2, 1, 0.7)` in Minecraft's axes (`Lighting.updateLevel`); `eyes` and
+    `energy_swirl` have none (`NO_CARDINAL_LIGHTING`);
+  - **emissive** (`EMISSIVE`: `eyes`, `entity_translucent_emissive`, `energy_swirl`): no light map;
+  - **the cut-out** (`ALPHA_CUTOUT`, 0.1 for these) tests the texel's own alpha, before the vertex colour multiplies
+    it, unlike the particles' shader.
+- **See-through textures** (Part 5): `slime.png` has 385 texels with alpha between 0 and 1, `allay.png` 45, `vex.png`
+  46, `breeze_wind.png` all 1,590 it keeps, the horse markings some, and `warden_bioluminescent_layer.png` 494 (0.19 to
+  0.43). `breeze.png`, the warden's spots and heart, `creeper_armor.png` and every eyes texture (the spider's,
+  enderman's, phantom's, creaking's, copper golem's, breeze's and ender dragon's) have none: Minecraft fades the
+  warden's spots and heart through their vertex alpha (the spots at most 0.25), and `creeper_armor.png` is opaque
+  stripes on clear ones. 41 of the 44 banner pattern textures have soft edges.
+- **Animated textures** (Part 5): 54 of the block textures have an animation (`.png.mcmeta`), and no item texture:
+  water, lava, fire and soul fire, magma, sea lanterns, prismarine, lanterns, campfires' flames and lit logs, sculk,
+  command blocks, the stonecutter's saw, nether portals, kelp and seagrass, crimson and warped stems, the respawn
+  anchor's top, a lit smoker's and blast furnace's fronts, and the firefly bush. 23 of them interpolate between frames,
+  which SkyCraft sends anew every tick.
 
 ## The protocol, as this spike uses it
 
@@ -273,12 +336,16 @@ SkyCraft's header (`extern/skycraft/skycraft_protocol.h`, version 11) stays unch
   mipmaps, bits 4 to 6 a face's direction + 1, where 7 means the triangle's own normal and 0 none. BlockRender reads
   bits 4 to 7 as the direction now; this spike reads 4 to 6, leaving bit 7 and up free. The light: block light in bits
   0 to 7, sky light in 8 to 15.
+- **`kRenAtlasRegion` (7)** (Part 5): `RenAtlasRegion` (`x`, `y`, `width`, `height`: a rectangle of the combined atlas,
+  in texels of its top level), then `width × height` RGBA8 pixels, top row first.
 - **`kRenClearAll` (3)** now also drops the textures and the scene.
 - **The world-entity table** at `0x1C000`, read under its sequence lock: `seq`, `count`, `hasSelection`, `selMin`,
   `selMax`, then up to 160 `WorldEntity` records of 96 bytes (`kind`, `id`, `x y z`, `yaw`, `pitch`, `scale`, `ext`,
   `uv[3][4]`, `tint`).
-- **Step C** adds meaning to free vertex-flag bits (bit 8 up), which SkyCraft's own game side ignores; it changes no
-  layout.
+- **Step C** changes no layout. Its marks use what the header has, full light (Part 4) and bit 1, translucent (Part
+  5), and one free bit of an entity vertex's flags: bit 7, additive (Part 5). It goes in a batch's flags, which
+  SkyCraft keys in 8 bits, so bit 8 and up aren't free there. The sections' shader reads bit 7 as part of a face's
+  direction, but entity vertices never reach it; the entities' shaders read bits 4 to 6.
 
 ## Repository layout
 
@@ -298,10 +365,13 @@ spikes/block-render/
   shaders/blocks.hlsl          + the entity, crack, forward and outline shaders
   src/link/Link.*              + textures, scenes and the world-entity table to the sink
   src/Plugin.cpp, Requests.*, Status.*   + the settings, the entities request and the entities status line
-  tools/mclink/                + scenes, textures and the world-entity table reported, and entities.txt
+  tools/mclink/                + scenes, textures and the world-entity table reported, and entities.txt; Part 5: the
+                                 additive flag, and the patches applied to its own atlas
   tools/blockrender_hud/init.lua         + the entities line, the Spawn row and Clear
+  src/render/Atlas.*           + an animated sprite's patch, and the levels under it rebuilt (pure; Part 5)
   tests/                       + the new unit tests
-minecraft/cybercraft-tweaks/   (step C only) + the capture's draw order (1.4.0) and emissive mark (1.5.0)
+minecraft/cybercraft-tweaks/   (step C only) + the capture's draw order (1.4.0), emissive mark (1.5.0) and blended
+                               mark (1.6.0)
 ```
 
 The names are proposals; the plan settles them.
@@ -311,11 +381,11 @@ The names are proposals; the plan settles them.
 - **The libraries:** `render_core` gains the pure parts (`link/WorldTable`, `entities/`, `render/EntityTextures`,
   `render/Snapshots`, and the additions to `link/Messages` and `link/Rings`), so `mclink` and the tests use them;
   `render_runtime` keeps the renderer.
-- **The versions:** step A deploys 0.20.0 and step B 0.21.0, in the log line and in `Query`. Module version 7 stays: no
-  redscript changes.
+- **The versions:** step A deploys 0.20.0, step B 0.21.0 and Part 5 0.22.0, in the log line and in `Query`. Module
+  version 7 stays: no redscript changes.
 - **CyberCraft Tweaks 1.4.0,** step C only, built by its own `build.sh` with the JDK alone, as in spikes 5 and 6, and
   copied into the CyberCraft instance's mods in place of 1.3.0, with Minecraft stopped; 1.5.0, with the emissive
-  mark, in place of 1.4.0 (Part 4).
+  mark, in place of 1.4.0 (Part 4); 1.6.0, with the blended mark, in place of 1.5.0 (Part 5).
 
 ## The frame
 
@@ -324,7 +394,8 @@ On the game's main thread, in `OnUpdate`:
    reads the world-entity table, which also goes to `Entities`.
 2. After the fight, the NPC list and V's hurts, `Entities` builds the frame's geometry, and the renderer takes it
    (`SetEntities`).
-3. `g_renderer->Update()` uploads new textures, and copies the frame's geometry into a free snapshot buffer.
+3. `g_renderer->Update()` uploads new textures and the atlas's waiting patches (Part 5), and copies the frame's
+   geometry into a free snapshot buffer.
 
 On the game's render threads:
 4. **At the G-buffer's end,** our list draws the blocks, then the newest snapshot's opaque things, then the cracks, then
@@ -356,12 +427,22 @@ numbers are finite, and counts the rest as left out; it takes the outline when `
 finite. The link reads the table each update while Minecraft is in its world, and hands the sink the table every
 update.
 
+### Animated textures (Part 5)
+
+`ParseAtlasRegion` takes a `kRenAtlasRegion` payload: each side at least 1, the rectangle inside the atlas the link
+last took (`x + width` and `y + height` within its sides, worked out in 64 bits), and the payload at least 16 bytes
+plus 4 a pixel. A good patch goes to the sink as `AtlasRegion(x, y, width, height, pixels)`, its pixels valid only
+during the call; a bad one is rejected and counted, and one before the atlas is stepped over and counted, as sections
+are. Patches count toward the ring's budget, as the messages the link takes do.
+
 ### Coming and going
 
 - **Before the atlas,** textures and scenes are stepped over, as sections are. The mapping's opening empties the ring,
   but Minecraft may write for up to a frame before it sees a new game process, with the old generation's ids, which
   SkyCraft reuses after its clear. They're counted (`beforeAtlas`).
 - **`kRenClearAll`** drops the textures (in `Entities` and on the GPU) and the scene.
+- **A new atlas** (`kRenAtlas`, after a clear or a resource reload in Minecraft) replaces BlockRender's whole atlas, at
+  its sprites' first frames, and drops the patches waiting for the GPU; SkyCraft's patches then start again from it.
 - **Minecraft gone or out of its world** (its heartbeat, or `kMcInWorld` clear): the scene and world entities are
   emptied, so nothing stale is drawn. The link empties the table it hands on; `Entities` empties the scene, which
   Minecraft stops sending when it leaves its world. The textures stay; a new Minecraft process starts with its own
@@ -379,8 +460,20 @@ update.
   - one vertex list: the scene's vertices as they came, then the world entities' triangles;
   - one draw list, each draw a first vertex, a count, a texture (0 the atlas, else an id) and a kind: `model` (the
     scene's batches not flagged translucent, and the world entities' solid shapes), `translucent` (the scene's
-    translucent batches), `crack` or `outline`;
+    translucent particles' batches), `blended` and `additive` (entity layers Minecraft blends; Part 5), `crack` or
+    `outline`;
   - the origin: the scene's, or, with no scene, the whole block under Minecraft's eye (`McState`).
+- **Entity layers Minecraft blends** (Part 5): a translucent batch whose first vertex has direction 7, the triangle's
+  own normal, is an entity layer the mod marked, not a particle (whose direction is 0). It's:
+  - `additive` when its first vertex has bit 7 (`energy_swirl`);
+  - `blended` when it's really see-through: its first vertex has block light of at least `glowlight` (emissive), or a
+    vertex's alpha is under 255, or its texture has a texel whose alpha is between 0 and 255 (noted when the texture
+    comes; the combined atlas isn't noted, so only its vertices' alpha counts);
+  - `model` otherwise, a cut-out the game lights, as before: a player's skin, a skull, a breeze's body.
+
+  An `additive` or `blended` batch's quads (SkyCraft's two triangles in a row) are copied into the frame back to front,
+  by the distance of their centres from Minecraft's eye, as Minecraft sorts these render types; a batch whose count
+  isn't a multiple of 6 is sorted by triangle.
 - **The world entities' shapes** (`WorldShapes`), relative to the origin, as `WorldRender.cpp` builds them:
   - a **dropped item:** one quad of its icon, `scale` wide (0.5), turned by `yaw` about the vertical, two-sided;
   - a **dropped full block:** a cube of side `scale` (0.25) about its centre, turned by `yaw`, side, top and bottom
@@ -466,11 +559,11 @@ SRV (t3, the entity textures):
 
 A second list of ours, the forward list, put before the DLSS list (the DLSS evaluate's list, `latest_.list`) while in
 `gbuffer` mode:
-- **when:** only in a frame whose G-buffer list drew a snapshot with anything for it: translucent draws, or the outline
-  while `set outline` is 1. That list leaves it the frame's DLSS list, tags, camera, constants (the jitter with them)
-  and extent, and holds the snapshot for it ("The snapshot ring"); the forward list is recorded with those when that
-  DLSS list is submitted, and reads what the G-buffer list wrote into the tagged depth. A claim whose forward list
-  never came is let go at the next G-buffer list, and at a change of mode;
+- **when:** only in a frame whose G-buffer list drew a snapshot with anything for it: translucent, blended or additive
+  draws, or the outline while `set outline` is 1. That list leaves it the frame's DLSS list, tags, camera, constants
+  (the jitter with them) and extent, and holds the snapshot for it ("The snapshot ring"); the forward list is recorded
+  with those when that DLSS list is submitted, and reads what the G-buffer list wrote into the tagged depth. A claim
+  whose forward list never came is let go at the next G-buffer list, and at a change of mode;
 - **its lists:** a ring of 8 of its own, with its own constants and timing queries, as the HUD pass has; and its own
   thread-local record, since one submission could hold both of a frame's lists of ours;
 - **its targets:** the tagged colour and `biasCurrentColorHint` as render targets, and the tagged depth read-only, each
@@ -479,11 +572,20 @@ A second list of ours, the forward list, put before the DLSS list (the DLSS eval
 
 What it draws, in order, each tested against the tagged depth, greater-or-equal as the entities, writing no depth and
 culling nothing:
-1. **The translucent particles:** blended (source alpha), the colour's alpha left alone. A particle with block light
-   of at least `glowlight` is unlit (`Linear(texel × colour) × exposure`); any other takes Minecraft's light curve,
-   `l / (4 − 3l)` of its brighter light level, times that. Under 0.1 of alpha is left out, as Minecraft's particle
-   shader leaves it. `exposure` is `predlss`'s setting, 2.5, chosen by eye in spike 3's run 4: the one hand-set value,
-   since the game tags no exposure.
+1. **The translucent particles, and the entity layers Minecraft blends** (Part 5), in the scene's order, each with its
+   own pipeline:
+   - **a translucent particle:** blended (source alpha), the colour's alpha left alone. A particle with block light of
+     at least `glowlight` is unlit (`Linear(texel × colour) × exposure`); any other takes Minecraft's light curve,
+     `l / (4 − 3l)` of its brighter light level, times that. Under 0.1 of alpha is left out, as Minecraft's particle
+     shader leaves it. `exposure` is `predlss`'s setting, 2.5, chosen by eye in spike 3's run 4: the one hand-set
+     value, since the game tags no exposure;
+   - **a `blended` layer:** blended as a particle, with its alpha `texel × colour`, but cut out where the texel's own
+     alpha is under 0.1, as Minecraft's entity shader cuts; lit as a particle (unlit from `glowlight`, else the light
+     curve), then times Minecraft's per-face shading, `min(1, (max(0, L0·n) + max(0, L1·n)) × 0.6 + 0.4)`, with n the
+     triangle's own normal turned toward the camera (which is Minecraft's back-face rule) and L0 and L1 Minecraft's two
+     overworld lights in the world's axes;
+   - **an `additive` layer:** `Linear(texel × colour) × exposure` added to what's there (`ONE, ONE`), unshaded, cut
+     out where the texel's own alpha is under 0.1, as `energy_swirl` draws.
 2. **The outline,** while build mode is on, paused or not, with `set outline 1`: each edge widened in the vertex shader
    into a strip facing the camera, as Minecraft's lines shader widens its own, `max(2.5, output width / 1920 × 2.5)`
    output pixels scaled to the render width (about 2.2 pixels at 2560 and 1707); an end behind the camera is first
@@ -491,19 +593,45 @@ culling nothing:
    colour to `Linear(0.6)`, about a third, as Minecraft's darkens its sRGB framebuffer's colours to 0.6. Outside
    build mode Minecraft's player aims where V looks, but V's clicks don't reach Minecraft, so an outline there would
    mislead; paused, it shows what build mode will aim at.
-3. **DLSS's bias hint,** `set dlsshint` 1 (the default): 1 under the translucent particles, which have no motion
-   vectors of their own, by drawing them again into the hint; at 0, nothing. The hint must be an `R8_UNORM` render
-   target the colour's size, as step 1 found it, or the forward list draws without it. It's the game's own mechanism
-   for what its motion vectors can't follow. Spike 3's frame log shows the DLSS list starting with five barriers and no
-   draw, dispatch or clear, its two dispatches after a change of targets, most likely DLSS's own. Run B's `dump hint`,
-   copied as DLSS gets it, shows whether these marks reach DLSS, and whether the game clears the hint each frame. If
-   the game writes it after the forward list, the hint's draw moves into the DLSS list at the evaluate, where the dumps'
-   copies go.
+3. **DLSS's bias hint,** `set dlsshint` 1 (the default): 1 under the translucent particles and the blended and
+   additive layers, which have no motion vectors of their own, by drawing them again into the hint; at 0, nothing.
+   The hint must be an `R8_UNORM` render target the colour's size, as step 1 found it, or the forward list draws
+   without it. It's the game's own mechanism for what its motion vectors can't follow. Spike 3's frame log shows the
+   DLSS list starting with five barriers and no draw, dispatch or clear, its two dispatches after a change of targets,
+   most likely DLSS's own. Run B's `dump hint`, copied as DLSS gets it, shows whether these marks reach DLSS, and
+   whether the game clears the hint each frame. If the game writes it after the forward list, the hint's draw moves
+   into the DLSS list at the evaluate, where the dumps' copies go.
+
+Two pipelines more come with Part 5, with the forward list's targets and depth: `blended` (the particles' blend, its
+own pixel shader) and `additive` (`ONE, ONE` on the colour); the hint's pipeline draws all three kinds. With `set
+blend 0` the renderer draws `blended` and `additive` draws as `model` draws, cut-outs in the G-buffer, as 0.21.0 drew
+every entity layer.
+
+### Animated textures on the GPU (Part 5)
+
+- **The atlas on the CPU:** BlockRender keeps the atlas it builds from SkyCraft's top level (`AtlasFromRgba`), every
+  level of it. A patch writes its pixels into the top level, then each level below is rebuilt over the patch's area:
+  at level n, columns `x >> n` to `(x + width − 1) >> n` and rows likewise, clamped to the level's size, each texel the
+  rounded average of the 2 × 2 above it, exactly as `AtlasFromRgba` builds a level. Patching an atlas gives the same
+  atlas as building one from the patched image: a unit test checks it.
+- **Waiting for the GPU:** a frame's patches wait for the upload list, the newest per rectangle (a sprite's cell), so
+  at most one per animated sprite waits; a new atlas drops them.
+- **Onto the GPU:** the upload list packs each waiting patch's area at every level into one upload buffer, kept and
+  reused, grown to the largest frame's patches, with a table of rectangles (the level's start, column, row, width and
+  height, and where the packed texels start). One compute dispatch writes them into the atlas buffer, which is created
+  with unordered access for it, between barriers into and out of `UNORDERED_ACCESS`. The upload list runs on the game's
+  main queue, as now, so every draw of ours sees each patch whole, before or after it.
+- **No faults:** the CPU builds the table only from patches inside the atlas, and the compute shader checks every
+  write against the atlas's length too, since root descriptors carry no bounds.
+- **While the atlas isn't on the GPU** (drawing off, or before its first upload), patches go into the CPU's atlas
+  only, which the next whole upload carries.
+- **`set animate 0`:** patches are counted and dropped, the atlas left as it is; a new atlas resets it.
 
 ### Costs measured
 
 A timestamp between the blocks and our entity draws, and around the forward list, give the GPU time of each; the
-status shows them. Main-thread costs (the scene's copy and `Update`'s) go into the existing update timing.
+status shows them. Main-thread costs (the scene's copy and `Update`'s) go into the existing update timing. Part 5 adds
+the patches' CPU time (patching and packing) and the compute dispatch's GPU time.
 
 ## Step C: the Minecraft side (where a step shows a need)
 
@@ -517,10 +645,23 @@ CyberCraft Tweaks mixes into SkyCraft's `AvatarExporter`:
   emissive render types (`eyes`, `entity_translucent_emissive` and `energy_swirl`, whose pipelines skip the light
   map) goes with full light, as SkyCraft sends lit TNT's white flash, so BlockRender's glow rule takes it, with no
   new flag and no shader change;
+- **blended render types** (1.6.0, Part 5, since run C saw the warden's layers and a charged creeper's armour drawn
+  solid, and the user brought the translucent entity parts in): the mixin changes the flags `batchFor` passes to
+  SkyCraft's `batch`, for the render type `submitModel` noted at its head, as the emissive mark notes it:
+  - `entity_translucent`, `entity_translucent_emissive`, `breeze_wind` and `wolf_armor_cracks` go with `2 | 8 | 7 << 4`
+    (122): translucent, no mipmaps, the triangle's own normal, so SkyCraft sends the batch translucent and keys it
+    apart from the solid ones;
+  - `energy_swirl` with bit 7 as well (250): additive;
+  - `eyes`, `banner_pattern` and the rest stay `SOLID`. Every eyes texture's texels are opaque or clear, so a cut-out
+    draws them as Minecraft does. Banner patterns have soft edges (41 of 26.3's 44), but they lie on cloth the game
+    lights, which a pattern lit by Minecraft's light would stand out from, and run A judged them right as cut-outs.
+    Items, block models and moving blocks don't go through `batchFor`, so they stay solid;
+  - the emissive mark's full light (1.5.0) stays, on `entity_translucent_emissive` and `energy_swirl` as on `eyes`;
 - **per-entity motion** isn't designed here: if `dlsshint 2` isn't enough, it gets a design of its own before any
   code.
 
-Each is checked with `mclink` (the batch order, and each batch's glowing vertices) before the game.
+Each is checked with `mclink` (the batch order, each batch's glowing vertices, and its translucent and additive
+flags) before the game.
 
 ## The steps
 
@@ -624,6 +765,27 @@ batch glowing (`tools/mclink/emissive.txt`: a spider and an enderman for `eyes`,
 `entity_translucent_emissive`, a charged creeper for `energy_swirl`); then run C shows those mobs at night in the
 game.
 
+### Step C's blended mark and animated textures (Part 5)
+
+Testable steps first:
+1. **CyberCraft Tweaks 1.6.0 with `mclink`, without the game.** A script, at step 0's spot, summons a slime, an allay,
+   a vex, a breeze, a warden and a charged creeper (AI off, no loot, tagged `sp7`), and places animated blocks that
+   stay put with nothing under them, each at a tagged marker: a lava cauldron, a lit campfire, magma, a sea lantern,
+   prismarine and a lantern. Nothing flows or spreads: no lava or fire of its own. Its end kills the mobs and sets the
+   blocks to air without updates (`strict`). `mclink` shows:
+   - each marked layer's batch `translucent`, the armour's `additive`, the glowing vertices as in Part 4, and the
+     breeze's body and the eyes as before;
+   - the patches applied to `mclink`'s own copy of the atlas with BlockRender's code: how many a second, how many
+     rectangles, and each placed block's faces on patched rectangles.
+2. **BlockRender 0.22.0's pure parts, unit-tested,** each new test broken once: the patch's parser; patching an atlas
+   against building it from the patched image; the frame's kinds, see-through rule and sorting; the settings; the
+   shader's constants.
+3. **Run D, in the game at night,** with Minecraft's window beside it:
+   - the six mobs: the slime's outer layer, the allay and the vex see-through; the warden's layers faint and pulsing;
+     the armour a soft glow added over the creeper; the breeze's wind see-through and still; `set blend 0` against 1;
+   - the animated blocks against Minecraft's: the lava, the flames and the sea lantern moving in step;
+   - the costs; and no crash or freeze.
+
 ### The results
 
 `docs/spikes/2026-10-06-minecraft-entities-results.md`, with the answer at the top.
@@ -636,6 +798,9 @@ game.
 - **`set glowlight <1 to 15>`** (15): the block light from which a triangle glows.
 - **`set dlsshint 0|1`** (1; step B): DLSS's bias hint under the translucent particles, or nowhere.
 - **`set outline 0|1`** (1; step B): the outline in build mode.
+- **`set blend 0|1`** (1; Part 5): the entity layers Minecraft blends drawn before DLSS, or as cut-outs in the
+  G-buffer, as 0.21.0 drew them.
+- **`set animate 0|1`** (1; Part 5): SkyCraft's patches applied to the atlas, or counted and dropped.
 - **`exposure`** stays `predlss`'s setting, shared with step B's unlit colours.
 - **`entities`** (a request): the newest scene's batches (texture, size, flags, count), the textures (id, size) and the
   world entities by kind, into the log.
@@ -675,7 +840,12 @@ A new status line, `entities`, shown by the overlay:
 - the nearest mob's distance from V, from the world table's shadow records (`kWeShadow`: players' and mobs' feet);
 - the GPU time of our entity draws, and of the forward list (step B);
 - frames the G-buffer list drew entities in, how many the forward list drew (step B) and how many of those with the
-  bias hint, its skips with the last one's reason, and the `outline` and `dlsshint` settings.
+  bias hint, its skips with the last one's reason, and the `outline` and `dlsshint` settings;
+- the newest frame's blended and additive draws, and the `blend` setting (Part 5).
+
+The `atlas` line (Part 5) gains the patches: applied, rejected and dropped a second (dropped: replaced by a newer one
+before the upload, or with `animate` 0), MB a second, the patching's CPU time and the dispatch's GPU time, and the
+`animate` setting.
 
 ## Safety
 
@@ -685,7 +855,10 @@ A new status line, `entities`, shown by the overlay:
 - **No reads past a buffer on the GPU:** root descriptors carry no bounds, so the shader clamps every index it works out
   from vertex data (a UV to a texel within its texture, a direction to its table); a bad UV reads an edge texel. Draws
   read only the vertices the CPU checked into the snapshot.
-- **GPU memory is bounded:** entity textures at 64 MB; snapshots at 8 buffers of at most 8 MB.
+- **GPU memory is bounded:** entity textures at 64 MB; snapshots at 8 buffers of at most 8 MB; the patches' upload
+  buffer at one frame's waiting patches, at most one per rectangle (Part 5).
+- **The atlas is written in place** (Part 5): only by the upload list's compute dispatch, on the game's main queue, at
+  rectangles the CPU checked inside the atlas, every write checked again in the shader.
 - **A failure never stops the blocks:** a texture, snapshot or pipeline that can't be made skips the entities (logged
   once), and drawing goes on. A removed device is handled as now.
 - **Builds and deploys** only with the game closed (`tasklist` shows no `Cyberpunk2077.exe`), `CP2077_DIR` set only for
@@ -702,6 +875,8 @@ A new status line, `entities`, shown by the overlay:
 - **A batch that can't be drawn** (texture missing or capped, range bad) is skipped and counted.
 - **Shader compile failures** (`reload`) leave the last shaders; the entity pipelines are made at their first use and,
   if they fail, entities are skipped with drawing kept on, logged once.
+- **A bad patch** (Part 5) is rejected and counted, as a bad section is; if the compute pipeline or the upload buffer
+  can't be made, patches go into the CPU's atlas only, logged once, and drawing goes on.
 
 ## Testing
 
@@ -724,18 +899,24 @@ A new status line, `entities`, shown by the overlay:
 - **Build mode** (Part 3): Shift+F6 and the overlay's word pause it, and it goes on when the overlay closes.
 - **The shader's constants:** the grown b1 checked against the compiled shader's reflection, as `TestShaders` does now.
 - **`Requests`:** the `entities`, `overlay` and `dump hint` requests, and the new settings parsed. Their ranges
-  (`entities`, `glow`, `glowlight`, `dlsshint`, `outline`) are the renderer's, as every drawing setting's are, which
-  no unit test reaches: run A sends values out of range.
+  (`entities`, `glow`, `glowlight`, `dlsshint`, `outline`, `blend`, `animate`) are the renderer's, as every drawing
+  setting's are, which no unit test reaches: run A sends values out of range.
+- **Part 5:** `ParseAtlasRegion` (a good patch; a side of 0, a rectangle past the atlas's edge, one whose sum wraps in
+  32 bits, a short payload, each rejected); patching an atlas, every level, against `AtlasFromRgba` of the patched
+  image, odd sides and a patch at the atlas's edge included; `Entities`' kinds (a blended, an additive and an opaque
+  entity layer, and a particle), the see-through rule (vertex alpha, the texture's note, emissive), and the sort's
+  order; the shader's constants, if they grow.
 
 Each new test is broken once to prove it can fail.
 
 ### `mclink`
 
-Step 0's script against the real Minecraft, and the same script again with step C's draw order.
+Step 0's script against the real Minecraft, and the same script again with step C's draw order; the Spawn rows (Part
+3); the emissive layers (Part 4); and the blended layers and animated textures (Part 5).
 
 ### In the game
 
-Runs A and B, as "The steps" has them.
+Runs A to D, as "The steps" has them.
 
 ## Risks
 
@@ -763,6 +944,16 @@ Runs A and B, as "The steps" has them.
     anything standing beside a block of light 15; run A tries it.
 14. **Things beyond the city's area fall:** SkyCraft holds the city's voxels only where V has been (5 regions of 8
     blocks around it), so a mob wandering farther, or something summoned there, drops into the void.
+15. **Blended layers lit by Minecraft's light** (Part 5) may look too bright at night where they lie over a body the
+    game lights, such as a horse's markings: Minecraft's time stands still in the user's world (its `advance_time` is
+    off), so its light is the day's. Run D compares them with `set blend 0`.
+16. **A layer drawn over its own body at the same depth** (the warden's, a horse's markings) passes the
+    greater-or-equal test only if both lists give it the same depth: they share the vertex shader, the snapshot and the
+    frame's constants, so they should, but run D looks for flicker.
+17. **Patches come in bursts:** SkyCraft sends a tick's patches together, about 40 of them (about 0.5 MB with their
+    levels), so every third frame or so uploads most of them; the status's times show the cost.
+18. **Sorting on the main thread:** each blended or additive batch is sorted every frame; a scene of many translucent
+    mobs costs more, which the update timing shows.
 
 ## Found while writing
 
@@ -1055,3 +1246,64 @@ Its code was written and built in a scratch clone first, and checked against Sky
 3. **Tested with a mob of each:** an `mclink` script (`tools/mclink/emissive.txt`) summons a spider, an enderman, a
    warden and a charged creeper, AI off, and run C shows them at night.
 4. **CyberCraft Tweaks 1.5.0;** BlockRender stays 0.21.0.
+
+## Changes while executing Part 4
+
+`mclink` and run C (the results' "Step C's emissive mark, with `mclink`" and "Run C") settled what Part 4 left open:
+1. **The emissive mark works:** every emissive layer's batch came with full light, and in the game the spider's and the
+   enderman's eyes glow at night as in Minecraft, with BlockRender 0.21.0 as it was.
+2. **The layers Minecraft blends are drawn solid:** the warden's glowing layers (texels at 0.19 to 0.43 of alpha, its
+   spots faded to at most 0.25) and a charged creeper's armour (which Minecraft adds) came out solid and far too
+   bright, and the user would "much rather blended". That's Part 5.
+3. **A correction to "Changes while planning Part 4":** the creaking's and the copper golem's glowing eyes are `eyes`,
+   not `entity_translucent_emissive`, which is only the warden's layers' and the breeze's eyes'. The mark takes both
+   render types, so 1.5.0 does what it meant to.
+4. **Cyberpunk's time of day setting Minecraft's** stays a task for later. Its world has `advance_time` and
+   `advance_weather` off (`game_rules.dat`), which that task will meet.
+
+## Changes while designing Part 5
+
+After run C the user chose to blend what Minecraft blends, brought in the translucent entity parts and animated
+textures, left out the swirl's scrolling, and chose approach 1, the mod marking and the forward list blending, over
+dithering into the G-buffer ("Decisions from the brainstorm"). The design was agreed section by section; the sections
+above include it:
+1. **Step C's blended mark,** CyberCraft Tweaks 1.6.0: the flags `batchFor` passes to SkyCraft's `batch` become
+   translucent for `entity_translucent`, `entity_translucent_emissive`, `breeze_wind` and `wolf_armor_cracks`, and
+   additive too for `energy_swirl` ("Step C").
+2. **Bit 7 of an entity vertex's flags means additive:** the one free bit that fits SkyCraft's 8-bit key, where the
+   first design had bit 8 and up, which would have needed a wider key ("The protocol").
+3. **The frame's kinds:** an entity layer the mod marked is `blended` when it's really see-through, `additive` when
+   marked so, and a `model` otherwise, so opaque skins and skulls stay lit by the game; blended and additive layers are
+   sorted back to front by quad ("Entities").
+4. **The forward list draws them:** blended layers with Minecraft's per-face shading and the texel's own alpha cut,
+   additive ones added; `set blend 0` puts them back in the G-buffer ("Step B").
+5. **Animated textures:** `ParseAtlasRegion`; the CPU's atlas patched, the levels under each patch rebuilt as
+   `AtlasFromRgba` builds them; one compute dispatch writing the GPU's atlas in place, on the game's main queue; `set
+   animate` ("Animated textures on the GPU").
+6. **The non-goals** lose the translucent entity parts and animated textures, and gain what stays out: items and blocks
+   drawn as entities, scrolling textures (the swirl's, a breeze's wind), the game's light on blended layers, and
+   animated entity textures.
+7. **Tested** with an `mclink` script of six mobs and six animated blocks, new unit tests, and run D ("The steps").
+8. **BlockRender 0.22.0 and CyberCraft Tweaks 1.6.0.**
+
+Checked against the sources while designing:
+- **SkyCraft 0.1.2's bytecode:** `AvatarExporter.batch` (the key), `batchFor` (its flags and skips, called by
+  `submitModel` alone), `Batch` (`translucent` from bit 1, every vertex's flags, quads as two triangles), and the
+  scene's `RenBatch` header; and SkyCraft's source at `bfcaf17`: `SkyAtlas.animate` (each changed sprite's cell, its
+  border, retries) and its Skyrim side's `OnAtlasRegion` (`UpdateSubresource`, then the mipmaps made again once a
+  frame).
+- **Minecraft 26.3's jar:** `RenderPipelines`' blend functions, culling and shader defines; `RenderTypes`'
+  `sortOnUpload`; `entity.vsh`, `entity.fsh` and `light.glsl`; `Lighting`'s directions; which renderers use each
+  render type; the textures' alpha; the animated textures' `.mcmeta`.
+- **BlockRender's code:** the upload list on the game's main queue (`d3d::MainQueue`), the atlas buffer (`MakeBuffer`,
+  without unordered access yet), `EntityVS`, `EntityTexel`, `TranslucentPS` and `HintPS`, and `Entities`' kinds.
+
+A self-review after writing, tracing each new claim to its source, corrected two and settled three:
+- **Banner patterns aren't opaque:** 41 of the 44 have soft edges. They stay cut-outs for another reason: they lie on
+  cloth the game lights ("Step C").
+- **Not every translucent pipeline is two-sided:** `entity_translucent_cull` culls; the ones step C marks don't.
+- **Each vertex's alpha reaches BlockRender:** SkyCraft's `writeQuad` writes red, green, blue and then the colour's own
+  alpha, which the warden's fading layers and the see-through rule need.
+- **Minecraft's two lights are the world's:** `Lighting.updateLevel` hands them on untransformed, so the per-face
+  shading takes the triangle's normal in world axes.
+- **Every eyes texture is opaque or clear,** so the eyes stay cut-outs as they are.
