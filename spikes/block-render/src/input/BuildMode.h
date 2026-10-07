@@ -13,9 +13,11 @@
 // game; F8 toggles it; and the keys that open the game's menus leave it, and reach the game. Since spike 5 (its spec's
 // "Keys"), Minecraft's movement keys go to Minecraft too, and the game's crouch keys are hidden without going anywhere.
 // Since spike 7's Part 3, Shift+F6, which opens and closes CET's overlay, pauses it instead: while the overlay is open
-// every input is the overlay's and the game's, and build mode goes on when it closes. A press's repeats and its release
-// go where the press went, so neither side is left holding an input that only the other saw let go. Pure, and not
-// thread-safe: the router (input/Router.h) holds its lock around every call.
+// every input is the overlay's and the game's, and build mode goes on when it closes. Since spike 8 (its spec's "Where
+// each input goes"), E, T, /, Q and F3 are Minecraft's too, every key while F3's press is Minecraft's, and O opens
+// Minecraft's pause menu; with a Minecraft screen open, every input but F8 and Shift+F6 is Minecraft's. A press's repeats
+// and its release go where the press went, for every key and button, so neither side is left holding an input that only
+// the other saw let go. Pure, and not thread-safe: the router (input/Router.h) holds its lock around every call.
 namespace cpmc::input
 {
 namespace proto = skycraft::proto;
@@ -45,6 +47,8 @@ struct Situation
 	bool        minecraftInWorld = false;
 	std::string blocked;  // why Minecraft can't drive V: V in a vehicle, a workspot or dead, or Minecraft's player dead (spike 5).
 	                      // Known even when the link finds no V, as in a car, where the camera isn't V's eye
+	bool screenOpen = false;  // Minecraft says a screen is open (spike 8): with build mode on and not paused, every input
+	                          // is Minecraft's
 };
 
 // What becomes of one event.
@@ -84,6 +88,7 @@ public:
 	std::optional<int> Slot() const { return slot_; }        // Minecraft's hotbar slot, 1 to 9, as far as it's known
 	uint64_t           Forwarded() const { return forwarded_; }  // events for Minecraft's input ring
 	uint64_t           Hidden() const { return hidden_; }        // inputs hidden from the game
+	uint64_t           F3Taken() const { return f3Taken_; }      // keys' presses Minecraft got only because F3 was held
 	const std::string& Last() const { return last_; }            // the last input forwarded
 
 private:
@@ -96,9 +101,11 @@ private:
 		Neither,  // Minecraft's, until build mode ended and Minecraft let go of everything
 	};
 
-	static constexpr size_t kInputs = 23;  // the five mouse buttons, the keys 1 to 9, then nine other keys it takes
+	static constexpr size_t kInputs = 5 + 512;  // the five mouse buttons, then every key by its scan code, then with E0
 
 	Holder Route(size_t aInput, bool aDown);
+	// Where a key's new press goes. A menu key's ends build mode first, and O's sends kInOpenMenu.
+	Holder PlaceKey(const RawKey& aKey, const Situation& aSituation, Decision& aDecision);
 	void   Forward(Decision& aDecision, const proto::InputEvent& aEvent, std::string aWhat);
 	void   Scroll(int16_t aWheel);
 	void   LetGo();  // Minecraft lets go of what it holds: those inputs' repeats and releases go nowhere
@@ -115,6 +122,7 @@ private:
 	double                      scroll_ = 0.0;  // the wheel's notches not yet whole, as Minecraft keeps them
 	uint64_t                    forwarded_ = 0;
 	uint64_t                    hidden_ = 0;
+	uint64_t                    f3Taken_ = 0;
 	std::string                 last_ = "nothing yet";
 };
 }

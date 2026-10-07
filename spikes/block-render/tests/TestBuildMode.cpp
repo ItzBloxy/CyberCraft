@@ -206,7 +206,7 @@ TEST(BuildModeTakesTheKeys1To9)
 	CHECK(Is(mode.Key(Release(0x0A), Ready()).forward[0], proto::kInKey, 38, 0));  // 9's release goes too
 	CHECK(Passes(mode.Key(Release(0x05), Ready())));      // 4's release, its press never seen: the game's
 	CHECK(Passes(mode.Key(Press(0x0B), Ready())));        // 0
-	CHECK(Passes(mode.Key(Press(0x12), Ready())));        // E: the game's iconic weapon, still the game's
+	CHECK(Passes(mode.Key(Press(0x21), Ready())));        // F: the game's interact, still the game's
 	CHECK(Passes(mode.Key(Press(0x02, true), Ready())));  // an extended 0x02 isn't 1
 	CHECK(Passes(mode.Key(Press(0x4F), Ready())));        // the keypad's 1
 	CHECK(mode.On());
@@ -214,7 +214,7 @@ TEST(BuildModeTakesTheKeys1To9)
 
 TEST(BuildModeLeavesOnTheMenuKeys)
 {
-	for (const int key : { 0x01, 0x17, 0x32, 0x24, 0x19, 0x25, 0x23, 0x14 })  // Esc I M J P K H T
+	for (const int key : { 0x01, 0x17, 0x32, 0x24, 0x19, 0x25, 0x23 })  // Esc I M J P K H: T is Minecraft's chat
 	{
 		BuildMode      mode = On();
 		const Decision decision = mode.Key(Press(uint16_t(key)), Ready());
@@ -406,6 +406,136 @@ TEST(BuildModeKnowsTheOverlayWhileOff)
 	mode.Key(Press(0x2A), Ready());
 	mode.Key(Press(0x40), Ready());  // and the overlay closes
 	CHECK(mode.On() && !mode.Paused());
+}
+
+TEST(BuildModeGivesMinecraftItsScreensKeys)
+{
+	// E, T, / and Q (spike 8's "No Minecraft screen open"), as set-1 scan codes, and the SDL scancodes Minecraft gets.
+	const std::pair<uint16_t, uint16_t> keys[] = { { 0x12, 8 }, { 0x14, 23 }, { 0x35, 56 }, { 0x10, 20 } };
+	BuildMode                           mode = On();
+	for (const auto& [scanCode, sdl] : keys)
+	{
+		const Decision down = mode.Key(Press(scanCode), Ready());
+		CHECK(down.hideKey && down.forwarded == 1 && Is(down.forward[0], proto::kInKey, sdl, 1));
+		const Decision up = mode.Key(Release(scanCode), Ready());
+		CHECK(up.hideKey && up.forwarded == 1 && Is(up.forward[0], proto::kInKey, sdl, 0));
+	}
+	CHECK(mode.On());  // T opens Minecraft's chat, and no longer leaves build mode
+	CHECK_STR(mode.Last(), "Q up");
+	CHECK(Passes(mode.Key(Press(0x35, true), Ready())));  // the keypad's /
+	BuildMode off;
+	for (const auto& [scanCode, sdl] : keys)
+	{
+		CHECK(Passes(off.Key(Press(scanCode), Ready())));
+	}
+}
+
+TEST(BuildModeGivesMinecraftEveryKeyWhileF3IsHeld)
+{
+	BuildMode      mode = On();
+	const Decision f3 = mode.Key(Press(0x3D), Ready());
+	CHECK(f3.hideKey && Is(f3.forward[0], proto::kInKey, 60, 1));
+	const Decision f4 = mode.Key(Press(0x3E), Ready());  // F3+F4: the game mode switcher
+	CHECK(f4.hideKey && Is(f4.forward[0], proto::kInKey, 61, 1));
+	CHECK(Is(mode.Key(Release(0x3E), Ready()).forward[0], proto::kInKey, 61, 0));
+	CHECK(Is(mode.Key(Press(0x31), Ready()).forward[0], proto::kInKey, 17, 1));  // F3+N: spectator
+	mode.Key(Release(0x31), Ready());
+	CHECK(Is(mode.Key(Press(0x40), Ready()).forward[0], proto::kInKey, 63, 1));  // F3+F6: debug options
+	mode.Key(Release(0x40), Ready());
+	const Decision esc = mode.Key(Press(0x01), Ready());  // F3+Esc: Minecraft's, not a menu key
+	CHECK(esc.hideKey && Is(esc.forward[0], proto::kInKey, 41, 1));
+	CHECK(mode.On());
+	mode.Key(Release(0x01), Ready());
+	CHECK_EQ(mode.F3Taken(), 4ull);
+	CHECK(Is(mode.Key(Release(0x3D), Ready()).forward[0], proto::kInKey, 60, 0));
+	CHECK(Passes(mode.Key(Press(0x3E), Ready())));  // a plain F4 is the game's again
+	mode.Key(Release(0x3E), Ready());
+	// F8 stays build mode's, F3 held or not.
+	mode.Key(Press(0x3D), Ready());
+	CHECK(mode.Key(Press(kF8), Ready()).releaseAll);
+	CHECK(!mode.On());
+	const Decision f3Up = mode.Key(Release(0x3D), Ready());  // Minecraft let go of everything: F3's release goes nowhere
+	CHECK(f3Up.hideKey && f3Up.forwarded == 0);
+}
+
+TEST(BuildModeOpensMinecraftsPauseMenuOnO)
+{
+	BuildMode      mode = On();
+	const Decision o = mode.Key(Press(0x18), Ready());
+	CHECK(o.hideKey && o.forwarded == 1 && Is(o.forward[0], proto::kInOpenMenu, 0, 0));
+	CHECK_STR(mode.Last(), "O, Minecraft's pause menu");
+	const Decision repeat = mode.Key(Press(0x18), Ready());  // one pause menu a press: its repeats and release go nowhere
+	CHECK(repeat.hideKey && repeat.forwarded == 0);
+	const Decision up = mode.Key(Release(0x18), Ready());
+	CHECK(up.hideKey && up.forwarded == 0);
+	BuildMode off;
+	CHECK(Passes(off.Key(Press(0x18), Ready())));
+}
+
+TEST(BuildModeGivesMinecraftEveryInputWithAScreenOpen)
+{
+	BuildMode mode = On();
+	mode.Key(Press(0x04), Ready());  // 3, before any screen
+	mode.Key(Release(0x04), Ready());
+	Situation screen = Ready();
+	screen.screenOpen = true;
+	// Every key, the game's menu keys too: typing, and Esc and E closing the screen.
+	const std::pair<RawKey, uint16_t> keys[] = { { Press(0x21), 9 },  { Press(0x01), 41 },     { Press(0x17), 12 }, { Press(0x18), 18 },
+		                                         { Press(0x2E), 6 },  { Press(0x1D, true), 228 }, { Press(0x40), 63 }, { Press(0x12), 8 } };
+	for (const auto& [key, sdl] : keys)
+	{
+		const Decision down = mode.Key(key, screen);
+		CHECK(down.hideKey && down.forwarded == 1 && Is(down.forward[0], proto::kInKey, sdl, 1));
+		const Decision up = mode.Key({ key.scanCode, key.extended, true }, screen);
+		CHECK(up.hideKey && Is(up.forward[0], proto::kInKey, sdl, 0));
+	}
+	CHECK(mode.On());
+	// 1 to 9 swap items there, and the wheel scrolls: the slot stays as it was.
+	CHECK(Is(mode.Key(Press(0x06), screen).forward[0], proto::kInKey, 34, 1));  // 5
+	mode.Key(Release(0x06), screen);
+	const Decision wheel = mode.Mouse({ RI_MOUSE_WHEEL, -120 }, screen);
+	CHECK(wheel.hideButtons == RI_MOUSE_WHEEL && Is(wheel.forward[0], proto::kInScroll, 0, -120));
+	mode.Mouse({ RI_MOUSE_BUTTON_4_DOWN, 0 }, screen);
+	mode.Mouse({ RI_MOUSE_BUTTON_4_UP, 0 }, screen);
+	CHECK_EQ(mode.Slot().value_or(0), 3);
+	// A click there changes no block: no latency mark.
+	const Decision click = mode.Mouse({ RI_MOUSE_LEFT_BUTTON_DOWN, 0 }, screen);
+	CHECK(Is(click.forward[0], proto::kInMouseButton, 1, 1));
+	CHECK(!click.press);
+	mode.Mouse({ RI_MOUSE_LEFT_BUTTON_UP, 0 }, screen);
+	// F8 stays build mode's.
+	CHECK(mode.Key(Press(kF8), screen).releaseAll);
+	CHECK(!mode.On());
+}
+
+TEST(BuildModeKeepsShiftF6WithAScreenOpen)
+{
+	BuildMode mode = On();
+	Situation screen = Ready();
+	screen.screenOpen = true;
+	CHECK(mode.Key(Press(0x2A), screen).forwarded == 1);  // Shift: Minecraft's
+	const Decision f6 = mode.Key(Press(0x40), screen);
+	CHECK(f6.releaseAll && !f6.hideKey && f6.forwarded == 0);  // CET's overlay, which pauses build mode
+	CHECK(mode.Paused());
+	CHECK(Passes(mode.Key(Press(0x21), screen)));  // paused: every input is the overlay's and the game's
+	CHECK(Passes(mode.Mouse({ RI_MOUSE_LEFT_BUTTON_DOWN, 0 }, screen)));
+	BuildMode off;
+	CHECK(Passes(off.Key(Press(0x21), screen)));  // a screen open with build mode off isn't build mode's
+	CHECK(Passes(off.Key(Press(0x01), screen)));
+}
+
+TEST(BuildModeSendsAKeysReleaseWhereItsPressWentAcrossAScreen)
+{
+	BuildMode mode = On();
+	Situation screen = Ready();
+	screen.screenOpen = true;
+	CHECK(Passes(mode.Key(Press(0x21), Ready())));  // F, the game's, held as a screen opens
+	CHECK(Passes(mode.Key(Press(0x21), screen)));   // its repeat is still the game's
+	CHECK(Passes(mode.Key(Release(0x21), screen)));
+	CHECK(mode.Key(Press(0x22), screen).forwarded == 1);  // G, pressed in the screen, is let go of after it closes
+	const Decision release = mode.Key(Release(0x22), Ready());
+	CHECK(release.hideKey && Is(release.forward[0], proto::kInKey, 10, 0));
+	CHECK(Passes(mode.Key(Press(0x22), Ready())));  // and pressed again, it's the game's
 }
 
 TEST(BuildModeTakesTheOverlaysOwnWord)

@@ -14,12 +14,15 @@ namespace cpmc::input
 {
 namespace
 {
+constexpr uint16_t kF3 = 0x3D;
 constexpr uint16_t kF6 = 0x40;
 constexpr uint16_t kF8 = 0x42;
+constexpr uint16_t kO = 0x18;
 constexpr uint16_t kLeftShift = 0x2A;
 constexpr uint16_t kRightShift = 0x36;
 
-// The keys that open the game's menus (Esc, I, M, J, P, K, H and T): its name, or null.
+// The keys that open the game's menus (Esc, I, M, J, P, K and H): its name, or null. T, the game's phone, is Minecraft's
+// chat since spike 8.
 const char* MenuKey(const RawKey& aKey)
 {
 	if (aKey.extended)
@@ -35,7 +38,6 @@ const char* MenuKey(const RawKey& aKey)
 	case 0x19: return "P";
 	case 0x25: return "K";
 	case 0x23: return "H";
-	case 0x14: return "T";
 	default: return nullptr;
 	}
 }
@@ -57,12 +59,13 @@ constexpr Button kButtons[] = {
 	{ RI_MOUSE_BUTTON_4_DOWN, RI_MOUSE_BUTTON_4_UP, 4, "mouse button 4" },
 	{ RI_MOUSE_BUTTON_5_DOWN, RI_MOUSE_BUTTON_5_UP, 5, "mouse button 5" },
 };
-constexpr size_t kButtonCount = std::size(kButtons);  // their holders come first, then the keys 1 to 9's
+constexpr size_t kButtonCount = std::size(kButtons);  // their holders come first, then the keys'
 constexpr size_t kSideButtons = 3;                    // the first side button's index
 
-// The other keys build mode takes (spike 5's "Keys"): Minecraft's movement keys, forwarded, and the game's crouch keys,
-// only hidden, so V can't crouch under the puppet. C is Minecraft's toolbar-saving key, so it isn't forwarded either.
-// The forwarded keys are physical keys: Minecraft applies its own bindings to them.
+// The other keys build mode takes with no Minecraft screen open: Minecraft's movement keys (spike 5's "Keys") and the
+// keys of its screens (spike 8), forwarded, and the game's crouch keys, only hidden, so V can't crouch under the puppet.
+// C is Minecraft's toolbar-saving key, so it isn't forwarded either. The forwarded keys are physical keys: Minecraft
+// applies its own bindings to them. The keys 1 to 9 are taken too.
 struct TakenKey
 {
 	uint16_t    scanCode;  // set 1, without its E0 prefix
@@ -72,11 +75,63 @@ struct TakenKey
 };
 
 constexpr TakenKey kTakenKeys[] = {
-	{ 0x11, false, true, "W" },          { 0x1E, false, true, "A" },        { 0x1F, false, true, "S" },
-	{ 0x20, false, true, "D" },          { 0x39, false, true, "Space" },    { 0x2A, false, true, "Left Shift" },
-	{ 0x1D, false, true, "Left Ctrl" },  { 0x2E, false, false, "C" },       { 0x1D, true, false, "Right Ctrl" },
+	{ 0x11, false, true, "W" },        { 0x1E, false, true, "A" },         { 0x1F, false, true, "S" },
+	{ 0x20, false, true, "D" },        { 0x39, false, true, "Space" },     { 0x2A, false, true, "Left Shift" },
+	{ 0x1D, false, true, "Left Ctrl" }, { 0x12, false, true, "E" },        { 0x14, false, true, "T" },
+	{ 0x35, false, true, "/" },        { 0x10, false, true, "Q" },         { kF3, false, true, "F3" },
+	{ 0x2E, false, false, "C" },       { 0x1D, true, false, "Right Ctrl" },
 };
-constexpr size_t kTakenFirst = kButtonCount + 9;  // their holders come after the buttons' and 1 to 9's
+
+const TakenKey* Taken(const RawKey& aKey)
+{
+	for (const TakenKey& taken : kTakenKeys)
+	{
+		if (aKey.scanCode == taken.scanCode && aKey.extended == taken.extended)
+		{
+			return &taken;
+		}
+	}
+	return nullptr;
+}
+
+// The keys 1 to 9: the digit, or 0.
+int Digit(const RawKey& aKey)
+{
+	return !aKey.extended && aKey.scanCode >= 0x02 && aKey.scanCode <= 0x0A ? aKey.scanCode - 0x01 : 0;
+}
+
+std::string KeyName(const RawKey& aKey)
+{
+	if (const int digit = Digit(aKey))
+	{
+		return std::format("the key {}", digit);
+	}
+	if (const TakenKey* taken = Taken(aKey))
+	{
+		return taken->name;
+	}
+	if (const char* menu = MenuKey(aKey))
+	{
+		return menu;
+	}
+	if (!aKey.extended && aKey.scanCode == kO)
+	{
+		return "O";
+	}
+	return std::format("the key of scan code {:#04x}{}", aKey.scanCode, aKey.extended ? " E0" : "");
+}
+
+// A key's holder: after the buttons', by its scan code, and those with the E0 prefix 256 further on. None past 0xFF.
+std::optional<size_t> KeyIndex(const RawKey& aKey)
+{
+	if (aKey.scanCode > 0xFF)
+	{
+		return std::nullopt;
+	}
+	return kButtonCount + (aKey.extended ? 256u : 0u) + aKey.scanCode;
+}
+
+constexpr size_t kF3Index = kButtonCount + kF3;
 
 int Sign(double aValue)
 {
@@ -123,63 +178,86 @@ Decision BuildMode::Key(const RawKey& aKey, const Situation& aSituation)
 	if (!aKey.extended && aKey.scanCode == kF6)
 	{
 		// Shift+F6 opens and closes CET's overlay, which pauses build mode while it's open, so its clicks don't reach
-		// Minecraft. The overlay sees the key, and an F6 alone or a repeat changes nothing.
+		// Minecraft. The overlay sees the key, and a repeat changes nothing. An F6 alone goes on as any other key: with a
+		// Minecraft screen open, or F3 held, it's Minecraft's.
 		const bool press = !aKey.up && !f6Down_;
 		f6Down_ = !aKey.up;
-		if (press && (leftShift_ || rightShift_))
+		if (leftShift_ || rightShift_)
 		{
-			decision.releaseAll = SetOverlay(!overlay_);
+			if (press)
+			{
+				decision.releaseAll = SetOverlay(!overlay_);
+			}
+			return decision;
 		}
+	}
+	const std::optional<size_t> index = KeyIndex(aKey);
+	if (!index)
+	{
 		return decision;
 	}
-	if (on_ && !overlay_ && !aKey.up)
+	Holder& holder = held_[*index];
+	if (!aKey.up && holder == Holder::None)
 	{
-		if (const char* menu = MenuKey(aKey))
-		{
-			decision.releaseAll = TurnOff(std::format("{} left it", menu));
-			return decision;  // and the game opens its menu
-		}
+		holder = PlaceKey(aKey, aSituation, decision);
 	}
-	if (!aKey.extended && aKey.scanCode >= 0x02 && aKey.scanCode <= 0x0A)
+	const Holder to = holder;  // a repeat or a release goes where its press went
+	if (aKey.up)
 	{
-		const int    digit = aKey.scanCode - 0x01;  // the keys 1 to 9
-		const Holder to = Route(kButtonCount - 1 + size_t(digit), !aKey.up);
-		if (to == Holder::Minecraft || to == Holder::Neither)
-		{
-			decision.hideKey = true;
-			++hidden_;
-		}
-		if (to == Holder::Minecraft)
-		{
-			Forward(decision, { proto::kInKey, SdlScancode(aKey.scanCode, false), aKey.up ? 0 : 1, 0, 0 },
-			        std::format("the key {} {}", digit, aKey.up ? "up" : "down"));
-			if (!aKey.up)
-			{
-				slot_ = digit;
-			}
-		}
+		holder = Holder::None;
 	}
-	for (size_t i = 0; i < std::size(kTakenKeys); ++i)
+	if (to == Holder::Minecraft || to == Holder::Neither)
 	{
-		const TakenKey& taken = kTakenKeys[i];
-		if (aKey.scanCode != taken.scanCode || aKey.extended != taken.extended)
+		decision.hideKey = true;
+		++hidden_;
+	}
+	if (to == Holder::Minecraft)
+	{
+		Forward(decision, { proto::kInKey, SdlScancode(aKey.scanCode, aKey.extended), aKey.up ? 0 : 1, 0, 0 },
+		        std::format("{} {}", KeyName(aKey), aKey.up ? "up" : "down"));
+		const int digit = Digit(aKey);
+		if (digit != 0 && !aKey.up && !aSituation.screenOpen)
 		{
-			continue;
+			slot_ = digit;  // in a Minecraft screen, 1 to 9 swap items instead
 		}
-		const Holder to = Route(kTakenFirst + i, !aKey.up);
-		if (to == Holder::Minecraft || to == Holder::Neither)
-		{
-			decision.hideKey = true;
-			++hidden_;
-		}
-		if (to == Holder::Minecraft && taken.forward)
-		{
-			Forward(decision, { proto::kInKey, SdlScancode(aKey.scanCode, aKey.extended), aKey.up ? 0 : 1, 0, 0 },
-			        std::format("{} {}", taken.name, aKey.up ? "up" : "down"));
-		}
-		break;
 	}
 	return decision;
+}
+
+BuildMode::Holder BuildMode::PlaceKey(const RawKey& aKey, const Situation& aSituation, Decision& aDecision)
+{
+	if (!on_ || overlay_)
+	{
+		return Holder::Game;
+	}
+	if (aSituation.screenOpen)
+	{
+		return Holder::Minecraft;  // a Minecraft screen is open: every key is Minecraft's, typing and Esc included
+	}
+	if ((aKey.extended || aKey.scanCode != kF3) && held_[kF3Index] == Holder::Minecraft)
+	{
+		++f3Taken_;
+		return Holder::Minecraft;  // F3's combinations: F3+F4, F3+N, F3+F6 and the rest
+	}
+	if (const char* menu = MenuKey(aKey))
+	{
+		aDecision.releaseAll = TurnOff(std::format("{} left it", menu));
+		return Holder::Game;  // and the game opens its menu
+	}
+	if (!aKey.extended && aKey.scanCode == kO)
+	{
+		Forward(aDecision, { proto::kInOpenMenu, 0, 0, 0, 0 }, "O, Minecraft's pause menu");
+		return Holder::Neither;  // one pause menu a press: its repeats and release go nowhere
+	}
+	if (Digit(aKey) != 0)
+	{
+		return Holder::Minecraft;
+	}
+	if (const TakenKey* taken = Taken(aKey))
+	{
+		return taken->forward ? Holder::Minecraft : Holder::Neither;
+	}
+	return Holder::Game;
 }
 
 Decision BuildMode::Mouse(const RawMouse& aMouse, const Situation& aSituation)
@@ -189,6 +267,7 @@ Decision BuildMode::Mouse(const RawMouse& aMouse, const Situation& aSituation)
 	{
 		return decision;
 	}
+	const bool screen = on_ && !overlay_ && aSituation.screenOpen;
 	for (size_t i = 0; i < kButtonCount; ++i)
 	{
 		for (const bool down : { true, false })
@@ -208,7 +287,11 @@ Decision BuildMode::Mouse(const RawMouse& aMouse, const Situation& aSituation)
 			{
 				Forward(decision, { proto::kInMouseButton, kButtons[i].sdl, down ? 1 : 0, 0, 0 },
 				        std::format("{} {}", kButtons[i].name, down ? "down" : "up"));
-				if (i < kSideButtons)
+				if (screen)
+				{
+					// In a Minecraft screen a click changes no block, and a side button picks no slot.
+				}
+				else if (i < kSideButtons)
 				{
 					decision.press = decision.press || down;  // a side button changes no block: no latency to time
 				}
@@ -224,7 +307,10 @@ Decision BuildMode::Mouse(const RawMouse& aMouse, const Situation& aSituation)
 		decision.hideButtons |= RI_MOUSE_WHEEL;
 		++hidden_;
 		Forward(decision, { proto::kInScroll, 0, aMouse.wheel, 0, 0 }, std::format("the wheel, {}", aMouse.wheel));
-		Scroll(aMouse.wheel);
+		if (!screen)
+		{
+			Scroll(aMouse.wheel);  // in a Minecraft screen, the wheel scrolls it instead
+		}
 	}
 	return decision;
 }
@@ -305,7 +391,6 @@ void BuildMode::LetGo()
 
 BuildMode::Holder BuildMode::Route(size_t aInput, bool aDown)
 {
-	static_assert(kInputs == kTakenFirst + std::size(kTakenKeys));
 	Holder& holder = held_[aInput];
 	if (aDown && holder == Holder::None)
 	{
