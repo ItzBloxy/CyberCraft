@@ -627,8 +627,9 @@ every entity layer.
 - **Onto the GPU:** the upload list packs each waiting patch's area at every level into one upload buffer, kept and
   reused, grown to the largest frame's patches, with a table of rectangles (the level's start, column, row, width and
   height, and where the packed texels start). One compute dispatch writes them into the atlas buffer, which is created
-  with unordered access for it, between barriers into and out of `UNORDERED_ACCESS`. The upload list runs on the game's
-  main queue, as now, so every draw of ours sees each patch whole, before or after it.
+  with unordered access for it, between barriers into and out of `UNORDERED_ACCESS`: at most 65,535 areas, D3D12's
+  most thread groups in one dimension of a dispatch, the rest waiting for the next. The upload list runs on the
+  game's main queue, as now, so every draw of ours sees each patch whole, before or after it.
 - **No faults:** the CPU builds the table only from patches inside the atlas, and the compute shader checks every
   write against the atlas's length too, since root descriptors carry no bounds.
 - **While the atlas isn't on the GPU** (drawing off, or before its first upload), patches go into the CPU's atlas
@@ -859,9 +860,10 @@ A new status line, `entities`, shown by the overlay:
   bias hint, its skips with the last one's reason, and the `outline` and `dlsshint` settings;
 - the newest frame's blended and additive draws, and the `blend` setting (Part 5).
 
-The `atlas` line (Part 5) gains the patches: applied, rejected and dropped a second (dropped: replaced by a newer one
-before the upload, or with `animate` 0), MB a second, the patching's CPU time and the dispatch's GPU time, and the
-`animate` setting.
+The `atlas` line (Part 5) gains the patches: applied, refused (no atlas they fit) and dropped a second (dropped:
+replaced by a newer one before the upload, or with `animate` 0), MB a second, the passes, the patching's CPU time and
+the dispatch's GPU time, the areas waiting, and the `animate` setting, then those from before the atlas once there are
+any. A bad patch counts with the ring's rejected messages, as a bad section does.
 
 ## Safety
 
@@ -874,7 +876,7 @@ before the upload, or with `animate` 0), MB a second, the patching's CPU time an
 - **GPU memory is bounded:** entity textures at 64 MB; snapshots at 8 buffers of at most 8 MB; the patches' upload
   buffer at one frame's waiting patches, at most one per rectangle (Part 5).
 - **The atlas is written in place** (Part 5): only by the upload list's compute dispatch, on the game's main queue, at
-  rectangles the CPU checked inside the atlas, every write checked again in the shader.
+  rectangles the CPU checked inside the atlas, at most 65,535 a dispatch, every write checked again in the shader.
 - **A failure never stops the blocks:** a texture, snapshot or pipeline that can't be made skips the entities (logged
   once), and drawing goes on. A removed device is handled as now.
 - **Builds and deploys** only with the game closed (`tasklist` shows no `Cyberpunk2077.exe`), `CP2077_DIR` set only for
@@ -892,7 +894,8 @@ before the upload, or with `animate` 0), MB a second, the patching's CPU time an
 - **Shader compile failures** (`reload`) leave the last shaders; the entity pipelines are made at their first use and,
   if they fail, entities are skipped with drawing kept on, logged once.
 - **A bad patch** (Part 5) is rejected and counted, as a bad section is; if the compute pipeline or the upload buffer
-  can't be made, patches go into the CPU's atlas only, logged once, and drawing goes on.
+  can't be made, or the atlas's own upload failed, the areas waiting are dropped and patches go into the CPU's atlas
+  only, logged once, and drawing goes on.
 
 ## Testing
 
@@ -1357,3 +1360,18 @@ What it checked:
   included.
 - **Played through:** the `mclink` script's commands and what each leaves (lava only in a cauldron, no fire of its
   own, air set `strict` at the end); run D by day, then at night.
+
+## Changes while planning Part 5
+
+Part 5 was planned from the design above. Its code was written and built in a scratch clone first, and checked against
+SkyCraft 0.1.2's bytecode and Minecraft 26.3's jar, before the plan was written from it. These changed the design; the
+sections above include them:
+1. **A patch pass takes at most 65,535 areas,** D3D12's most thread groups in one dimension of a dispatch; the rest wait
+   for the next pass. A tick's patches make about 200 areas, their cells at each level, so it's a bound for the
+   no-faults rule rather than a limit met ("Animated textures on the GPU", "Safety").
+2. **A failed upload of the atlas drops the areas waiting,** as a patch pass that can't be made does, so no list is
+   recorded each frame for a buffer that isn't there; the CPU's atlas stays current for the next whole upload ("Error
+   handling").
+3. **The `atlas` line's patches** are applied, refused (no atlas they fit) and dropped; a bad patch counts with the
+   ring's rejected messages, as a bad section does; the passes and the areas waiting join the times ("Measurements and
+   the status").

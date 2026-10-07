@@ -1,4 +1,4 @@
-# Minecraft's Entities Implementation Plan, Parts 1 to 4 (steps 0, A, B and C)
+# Minecraft's Entities Implementation Plan, Parts 1 to 5 (steps 0, A, B and C)
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 >
@@ -39,6 +39,10 @@ section below says how it's built.
 **Part 4** (Tasks 32 to 36) builds step C's emissive mark: CyberCraft Tweaks 1.5.0 sends the layers Minecraft draws
 emissive, such as a spider's eyes, with full light, so they glow. It was planned after run B, at the user's choice,
 and its own section below says how it's built.
+**Part 5** (Tasks 37 to 51) builds step C's blended mark and animated textures: CyberCraft Tweaks 1.6.0 sends the
+layers Minecraft blends translucent, and BlockRender 0.22.0 blends the really see-through ones before DLSS and adds
+a charged creeper's armour, as Minecraft does, and plays Minecraft's animated textures. It was planned after run C,
+at the user's choice, and its own section below says how it's built.
 
 ---
 
@@ -9550,7 +9554,7 @@ cd /d/Cyberpunk-Minecraft && git add docs/superpowers \
        -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
 ```
 
-- [ ] **Step 4: Plan Part 5**
+- [x] **Step 4: Plan Part 5**
 
 After run C the user chose to blend what Minecraft blends, as Part 5, with the translucent entity parts and animated
 textures ("How Part 4 went"); the spec's "Changes while designing Part 5" records the design, which the user approved
@@ -9596,3 +9600,3850 @@ Part 4 ran on 2026-10-07, the user starting the games and playing run C.
   translucent entity parts and animated textures; leave the swirl's scrolling out; and approach 1, the mod marking and
   step B's forward list blending. The spec's "Changes while designing Part 5" records the design and its deep review.
   So Task 36's last step plans Part 5 instead of finishing the branch.
+
+---
+
+## Part 5: step C's blended mark, and animated textures
+
+Part 5 draws the entity layers Minecraft blends the way it does, blended or added, in Night City too (the spec's "Step
+C" and "Step B: before DLSS"): run C saw the warden's faint glowing layers and a charged creeper's armour drawn solid
+and far too bright, and the user would "much rather blended". At the user's request it also brings in the translucent
+entity parts (a slime's outer layer, allays, vexes, a breeze's wind) and Minecraft's animated textures. The spec's
+"Changes while designing Part 5" lists the design, which the user approved after its deep review; "Changes while
+planning Part 5" what planning changed in it; and "Found while planning Part 5", at the end, what planning settled in
+the plan.
+- **Task 37** makes CyberCraft Tweaks 1.6.0: a layer of a render type Minecraft blends goes translucent, with its own
+  normal, and the one it adds goes additive too.
+- **Tasks 38 to 42** make BlockRender's plain C++ for them, tested without the game: the atlas patch's parser, the link
+  handing patches on, an atlas patched as it would be built from the patched image, each batch's kind with the frame's
+  sort, and `mclink`, which tells each batch's kind and patches its own copy of the atlas.
+- **Task 43** writes an `mclink` script of seven mobs and six animated blocks, and **Task 44** runs it in Minecraft,
+  without the game, with 1.6.0 installed.
+- **Tasks 45 to 49** draw them: the shaders; the forward list's blended and additive layers, with `set blend`; the
+  atlas's waiting areas; the renderer's patch pass, with `set animate`; and BlockRender 0.22.0's wiring and status.
+- **Task 50** is run D, in the game. **Task 51** closes the spike.
+
+Test counts: 505 at the start of Part 5. Then 507 after Task 38, 508 after Task 39, 511 after Task 40, 515 after Task
+41, 516 after Task 42, 517 after Task 45, 518 after Task 46, 519 after Task 47 and 520 after Task 49. Tasks 37, 43 and
+48 add none: 43 changes a test.
+
+### What run C found
+
+From the results' "Run C", what Part 5 builds on:
+- **The emissive mark works:** the spider's and the enderman's eyes glow at night as in Minecraft, from CyberCraft
+  Tweaks 1.5.0's full light, with BlockRender 0.21.0 as it was.
+- **What Minecraft blends is drawn solid:** SkyCraft's `AvatarExporter` sends every entity layer as `SOLID`, a cut-out,
+  so the warden's glowing layers (texels at 0.19 to 0.43 of alpha, its spots faded through their vertex alpha) and the
+  charged creeper's armour, which Minecraft adds, came out solid and far too bright. A slime's outer layer, allays and
+  vexes are cut-outs for the same reason.
+- **The user's choices:** blend what Minecraft blends, before the spike closes; bring in the translucent entity parts
+  and animated textures; leave the swirl's scrolling out; and approach 1: the mod marks the layers, and step B's
+  forward list blends them.
+
+### Minecraft 26.3's blended layers, and SkyCraft's capture
+
+From the spec's "Minecraft 26.3" and "The protocol", what the code below relies on:
+- **The render types the mod marks:** `entity_translucent`, `entity_translucent_emissive`, `breeze_wind` and
+  `wolf_armor_cracks` blend by alpha (`SRC_ALPHA, ONE_MINUS_SRC_ALPHA`); `energy_swirl` adds (`ONE, ONE`). None culls.
+  Each cuts out where the texel's own alpha is under 0.1, before the vertex colour multiplies it. `entity_translucent`
+  and `entity_translucent_emissive` shade per face, `min(1, (max(0, L0·n) + max(0, L1·n)) × 0.6 + 0.4)`, with
+  Minecraft's two overworld lights. `eyes` and `banner_pattern` blend too, but stay solid: every eyes texture is opaque
+  or clear, and banner patterns lie on cloth the game lights.
+- **`entity_translucent` draws opaque things too:** piglins' whole bodies, players' skins, every skull and a breeze's
+  body. So BlockRender blends a marked layer only when it's really see-through: emissive (block light of at least
+  `glowlight`), with a vertex alpha under 255, or with a see-through texture, one whose texels that aren't clear are at
+  least 1 in 50 partly see-through. A piglin's texture has 6 stray such texels of 1,886 (0.32%); a vex's 13.4%.
+- **SkyCraft's capture:** `submitModel` alone picks a batch by render type, through `batchFor`, which calls
+  `batch(texture, uvMode, flags)` three times, for the block atlas, the items' atlas and an entity texture, each with
+  `SOLID` (121: cut-out, no mipmaps, the triangle's own normal). A batch is translucent when its flags have bit 1;
+  every vertex carries its batch's flags, whose bit 7 is free within SkyCraft's 8-bit key; `writeQuad` keeps each
+  vertex's alpha.
+- **Animated textures:** 54 of the block textures animate. Each tick SkyCraft sends each changed sprite's cell, its new
+  frame with the edge pixels repeated into its border, as a `kRenAtlasRegion` patch of the combined atlas's top level.
+
+## Before you start (Part 5)
+
+- **Part 1's "Before you start" holds,** its shell, Edit steps and commits included.
+- **Already verified:** all the code in Part 5 has been built and tested once already, in a scratch clone.
+  - Tasks 37 to 43 and 45 to 49 were then replayed in a fresh clone by a script that applied every file step exactly
+    as written, and checked every build, test, CyberCraft Tweaks and `mclink` step's expected result. The results:
+    - CyberCraft Tweaks 1.6.0 built with no warning, and zero compiler warnings at `/W4`;
+    - 520 C++ tests passing;
+    - the replayed files identical to the scratch clone's.
+  - Each new or changed test was broken once, by a mutation of the code it covers, and failed as it should: 50
+    mutations.
+  - The mixin was checked against SkyCraft 0.1.2's bytecode: `batchFor`'s three `batch` calls, each passing `SOLID`,
+    and `submitModel`, whose head Part 4's mixin takes already.
+  - The shaders' constants were checked against the compiled shaders' reflection, and the per-face shading and the
+    lights against Minecraft 26.3's `light.glsl` and `Lighting`.
+
+  So a failure while following the plan most likely means a transcription slip: compare against the plan's code first.
+- **What only Minecraft and the game can test:** that the mixin applies, and the kinds and patches come as the spec has
+  them (Task 44); and everything drawn (Task 50): the layers blended and added, side by side with Minecraft's, the
+  blocks animating, and the costs.
+- **The user:**
+  - **does everything in Minecraft, the Modrinth App and the game,** as before: never drive their mouse or keyboard;
+    ask, then wait for them to say they're done;
+  - **approves installing CyberCraft Tweaks 1.6.0** into the `CyberCraft` instance, with Minecraft stopped (Task 44).
+    1.5.0 stays in the mods folder, disabled, so it can be put back;
+  - **chooses whether their own Entity Model Features and Entity Texture Features stay on** for Tasks 44 and 50: they
+    were disabled for Task 34, and are enabled again now. Both change how Minecraft draws entities, so the kinds below
+    are vanilla's;
+  - **approves changes to their Minecraft world:** Task 44's script summons seven mobs and places six blocks at x 880
+    in the `SkyCraft` world, and clears them; in Task 50 the agent's requests make them ahead of Minecraft's player, and
+    the overlay's Clear removes them, leaving no drops.
+- **The game:** builds deploy only with `CP2077_DIR` set, which only Task 50's deploy step sets, with the game closed.
+  `mclink` needs the game closed too, since the game would hold the mapping.
+- **No faults:** as before. The link checks each patch inside the atlas it last took, in 64 bits; the patch pass writes
+  only rectangles the CPU checked inside the atlas, at most 65,535 a dispatch, and its shader checks every read and
+  write against the counts the CPU gave; the sort checks its range, and each batch's range was checked by the scene's
+  parse.
+
+## File map (Part 5)
+
+| File | Responsibility |
+|---|---|
+| `minecraft/cybercraft-tweaks/` (`MarkBlended.java`, `MarkEmissive.java`, `cybercraft_tweaks.mixins.json`, `fabric.mod.json`, `README.md`) | CyberCraft Tweaks 1.6.0: the layers Minecraft blends go translucent, the one it adds additive too |
+| `src/link/Messages.*`, `src/link/Link.*` | The atlas patch's parser, and the link handing patches on once it has the atlas they fit |
+| `src/render/Atlas.*` | An atlas patched, its levels rebuilt under the patch; the areas waiting for the GPU, packed |
+| `src/entities/Entities.*` | Each batch's kind, the see-through rule, the sort, the kinds' words, and `set blend 0`'s draws |
+| `tools/mclink/Main.cpp` | Each batch's kind, the patches applied to its own copy of the atlas, and sections on animated sprites |
+| `tools/mclink/blended.txt`, `tests/TestMcLinkScript.cpp` | Seven mobs and six animated blocks, typed into Minecraft, and the test that parses it |
+| `shaders/blocks.hlsl`, `src/render/Shaders.*`, `src/render/FrameConstants.h` | The blended and additive layers' shaders, and the patch pass's |
+| `src/render/Renderer.*`, `src/render/Gpu.*` | The forward list's blended and additive pipelines, `set blend`; the patch pass in the upload list, `set animate` |
+| `src/Status.*`, `src/Plugin.cpp`, `CMakeLists.txt` | The status's layers and patches, the sink's patches and texture notes, 0.22.0 |
+| `tests/*` | Their units' new tests |
+
+---
+
+### Task 37: CyberCraft Tweaks 1.6.0 sends the layers Minecraft blends blended
+
+- **`MarkBlended`** mixes into SkyCraft's `AvatarExporter` by name, as `KeepDrawOrder` and `MarkEmissive` do:
+  - at the head of `submitModel`, it notes the flags for the render type (SkyCraft's own `RenderTypeAccessor` gives its
+    name): `2 | 8 | 7 << 4` (122: translucent, no mipmaps, the triangle's own normal) for `entity_translucent`,
+    `entity_translucent_emissive`, `breeze_wind` and `wolf_armor_cracks`; that with bit 7 (250) for `energy_swirl`,
+    which Minecraft adds; and none for the rest;
+  - on the flags `batchFor` passes SkyCraft's `batch`, at each of its three calls, it puts the noted flags, or keeps
+    SkyCraft's. `submitModel` calls `batchFor` first, on the render thread, so the note is always the call's own.
+    SkyCraft then sends the batch translucent, keyed apart from the solid ones, every vertex with those flags.
+- **`MarkEmissive`'s comment and the README** have the creaking's and the copper golem's glowing eyes as `eyes`, as Part
+  4 found, and the README says what 1.6.0 does.
+- **The version** goes to 1.6.0.
+
+**Files:**
+- Create: `minecraft/cybercraft-tweaks/src/main/java/dev/cybercraft/tweaks/mixin/MarkBlended.java`
+- Modify: `minecraft/cybercraft-tweaks/src/main/java/dev/cybercraft/tweaks/mixin/MarkEmissive.java`,
+  `minecraft/cybercraft-tweaks/src/main/resources/cybercraft_tweaks.mixins.json`,
+  `minecraft/cybercraft-tweaks/src/main/resources/fabric.mod.json`, `minecraft/cybercraft-tweaks/README.md`
+
+- [ ] **Step 1: Write `minecraft/cybercraft-tweaks/src/main/java/dev/cybercraft/tweaks/mixin/MarkBlended.java`**
+
+```java
+package dev.cybercraft.tweaks.mixin;
+
+import java.util.Set;
+
+import com.mojang.blaze3d.vertex.PoseStack;
+
+import dev.skycraft.client.mixin.RenderTypeAccessor;
+
+import net.minecraft.client.model.Model;
+import net.minecraft.client.renderer.rendertype.RenderType;
+import net.minecraft.client.renderer.texture.UvMapping;
+
+import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Unique;
+import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.ModifyArg;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+
+/**
+ * What Minecraft blends goes to the game blended. SkyCraft's {@code AvatarExporter} sends every layer of an entity model
+ * as {@code SOLID} (a cut-out, no mipmaps, lit by the triangle's own normal), so spike 7's run C saw the warden's faint
+ * glowing layers and a charged creeper's armour drawn solid, and the game drew a slime's outer layer, allays and vexes
+ * as cut-outs. Here a layer of a render type Minecraft 26.3 blends by alpha, {@code entity_translucent},
+ * {@code entity_translucent_emissive}, {@code breeze_wind} or {@code wolf_armor_cracks}, goes with SkyCraft's
+ * translucent flag and its own normal ({@code 2 | 8 | 7 << 4}): SkyCraft sends its batch translucent, keyed apart from
+ * the solid ones. {@code energy_swirl}, which Minecraft adds rather than blends, goes with bit 7 as well, which
+ * BlockRender reads as additive. BlockRender draws those that are really see-through before DLSS, and the rest as
+ * before. {@code eyes} and {@code banner_pattern} stay solid: every eyes texture is opaque or clear, and banner patterns
+ * lie on cloth the game lights.
+ *
+ * <p>It targets SkyCraft 0.1.2's {@code dev.skycraft.client.render.AvatarExporter} by name, as {@link MarkEmissive}
+ * does: {@code submitModel} alone picks its batch by render type, through {@code batchFor}, which it calls first.
+ */
+@Mixin(targets = "dev.skycraft.client.render.AvatarExporter", remap = false)
+public abstract class MarkBlended {
+    /** SkyCraft's flags for a translucent particle, with the triangle's own normal: translucent, no mipmaps, direction 7. */
+    @Unique private static final int BLENDED = 2 | 8 | 7 << 4;
+    /** Bit 7 of an entity vertex's flags, free within SkyCraft's 8-bit key: BlockRender adds such a layer. */
+    @Unique private static final int ADDITIVE = 1 << 7;
+    /** Minecraft 26.3's render types whose pipelines blend by alpha, two-sided, and that BlockRender blends too. */
+    @Unique private static final Set<String> BLENDED_TYPES = Set.of("entity_translucent", "entity_translucent_emissive", "breeze_wind",
+        "wolf_armor_cracks");
+    /** The one whose pipeline adds. */
+    @Unique private static final String ADDITIVE_TYPE = "energy_swirl";
+
+    /** The flags of the layer being submitted: 0 keeps SkyCraft's. */
+    @Unique private int cybercraft_tweaks$flags;
+
+    @Inject(method = "submitModel", at = @At("HEAD"))
+    private void cybercraft_tweaks$seeBlend(Model<?> model, Object state, PoseStack poseStack, RenderType renderType, int lightCoords,
+        int overlayCoords, int tintedColor, UvMapping uvMapping, int outlineColor, CallbackInfo info) {
+        String name = ((RenderTypeAccessor) renderType).skycraft$name();
+        this.cybercraft_tweaks$flags = BLENDED_TYPES.contains(name) ? BLENDED : ADDITIVE_TYPE.equals(name) ? BLENDED | ADDITIVE : 0;
+    }
+
+    // The flags batchFor picks the layer's batch with: SkyCraft's SOLID, or the blend noted at submitModel's head.
+    @ModifyArg(method = "batchFor", at = @At(value = "INVOKE",
+        target = "Ldev/skycraft/client/render/AvatarExporter;batch(III)Ldev/skycraft/client/render/AvatarExporter$Batch;"),
+        index = 2)
+    private int cybercraft_tweaks$blendFlags(int flags) {
+        return this.cybercraft_tweaks$flags != 0 ? this.cybercraft_tweaks$flags : flags;
+    }
+}
+```
+
+- [ ] **Step 2: Edit `minecraft/cybercraft-tweaks/src/main/java/dev/cybercraft/tweaks/mixin/MarkEmissive.java`'s comment**
+
+```java
+ * an enderman's and a phantom's eyes; {@code entity_translucent_emissive}, the warden's, the creaking's, the copper
+ * golem's and the breeze's glowing parts; and {@code energy_swirl}, a charged creeper's and the wither's armour.
+```
+```java
+ * an enderman's, a phantom's, a creaking's and a copper golem's eyes; {@code entity_translucent_emissive}, the warden's
+ * glowing layers and a breeze's eyes; and {@code energy_swirl}, a charged creeper's and the wither's armour.
+```
+
+- [ ] **Step 3: Edit `minecraft/cybercraft-tweaks/src/main/resources/cybercraft_tweaks.mixins.json` to add it, on the client**
+
+```json
+  "client": ["KeepDrawOrder", "MarkEmissive"],
+```
+```json
+  "client": ["KeepDrawOrder", "MarkEmissive", "MarkBlended"],
+```
+
+- [ ] **Step 4: Edit `minecraft/cybercraft-tweaks/src/main/resources/fabric.mod.json` for 1.6.0**
+
+```json
+  "version": "1.5.0",
+  "name": "CyberCraft Tweaks",
+  "description": "SkyCraft adjusted for Cyberpunk 2077's Night City: nothing digs into the game's ground, so blasts leave no blocks floating above it; V's health share carries into Minecraft's player as build mode starts; and what SkyCraft sends of Minecraft's entities keeps their layers in Minecraft's draw order, with the layers Minecraft draws emissive marked to glow.",
+```
+```json
+  "version": "1.6.0",
+  "name": "CyberCraft Tweaks",
+  "description": "SkyCraft adjusted for Cyberpunk 2077's Night City: nothing digs into the game's ground, so blasts leave no blocks floating above it; V's health share carries into Minecraft's player as build mode starts; and what SkyCraft sends of Minecraft's entities keeps their layers in Minecraft's draw order, with the layers Minecraft draws emissive marked to glow, and those it blends marked blended.",
+```
+
+- [ ] **Step 5: Edit `minecraft/cybercraft-tweaks/README.md` to say what it does**
+
+```markdown
+What SkyCraft sends of Minecraft's entities keeps Minecraft's draw order and its glow:
+```
+```markdown
+What SkyCraft sends of Minecraft's entities keeps Minecraft's draw order, its glow and its blending:
+```
+```markdown
+  its `eyes` render type (a spider's, an enderman's and a phantom's eyes), `entity_translucent_emissive` (the warden's,
+  the creaking's, the copper golem's and the breeze's glowing parts) and `energy_swirl` (a charged creeper's and the
+  wither's armour). SkyCraft keeps the light Minecraft passes them, the entity's own, so the game lit them as the rest:
+  spike 7's run B saw a spider's eyes at night as dark as its body. With the mod, such a layer goes with full light, as
+  SkyCraft sends lit TNT's white flash, and BlockRender's glow rule makes it glow.
+```
+```markdown
+  its `eyes` render type (a spider's, an enderman's, a phantom's, a creaking's and a copper golem's eyes),
+  `entity_translucent_emissive` (the warden's glowing layers and a breeze's eyes) and `energy_swirl` (a charged
+  creeper's and the wither's armour). SkyCraft keeps the light Minecraft passes them, the entity's own, so the game lit
+  them as the rest: spike 7's run B saw a spider's eyes at night as dark as its body. With the mod, such a layer goes
+  with full light, as SkyCraft sends lit TNT's white flash, and BlockRender's glow rule makes it glow.
+- **Blended layers go blended** (`MarkBlended`, from 1.6.0). SkyCraft sends every layer of an entity model solid, so
+  the game drew the warden's faint glowing layers and a charged creeper's armour solid (spike 7's run C), and a slime's
+  outer layer, allays and vexes as cut-outs. With the mod, a layer of a render type Minecraft blends by alpha
+  (`entity_translucent`, `entity_translucent_emissive`, `breeze_wind` and `wolf_armor_cracks`) goes with SkyCraft's
+  translucent flag and its own normal, so its batch goes translucent; `energy_swirl`, which Minecraft adds, goes with
+  bit 7 as well, for additive. BlockRender 0.22.0 draws those that are really see-through blended, before DLSS, and
+  the rest as before. `eyes` and `banner_pattern` stay solid: every eyes texture is opaque or clear, and banner
+  patterns lie on cloth the game lights.
+```
+
+- [ ] **Step 6: Build CyberCraft Tweaks, and check that SkyCraft's exporter has what the mixin takes**
+
+```bash
+cd /d/Cyberpunk-Minecraft/minecraft/cybercraft-tweaks && out=$(bash build.sh 2>&1); echo "$out" | tail -2; \
+  echo "warnings: $(echo "$out" | grep -c -i warning)"; \
+  unzip -l build/cybercraft-tweaks-1.6.0.jar | grep -o "dev/cybercraft/tweaks/mixin/MarkBlended.class"; \
+  S=/c/Users/BLOXY/AppData/Roaming/ModrinthApp/profiles/CyberCraft/mods/skycraft-fabric-0.1.2.jar; \
+  code=$(javap -c -p -cp $S dev.skycraft.client.render.AvatarExporter | awk '/ batchFor\(net/{f=1; next} f && /^  [a-z]/{f=0} f'); \
+  echo "batch calls in batchFor: $(echo "$code" | grep -c -F 'Method batch:(III)Ldev/skycraft/client/render/AvatarExporter$Batch;'), each with SOLID: $(echo "$code" | grep -c -E 'bipush +121$')"
+```
+Expected: `built build/cybercraft-tweaks-1.6.0.jar against 26.3-`, then `warnings: 0`,
+`dev/cybercraft/tweaks/mixin/MarkBlended.class`, and `batch calls in batchFor: 3, each with SOLID: 3`.
+
+- [ ] **Step 7: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add minecraft/cybercraft-tweaks/src minecraft/cybercraft-tweaks/README.md \
+  && git commit -q -m "minecraft-entities: CyberCraft Tweaks 1.6.0 sends the layers Minecraft blends blended" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 38: The atlas patch's parser
+
+`ParseAtlasRegion` takes a `kRenAtlasRegion` payload (the spec's "Animated textures"): `{u32 x, y, width, height}`,
+then `width × height` RGBA8 pixels, top row first. Each side at least 1; the rectangle inside the atlas the link last
+took, worked out in 64 bits, so a corner near 2^32 can't wrap back inside; the payload at least 16 bytes plus 4 a pixel.
+Its pixels point into the payload, valid during the call, as a texture's do.
+
+**Files:**
+- Modify: `tests/TestMessages.cpp`, `src/link/Messages.h`, `src/link/Messages.cpp`
+
+- [ ] **Step 1: Edit `tests/TestMessages.cpp` to add the failing tests**
+
+```cpp
+// AvatarExporter.send's scene: the origin as three doubles, the counts, the batches {texture, first, count, flags},
+```
+```cpp
+// WorldExporter.frame's patch: x, y, width and height, then aBytes bytes of pixels, the i-th i + 1.
+std::vector<uint8_t> Patch(uint32_t aX, uint32_t aY, uint32_t aWidth, uint32_t aHeight, uint32_t aBytes)
+{
+	Bytes bytes;
+	bytes.Put(aX).Put(aY).Put(aWidth).Put(aHeight);
+	for (uint32_t i = 0; i < aBytes; ++i)
+	{
+		bytes.Put(uint8_t(i + 1));
+	}
+	return bytes.data;
+}
+
+// AvatarExporter.send's scene: the origin as three doubles, the counts, the batches {texture, first, count, flags},
+```
+```cpp
+	CHECK(!ParseTexture(Texture(3, 2, 2, 12), error).has_value());
+```
+```cpp
+	CHECK(!ParseTexture(Texture(3, 2, 2, 12), error).has_value());
+	CHECK(error.find("needs 16 bytes, and has 12") != std::string::npos);
+}
+
+TEST(MessagesAtlasPatchAsWorldExporterWritesIt)
+{
+	const auto  payload = Patch(16, 32, 2, 1, 8);
+	std::string error;
+	const auto  patch = ParseAtlasRegion(payload, 64, 48, error);
+	CHECK(patch.has_value());
+	if (!patch)
+	{
+		return;
+	}
+	CHECK_EQ(patch->x, 16u);
+	CHECK_EQ(patch->y, 32u);
+	CHECK_EQ(patch->width, 2u);
+	CHECK_EQ(patch->height, 1u);
+	CHECK_EQ(patch->rgba.size(), size_t(8));
+	CHECK_EQ(int(patch->rgba[0]), 1);
+	CHECK_EQ(int(patch->rgba[7]), 8);
+	CHECK(ParseAtlasRegion(Patch(62, 47, 2, 1, 8), 64, 48, error).has_value());  // the far corner is inside too
+}
+
+TEST(MessagesAtlasPatchRejections)
+{
+	std::string error;
+	CHECK(!ParseAtlasRegion(std::vector<uint8_t>(15), 64, 48, error).has_value());
+	CHECK(error.find("no room for its header") != std::string::npos);
+	CHECK(!ParseAtlasRegion(Patch(0, 0, 0, 1, 0), 64, 48, error).has_value());
+	CHECK(error.find("of 0 x 1 at 0 0 isn't inside") != std::string::npos);
+	CHECK(!ParseAtlasRegion(Patch(63, 0, 2, 1, 8), 64, 48, error).has_value());  // past the right edge
+	CHECK(error.find("isn't inside the 64 x 48 atlas") != std::string::npos);
+	CHECK(!ParseAtlasRegion(Patch(0, 47, 1, 2, 8), 64, 48, error).has_value());  // past the bottom
+	CHECK(error.find("at 0 47 isn't inside") != std::string::npos);
+	CHECK(!ParseAtlasRegion(Patch(0xFFFFFFFF, 0, 2, 1, 8), 64, 48, error).has_value());  // x + width wraps in 32 bits
+	CHECK(error.find("at 4294967295 0 isn't inside") != std::string::npos);
+	CHECK(!ParseAtlasRegion(Patch(0, 0, 2, 2, 12), 64, 48, error).has_value());
+```
+
+- [ ] **Step 2: Build; it must fail**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C" | sort -u | head -3
+```
+Expected: `'ParseAtlasRegion': identifier not found`.
+
+- [ ] **Step 3: Edit `src/link/Messages.h` to declare it**
+
+```cpp
+// Spike 7: a texture besides the atlas (kRenTexture), for the scene's batches that name its id: an entity's skin, or a
+```
+```cpp
+// Spike 7's Part 5: an animated sprite's frame (kRenAtlasRegion), a patch of Minecraft's combined atlas: the sprite's
+// cell, the frame's edge pixels repeated into its border. RGBA8, top row first.
+struct AtlasPatch
+{
+	uint32_t                 x = 0;  // its top left texel, in the atlas's top level
+	uint32_t                 y = 0;
+	uint32_t                 width = 0;
+	uint32_t                 height = 0;
+	std::span<const uint8_t> rgba;  // width * height * 4 bytes, inside the payload
+};
+
+// A kRenAtlasRegion payload: {u32 x, y, width, height}, then the pixels. Nothing, with aError saying why, if a side is
+// 0, the rectangle doesn't lie inside an atlas of aAtlasWidth x aAtlasHeight, or the payload is too short.
+std::optional<AtlasPatch> ParseAtlasRegion(std::span<const uint8_t> aPayload, uint32_t aAtlasWidth, uint32_t aAtlasHeight, std::string& aError);
+
+// Spike 7: a texture besides the atlas (kRenTexture), for the scene's batches that name its id: an entity's skin, or a
+```
+
+- [ ] **Step 4: Edit `src/link/Messages.cpp` to add it**
+
+```cpp
+static_assert(sizeof(proto::RenTexture) == 16 && sizeof(proto::RenScene) == 32 && sizeof(proto::RenBatch) == 16);
+```
+```cpp
+static_assert(sizeof(proto::RenTexture) == 16 && sizeof(proto::RenScene) == 32 && sizeof(proto::RenBatch) == 16);
+static_assert(sizeof(proto::RenAtlasRegion) == 16);
+```
+```cpp
+	return AtlasImage{ header.width, header.height, aPayload.subspan(sizeof header, size_t(bytes)) };
+```
+```cpp
+	return AtlasImage{ header.width, header.height, aPayload.subspan(sizeof header, size_t(bytes)) };
+}
+
+std::optional<AtlasPatch> ParseAtlasRegion(std::span<const uint8_t> aPayload, uint32_t aAtlasWidth, uint32_t aAtlasHeight, std::string& aError)
+{
+	proto::RenAtlasRegion header;
+	if (aPayload.size() < sizeof header)
+	{
+		aError = std::format("an atlas patch of {} bytes has no room for its header", aPayload.size());
+		return std::nullopt;
+	}
+	std::memcpy(&header, aPayload.data(), sizeof header);
+	// In 64 bits: a corner near 2^32 mustn't wrap back inside.
+	if (header.width == 0 || header.height == 0 || uint64_t(header.x) + header.width > aAtlasWidth ||
+	    uint64_t(header.y) + header.height > aAtlasHeight)
+	{
+		aError = std::format("an atlas patch of {} x {} at {} {} isn't inside the {} x {} atlas", header.width, header.height, header.x,
+		                     header.y, aAtlasWidth, aAtlasHeight);
+		return std::nullopt;
+	}
+	const uint64_t bytes = uint64_t(header.width) * header.height * 4;
+	if (aPayload.size() - sizeof header < bytes)
+	{
+		aError = std::format("a {} x {} atlas patch needs {} bytes, and has {}", header.width, header.height, bytes,
+		                     aPayload.size() - sizeof header);
+		return std::nullopt;
+	}
+	return AtlasPatch{ header.x, header.y, header.width, header.height, aPayload.subspan(sizeof header, size_t(bytes)) };
+```
+
+- [ ] **Step 5: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `507 test(s), 0 failure(s)`.
+
+- [ ] **Step 6: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "minecraft-entities: the atlas patch's parser, an animated sprite's frame checked inside the atlas" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 39: The link hands on the atlas's patches
+
+- **The sink's new call, `AtlasRegion`,** a patch at a time, its pixels valid during the call.
+- **The link keeps the last atlas's size,** where it kept only that one came, and checks each patch inside it. Before
+  any atlas, a patch is stepped over and counted (`patchesBeforeAtlas`), as textures and scenes are: a frame for an
+  atlas the link never saw, or the one Minecraft's clear dropped. A bad one is rejected and counted, as any message.
+- **Patches count toward the ring's budget,** as the messages the link takes do, which the new test checks; the
+  budget's own test steps over lights now, which the link still steps over, in place of patches.
+
+**Files:**
+- Modify: `tests/TestLink.cpp`, `src/link/Link.h`, `src/link/Link.cpp`
+
+- [ ] **Step 1: Edit `tests/TestLink.cpp` to add the failing test**
+
+```cpp
+	void WorldEntities(const WorldTable& aTable) override { worlds.push_back(aTable); }
+```
+```cpp
+	void WorldEntities(const WorldTable& aTable) override { worlds.push_back(aTable); }
+	void AtlasRegion(const AtlasPatch& aPatch) override { patches.push_back({ aPatch.x, aPatch.y, aPatch.width, aPatch.height }); }
+```
+```cpp
+	std::vector<WorldTable>                    worlds;  // one an update
+```
+```cpp
+	std::vector<WorldTable>                    worlds;   // one an update
+	std::vector<std::array<uint32_t, 4>>       patches;  // x, y, width and height
+```
+```cpp
+	std::memcpy(payload.data() + 12, &aClaimed, 4);
+```
+```cpp
+	std::memcpy(payload.data() + 12, &aClaimed, 4);
+	return payload;
+}
+
+// Spike 7's Part 5: a kRenAtlasRegion payload, aWidth x aHeight at aX aY, as WorldExporter.frame sends it.
+std::vector<uint8_t> PatchPayload(uint32_t aX, uint32_t aY, uint32_t aWidth, uint32_t aHeight)
+{
+	std::vector<uint8_t> payload(16 + size_t(aWidth) * aHeight * 4, 0x40);
+	const uint32_t       header[4] = { aX, aY, aWidth, aHeight };
+	std::memcpy(payload.data(), header, sizeof header);
+```
+```cpp
+		minecraft.Send(proto::kRenAtlasRegion, std::vector<uint8_t>(4000));
+```
+```cpp
+		minecraft.Send(proto::kRenLights, std::vector<uint8_t>(4000));
+```
+```cpp
+	CHECK_EQ(link.State().messages[proto::kRenAtlasRegion], 1ull);  // stepped over, without counting toward the budget
+	link.Update(At(1.1), kSettings, sink);
+	CHECK_EQ(sink.sections.size(), size_t(3));
+	CHECK_EQ(link.State().messages[proto::kRenAtlasRegion], 3ull);
+	CHECK_EQ(link.State().messages[proto::kRenSection], 3ull);
+```
+```cpp
+	CHECK_EQ(link.State().messages[proto::kRenLights], 1ull);  // stepped over, without counting toward the budget
+	link.Update(At(1.1), kSettings, sink);
+	CHECK_EQ(sink.sections.size(), size_t(3));
+	CHECK_EQ(link.State().messages[proto::kRenLights], 3ull);
+	CHECK_EQ(link.State().messages[proto::kRenSection], 3ull);
+}
+
+TEST(LinkPassesOnPatchesOnceTheAtlasIsSeen)
+{
+	FakeMinecraft minecraft;
+	Link          link(minecraft.base);
+	Sink          sink;
+	minecraft.Send(proto::kRenAtlasRegion, PatchPayload(0, 0, 1, 1));  // a frame for an atlas we never saw
+	link.Update(At(1.0), kSettings, sink);
+	CHECK(sink.patches.empty());
+	CHECK_EQ(link.State().patchesBeforeAtlas, 1ull);
+	minecraft.Send(proto::kRenClearAll, {});
+	minecraft.Send(proto::kRenAtlas, Atlas2x2());
+	minecraft.Send(proto::kRenAtlasRegion, PatchPayload(1, 0, 1, 2));  // the 2 x 2 atlas's right column
+	minecraft.Send(proto::kRenAtlasRegion, PatchPayload(1, 1, 1, 2));  // one past its bottom
+	link.Update(At(1.1), kSettings, sink);
+	CHECK_EQ(link.State().atlasWidth, 2u);
+	CHECK_EQ(link.State().atlasHeight, 2u);
+	CHECK_EQ(link.State().patchesBeforeAtlas, 1ull);
+	CHECK_EQ(link.State().rejected, 1ull);
+	CHECK(link.State().lastRejected.find("of 1 x 2 at 1 1 isn't inside the 2 x 2 atlas") != std::string::npos);
+	CHECK_EQ(sink.patches.size(), size_t(1));
+	if (sink.patches.size() == 1)
+	{
+		CHECK(sink.patches[0] == (std::array<uint32_t, 4>{ 1, 0, 1, 2 }));
+	}
+	// The patches the link takes count toward the ring's budget: the first reaches it, so the second waits an update.
+	minecraft.Send(proto::kRenAtlasRegion, PatchPayload(0, 0, 2, 2));
+	minecraft.Send(proto::kRenAtlasRegion, PatchPayload(0, 1, 2, 1));
+	LinkSettings settings;
+	settings.ringBudget = 20;
+	link.Update(At(1.2), settings, sink);
+	CHECK_EQ(sink.patches.size(), size_t(2));
+	link.Update(At(1.3), settings, sink);
+	CHECK_EQ(sink.patches.size(), size_t(3));
+```
+
+- [ ] **Step 2: Build; it must fail**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C" | sort -u | head -3
+```
+Expected: `'patchesBeforeAtlas': is not a member of 'cpmc::link::Link::Status'`.
+
+- [ ] **Step 3: Edit `src/link/Link.h` for the sink's call and the atlas's size**
+
+```cpp
+	virtual void WorldEntities(const WorldTable&) {}  // spike 7: every update; empty while Minecraft isn't in its world
+```
+```cpp
+	virtual void WorldEntities(const WorldTable&) {}  // spike 7: every update; empty while Minecraft isn't in its world
+	virtual void AtlasRegion(const AtlasPatch&) {}    // spike 7's Part 5: an animated sprite's frame, inside the atlas
+```
+```cpp
+		uint64_t                     entitiesBeforeAtlas = 0;  // spike 7: textures and scenes from before the atlas, skipped
+```
+```cpp
+		uint64_t                     entitiesBeforeAtlas = 0;  // spike 7: textures and scenes from before the atlas, skipped
+		uint32_t                     atlasWidth = 0;           // spike 7's Part 5: the last atlas's size, for its patches
+		uint32_t                     atlasHeight = 0;
+		uint64_t                     patchesBeforeAtlas = 0;   // and patches from before the atlas, skipped
+```
+
+- [ ] **Step 4: Edit `src/link/Link.cpp` to hand patches on**
+
+```cpp
+			status_.atlasSeen = true;
+```
+```cpp
+			status_.atlasSeen = true;
+			status_.atlasWidth = atlas->width;
+			status_.atlasHeight = atlas->height;
+```
+```cpp
+		return true;
+	default:
+		return false;  // atlas patches, lights, digging, avatar, ragdoll: stepped over
+```
+```cpp
+		return true;
+	case proto::kRenAtlasRegion:
+		if (!status_.atlasSeen)
+		{
+			++status_.patchesBeforeAtlas;  // a frame for an atlas we never saw, or the one Minecraft's clear dropped
+			return false;
+		}
+		if (const auto patch = ParseAtlasRegion(aMessage.payload, status_.atlasWidth, status_.atlasHeight, error))
+		{
+			aSink.AtlasRegion(*patch);
+		}
+		else
+		{
+			reject();
+		}
+		return true;
+	default:
+		return false;  // lights, digging, avatar, ragdoll: stepped over
+```
+
+- [ ] **Step 5: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `508 test(s), 0 failure(s)`.
+
+- [ ] **Step 6: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "minecraft-entities: the link hands on the atlas's patches, once it has the atlas they fit" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 40: An atlas patched with an animated sprite's frame
+
+`PatchAtlas` (the spec's "Animated textures on the GPU"), on the CPU's atlas, as `AtlasFromRgba` lays it out:
+- **It writes the patch into the top level,** then rebuilds each level below over the patch's area: at level n,
+  columns `x >> n` to `(x + width − 1) >> n` and rows likewise, clamped to the level's sides, each texel the rounded
+  average of the 2 × 2 above it. `AtlasFromRgba` builds its levels with the same `Downsample` now, so patching an atlas
+  gives the same texels as building one from the patched image.
+- **It stops at the first level the patch doesn't reach:** where it lies in an odd side's last row or column, which the
+  level below leaves out, that level and those below are as they were.
+- **It hands back the areas it changed,** one a level, for the GPU's copy (Task 47).
+- **It refuses, changing nothing,** a patch not inside the top level (in 64 bits), short pixels, or an atlas whose
+  levels aren't where `AtlasFromRgba` puts them.
+
+The tests patch an atlas of odd sides, 9 × 7, at its top left (every level) and its bottom right (stopping), against
+building one from the patched image, and try each refusal.
+
+**Files:**
+- Modify: `tests/TestAtlas.cpp`, `src/render/Atlas.h`, `src/render/Atlas.cpp`
+
+- [ ] **Step 1: Edit `tests/TestAtlas.cpp` to add the failing tests**
+
+```cpp
+#include "AtlasFixture.h"
+```
+```cpp
+#include "AtlasFixture.h"
+
+#include <algorithm>
+
+namespace
+{
+// A aWidth x aHeight image whose every channel differs from texel to texel, from aSeed on.
+std::vector<uint8_t> Pixels(uint32_t aWidth, uint32_t aHeight, uint32_t aSeed)
+{
+	std::vector<uint8_t> rgba(size_t(aWidth) * aHeight * 4);
+	for (size_t i = 0; i < rgba.size(); ++i)
+	{
+		rgba[i] = uint8_t((i * 37 + aSeed * 101) % 251);
+	}
+	return rgba;
+}
+
+// aImage, aWidth wide, with the aPatchWidth x aPatchHeight aPatch written at aX aY.
+std::vector<uint8_t> Pasted(std::vector<uint8_t> aImage, uint32_t aWidth, uint32_t aX, uint32_t aY, uint32_t aPatchWidth, uint32_t aPatchHeight,
+                            const std::vector<uint8_t>& aPatch)
+{
+	for (uint32_t row = 0; row < aPatchHeight; ++row)
+	{
+		std::copy_n(aPatch.begin() + size_t(row) * aPatchWidth * 4, size_t(aPatchWidth) * 4, aImage.begin() + (size_t(aY + row) * aWidth + aX) * 4);
+	}
+	return aImage;
+}
+
+bool SameArea(const cpmc::AtlasArea& aArea, uint32_t aLevel, uint32_t aX, uint32_t aY, uint32_t aWidth, uint32_t aHeight)
+{
+	return aArea.level == aLevel && aArea.x == aX && aArea.y == aY && aArea.width == aWidth && aArea.height == aHeight;
+}
+}
+```
+```cpp
+	CHECK(!cpmc::AtlasFromRgba(0, 4, rgba, error));
+}
+```
+```cpp
+	CHECK(!cpmc::AtlasFromRgba(0, 4, rgba, error));
+}
+
+TEST(AtlasPatchedAsBuiltFromThePatchedImage)
+{
+	// 9 x 7, odd sides: levels of 9 x 7, 4 x 3, 2 x 1, 1 x 1 and 1 x 1. A 3 x 2 patch at the top left reaches every level.
+	const std::vector<uint8_t> image = Pixels(9, 7, 1);
+	const std::vector<uint8_t> patch = Pixels(3, 2, 2);
+	std::string                error;
+	std::optional<cpmc::Atlas> atlas = cpmc::AtlasFromRgba(9, 7, image, error);
+	const auto                 areas = cpmc::PatchAtlas(*atlas, 1, 0, 3, 2, patch);
+	const auto                 built = cpmc::AtlasFromRgba(9, 7, Pasted(image, 9, 1, 0, 3, 2, patch), error);
+	CHECK(atlas->texels == built->texels);
+	CHECK_EQ(areas.size(), size_t(5));
+	if (areas.size() == 5)
+	{
+		CHECK(SameArea(areas[0], 0, 1, 0, 3, 2));
+		CHECK(SameArea(areas[1], 1, 0, 0, 2, 1));
+		CHECK(SameArea(areas[2], 2, 0, 0, 1, 1));
+		CHECK(SameArea(areas[3], 3, 0, 0, 1, 1));
+		CHECK(SameArea(areas[4], 4, 0, 0, 1, 1));
+	}
+}
+
+TEST(AtlasPatchStopsWhereALevelLeavesItOut)
+{
+	// At 9 x 7's bottom rows: level 1 (4 x 3) takes row 5 into its row 2, but level 2 (2 x 1) leaves level 1's odd last
+	// row out, so it and those below are as they were. Then the far corner: a column level 1 leaves out at once.
+	const std::vector<uint8_t> image = Pixels(9, 7, 3);
+	const std::vector<uint8_t> patch = Pixels(3, 2, 4);
+	std::string                error;
+	std::optional<cpmc::Atlas> atlas = cpmc::AtlasFromRgba(9, 7, image, error);
+	const auto                 areas = cpmc::PatchAtlas(*atlas, 5, 4, 3, 2, patch);
+	const auto                 built = cpmc::AtlasFromRgba(9, 7, Pasted(image, 9, 5, 4, 3, 2, patch), error);
+	CHECK(atlas->texels == built->texels);
+	CHECK_EQ(areas.size(), size_t(2));
+	if (areas.size() == 2)
+	{
+		CHECK(SameArea(areas[0], 0, 5, 4, 3, 2));
+		CHECK(SameArea(areas[1], 1, 2, 2, 2, 1));
+	}
+	const std::vector<uint8_t> corner = Pixels(1, 1, 5);
+	const auto                 cornerAreas = cpmc::PatchAtlas(*atlas, 8, 6, 1, 1, corner);
+	const auto                 cornerBuilt = cpmc::AtlasFromRgba(9, 7, Pasted(Pasted(image, 9, 5, 4, 3, 2, patch), 9, 8, 6, 1, 1, corner), error);
+	CHECK(atlas->texels == cornerBuilt->texels);
+	CHECK_EQ(cornerAreas.size(), size_t(1));
+}
+
+TEST(AtlasPatchRefusesWhatDoesntFit)
+{
+	std::string                error;
+	std::optional<cpmc::Atlas> atlas = cpmc::AtlasFromRgba(9, 7, Pixels(9, 7, 6), error);
+	const std::vector<uint32_t> before = atlas->texels;
+	CHECK(cpmc::PatchAtlas(*atlas, 7, 0, 3, 1, Pixels(3, 1, 7)).empty());           // past the right edge
+	CHECK(cpmc::PatchAtlas(*atlas, 0, 6, 1, 2, Pixels(1, 2, 7)).empty());           // past the bottom
+	CHECK(cpmc::PatchAtlas(*atlas, 0xFFFFFFFF, 0, 2, 1, Pixels(2, 1, 7)).empty());  // x + width wraps in 32 bits
+	CHECK(cpmc::PatchAtlas(*atlas, 0, 0, 0, 1, {}).empty());
+	CHECK(cpmc::PatchAtlas(*atlas, 0, 0, 2, 2, Pixels(2, 1, 7)).empty());           // short pixels
+	CHECK(atlas->texels == before);
+	atlas->texels.pop_back();  // levels no longer where AtlasFromRgba puts them
+	CHECK(cpmc::PatchAtlas(*atlas, 0, 0, 1, 1, Pixels(1, 1, 7)).empty());
+	atlas->levelOffsets[1] += 1;
+	atlas->texels.push_back(0);
+	CHECK(cpmc::PatchAtlas(*atlas, 0, 0, 1, 1, Pixels(1, 1, 7)).empty());
+}
+```
+
+- [ ] **Step 2: Build; it must fail**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C" | sort -u | head -3
+```
+Expected: `'PatchAtlas': is not a member of 'cpmc'`.
+
+- [ ] **Step 3: Edit `src/render/Atlas.h` to declare it**
+
+```cpp
+std::optional<Atlas> AtlasFromRgba(uint32_t aWidth, uint32_t aHeight, std::span<const uint8_t> aRgba, std::string& aError);
+```
+```cpp
+std::optional<Atlas> AtlasFromRgba(uint32_t aWidth, uint32_t aHeight, std::span<const uint8_t> aRgba, std::string& aError);
+
+// A rectangle of one of an atlas's levels, in that level's texels.
+struct AtlasArea
+{
+	uint32_t level = 0;
+	uint32_t x = 0;
+	uint32_t y = 0;
+	uint32_t width = 0;
+	uint32_t height = 0;
+};
+
+// Spike 7's Part 5: an animated sprite's frame into aAtlas, laid out as AtlasFromRgba lays an atlas out: aWidth x aHeight
+// RGBA8 pixels, top row first, written at aX aY of its top level, then each level below rebuilt over the patch's area,
+// each texel as AtlasFromRgba makes it. The areas it changed come back, one a level from the top, down to the first
+// level the patch leaves as it was (where it lies in an odd side's last row or column, which the level below leaves
+// out). Nothing changes, and none come back, if the patch doesn't lie inside the top level, aRgba is short, or aAtlas's
+// levels aren't where AtlasFromRgba puts them.
+std::vector<AtlasArea> PatchAtlas(Atlas& aAtlas, uint32_t aX, uint32_t aY, uint32_t aWidth, uint32_t aHeight, std::span<const uint8_t> aRgba);
+```
+
+- [ ] **Step 4: Edit `src/render/Atlas.cpp` to add it, building levels as `AtlasFromRgba` does**
+
+```cpp
+	return out;
+```
+```cpp
+	return out;
+}
+
+// A side at aLevel, as AtlasFromRgba lays the levels out: half the level above's, rounded down, at least 1.
+uint32_t LevelSide(uint32_t aSide, uint32_t aLevel)
+{
+	return std::max(1u, aSide >> aLevel);
+}
+
+// aLevel's texels from aX0 to aX1 and aY0 to aY1, each the rounded average of the 2 x 2 above it: an odd side's last row
+// or column is left out, and a side of 1 is used twice.
+void Downsample(Atlas& aAtlas, uint32_t aLevel, uint32_t aX0, uint32_t aY0, uint32_t aX1, uint32_t aY1)
+{
+	const uint32_t  aboveWidth = LevelSide(aAtlas.width, aLevel - 1);
+	const uint32_t  aboveHeight = LevelSide(aAtlas.height, aLevel - 1);
+	const uint32_t  width = LevelSide(aAtlas.width, aLevel);
+	const uint32_t* above = aAtlas.texels.data() + aAtlas.levelOffsets[aLevel - 1];
+	uint32_t*       out = aAtlas.texels.data() + aAtlas.levelOffsets[aLevel];
+	for (uint32_t y = aY0; y <= aY1; ++y)
+	{
+		const size_t row0 = size_t(y * 2) * aboveWidth;
+		const size_t row1 = size_t(std::min(y * 2 + 1, aboveHeight - 1)) * aboveWidth;
+		for (uint32_t x = aX0; x <= aX1; ++x)
+		{
+			const uint32_t x0 = x * 2;
+			const uint32_t x1 = std::min(x0 + 1, aboveWidth - 1);
+			out[size_t(y) * width + x] = Average(above[row0 + x0], above[row0 + x1], above[row1 + x0], above[row1 + x1]);
+		}
+	}
+```
+```cpp
+		texelCount += size_t(std::max(1u, aWidth >> level)) * std::max(1u, aHeight >> level);
+```
+```cpp
+		texelCount += size_t(LevelSide(aWidth, level)) * LevelSide(aHeight, level);
+```
+```cpp
+		const uint32_t  aboveWidth = std::max(1u, aWidth >> (level - 1));
+		const uint32_t  aboveHeight = std::max(1u, aHeight >> (level - 1));
+		const uint32_t  width = std::max(1u, aWidth >> level);
+		const uint32_t  height = std::max(1u, aHeight >> level);
+		const uint32_t* above = atlas.texels.data() + atlas.levelOffsets[level - 1];
+		uint32_t*       out = atlas.texels.data() + atlas.levelOffsets[level];
+		for (uint32_t y = 0; y < height; ++y)
+		{
+			const size_t row0 = size_t(y * 2) * aboveWidth;
+			const size_t row1 = size_t(std::min(y * 2 + 1, aboveHeight - 1)) * aboveWidth;
+			for (uint32_t x = 0; x < width; ++x)
+			{
+				const uint32_t x0 = x * 2;
+				const uint32_t x1 = std::min(x0 + 1, aboveWidth - 1);
+				out[size_t(y) * width + x] = Average(above[row0 + x0], above[row0 + x1], above[row1 + x0], above[row1 + x1]);
+			}
+		}
+	}
+	return atlas;
+}
+}
+```
+```cpp
+		Downsample(atlas, level, 0, 0, LevelSide(aWidth, level) - 1, LevelSide(aHeight, level) - 1);
+	}
+	return atlas;
+}
+
+std::vector<AtlasArea> PatchAtlas(Atlas& aAtlas, uint32_t aX, uint32_t aY, uint32_t aWidth, uint32_t aHeight, std::span<const uint8_t> aRgba)
+{
+	size_t texelCount = 0;  // every level where AtlasFromRgba puts it, and nothing past the last
+	for (uint32_t level = 0; level < aAtlas.Levels(); ++level)
+	{
+		if (aAtlas.levelOffsets[level] != texelCount)
+		{
+			return {};
+		}
+		texelCount += size_t(LevelSide(aAtlas.width, level)) * LevelSide(aAtlas.height, level);
+	}
+	if (aAtlas.Levels() == 0 || aAtlas.texels.size() != texelCount || aWidth == 0 || aHeight == 0 ||
+	    uint64_t(aX) + aWidth > aAtlas.width || uint64_t(aY) + aHeight > aAtlas.height || aRgba.size() < uint64_t(aWidth) * aHeight * 4)
+	{
+		return {};
+	}
+	for (uint32_t row = 0; row < aHeight; ++row)
+	{
+		std::memcpy(aAtlas.texels.data() + aAtlas.levelOffsets[0] + size_t(aY + row) * aAtlas.width + aX, aRgba.data() + size_t(row) * aWidth * 4,
+		            size_t(aWidth) * 4);
+	}
+	std::vector<AtlasArea> areas{ { 0, aX, aY, aWidth, aHeight } };
+	const uint32_t         right = aX + aWidth - 1;
+	const uint32_t         bottom = aY + aHeight - 1;
+	for (uint32_t level = 1; level < aAtlas.Levels(); ++level)
+	{
+		const uint32_t width = LevelSide(aAtlas.width, level);
+		const uint32_t height = LevelSide(aAtlas.height, level);
+		const uint32_t x0 = aX >> level;
+		const uint32_t y0 = aY >> level;
+		if (x0 >= width || y0 >= height)
+		{
+			break;  // the patch lies in the row or column the level leaves out: it, and those below, are as they were
+		}
+		const uint32_t x1 = std::min(right >> level, width - 1);
+		const uint32_t y1 = std::min(bottom >> level, height - 1);
+		Downsample(aAtlas, level, x0, y0, x1, y1);
+		areas.push_back({ level, x0, y0, x1 - x0 + 1, y1 - y0 + 1 });
+	}
+	return areas;
+}
+}
+```
+
+- [ ] **Step 5: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `511 test(s), 0 failure(s)`.
+
+- [ ] **Step 6: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "minecraft-entities: an atlas patched with an animated sprite's frame, its levels rebuilt under the patch" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 41: The frame's blended and additive layers
+
+The frame's kinds (the spec's "Entities: one frame's geometry"):
+- **Two new kinds,** `Blended` and `Additive`, for step B's forward list, which `ForwardDraws` counts now.
+- **`KindOf`:** a batch not translucent is a model. A translucent one whose first vertex has no normal of its own
+  (direction 0) is a particle, `Translucent`, as before. One with direction 7 is an entity layer CyberCraft Tweaks 1.6.0
+  marked: `Additive` with bit 7 (`kFlagAdditive`); `Blended` when it's really see-through: its first vertex has block
+  light of at least `glowlight` (emissive), a vertex has an alpha under 255 (faded), or its texture is see-through; a
+  model otherwise, a cut-out the game lights, as a piglin.
+- **`SeeThrough`:** at least 1 in 50 of a texture's texels that aren't clear have an alpha between 0 and 255.
+  `Entities::Texture` notes it for each texture as it comes; `ClearAll`, at Minecraft's clear, drops the notes with the
+  scene, while `Clear` keeps them, since SkyCraft sends each texture once.
+- **`SortBackToFront`:** a blended or additive batch's quads, back to front from Minecraft's eye, as Minecraft sorts
+  its translucent layers (SkyCraft sends each quad as two triangles in a row), or its triangles' when its count isn't a
+  multiple of 6. `Frame` sorts them each frame, and takes `glowlight`.
+- **The counts and the `entities` request** tell the blended and additive batches; each translucent batch's line says
+  its kind (`KindName`).
+
+**Files:**
+- Modify: `tests/TestEntities.cpp`, `src/entities/Entities.h`, `src/entities/Entities.cpp`
+
+- [ ] **Step 1: Edit `tests/TestEntities.cpp` to add the failing tests**
+
+```cpp
+const Vec3d kEye{ 880.5, 7.76, 2007.5 };
+```
+```cpp
+const Vec3d kEye{ 880.5, 7.76, 2007.5 };
+
+// Part 5: an entity layer as CyberCraft Tweaks 1.6.0 marks it, aCount vertices with aFlags (translucent, no mipmaps and
+// the triangle's own normal by default), block light aLight and alpha aAlpha, the i-th at x = aX + i / 6, so each quad
+// (six vertices) lies one block on.
+std::vector<Vertex> Layer(uint32_t aCount, uint32_t aFlags = 2 | 8 | (7 << 4), uint32_t aLight = 0, uint8_t aAlpha = 255, float aX = 0.0f)
+{
+	std::vector<Vertex> vertices(aCount);
+	for (uint32_t i = 0; i < aCount; ++i)
+	{
+		vertices[i].x = aX + float(i / 6);
+		vertices[i].flags = aFlags;
+		vertices[i].light = aLight | (15u << 8);
+		vertices[i].a = aAlpha;
+	}
+	return vertices;
+}
+
+// aTexels RGBA8 texels: aClear clear ones, aPartly half see-through, and the rest opaque.
+std::vector<uint8_t> Texels(uint32_t aTexels, uint32_t aClear, uint32_t aPartly)
+{
+	std::vector<uint8_t> rgba(size_t(aTexels) * 4, 200);
+	for (uint32_t i = 0; i < aTexels; ++i)
+	{
+		rgba[size_t(i) * 4 + 3] = i < aClear ? 0 : i < aClear + aPartly ? 128 : 255;
+	}
+	return rgba;
+}
+```
+```cpp
+	CHECK(!ForwardDraws({ { 0, 24, 0, Kind::Outline } }, false));  // set outline 0
+```
+```cpp
+	CHECK(!ForwardDraws({ { 0, 24, 0, Kind::Outline } }, false));  // set outline 0
+	CHECK(ForwardDraws({ { 0, 3, 0, Kind::Model }, { 3, 6, 4, Kind::Blended } }, false));  // Part 5's layers
+	CHECK(ForwardDraws({ { 0, 3, 0, Kind::Model }, { 3, 6, 4, Kind::Additive } }, false));
+}
+
+TEST(EntitiesTellASeeThroughTexture)
+{
+	CHECK(SeeThrough(Texels(343, 0, 46)));     // a vex's share: 46 of 343
+	CHECK(!SeeThrough(Texels(1886, 0, 6)));    // a piglin's: 6 stray of 1,886, opaque all the same
+	CHECK(SeeThrough(Texels(150, 50, 2)));     // 1 in 50 of the 100 not clear: the clear ones don't count
+	CHECK(!SeeThrough(Texels(151, 50, 2)));    // just under
+	CHECK(!SeeThrough(Texels(64, 64, 0)));     // all clear
+	CHECK(!SeeThrough(Texels(64, 0, 0)));      // all opaque
+	CHECK(!SeeThrough({}));
+}
+
+TEST(EntitiesKnowEachKindOfLayer)
+{
+	using Kind = EntityDraw::Kind;
+	const link::SceneBatch translucent{ 4, 0, 6, 1 };
+	CHECK(KindOf({ 4, 0, 6, 0 }, Layer(6), true, 15) == Kind::Model);                     // not translucent
+	CHECK(KindOf(translucent, Layer(6, 2 | 8), false, 15) == Kind::Translucent);          // a particle: direction 0
+	CHECK(KindOf(translucent, Layer(6, 2 | 8 | (7 << 4) | kFlagAdditive), false, 15) == Kind::Additive);  // energy_swirl
+	CHECK(KindOf(translucent, Layer(6), false, 15) == Kind::Model);                       // marked, but opaque: a piglin
+	CHECK(KindOf(translucent, Layer(6), true, 15) == Kind::Blended);                      // its texture see-through: a slime
+	CHECK(KindOf(translucent, Layer(6, 2 | 8 | (7 << 4), 15), false, 15) == Kind::Blended);  // emissive: the warden's
+	CHECK(KindOf(translucent, Layer(6, 2 | 8 | (7 << 4), 14), false, 15) == Kind::Model);
+	CHECK(KindOf(translucent, Layer(6, 2 | 8 | (7 << 4), 14), false, 14) == Kind::Blended);  // set glowlight 14
+	std::vector<Vertex> fading = Layer(6);
+	fading[5].a = 64;  // a vertex faded: the warden's spots
+	CHECK(KindOf(translucent, fading, false, 15) == Kind::Blended);
+	CHECK_STR(KindName(Kind::Blended), "blended");
+	CHECK_STR(KindName(Kind::Additive), "additive");
+}
+
+TEST(EntitiesSortLayersBackToFront)
+{
+	// Three quads at x 0, 1 and 2, seen from x 5: the farthest, at 0, first. Then two triangles by their own centres.
+	std::vector<Vertex> vertices = Layer(18);
+	SortBackToFront(vertices, 0, 18, { 5.0, 0.0, 0.0 });
+	CHECK_EQ(vertices[0].x, 0.0f);
+	CHECK_EQ(vertices[6].x, 1.0f);
+	CHECK_EQ(vertices[12].x, 2.0f);
+	SortBackToFront(vertices, 0, 18, { -5.0, 0.0, 0.0 });
+	CHECK_EQ(vertices[0].x, 2.0f);
+	CHECK_EQ(vertices[5].x, 2.0f);
+	CHECK_EQ(vertices[17].x, 0.0f);
+	std::vector<Vertex> triangles = Layer(9);  // 9: not whole quads, so by triangle, at x 3, 0 and 1
+	triangles[0].x = triangles[1].x = triangles[2].x = 3.0f;
+	SortBackToFront(triangles, 0, 9, { -5.0, 0.0, 0.0 });
+	CHECK_EQ(triangles[0].x, 3.0f);
+	CHECK_EQ(triangles[3].x, 1.0f);
+	CHECK_EQ(triangles[6].x, 0.0f);
+	SortBackToFront(triangles, 6, 6, { 0.0, 0.0, 0.0 });  // past the end: left alone
+	CHECK_EQ(triangles[6].x, 0.0f);
+}
+
+TEST(EntitiesDrawEachLayerByItsKind)
+{
+	// A particle, a slime's outer layer (its texture see-through), the creeper's armour, and a piglin: each six
+	// vertices, the slime's quads at x 0 and 1 seen from Minecraft's eye east of them.
+	std::vector<Vertex> vertices = Layer(6, 2 | 8);
+	for (const auto& layer : { Layer(12), Layer(6, 2 | 8 | (7 << 4) | kFlagAdditive), Layer(6) })
+	{
+		vertices.insert(vertices.end(), layer.begin(), layer.end());
+	}
+	Entities entities;
+	entities.Texture(7, Texels(655, 0, 385));  // slime.png's share
+	entities.Texture(8, Texels(1886, 0, 6));   // piglin.png's
+	entities.Scene(Scene(vertices, { { 12, 0, 6, 1 }, { 7, 6, 12, 1 }, { 9, 18, 6, 1 }, { 8, 24, 6, 1 } }, kOrigin));
+	using Kind = EntityDraw::Kind;
+	EntityFrame frame = entities.Frame({ 885.0, 7.0, 2007.0 });
+	CHECK_EQ(frame.draws.size(), size_t(4));
+	if (frame.draws.size() == 4)
+	{
+		CHECK(frame.draws[0].kind == Kind::Translucent);
+		CHECK(frame.draws[1].kind == Kind::Blended);
+		CHECK(frame.draws[2].kind == Kind::Additive);
+		CHECK(frame.draws[3].kind == Kind::Model);
+		CHECK_EQ(frame.vertices[6].x, 0.0f);  // the slime's far quad first, from the east
+		CHECK_EQ(frame.vertices[12].x, 1.0f);
+	}
+	frame = entities.Frame({ 875.0, 7.0, 2007.0 });  // from the west: the other way round
+	CHECK_EQ(frame.vertices[6].x, 1.0f);
+	const Entities::SceneCounts counts = entities.Counts(15);
+	CHECK_EQ(counts.blended, 1u);
+	CHECK_EQ(counts.additive, 1u);
+	const std::vector<std::string> lines = entities.Lines(15, {});
+	CHECK_EQ(lines.size(), size_t(6));
+	if (lines.size() == 6)
+	{
+		CHECK_STR(lines[1], "  batch 0: texture 12, 6 vertices from 0, translucent, 0 glowing");
+		CHECK_STR(lines[2], "  batch 1: texture 7, 12 vertices from 6, blended, 0 glowing");
+		CHECK_STR(lines[3], "  batch 2: texture 9, 6 vertices from 18, additive, 0 glowing");
+		CHECK_STR(lines[4], "  batch 3: texture 8, 6 vertices from 24, translucent, drawn as a model, 0 glowing");
+	}
+	entities.Clear();  // the scene goes, the notes stay: SkyCraft won't send its textures again
+	entities.Scene(Scene(vertices, { { 7, 6, 12, 1 } }, kOrigin));
+	CHECK(entities.Frame(kEye).draws[0].kind == Kind::Blended);
+	entities.ClearAll();  // Minecraft's clear: they go too
+	entities.Scene(Scene(vertices, { { 7, 6, 12, 1 } }, kOrigin));
+	CHECK(entities.Frame(kEye).draws[0].kind == Kind::Model);
+```
+
+- [ ] **Step 2: Build; it must fail**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C" | sort -u | head -3
+```
+Expected: `'Texture': is not a member of 'cpmc::entities::Entities'`.
+
+- [ ] **Step 3: Edit `src/entities/Entities.h` for the kinds, the rule and the sort**
+
+```cpp
+#include <optional>
+```
+```cpp
+#include <optional>
+#include <span>
+```
+```cpp
+		Translucent,  // the scene's blended batches, for step B's forward pass
+		Crack,        // multiplied into the G-buffer's base colour
+		Outline,      // step B's too: the targeted block's edges, a pair of vertices each, widened into strips
+```
+```cpp
+		Translucent,  // the scene's blended particles, for step B's forward pass
+		Crack,        // multiplied into the G-buffer's base colour
+		Outline,      // step B's too: the targeted block's edges, a pair of vertices each, widened into strips
+		Blended,      // Part 5, step B's too: an entity layer Minecraft blends, really see-through
+		Additive,     // Part 5, step B's too: an entity layer Minecraft adds (energy_swirl)
+```
+```cpp
+// Whether step B's forward pass has any of aDraws to draw: translucent ones, or the outline while aOutline (set outline).
+bool ForwardDraws(const std::vector<EntityDraw>& aDraws, bool aOutline);
+```
+```cpp
+// A kind's name, for the entities request and mclink: model, translucent, crack, outline, blended or additive.
+const char* KindName(EntityDraw::Kind aKind);
+
+// Whether step B's forward pass has any of aDraws to draw: translucent, blended or additive ones, or the outline while
+// aOutline (set outline).
+bool ForwardDraws(const std::vector<EntityDraw>& aDraws, bool aOutline);
+
+// Part 5: bit 7 of an entity vertex's flags, which CyberCraft Tweaks 1.6.0 sets on a layer Minecraft adds rather than
+// blends. SkyCraft keys a batch's flags in 8 bits, and its own flags leave this one free.
+constexpr uint32_t kFlagAdditive = 1u << 7;
+
+// Part 5: whether a texture is see-through: at least 1 in 50 of its texels that aren't clear have an alpha between 0
+// and 255. Vanilla's stray ones stay under it: a piglin's texture has 6 of 1,886 (0.32%), while a vex's has 13.4%.
+bool SeeThrough(std::span<const uint8_t> aRgba);
+
+// Part 5: the kind aBatch is drawn as, aVertices its own. Not translucent: a model. Translucent with no normal of its own
+// (direction 0): a particle, translucent. Else an entity layer CyberCraft Tweaks marked: additive with kFlagAdditive;
+// blended when it's really see-through, its first vertex with block light of at least aGlowLight (emissive), a vertex
+// with an alpha under 255, or aSeeThrough, its texture's; else a model, a cut-out the game lights.
+EntityDraw::Kind KindOf(const link::SceneBatch& aBatch, std::span<const Vertex> aVertices, bool aSeeThrough, uint32_t aGlowLight);
+
+// Part 5: aCount of aVertices from aFirst, back to front, as Minecraft sorts its translucent layers: by the distance of
+// their quads' centres from aEye (SkyCraft sends each quad as two triangles in a row), or their triangles' when aCount
+// isn't a multiple of 6. Positions and aEye alike are relative to the frame's origin. Ties keep their order.
+void SortBackToFront(std::vector<Vertex>& aVertices, uint32_t aFirst, uint32_t aCount, const Vec3d& aEye);
+```
+```cpp
+	void Clear();                                  // Minecraft's clear: the scene goes
+	void InWorld(bool aInWorld);                   // out of its world, or gone, the scene goes: SkyCraft stops sending
+
+	// This frame's geometry. aEye, Minecraft's eye (McState), gives the origin when there's no scene: its whole block.
+	// aOutline, while build mode is on, adds the outline of the block Minecraft's player targets: outside it, V's clicks
+	// don't reach Minecraft, so an outline would mislead.
+	EntityFrame Frame(const Vec3d& aEye, bool aOutline = false) const;
+
+	// The newest scene: its batches and vertices, how many of those have block light of at least aGlowLight, and how many
+	// are in translucent batches.
+```
+```cpp
+	void Clear();                                  // the scene goes
+	void ClearAll();                               // Minecraft's clear: the scene, and what Texture noted, go
+	void InWorld(bool aInWorld);                   // out of its world, or gone, the scene goes: SkyCraft stops sending
+	// Part 5: an entity texture as it comes, whether it's see-through noted (SeeThrough) for its batches' kinds. SkyCraft
+	// sends each once, and all of them again after its clear.
+	void Texture(uint32_t aId, std::span<const uint8_t> aRgba);
+
+	// This frame's geometry. aEye, Minecraft's eye (McState), gives the origin when there's no scene: its whole block.
+	// aOutline, while build mode is on, adds the outline of the block Minecraft's player targets: outside it, V's clicks
+	// don't reach Minecraft, so an outline would mislead. Each batch's kind is KindOf's at aGlowLight (set glowlight), and
+	// the blended and additive ones are sorted back to front from aEye.
+	EntityFrame Frame(const Vec3d& aEye, bool aOutline = false, uint32_t aGlowLight = 15) const;
+
+	// The newest scene: its batches and vertices, how many of those have block light of at least aGlowLight, how many are
+	// in translucent batches, and its batches drawn blended and additive (Part 5).
+```
+```cpp
+		uint32_t translucent = 0;
+```
+```cpp
+		uint32_t translucent = 0;
+		uint32_t blended = 0;
+		uint32_t additive = 0;
+```
+```cpp
+	// its texture (and its size, if aSizes has it, by id), vertices and those glowing, then the world entities by kind.
+	std::vector<std::string> Lines(uint32_t aGlowLight, const std::map<uint32_t, std::pair<uint32_t, uint32_t>>& aSizes) const;
+
+private:
+```
+```cpp
+	// its texture (and its size, if aSizes has it, by id), vertices, its kind if translucent, and those glowing, then the
+	// world entities by kind.
+	std::vector<std::string> Lines(uint32_t aGlowLight, const std::map<uint32_t, std::pair<uint32_t, uint32_t>>& aSizes) const;
+
+private:
+	EntityDraw::Kind BatchKind(const link::SceneBatch& aBatch, uint32_t aGlowLight) const;  // KindOf, with its texture's note
+
+```
+```cpp
+	uint64_t                      sceneBytes_ = 0;
+```
+```cpp
+	uint64_t                      sceneBytes_ = 0;
+	std::map<uint32_t, bool>      seeThrough_;  // Part 5: each texture's, by id
+```
+
+- [ ] **Step 4: Edit `src/entities/Entities.cpp` to add them**
+
+```cpp
+{
+bool ForwardDraws(const std::vector<EntityDraw>& aDraws, bool aOutline)
+{
+	return std::any_of(aDraws.begin(), aDraws.end(), [aOutline](const EntityDraw& aDraw) {
+		return aDraw.kind == EntityDraw::Kind::Translucent || (aOutline && aDraw.kind == EntityDraw::Kind::Outline);
+	});
+```
+```cpp
+{
+const char* KindName(EntityDraw::Kind aKind)
+{
+	switch (aKind)
+	{
+	case EntityDraw::Kind::Model:
+		return "model";
+	case EntityDraw::Kind::Translucent:
+		return "translucent";
+	case EntityDraw::Kind::Crack:
+		return "crack";
+	case EntityDraw::Kind::Outline:
+		return "outline";
+	case EntityDraw::Kind::Blended:
+		return "blended";
+	case EntityDraw::Kind::Additive:
+		return "additive";
+	}
+	return "?";
+}
+
+bool ForwardDraws(const std::vector<EntityDraw>& aDraws, bool aOutline)
+{
+	return std::any_of(aDraws.begin(), aDraws.end(), [aOutline](const EntityDraw& aDraw) {
+		return aDraw.kind == EntityDraw::Kind::Translucent || aDraw.kind == EntityDraw::Kind::Blended || aDraw.kind == EntityDraw::Kind::Additive ||
+		       (aOutline && aDraw.kind == EntityDraw::Kind::Outline);
+	});
+}
+
+bool SeeThrough(std::span<const uint8_t> aRgba)
+{
+	uint64_t kept = 0;    // texels that aren't clear
+	uint64_t partly = 0;  // of those, the ones not opaque either
+	for (size_t i = 3; i < aRgba.size(); i += 4)
+	{
+		kept += aRgba[i] != 0 ? 1 : 0;
+		partly += aRgba[i] != 0 && aRgba[i] != 255 ? 1 : 0;
+	}
+	return partly > 0 && partly * 50 >= kept;
+}
+
+EntityDraw::Kind KindOf(const link::SceneBatch& aBatch, std::span<const Vertex> aVertices, bool aSeeThrough, uint32_t aGlowLight)
+{
+	if ((aBatch.flags & 1) == 0)
+	{
+		return EntityDraw::Kind::Model;
+	}
+	if (aVertices.empty() || ((aVertices.front().flags >> 4) & 7) != 7)
+	{
+		return EntityDraw::Kind::Translucent;  // a particle: no normal of its own
+	}
+	if (aVertices.front().flags & kFlagAdditive)
+	{
+		return EntityDraw::Kind::Additive;
+	}
+	const bool emissive = (aVertices.front().light & 0xFF) >= aGlowLight;
+	const bool faded = std::any_of(aVertices.begin(), aVertices.end(), [](const Vertex& aVertex) { return aVertex.a < 255; });
+	return emissive || faded || aSeeThrough ? EntityDraw::Kind::Blended : EntityDraw::Kind::Model;
+}
+
+void SortBackToFront(std::vector<Vertex>& aVertices, uint32_t aFirst, uint32_t aCount, const Vec3d& aEye)
+{
+	if (uint64_t(aFirst) + aCount > aVertices.size())
+	{
+		return;
+	}
+	const uint32_t                            group = aCount % 6 == 0 ? 6 : 3;
+	const uint32_t                            groups = aCount / group;
+	std::vector<std::pair<double, uint32_t>> order(groups);  // each quad's or triangle's distance squared, and which it is
+	for (uint32_t g = 0; g < groups; ++g)
+	{
+		Vec3d centre;
+		for (uint32_t i = 0; i < group; ++i)
+		{
+			const Vertex& vertex = aVertices[size_t(aFirst) + size_t(g) * group + i];
+			centre.x += vertex.x / double(group);
+			centre.y += vertex.y / double(group);
+			centre.z += vertex.z / double(group);
+		}
+		const double dx = centre.x - aEye.x;
+		const double dy = centre.y - aEye.y;
+		const double dz = centre.z - aEye.z;
+		order[g] = { dx * dx + dy * dy + dz * dz, g };
+	}
+	std::stable_sort(order.begin(), order.end(), [](const auto& aA, const auto& aB) { return aA.first > aB.first; });
+	std::vector<Vertex> sorted;
+	sorted.reserve(size_t(groups) * group);
+	for (const auto& [distance, g] : order)
+	{
+		const auto start = aVertices.begin() + aFirst + ptrdiff_t(g) * group;
+		sorted.insert(sorted.end(), start, start + group);
+	}
+	std::copy(sorted.begin(), sorted.end(), aVertices.begin() + aFirst);
+```
+```cpp
+void Entities::InWorld(bool aInWorld)
+```
+```cpp
+void Entities::ClearAll()
+{
+	Clear();
+	seeThrough_.clear();
+}
+
+void Entities::Texture(uint32_t aId, std::span<const uint8_t> aRgba)
+{
+	seeThrough_[aId] = SeeThrough(aRgba);
+}
+
+EntityDraw::Kind Entities::BatchKind(const link::SceneBatch& aBatch, uint32_t aGlowLight) const
+{
+	const auto note = seeThrough_.find(aBatch.texture);
+	return KindOf(aBatch, std::span<const Vertex>(vertices_).subspan(aBatch.first, aBatch.count), note != seeThrough_.end() && note->second,
+	              aGlowLight);
+}
+
+void Entities::InWorld(bool aInWorld)
+```
+```cpp
+EntityFrame Entities::Frame(const Vec3d& aEye, bool aOutline) const
+```
+```cpp
+EntityFrame Entities::Frame(const Vec3d& aEye, bool aOutline, uint32_t aGlowLight) const
+```
+```cpp
+	frame.vertices = vertices_;
+```
+```cpp
+	frame.vertices = vertices_;
+	const Vec3d eye{ aEye.x - frame.origin.x, aEye.y - frame.origin.y, aEye.z - frame.origin.z };
+```
+```cpp
+			frame.draws.push_back({ batch.first, batch.count, batch.texture, (batch.flags & 1) ? EntityDraw::Kind::Translucent : EntityDraw::Kind::Model });
+```
+```cpp
+			const EntityDraw::Kind kind = BatchKind(batch, aGlowLight);
+			if (kind == EntityDraw::Kind::Blended || kind == EntityDraw::Kind::Additive)
+			{
+				SortBackToFront(frame.vertices, batch.first, batch.count, eye);
+			}
+			frame.draws.push_back({ batch.first, batch.count, batch.texture, kind });
+```
+```cpp
+		counts.translucent += (batch.flags & 1) ? batch.count : 0;
+```
+```cpp
+		counts.translucent += (batch.flags & 1) ? batch.count : 0;
+		const EntityDraw::Kind kind = BatchKind(batch, aGlowLight);
+		counts.blended += kind == EntityDraw::Kind::Blended ? 1 : 0;
+		counts.additive += kind == EntityDraw::Kind::Additive ? 1 : 0;
+```
+```cpp
+		lines.push_back(std::format("  batch {}: {}, {} vertices from {}{}, {} glowing", b, texture, batch.count, batch.first,
+		                            (batch.flags & 1) ? ", translucent" : "", glowing));
+```
+```cpp
+		// A translucent batch's kind: a particle's, a blended or an additive layer's, or a marked layer that's opaque.
+		const EntityDraw::Kind kind = BatchKind(batch, aGlowLight);
+		const std::string      drawn = (batch.flags & 1) == 0            ? std::string()
+		                               : kind == EntityDraw::Kind::Model ? std::string(", translucent, drawn as a model")
+		                                                                 : std::format(", {}", KindName(kind));
+		lines.push_back(std::format("  batch {}: {}, {} vertices from {}{}, {} glowing", b, texture, batch.count, batch.first, drawn, glowing));
+```
+
+- [ ] **Step 5: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `515 test(s), 0 failure(s)`.
+
+- [ ] **Step 6: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "minecraft-entities: the frame's blended and additive layers, the really see-through ones, sorted back to front" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 42: `mclink` tells each batch's kind, and patches its own copy of the atlas
+
+- **`KindWords`:** how the `entities` request and `mclink` tell a batch's kind: nothing for one that isn't translucent;
+  for one that is, `, translucent` (a particle), `, blended`, `, additive`, or `, translucent, drawn as a model`.
+- **`mclink`,** as BlockRender will:
+  - notes whether each texture is see-through, saying so on its line, and gives each batch of `scene`'s lines its
+    kind, at `glowlight` 15;
+  - applies each patch to its own copy of the atlas with `PatchAtlas`, counting the patches, their MB, the rectangles
+    patched and those refused, in the status's `atlas patches:` line and a `patches:` line every five seconds;
+  - once patches have come, says how many of a section's triangles lie on a patched rectangle, by the centre of their
+    UVs, so a placed animated block shows on its sprite.
+
+**Files:**
+- Modify: `tests/TestEntities.cpp`, `src/entities/Entities.h`, `src/entities/Entities.cpp`, `tools/mclink/Main.cpp`
+
+- [ ] **Step 1: Edit `tests/TestEntities.cpp` to add the failing test**
+
+```cpp
+TEST(EntitiesSortLayersBackToFront)
+```
+```cpp
+TEST(EntitiesNameEachBatchsKind)
+{
+	using Kind = EntityDraw::Kind;
+	const link::SceneBatch translucent{ 4, 0, 6, 1 };
+	CHECK_STR(KindWords({ 4, 0, 6, 0 }, Kind::Model), "");  // not translucent: nothing said
+	CHECK_STR(KindWords(translucent, Kind::Translucent), ", translucent");
+	CHECK_STR(KindWords(translucent, Kind::Blended), ", blended");
+	CHECK_STR(KindWords(translucent, Kind::Additive), ", additive");
+	CHECK_STR(KindWords(translucent, Kind::Model), ", translucent, drawn as a model");
+}
+
+TEST(EntitiesSortLayersBackToFront)
+```
+
+- [ ] **Step 2: Build; it must fail**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C" | sort -u | head -3
+```
+Expected: `'KindWords': identifier not found`.
+
+- [ ] **Step 3: Edit `src/entities/Entities.h` to declare it**
+
+```cpp
+struct EntityFrame
+```
+```cpp
+// How the entities request and mclink tell a batch drawn as aKind: nothing for one that isn't translucent; for one
+// that is, ", translucent" (a particle), ", blended", ", additive", or ", translucent, drawn as a model".
+std::string KindWords(const link::SceneBatch& aBatch, EntityDraw::Kind aKind);
+
+struct EntityFrame
+```
+
+- [ ] **Step 4: Edit `src/entities/Entities.cpp` to add it, for the request's lines too**
+
+```cpp
+	std::copy(sorted.begin(), sorted.end(), aVertices.begin() + aFirst);
+```
+```cpp
+	std::copy(sorted.begin(), sorted.end(), aVertices.begin() + aFirst);
+}
+
+std::string KindWords(const link::SceneBatch& aBatch, EntityDraw::Kind aKind)
+{
+	if ((aBatch.flags & 1) == 0)
+	{
+		return {};
+	}
+	return aKind == EntityDraw::Kind::Model ? std::string(", translucent, drawn as a model") : std::format(", {}", KindName(aKind));
+```
+```cpp
+		// A translucent batch's kind: a particle's, a blended or an additive layer's, or a marked layer that's opaque.
+		const EntityDraw::Kind kind = BatchKind(batch, aGlowLight);
+		const std::string      drawn = (batch.flags & 1) == 0            ? std::string()
+		                               : kind == EntityDraw::Kind::Model ? std::string(", translucent, drawn as a model")
+		                                                                 : std::format(", {}", KindName(kind));
+		lines.push_back(std::format("  batch {}: {}, {} vertices from {}{}, {} glowing", b, texture, batch.count, batch.first, drawn, glowing));
+```
+```cpp
+		lines.push_back(std::format("  batch {}: {}, {} vertices from {}{}, {} glowing", b, texture, batch.count, batch.first,
+		                            KindWords(batch, BatchKind(batch, aGlowLight)), glowing));
+```
+
+- [ ] **Step 5: Edit `tools/mclink/Main.cpp` for the kinds and the patches**
+
+```cpp
+// feet, and when each blast's push would come; its entity textures, scenes and world-entity table; and refuses to start
+// while another game side uses the mapping.
+```
+```cpp
+// feet, and when each blast's push would come; its entity textures, scenes and world-entity table, each batch's kind as
+// BlockRender draws it, and the atlas's patches, applied to a copy of the atlas as BlockRender keeps it; and refuses to
+// start while another game side uses the mapping.
+```
+```cpp
+#include "Coords.h"
+```
+```cpp
+#include "Coords.h"
+#include "entities/Entities.h"
+```
+```cpp
+#include "log/DdsWriter.h"
+```
+```cpp
+#include "log/DdsWriter.h"
+#include "render/Atlas.h"
+```
+```cpp
+#include <algorithm>
+```
+```cpp
+#include <algorithm>
+#include <array>
+```
+```cpp
+#include <map>
+```
+```cpp
+#include <map>
+#include <optional>
+#include <set>
+```
+```cpp
+// takes as glowing (the spec's "Step A: into the G-buffer").
+```
+```cpp
+// takes as glowing (the spec's "Step A: into the G-buffer"), and the kind it draws each batch as (Part 5).
+```
+```cpp
+		SceneBatch batch;
+		uint32_t   glow = 0;
+```
+```cpp
+		SceneBatch                 batch;
+		uint32_t                   glow = 0;
+		entities::EntityDraw::Kind kind = entities::EntityDraw::Kind::Model;
+```
+```cpp
+SceneSummary Summarize(const SceneMessage& aScene)
+```
+```cpp
+// aSeeThrough: whether each texture, by id, is see-through (entities::SeeThrough).
+SceneSummary Summarize(const SceneMessage& aScene, const std::map<uint32_t, bool>& aSeeThrough)
+```
+```cpp
+		}
+		summary.glow += entry.glow;
+```
+```cpp
+		}
+		const auto note = aSeeThrough.find(batch.texture);
+		entry.kind = entities::KindOf(batch, std::span<const Vertex>(vertices).subspan(batch.first, batch.count),
+		                              note != aSeeThrough.end() && note->second, 15);
+		summary.glow += entry.glow;
+```
+```cpp
+		atlas.assign(aAtlas.rgba.begin(), aAtlas.rgba.end());
+```
+```cpp
+		atlas.assign(aAtlas.rgba.begin(), aAtlas.rgba.end());
+		std::string error;
+		built = AtlasFromRgba(aAtlas.width, aAtlas.height, aAtlas.rgba, error);  // its sprites at their first frames
+		patched.clear();
+```
+```cpp
+		textures.clear();  // SkyCraft sends its textures again, its ids from 1
+	}
+
+	// Spike 7: each entity texture, kept to be saved.
+	void Texture(const TextureImage& aTexture) override
+	{
+		textures[aTexture.id] = { aTexture.width, aTexture.height, { aTexture.rgba.begin(), aTexture.rgba.end() } };
+		Say("texture {}: {} x {}, {:.2f} MB", aTexture.id, aTexture.width, aTexture.height, double(aTexture.rgba.size()) / 1048576.0);
+```
+```cpp
+		textures.clear();  // SkyCraft sends its textures again, its ids from 1
+		seeThrough.clear();
+		built.reset();  // and its atlas
+		patched.clear();
+	}
+
+	// Spike 7: each entity texture, kept to be saved, and whether it's see-through (Part 5).
+	void Texture(const TextureImage& aTexture) override
+	{
+		textures[aTexture.id] = { aTexture.width, aTexture.height, { aTexture.rgba.begin(), aTexture.rgba.end() } };
+		seeThrough[aTexture.id] = entities::SeeThrough(aTexture.rgba);
+		Say("texture {}: {} x {}, {:.2f} MB{}", aTexture.id, aTexture.width, aTexture.height, double(aTexture.rgba.size()) / 1048576.0,
+		    seeThrough[aTexture.id] ? ", see-through" : "");
+	}
+
+	// Spike 7's Part 5: an animated sprite's frame, patched into the atlas as BlockRender patches its own.
+	void AtlasRegion(const AtlasPatch& aPatch) override
+	{
+		++patches;
+		patchBytes += aPatch.rgba.size();
+		if (built && !PatchAtlas(*built, aPatch.x, aPatch.y, aPatch.width, aPatch.height, aPatch.rgba).empty())
+		{
+			patched.insert({ aPatch.x, aPatch.y, aPatch.width, aPatch.height });
+		}
+		else
+		{
+			++patchesRefused;
+		}
+```
+```cpp
+		scene = Summarize(aScene);
+```
+```cpp
+		scene = Summarize(aScene, seeThrough);
+```
+```cpp
+	// inside that face's sprite, where a corner's UV can land on the next sprite over.
+```
+```cpp
+	// inside that face's sprite, where a corner's UV can land on the next sprite over. Once patches have come (Part 5),
+	// how many of its triangles lie on an animated sprite, by the centre of their UVs.
+```
+```cpp
+		}
+		const std::string dropped = aMesh.translucentDropped ? std::format(" ({} translucent triangles dropped)", aMesh.translucentDropped) : "";
+		Say("section {} {} {}: {} vertices{}, blocks x {:.2f} to {:.2f}, y {:.2f} to {:.2f}, z {:.2f} to {:.2f}{}", aMesh.x, aMesh.y, aMesh.z,
+		    aMesh.vertices.size(), dropped, aMesh.x * 16.0 + low[0], aMesh.x * 16.0 + high[0], aMesh.y * 16.0 + low[1],
+		    aMesh.y * 16.0 + high[1], aMesh.z * 16.0 + low[2], aMesh.z * 16.0 + high[2], sample);
+```
+```cpp
+		}
+		std::string animated;
+		if (!patched.empty() && atlasWidth > 0 && atlasHeight > 0)
+		{
+			size_t on = 0;
+			for (size_t t = 0; t + 2 < aMesh.vertices.size(); t += 3)
+			{
+				const Vertex*  corner = aMesh.vertices.data() + t;
+				const float    u = (corner[0].u + corner[1].u + corner[2].u) / 3.0f;
+				const float    v = (corner[0].v + corner[1].v + corner[2].v) / 3.0f;
+				const uint32_t x = std::min(uint32_t(std::clamp(u, 0.0f, 1.0f) * atlasWidth), atlasWidth - 1);
+				const uint32_t y = std::min(uint32_t(std::clamp(v, 0.0f, 1.0f) * atlasHeight), atlasHeight - 1);
+				on += std::any_of(patched.begin(), patched.end(), [x, y](const std::array<uint32_t, 4>& aRect) {
+					return x >= aRect[0] && x - aRect[0] < aRect[2] && y >= aRect[1] && y - aRect[1] < aRect[3];
+				}) ? 1 : 0;
+			}
+			animated = std::format("; {} of its {} triangles on animated sprites", on, aMesh.vertices.size() / 3);
+		}
+		const std::string dropped = aMesh.translucentDropped ? std::format(" ({} translucent triangles dropped)", aMesh.translucentDropped) : "";
+		Say("section {} {} {}: {} vertices{}, blocks x {:.2f} to {:.2f}, y {:.2f} to {:.2f}, z {:.2f} to {:.2f}{}{}", aMesh.x, aMesh.y, aMesh.z,
+		    aMesh.vertices.size(), dropped, aMesh.x * 16.0 + low[0], aMesh.x * 16.0 + high[0], aMesh.y * 16.0 + low[1],
+		    aMesh.y * 16.0 + high[1], aMesh.z * 16.0 + low[2], aMesh.z * 16.0 + high[2], sample, animated);
+```
+```cpp
+	WorldTable                      world;  // the newest
+```
+```cpp
+	WorldTable                      world;  // the newest
+	// Part 5
+	std::map<uint32_t, bool>          seeThrough;  // each texture's, by id
+	std::optional<cpmc::Atlas>        built;       // the atlas as BlockRender keeps it, every patch applied
+	std::set<std::array<uint32_t, 4>> patched;     // the rectangles patched since the atlas came: x, y, width, height
+	uint64_t                          patches = 0;  // that came, since the start
+	uint64_t                          patchBytes = 0;
+	uint64_t                          patchesRefused = 0;  // PatchAtlas had no atlas for, or found outside it
+```
+```cpp
+		Say("  batch {}: {}, {} vertices from {}{}, {} glow", b, what, batch.count, batch.first, (batch.flags & 1) ? ", translucent" : "",
+```
+```cpp
+		Say("  batch {}: {}, {} vertices from {}{}, {} glow", b, what, batch.count, batch.first, entities::KindWords(batch, s.batches[b].kind),
+```
+```cpp
+	    s.worldLeftOut, s.worldTorn, s.outline ? "; an outline" : "");
+```
+```cpp
+	    s.worldLeftOut, s.worldTorn, s.outline ? "; an outline" : "");
+	Say("atlas patches: {} ({:.2f} MB), {} rectangles patched, {} refused; {} from before the atlas, skipped", aReport.patches,
+	    double(aReport.patchBytes) / 1048576.0, aReport.patched.size(), aReport.patchesRefused, s.patchesBeforeAtlas);
+```
+```cpp
+	uint64_t reportedSceneBytes = 0;
+```
+```cpp
+	uint64_t reportedSceneBytes = 0;
+	uint64_t reportedPatches = 0;
+	uint64_t reportedPatchBytes = 0;
+```
+```cpp
+			}
+			lastReport = now;
+```
+```cpp
+			}
+			if (report.patches != reportedPatches)
+			{
+				Say("patches: {:.0f}/s, {:.2f} MB/s; {} rectangles patched since the atlas came", double(report.patches - reportedPatches) / seconds,
+				    double(report.patchBytes - reportedPatchBytes) / 1048576.0 / seconds, report.patched.size());
+			}
+			lastReport = now;
+```
+```cpp
+			reportedSceneBytes = report.sceneBytes;
+```
+```cpp
+			reportedSceneBytes = report.sceneBytes;
+			reportedPatches = report.patches;
+			reportedPatchBytes = report.patchBytes;
+```
+
+- [ ] **Step 6: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `516 test(s), 0 failure(s)`.
+
+- [ ] **Step 7: Run mclink without Minecraft**
+
+Minecraft and the game must not be running.
+```bash
+cd /d/Cyberpunk-Minecraft/spikes/block-render && printf 'status\nquit\n' > build/selfcheck.txt \
+  && ./build/RelWithDebInfo/mclink.exe build/selfcheck.txt; echo "exit: $?"
+```
+Expected: `the mapping: created (process …); waiting for Minecraft`, then the status with `Minecraft: absent` and
+`atlas patches: 0 (0.00 MB), 0 rectangles patched, 0 refused; 0 from before the atlas, skipped`. Then `exit: 0`.
+
+- [ ] **Step 8: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "minecraft-entities: mclink tells each batch's kind, and patches its own copy of the atlas" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 43: An `mclink` script of the layers Minecraft blends, and of animated blocks
+
+`tools/mclink/blended.txt`, at step 0's spot, the stand-in V looking at what it makes:
+- **Seven mobs, 6 or 7 blocks ahead:** a slime of the smallest size, an allay and a vex (`entity_translucent`), a breeze
+  (its wind, `breeze_wind`, and its eyes, `entity_translucent_emissive`), a warden (`entity_translucent_emissive`), a
+  charged creeper (`energy_swirl`) and a piglin, whose whole body is `entity_translucent` but opaque. Each has its AI
+  off, so none moves, attacks or explodes, and no loot, and is tagged `sp7`; the piglin can't turn into a zombified
+  piglin.
+- **Six animated blocks, 9 blocks ahead,** each at its marker, tagged `sp7b`: lava in a cauldron, a lit campfire,
+  magma, a sea lantern, prismarine and a lantern. They're set without block updates (`strict`), so none needs a block
+  under it, and nothing flows or burns.
+- **The end,** as the overlay's Clear: the blocks at their markers to air, without updates, then the mobs and the
+  markers killed, so nothing is left.
+
+It's kept with the other scripts, and the test that parses them takes it too; the mod's README names it.
+
+**Files:**
+- Create: `tools/mclink/blended.txt`
+- Modify: `tests/TestMcLinkScript.cpp`, `minecraft/cybercraft-tweaks/README.md`
+
+- [ ] **Step 1: Edit `tests/TestMcLinkScript.cpp` to parse it too**
+
+```cpp
+	                          "entities.txt", "spawn.txt", "emissive.txt" })
+```
+```cpp
+	                          "entities.txt", "spawn.txt", "emissive.txt", "blended.txt" })
+```
+
+- [ ] **Step 2: Build and run the tests; the new one must fail**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | grep -v "^PASS" | tail -4
+```
+Expected: `FAIL ScriptsInTheRepoParse` and `516 test(s), 2 failure(s)`: the file isn't there yet.
+
+- [ ] **Step 3: Write `tools/mclink/blended.txt`**
+
+```text
+# Spike 7's Part 5: the layers Minecraft blends, sent blended by CyberCraft Tweaks 1.6.0, and animated textures, against
+# SkyCraft's real mod, without the game. At step 0's spot, seven mobs stand 6 or 7 blocks ahead of the stand-in V, who
+# looks at them: a slime, an allay and a vex (entity_translucent), a breeze (its wind, and its eyes), a warden
+# (entity_translucent_emissive), a charged creeper (energy_swirl), and a piglin, whose whole body is entity_translucent
+# but opaque. Each has its AI off, so none moves, attacks or explodes, and no loot, and is tagged sp7; the piglin can't
+# turn into a zombified piglin. Each layer's kind is what BlockRender draws it as: blended, additive, or a model.
+# Then six animated blocks 9 blocks ahead, each at a marker tagged sp7b: lava in a cauldron, a lit campfire, magma, a sea
+# lantern, prismarine and a lantern, set without block updates (strict), so none needs a block under it; nothing flows
+# or burns. Their section's triangles lie on patched sprites. The end sets the blocks to air and kills the mobs and the
+# markers, leaving nothing. Start Minecraft first; this waits for its world.
+status
+wait-world 180
+ground city
+at 880.5 6.14 2007.5
+look 270 0
+dump E:\Cyberpunk2077\red4ext\plugins\PhysXProbe\dumps\2026-10-01_14-37-07\collision.obj
+link on
+wait-ground 30
+wait 2
+type /gamemode creative
+scene
+type /execute rotated ~ 0 positioned ^5 ^ ^6 run summon minecraft:slime ~ ~ ~ {Tags:["sp7"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty",NoAI:1b,Size:0}
+type /execute rotated ~ 0 positioned ^3.5 ^ ^6 run summon minecraft:allay ~ ~ ~ {Tags:["sp7"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty",NoAI:1b}
+type /execute rotated ~ 0 positioned ^2 ^ ^6 run summon minecraft:vex ~ ~ ~ {Tags:["sp7"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty",NoAI:1b}
+type /execute rotated ~ 0 positioned ^0.5 ^ ^6 run summon minecraft:breeze ~ ~ ~ {Tags:["sp7"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty",NoAI:1b}
+type /execute rotated ~ 0 positioned ^-1.5 ^ ^7 run summon minecraft:warden ~ ~ ~ {Tags:["sp7"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty",NoAI:1b}
+type /execute rotated ~ 0 positioned ^-3.5 ^ ^6 run summon minecraft:creeper ~ ~ ~ {Tags:["sp7"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty",NoAI:1b,powered:1b}
+type /execute rotated ~ 0 positioned ^-5 ^ ^6 run summon minecraft:piglin ~ ~ ~ {Tags:["sp7"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty",NoAI:1b,IsImmuneToZombification:1b}
+wait 3
+scene
+wait 1
+scene
+status
+# The animated blocks: each marker, then its block at the same spot. The stand-in V doesn't move between them.
+type /execute rotated ~ 0 positioned ^5 ^ ^9 run summon minecraft:marker ~ ~ ~ {Tags:["sp7b"]}
+type /execute rotated ~ 0 positioned ^5 ^ ^9 run setblock ~ ~ ~ minecraft:lava_cauldron strict
+type /execute rotated ~ 0 positioned ^3 ^ ^9 run summon minecraft:marker ~ ~ ~ {Tags:["sp7b"]}
+type /execute rotated ~ 0 positioned ^3 ^ ^9 run setblock ~ ~ ~ minecraft:campfire strict
+type /execute rotated ~ 0 positioned ^1 ^ ^9 run summon minecraft:marker ~ ~ ~ {Tags:["sp7b"]}
+type /execute rotated ~ 0 positioned ^1 ^ ^9 run setblock ~ ~ ~ minecraft:magma_block strict
+type /execute rotated ~ 0 positioned ^-1 ^ ^9 run summon minecraft:marker ~ ~ ~ {Tags:["sp7b"]}
+type /execute rotated ~ 0 positioned ^-1 ^ ^9 run setblock ~ ~ ~ minecraft:sea_lantern strict
+type /execute rotated ~ 0 positioned ^-3 ^ ^9 run summon minecraft:marker ~ ~ ~ {Tags:["sp7b"]}
+type /execute rotated ~ 0 positioned ^-3 ^ ^9 run setblock ~ ~ ~ minecraft:prismarine strict
+type /execute rotated ~ 0 positioned ^-5 ^ ^9 run summon minecraft:marker ~ ~ ~ {Tags:["sp7b"]}
+type /execute rotated ~ 0 positioned ^-5 ^ ^9 run setblock ~ ~ ~ minecraft:lantern strict
+wait 3
+status
+# The clear, as the overlay's Clear: the blocks at their markers to air, then the mobs and the markers. A killed mob
+# takes a second to die, and its puffs up to 5 s more, so the last scene, 7 s on, is empty.
+type /execute at @e[tag=sp7b] run setblock ~ ~ ~ minecraft:air strict
+type /kill @e[tag=sp7]
+type /kill @e[tag=sp7b]
+wait 7
+scene
+status
+quit
+```
+
+- [ ] **Step 4: Edit `minecraft/cybercraft-tweaks/README.md` to name it**
+
+```markdown
+mod, every vertex of their emissive layers' batches glows (block light 15), and their bodies' don't.
+```
+```markdown
+mod, every vertex of their emissive layers' batches glows (block light 15), and their bodies' don't.
+`spikes/block-render/tools/mclink/blended.txt` summons a slime, an allay, a vex, a breeze, a warden, a charged creeper
+and a piglin: with the mod, their blended layers' batches come translucent, the armour's additive too, and BlockRender
+draws the slime's outer layer, the allay, the vex, the breeze's wind and eyes and the warden's layers blended, and the
+piglin, opaque, as a model.
+```
+
+- [ ] **Step 5: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `516 test(s), 0 failure(s)`.
+
+- [ ] **Step 6: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render minecraft/cybercraft-tweaks/README.md \
+  && git commit -q -m "minecraft-entities: an mclink script of the layers Minecraft blends, and of animated blocks" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 44: In Minecraft: the blended layers and the animated blocks
+
+Task 43's script, with the user, against SkyCraft's unchanged mod with CyberCraft Tweaks 1.6.0, in the `CyberCraft`
+instance, without the game.
+- **Installing:** with Minecraft stopped, 1.5.0 is renamed `.jar.disabled`, as 1.4.0 was, and 1.6.0 copied in. A jar
+  can't be renamed while Minecraft runs, so the rename failing means it's still running.
+- **If Minecraft doesn't start, or crashes as it opens its world,** its log says why: a mixin that can't apply names
+  `MarkBlended`. Then put 1.5.0 back (rename 1.6.0's jar `.jar.disabled` and 1.5.0's back to `.jar`), and stop.
+- **If a check fails,** stop and find the cause with superpowers:systematic-debugging before going on. Fixes become new
+  tasks.
+
+**Files:**
+- Modify: `docs/spikes/2026-10-06-minecraft-entities-results.md`
+
+- [ ] **Step 1: Check that the game isn't running**
+
+```bash
+tasklist | grep -i -c "cyberpunk2077.exe"
+```
+Expected: `0`. If it's `1`, ask the user to quit the game: it would hold the mapping.
+
+- [ ] **Step 2: Ask the user to stop Minecraft, and for their leave**
+
+Ask the user for their leave to install CyberCraft Tweaks 1.6.0 into the `CyberCraft` instance, keeping 1.5.0
+disabled, and to run the script at x 880 in the `SkyCraft` world, which summons seven mobs and places six blocks, then
+clears them; and, if Minecraft is running, to stop it from the Modrinth App. Ask too whether their own Entity Model
+Features and Entity Texture Features stay on for Part 5's tests ("Before you start (Part 5)"): if not, they're renamed
+`.jar.disabled` with 1.5.0, and put back after Task 50. Wait for the answers.
+
+- [ ] **Step 3: Install CyberCraft Tweaks 1.6.0**
+
+```bash
+M=/c/Users/BLOXY/AppData/Roaming/ModrinthApp/profiles/CyberCraft/mods
+mv "$M/cybercraft-tweaks-1.5.0.jar" "$M/cybercraft-tweaks-1.5.0.jar.disabled" \
+  && cp /d/Cyberpunk-Minecraft/minecraft/cybercraft-tweaks/build/cybercraft-tweaks-1.6.0.jar "$M/" && ls "$M"
+```
+If the user chose to disable Entity Model Features and Entity Texture Features, rename their jars too:
+```bash
+M=/c/Users/BLOXY/AppData/Roaming/ModrinthApp/profiles/CyberCraft/mods
+for j in entity_model_features-3.3.11-26.3-fabric entity_texture_features-7.2.5-26.3-fabric; do mv "$M/$j.jar" "$M/$j.jar.disabled"; done; ls "$M"
+```
+Expected: `cybercraft-tweaks-1.2.0.jar.disabled` to `cybercraft-tweaks-1.5.0.jar.disabled`,
+`cybercraft-tweaks-1.6.0.jar`, the user's own `entity_model_features-3.3.11-26.3-fabric` and
+`entity_texture_features-7.2.5-26.3-fabric`, `.jar` or `.jar.disabled` as they chose, `fabric-api-0.161.0+26.3.jar`
+and `skycraft-fabric-0.1.2.jar`. If a rename fails, Minecraft is still running.
+
+- [ ] **Step 4: Ask the user to start Minecraft**
+
+The user starts the `CyberCraft` instance from the Modrinth App, and says when its title screen shows. Then:
+```bash
+L="/c/Users/BLOXY/AppData/Roaming/ModrinthApp/profiles/CyberCraft/logs/latest.log"
+grep -m1 "cybercraft_tweaks" "$L"; grep "SkyCraft:" "$L" | tail -2; echo "mixin errors: $(grep -c -i -E "mixin.*(error|fail)" "$L")"
+```
+Expected: `cybercraft_tweaks 1.6.0` in Fabric's list of mods, `SkyCraft: can't open Skyrim's shared memory yet (Windows
+error 2: …)`, and `mixin errors: 0`.
+
+- [ ] **Step 5: Run the script**
+
+```bash
+L="/c/Users/BLOXY/AppData/Roaming/ModrinthApp/profiles/CyberCraft/logs/latest.log"; before=$(wc -l < "$L"); \
+  cd /d/Cyberpunk-Minecraft/spikes/block-render && mkdir -p build/blended \
+  && ./build/RelWithDebInfo/mclink.exe tools/mclink/blended.txt | tee build/blended/blended.log; echo "exit: ${PIPESTATUS[0]}"; \
+  tail -n +$((before + 1)) "$L" | grep -E "SkyCraft: (sent texture|texture)|\[CHAT\]|WARN|ERROR|[Mm]ixin" | tee build/blended/minecraft.log
+```
+Give it 2 minutes. Expected:
+- **Every command answered** in Minecraft's chat: `Summoned new Slime`, `… Allay`, `… Vex`, `… Breeze`, `… Warden`, `…
+  Creeper` and `… Piglin`; six `Summoned new Marker` and six `Changed the block at …`; and no `WARN`, `ERROR` or mixin
+  line about them.
+- **The see-through textures:** by the ids Minecraft's `sent texture … (id N)` lines give, `mclink`'s texture lines
+  say `see-through` for `slime.png`, `allay.png`, `vex.png`, `breeze_wind.png` and
+  `warden_bioluminescent_layer.png`, and not for `piglin.png`, `breeze.png`, `breeze_eyes.png`, `warden.png`, the
+  warden's heart and spots, `creeper.png` or `creeper_armor.png`, as the spec has their shares.
+- **The kinds,** in the scenes after the summons:
+  - `blended` for the slime's outer layer (`slime`'s translucent batch; its inside isn't translucent), the allay, the
+    vex, the breeze's wind and eyes (`breeze_wind`, `breeze_eyes`) and the warden's layers
+    (`warden_bioluminescent_layer`, `warden_heart`, `warden_pulsating_spots_…`), these last glowing, as in Task 34;
+  - `additive` for the charged creeper's armour (`creeper_armor`), glowing too;
+  - `translucent, drawn as a model` for the piglin and the breeze's body (`breeze`);
+  - the warden's and the creeper's bodies not translucent.
+- **The patches:** every five seconds `patches: N/s, …; R rectangles patched since the atlas came`, N in the hundreds
+  and R up to 54, Minecraft's animated block textures; and the lines of the placed blocks' sections ending `… of its …
+  triangles on animated sprites`, more than none once the blocks are there.
+- **Nothing left:** each placed block's section `removed` once the blocks are air, the last scene no batches, its world
+  line `nothing`, the status's `atlas patches: …, 0 refused; …`, and `exit: 0`.
+
+- [ ] **Step 6: Ask the user to stop Minecraft**
+
+Its window is hidden while `mclink` drives it, so the user stops it from the Modrinth App.
+
+- [ ] **Step 7: Record the run in `docs/spikes/2026-10-06-minecraft-entities-results.md`**
+
+A "Step C's blended mark and animated textures, with `mclink`" section after run C's: the versions (CyberCraft Tweaks
+1.6.0, and whether Entity Model Features and Entity Texture Features were on); each mob's batches, with their textures,
+kinds and glowing vertices; the see-through textures; the patches a second and the rectangles; the placed blocks'
+triangles on animated sprites; anything that differs from the spec; and the verdict.
+
+- [ ] **Step 8: Commit**
+
+With the plan, its steps ticked up to this one.
+```bash
+cd /d/Cyberpunk-Minecraft && git add docs/spikes/2026-10-06-minecraft-entities-results.md docs/superpowers/plans/2026-10-06-minecraft-entities.md \
+  && git commit -q -m "minecraft-entities: step C's blended mark and animated textures with mclink" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 45: Part 5's shaders
+
+New entry points beside step B's (the spec's "Step B: before DLSS" and "Animated textures on the GPU"):
+- **`BlendedPS`:** an entity layer Minecraft blends, into the scene's colour, which the pipeline blends with its alpha,
+  `texel × colour`. Cut out where the texel's own alpha is under 0.1, as Minecraft's entity shader cuts, before the
+  vertex colour. Lit as a translucent particle: unlit from `glowlight`'s block light (the emissive layers), else
+  Minecraft's light curve, `l / (4 − 3l)` of its brighter light level; times `exposure`. Then shaded per face as
+  Minecraft's `PER_FACE_LIGHTING` shades it, `min(1, (max(0, L0·n) + max(0, L1·n)) × 0.6 + 0.4)` of its sRGB colour,
+  with n the triangle's own normal turned toward the camera, Minecraft's back-face rule, and L0 and L1 its two overworld
+  lights, `normalize(0.2, 1, −0.7)` and `normalize(−0.2, 1, 0.7)` in Minecraft's axes, `(x, −z, y)` in the world's.
+- **`AdditivePS`:** an entity layer Minecraft adds (`energy_swirl`), `Linear(texel × colour) × exposure` for a pipeline
+  that adds `ONE` to `ONE`; unlit and unshaded (`EMISSIVE`, `NO_CARDINAL_LIGHTING`); cut out as `BlendedPS` cuts.
+- **`HintPS`** draws under both too, unchanged.
+- **`PatchCS`,** a compute shader with its own root signature: a group for each area of the patch pass's table, its 64
+  threads copying the area's texels, row by row, from the packed texels into the atlas buffer. Root descriptors carry no
+  bounds, so every read and write is checked against the counts the CPU gave as well (`PatchConstants`). `PatchAreaGpu`
+  mirrors its table's entries.
+
+**Files:**
+- Modify: `tests/TestShaders.cpp`, `shaders/blocks.hlsl`, `src/render/FrameConstants.h`, `src/render/Shaders.h`,
+  `src/render/Shaders.cpp`
+
+- [ ] **Step 1: Edit `tests/TestShaders.cpp` to add the failing test**
+
+```cpp
+	return desc.OutputParameters;
+```
+```cpp
+	return desc.OutputParameters;
+}
+
+// A structured buffer's stride, which reflection gives as its "samples".
+UINT Stride(const std::vector<uint8_t>& aCode, const char* aName)
+{
+	Microsoft::WRL::ComPtr<ID3D12ShaderReflection> reflection;
+	D3D12_SHADER_INPUT_BIND_DESC                   desc{};
+	if (FAILED(D3DReflect(aCode.data(), aCode.size(), IID_PPV_ARGS(&reflection))) || FAILED(reflection->GetResourceBindingDescByName(aName, &desc)))
+	{
+		return 0;
+	}
+	return desc.NumSamples;
+```
+```cpp
+TEST(ShadersReportCompileErrors)
+```
+```cpp
+TEST(ShadersDrawPart5sLayersAndPatches)
+{
+	std::string error;
+	const auto  shaders = cpmc::CompileBlockShaders(ShaderSource(), error);
+	CHECK(shaders.has_value());
+	if (shaders)
+	{
+		CHECK_EQ(ConstantBufferSize(shaders->blended, "Frame"), UINT(sizeof(cpmc::FrameConstants)));
+		CHECK_EQ(ConstantBufferSize(shaders->blended, "Entity"), UINT(sizeof(cpmc::EntityConstants)));
+		CHECK_EQ(ConstantBufferSize(shaders->additive, "Entity"), UINT(sizeof(cpmc::EntityConstants)));
+		CHECK_EQ(Outputs(shaders->blended), 1u);   // the scene's colour
+		CHECK_EQ(Outputs(shaders->additive), 1u);
+		CHECK_EQ(ConstantBufferSize(shaders->patch, "Patch"), UINT(sizeof(cpmc::PatchConstants)));
+		CHECK_EQ(Stride(shaders->patch, "patchAreas"), UINT(sizeof(cpmc::PatchAreaGpu)));
+		CHECK_EQ(Stride(shaders->patch, "patchTexels"), 4u);
+		CHECK_EQ(Stride(shaders->patch, "patchAtlas"), 4u);
+	}
+}
+
+TEST(ShadersReportCompileErrors)
+```
+
+- [ ] **Step 2: Build; it must fail**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C" | sort -u | head -3
+```
+Expected: `'blended': is not a member of 'cpmc::BlockShaders'`.
+
+- [ ] **Step 3: Edit `shaders/blocks.hlsl` to add the shaders**
+
+```hlsl
+// their colour from this frame rather than from its history: the motion vectors there are the surface's behind them.
+```
+```hlsl
+// their colour from this frame rather than from its history: the motion vectors there are the surface's behind them.
+// Part 5's blended and additive layers too.
+```
+```hlsl
+    return 1.0;
+```
+```hlsl
+    return 1.0;
+}
+
+// Minecraft's two lights for entities in the overworld (Lighting.updateLevel's DIFFUSE_LIGHT_0 and _1), normalize(0.2,
+// 1, -0.7) and normalize(-0.2, 1, 0.7) in its axes, here in the world's: Minecraft (x, y, z) is world (x, -z, y).
+static const float3 kLight0 = float3(0.161690, 0.565916, 0.808452);
+static const float3 kLight1 = float3(-0.161690, -0.565916, 0.808452);
+
+// Part 5 (the spec's "Step B"): an entity layer Minecraft blends, blended into the scene's colour as a translucent
+// particle is, but cut out where the texel's own alpha is under 0.1, as Minecraft's entity shader cuts (ALPHA_CUTOUT,
+// before the vertex colour). Lit as a particle, unlit from entityTuning.y's block light (the emissive layers), and shaded
+// per face as Minecraft's PER_FACE_LIGHTING shades it: min(1, (L0.n + L1.n) * 0.6 + 0.4) of its sRGB colour, each dot
+// at least 0, with n the triangle's own normal turned toward the camera, which is Minecraft's back-face rule.
+float4 BlendedPS(EntityOut i) : SV_Target0
+{
+    const float3 own = OwnNormal(i.world);  // before the discard, which ends the pixel's part in the derivatives
+    const float4 texel = EntityTexel(i.uv);
+    if (texel.a < 0.1)
+    {
+        discard;
+    }
+    const float3 normal = EntityNormal(i.flags, own, i.world);
+    const float  face = min(1.0, (max(0.0, dot(kLight0, normal)) + max(0.0, dot(kLight1, normal))) * 0.6 + 0.4);
+    const uint   block = i.light & 0xFF;
+    const float  level = (float)min(max(block, (i.light >> 8) & 0xFF), 15u) / 15.0;
+    const float  light = block >= (uint)entityTuning.y ? 1.0 : level / (4.0 - 3.0 * level);
+    return float4(Linear(texel.rgb * i.colour.rgb * face) * light * tuning.z, texel.a * i.colour.a);
+}
+
+// Part 5: an entity layer Minecraft adds rather than blends (energy_swirl, a charged creeper's armour): its colour added
+// to the scene's, whose pipeline adds ONE to ONE as Minecraft's ADDITIVE does, unlit and unshaded (EMISSIVE,
+// NO_CARDINAL_LIGHTING), cut out where the texel's own alpha is under 0.1.
+float4 AdditivePS(EntityOut i) : SV_Target0
+{
+    const float4 texel = EntityTexel(i.uv);
+    if (texel.a < 0.1)
+    {
+        discard;
+    }
+    return float4(Linear(texel.rgb * i.colour.rgb) * tuning.z, 0.0);
+```
+```hlsl
+    const uint packed = hudImage[row * hudInfo.x + texel.x];
+    return float4(packed & 0xFF, (packed >> 8) & 0xFF, (packed >> 16) & 0xFF, packed >> 24) / 255.0;
+}
+```
+```hlsl
+    const uint packed = hudImage[row * hudInfo.x + texel.x];
+    return float4(packed & 0xFF, (packed >> 8) & 0xFF, (packed >> 16) & 0xFF, packed >> 24) / 255.0;
+}
+
+// Spike 7's Part 5: the atlas's animated sprites (the spec's "Animated textures on the GPU"). The upload list writes the
+// areas its patches changed, at every level, into the atlas buffer, with its own root signature: b0 the pass's
+// constants, t0 the areas, t1 their texels packed one area after another, u0 the atlas. src/render/FrameConstants.h
+// mirrors PatchArea and Patch.
+struct PatchArea
+{
+    uint  start;   // its first texel in the atlas buffer: the level's start, plus y times the level's width, plus x
+    uint  stride;  // the level's width
+    uint  width;
+    uint  height;
+    uint  source;  // its first texel in patchTexels
+    uint3 unused;
+};
+
+cbuffer Patch : register(b0)
+{
+    uint4 patchInfo;  // the areas; the texels packed; the atlas buffer's length in texels; 0
+};
+
+StructuredBuffer<PatchArea> patchAreas  : register(t0);
+StructuredBuffer<uint>      patchTexels : register(t1);
+RWStructuredBuffer<uint>    patchAtlas  : register(u0);
+
+// A group an area, its 64 threads taking its texels in turn. Root descriptors carry no bounds, so every read and write
+// is checked against the counts the CPU gave as well.
+[numthreads(64, 1, 1)]
+void PatchCS(uint3 group : SV_GroupID, uint thread : SV_GroupIndex)
+{
+    if (group.x >= patchInfo.x)
+    {
+        return;
+    }
+    const PatchArea area = patchAreas[group.x];
+    for (uint t = thread; t < area.width * area.height; t += 64)
+    {
+        const uint row = t / area.width;
+        const uint to = area.start + row * area.stride + (t - row * area.width);
+        const uint from = area.source + t;
+        if (to < patchInfo.z && from < patchInfo.y)
+        {
+            patchAtlas[to] = patchTexels[from];
+        }
+    }
+}
+```
+
+- [ ] **Step 4: Edit `src/render/FrameConstants.h` for the patch pass's constants and table**
+
+```cpp
+// The HUD pass's root constants, in b1 where the blocks have SectionConstants.
+```
+```cpp
+// Spike 7's Part 5: the patch pass's root constants, in b0 of its own root signature (PatchCS's Patch).
+struct PatchConstants
+{
+	uint32_t areas = 0;        // in its area table
+	uint32_t texels = 0;       // packed after one another
+	uint32_t atlasTexels = 0;  // the atlas buffer's length
+	uint32_t unused = 0;
+};
+static_assert(sizeof(PatchConstants) == 16);
+
+// One area of the patch pass's table (PatchCS's PatchArea): where one level's patched rectangle goes in the atlas
+// buffer, and where its texels lie among those packed.
+struct PatchAreaGpu
+{
+	uint32_t start = 0;   // its first texel in the atlas buffer: the level's start, plus y times the level's width, plus x
+	uint32_t stride = 0;  // the level's width
+	uint32_t width = 0;
+	uint32_t height = 0;
+	uint32_t source = 0;  // its first texel among those packed
+	uint32_t unused[3]{};
+};
+static_assert(sizeof(PatchAreaGpu) == 32);
+
+// The HUD pass's root constants, in b1 where the blocks have SectionConstants.
+```
+
+- [ ] **Step 5: Edit `src/render/Shaders.h` to add them**
+
+```cpp
+	std::vector<uint8_t> outline;        // OutlinePS
+```
+```cpp
+	std::vector<uint8_t> outline;        // OutlinePS
+	std::vector<uint8_t> blended;        // BlendedPS (Part 5)
+	std::vector<uint8_t> additive;       // AdditivePS
+	std::vector<uint8_t> patch;          // PatchCS, a compute shader
+```
+
+- [ ] **Step 6: Edit `src/render/Shaders.cpp` to compile them**
+
+```cpp
+	}
+	return BlockShaders{ std::move(*vertex), std::move(*present), std::move(*predlss), std::move(*gbuffer),
+		                 std::move(*depth), std::move(*hudVertex), std::move(*hud), std::move(*entityVertex),
+		                 std::move(*entity), std::move(*crack), std::move(*entityDepth), std::move(*translucent),
+		                 std::move(*hint), std::move(*outlineVertex), std::move(*outline) };
+```
+```cpp
+	}
+	auto blended = CompileShader(aSource, "blocks.hlsl", "BlendedPS", "ps_5_1", aError);
+	if (!blended)
+	{
+		return std::nullopt;
+	}
+	auto additive = CompileShader(aSource, "blocks.hlsl", "AdditivePS", "ps_5_1", aError);
+	if (!additive)
+	{
+		return std::nullopt;
+	}
+	auto patch = CompileShader(aSource, "blocks.hlsl", "PatchCS", "cs_5_1", aError);
+	if (!patch)
+	{
+		return std::nullopt;
+	}
+	return BlockShaders{ std::move(*vertex), std::move(*present), std::move(*predlss), std::move(*gbuffer),
+		                 std::move(*depth), std::move(*hudVertex), std::move(*hud), std::move(*entityVertex),
+		                 std::move(*entity), std::move(*crack), std::move(*entityDepth), std::move(*translucent),
+		                 std::move(*hint), std::move(*outlineVertex), std::move(*outline), std::move(*blended),
+		                 std::move(*additive), std::move(*patch) };
+```
+
+- [ ] **Step 7: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `517 test(s), 0 failure(s)`.
+
+- [ ] **Step 8: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "minecraft-entities: Part 5's shaders: blended layers shaded per face, additive ones, and the atlas's patch pass" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 46: The forward list draws the blended and additive layers
+
+- **Two pipelines more,** made with the forward list's others, from the particles' description: `blended`, with
+  `BlendedPS`, and `additive`, with `AdditivePS` and the colour's blend `ONE` to `ONE`. A failure skips the forward list
+  as before, and `reload` makes them again.
+- **The forward list draws the translucent particles and the blended and additive layers in the scene's order,** each
+  with its kind's pipeline, set only when it changes (`DrawEntities` with a list of kinds); then the outline; then the
+  bias hint under all three kinds, with the hint's pipeline.
+- **`set blend 0|1`** (1 by default): at 0, `UnblendDraws` turns the frame's blended and additive draws into model
+  draws as the snapshot is filled, cut-outs in the G-buffer, as 0.21.0 drew every entity layer. The stats carry the
+  setting.
+
+**Files:**
+- Modify: `tests/TestEntities.cpp`, `src/entities/Entities.h`, `src/entities/Entities.cpp`, `src/render/Renderer.h`,
+  `src/render/Renderer.cpp`
+
+- [ ] **Step 1: Edit `tests/TestEntities.cpp` to add the failing test**
+
+```cpp
+	CHECK(ForwardDraws({ { 0, 3, 0, Kind::Model }, { 3, 6, 4, Kind::Additive } }, false));
+```
+```cpp
+	CHECK(ForwardDraws({ { 0, 3, 0, Kind::Model }, { 3, 6, 4, Kind::Additive } }, false));
+}
+
+TEST(EntitiesUnblendWithBlendOff)
+{
+	using Kind = EntityDraw::Kind;
+	std::vector<EntityDraw> draws = { { 0, 6, 4, Kind::Blended }, { 6, 6, 5, Kind::Additive }, { 12, 6, 12, Kind::Translucent },
+		                              { 18, 24, 0, Kind::Outline }, { 42, 36, 0, Kind::Crack } };
+	UnblendDraws(draws);
+	CHECK(draws[0].kind == Kind::Model);
+	CHECK(draws[1].kind == Kind::Model);
+	CHECK(draws[2].kind == Kind::Translucent);  // particles are as they were
+	CHECK(draws[3].kind == Kind::Outline);
+	CHECK(draws[4].kind == Kind::Crack);
+	CHECK(!ForwardDraws({ draws[0], draws[1] }, false));  // nothing left for the forward pass
+```
+
+- [ ] **Step 2: Build; it must fail**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C" | sort -u | head -3
+```
+Expected: `'UnblendDraws': identifier not found`.
+
+- [ ] **Step 3: Edit `src/entities/Entities.h` to declare it**
+
+```cpp
+bool ForwardDraws(const std::vector<EntityDraw>& aDraws, bool aOutline);
+```
+```cpp
+bool ForwardDraws(const std::vector<EntityDraw>& aDraws, bool aOutline);
+
+// Part 5's set blend 0: every blended and additive draw of aDraws drawn as a model again, a cut-out in the G-buffer, as
+// BlockRender 0.21.0 drew every entity layer.
+void UnblendDraws(std::vector<EntityDraw>& aDraws);
+```
+
+- [ ] **Step 4: Edit `src/entities/Entities.cpp` to add it**
+
+```cpp
+		       (aOutline && aDraw.kind == EntityDraw::Kind::Outline);
+	});
+}
+```
+```cpp
+		       (aOutline && aDraw.kind == EntityDraw::Kind::Outline);
+	});
+}
+
+void UnblendDraws(std::vector<EntityDraw>& aDraws)
+{
+	for (EntityDraw& draw : aDraws)
+	{
+		if (draw.kind == EntityDraw::Kind::Blended || draw.kind == EntityDraw::Kind::Additive)
+		{
+			draw.kind = EntityDraw::Kind::Model;
+		}
+	}
+}
+```
+
+- [ ] **Step 5: Edit `src/render/Renderer.h` for the pipelines, the setting and the draws by kind**
+
+```cpp
+//   snapshot, camera and jitter: the translucent particles and the outline, blended into the tagged colour, then DLSS's
+//   bias hint under the particles, each tested against the tagged depth.
+```
+```cpp
+//   snapshot, camera and jitter: the translucent particles, Part 5's blended and additive entity layers and the outline,
+//   blended into the tagged colour, then DLSS's bias hint under the particles and the layers, each tested against the
+//   tagged depth.
+```
+```cpp
+	// metalness, roughness, materialb, gbmotion and gbdepth; spike 7's entities, glow and glowlight, and step B's dlsshint
+	// and outline
+```
+```cpp
+	// metalness, roughness, materialb, gbmotion and gbdepth; spike 7's entities, glow and glowlight, step B's dlsshint
+	// and outline, and Part 5's blend
+```
+```cpp
+		double      forwardGpuMsAverage = -1.0;  // the forward list, on the GPU; below 0: none drawn
+```
+```cpp
+		double      forwardGpuMsAverage = -1.0;  // the forward list, on the GPU; below 0: none drawn
+		bool        blendOn = true;              // Part 5's set blend
+```
+```cpp
+	                  entities::EntityDraw::Kind aKind, bool aCount);
+```
+```cpp
+	                  entities::EntityDraw::Kind aKind, bool aCount);
+	// Part 5: or those of the kinds aKinds has, in the snapshot's order, each with its kind's pipeline, set only when it
+	// changes (null: the one set already).
+	struct KindPipeline
+	{
+		entities::EntityDraw::Kind kind = entities::EntityDraw::Kind::Model;
+		ID3D12PipelineState*       pipeline = nullptr;
+	};
+	void DrawEntities(ID3D12GraphicsCommandList* aList, const CameraFrame& aCamera, uint64_t aCompleted, const SnapshotGpu& aSnapshot,
+	                  std::span<const KindPipeline> aKinds, bool aCount);
+```
+```cpp
+	int                                                        dlssHint_ = 1;    // set dlsshint: 1 under the particles, 0 nowhere
+```
+```cpp
+	int                                                        dlssHint_ = 1;    // set dlsshint: 1 under the particles, 0 nowhere
+	bool                                                       blend_ = true;    // Part 5's set blend: blended layers before DLSS
+```
+```cpp
+	gpu::ComPtr<ID3D12PipelineState>                           hintPipeline_;
+```
+```cpp
+	gpu::ComPtr<ID3D12PipelineState>                           hintPipeline_;
+	gpu::ComPtr<ID3D12PipelineState>                           blendedPipeline_;   // Part 5
+	gpu::ComPtr<ID3D12PipelineState>                           additivePipeline_;
+```
+
+- [ ] **Step 6: Edit `src/render/Renderer.cpp` to draw them**
+
+```cpp
+	hintPipeline_.Reset();
+	forwardPipelinesFailed_ = false;
+```
+```cpp
+	hintPipeline_.Reset();
+	blendedPipeline_.Reset();
+	additivePipeline_.Reset();
+	forwardPipelinesFailed_ = false;
+```
+```cpp
+		outline_ = aValue == 1.0;
+```
+```cpp
+		outline_ = aValue == 1.0;
+		return true;
+	}
+	if (aName == "blend")
+	{
+		if (aValue != 0.0 && aValue != 1.0)
+		{
+			aError = "blend is 1 to blend the entity layers Minecraft blends before DLSS, or 0 to draw them as cut-outs";
+			return false;
+		}
+		blend_ = aValue == 1.0;
+```
+```cpp
+	hint.RTVFormats[0] = DXGI_FORMAT_R8_UNORM;
+	gpu::ComPtr<ID3D12PipelineState> particlePipeline;
+	gpu::ComPtr<ID3D12PipelineState> outlinePipeline;
+	gpu::ComPtr<ID3D12PipelineState> hintPipeline;
+	if (FAILED(device_->CreateGraphicsPipelineState(&particles, IID_PPV_ARGS(&particlePipeline))) ||
+	    FAILED(device_->CreateGraphicsPipelineState(&outline, IID_PPV_ARGS(&outlinePipeline))) ||
+	    FAILED(device_->CreateGraphicsPipelineState(&hint, IID_PPV_ARGS(&hintPipeline))))
+	{
+		forwardPipelinesFailed_ = true;
+		log_.Push("renderer: couldn't create the forward list's pipelines, so Minecraft's translucent particles and the outline aren't "
+		          "drawn; everything else still is");
+```
+```cpp
+	hint.RTVFormats[0] = DXGI_FORMAT_R8_UNORM;
+	// Part 5: the entity layers Minecraft blends, blended as the particles with their own shader; and those it adds, their
+	// colour added, ONE to ONE, as Minecraft's ADDITIVE.
+	D3D12_GRAPHICS_PIPELINE_STATE_DESC layers = particles;
+	layers.PS = { shaders_->blended.data(), shaders_->blended.size() };
+	D3D12_GRAPHICS_PIPELINE_STATE_DESC added = particles;
+	added.PS = { shaders_->additive.data(), shaders_->additive.size() };
+	added.BlendState.RenderTarget[0].SrcBlend = D3D12_BLEND_ONE;
+	added.BlendState.RenderTarget[0].DestBlend = D3D12_BLEND_ONE;
+	gpu::ComPtr<ID3D12PipelineState> particlePipeline;
+	gpu::ComPtr<ID3D12PipelineState> outlinePipeline;
+	gpu::ComPtr<ID3D12PipelineState> hintPipeline;
+	gpu::ComPtr<ID3D12PipelineState> blendedPipeline;
+	gpu::ComPtr<ID3D12PipelineState> additivePipeline;
+	if (FAILED(device_->CreateGraphicsPipelineState(&particles, IID_PPV_ARGS(&particlePipeline))) ||
+	    FAILED(device_->CreateGraphicsPipelineState(&outline, IID_PPV_ARGS(&outlinePipeline))) ||
+	    FAILED(device_->CreateGraphicsPipelineState(&hint, IID_PPV_ARGS(&hintPipeline))) ||
+	    FAILED(device_->CreateGraphicsPipelineState(&layers, IID_PPV_ARGS(&blendedPipeline))) ||
+	    FAILED(device_->CreateGraphicsPipelineState(&added, IID_PPV_ARGS(&additivePipeline))))
+	{
+		forwardPipelinesFailed_ = true;
+		log_.Push("renderer: couldn't create the forward list's pipelines, so Minecraft's translucent particles, its blended layers and "
+		          "the outline aren't drawn; everything else still is");
+```
+```cpp
+	hintPipeline->SetName(L"BlockRender bias hint pipeline");
+	translucentPipeline_ = particlePipeline;
+	outlinePipeline_ = outlinePipeline;
+	hintPipeline_ = hintPipeline;
+```
+```cpp
+	hintPipeline->SetName(L"BlockRender bias hint pipeline");
+	blendedPipeline->SetName(L"BlockRender blended layers pipeline");
+	additivePipeline->SetName(L"BlockRender additive layers pipeline");
+	translucentPipeline_ = particlePipeline;
+	outlinePipeline_ = outlinePipeline;
+	hintPipeline_ = hintPipeline;
+	blendedPipeline_ = blendedPipeline;
+	additivePipeline_ = additivePipeline;
+```
+```cpp
+	}
+	snapshotRing_.Written(*index);
+```
+```cpp
+	}
+	if (!blend_)
+	{
+		entities::UnblendDraws(snapshot.draws);  // set blend 0: every entity layer a cut-out in the G-buffer, as before Part 5
+	}
+	snapshotRing_.Written(*index);
+```
+```cpp
+	stats.dlssHint = dlssHint_;
+```
+```cpp
+	stats.dlssHint = dlssHint_;
+	stats.blendOn = blend_;
+```
+```cpp
+{
+	// The snapshot's positions are relative to its origin, a whole block: camera-relative, as a section's corner is.
+```
+```cpp
+{
+	const KindPipeline kinds[] = { { aKind, nullptr } };
+	DrawEntities(aList, aCamera, aCompleted, aSnapshot, kinds, aCount);
+}
+
+void Renderer::DrawEntities(ID3D12GraphicsCommandList* aList, const CameraFrame& aCamera, uint64_t aCompleted, const SnapshotGpu& aSnapshot,
+                            std::span<const KindPipeline> aKinds, bool aCount)
+{
+	// The snapshot's positions are relative to its origin, a whole block: camera-relative, as a section's corner is.
+```
+```cpp
+	aList->SetGraphicsRootShaderResourceView(5, (entityTextures_ ? entityTextures_ : atlasBuffer_)->GetGPUVirtualAddress());
+	for (const entities::EntityDraw& draw : aSnapshot.draws)
+	{
+		if (draw.kind != aKind)
+```
+```cpp
+	aList->SetGraphicsRootShaderResourceView(5, (entityTextures_ ? entityTextures_ : atlasBuffer_)->GetGPUVirtualAddress());
+	ID3D12PipelineState* bound = nullptr;  // the pipeline this call set last
+	for (const entities::EntityDraw& draw : aSnapshot.draws)
+	{
+		const auto kind = std::find_if(aKinds.begin(), aKinds.end(), [&draw](const KindPipeline& aEntry) { return aEntry.kind == draw.kind; });
+		if (kind == aKinds.end())
+```
+```cpp
+			constants.textureHeight = place->height;
+```
+```cpp
+			constants.textureHeight = place->height;
+		}
+		if (kind->pipeline && kind->pipeline != bound)
+		{
+			aList->SetPipelineState(kind->pipeline);
+			bound = kind->pipeline;
+```
+```cpp
+	// The translucent particles, then the outline, blended into the colour; then the bias hint under the particles.
+	const SnapshotGpu& shot = snapshots_[forward.snapshot];
+	original.omSetRenderTargets(list, 1, &colourRtv, FALSE, &dsv);
+	DrawEntities(list, forward.camera, completed, shot, entities::EntityDraw::Kind::Translucent, true);
+	if (outline_)
+	{
+		list->SetPipelineState(outlinePipeline_.Get());
+		DrawEntities(list, forward.camera, completed, shot, entities::EntityDraw::Kind::Outline, false);
+```
+```cpp
+	// The translucent particles and Part 5's blended and additive layers, in the scene's order, each kind with its pipeline;
+	// then the outline, blended into the colour; then the bias hint under the particles and the layers.
+	using Kind = entities::EntityDraw::Kind;
+	const SnapshotGpu& shot = snapshots_[forward.snapshot];
+	original.omSetRenderTargets(list, 1, &colourRtv, FALSE, &dsv);
+	const KindPipeline layers[] = { { Kind::Translucent, translucentPipeline_.Get() }, { Kind::Blended, blendedPipeline_.Get() },
+		                            { Kind::Additive, additivePipeline_.Get() } };
+	DrawEntities(list, forward.camera, completed, shot, layers, true);
+	if (outline_)
+	{
+		list->SetPipelineState(outlinePipeline_.Get());
+		DrawEntities(list, forward.camera, completed, shot, Kind::Outline, false);
+```
+```cpp
+		DrawEntities(list, forward.camera, completed, shot, entities::EntityDraw::Kind::Translucent, false);
+```
+```cpp
+		const KindPipeline hinted[] = { { Kind::Translucent, nullptr }, { Kind::Blended, nullptr }, { Kind::Additive, nullptr } };
+		DrawEntities(list, forward.camera, completed, shot, hinted, false);
+```
+
+- [ ] **Step 7: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `518 test(s), 0 failure(s)`.
+
+- [ ] **Step 8: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "minecraft-entities: the forward list draws the blended and additive layers, and set blend puts them back in the G-buffer" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 47: The atlas's patched areas, waiting for the GPU
+
+`AtlasDirty` keeps the areas `PatchAtlas` changed until the upload list's patch pass (the spec's "Animated textures on
+the GPU"):
+- **Each area waits once,** however often it was patched since, as the CPU's atlas holds its newest texels; `Waiting`
+  says whether a patch replaces one the GPU never got.
+- **`Take` packs them** for `PatchCS`: its table, each area's start, stride, sides and where its texels start, and the
+  texels from the atlas, one area after another, row by row. An area not inside its level is left out. At most so many
+  areas come, as D3D12 takes at most 65,535 thread groups in one dimension of a dispatch; the rest wait for the next
+  pass.
+
+**Files:**
+- Modify: `tests/TestAtlas.cpp`, `src/render/Atlas.h`, `src/render/Atlas.cpp`
+
+- [ ] **Step 1: Edit `tests/TestAtlas.cpp` to add the failing test**
+
+```cpp
+	CHECK(cpmc::PatchAtlas(*atlas, 0, 0, 1, 1, Pixels(1, 1, 7)).empty());
+}
+```
+```cpp
+	CHECK(cpmc::PatchAtlas(*atlas, 0, 0, 1, 1, Pixels(1, 1, 7)).empty());
+}
+
+TEST(AtlasDirtyAreasPackedForThePatchPass)
+{
+	// A sprite patched twice waits once, at its newest; each area comes with where it goes in the atlas buffer, and its
+	// texels row by row, one area after another.
+	std::string                error;
+	std::optional<cpmc::Atlas> atlas = cpmc::AtlasFromRgba(9, 7, Pixels(9, 7, 8), error);
+	cpmc::AtlasDirty           dirty;
+	const cpmc::AtlasArea      patched = { 0, 5, 4, 3, 2 };
+	CHECK(!dirty.Waiting(patched));
+	dirty.Add(cpmc::PatchAtlas(*atlas, 5, 4, 3, 2, Pixels(3, 2, 9)));  // levels 0 and 1
+	CHECK(dirty.Waiting(patched));
+	CHECK(!dirty.Waiting({ 0, 5, 4, 3, 1 }));  // another area
+	dirty.Add(cpmc::PatchAtlas(*atlas, 5, 4, 3, 2, Pixels(3, 2, 10)));
+	CHECK_EQ(dirty.Size(), size_t(2));
+	const std::vector<cpmc::AtlasArea> outside = { { 1, 3, 2, 2, 1 }, { 5, 0, 0, 1, 1 } };  // past level 1's side; no level 5
+	dirty.Add(outside);
+	const cpmc::AtlasDirty::Packed packed = dirty.Take(*atlas);
+	CHECK(dirty.Empty());
+	CHECK_EQ(packed.areas.size(), size_t(2));
+	CHECK_EQ(packed.texels.size(), size_t(3 * 2 + 2 * 1));
+	if (packed.areas.size() == 2 && packed.texels.size() == 8)
+	{
+		const cpmc::PatchAreaGpu& top = packed.areas[0];  // level 0's, at 5 4: 4 rows of 9 down, 5 along
+		CHECK_EQ(top.start, 4u * 9u + 5u);
+		CHECK_EQ(top.stride, 9u);
+		CHECK_EQ(top.width, 3u);
+		CHECK_EQ(top.height, 2u);
+		CHECK_EQ(top.source, 0u);
+		CHECK_EQ(packed.texels[0], atlas->texels[4 * 9 + 5]);
+		CHECK_EQ(packed.texels[3], atlas->texels[5 * 9 + 5]);  // the second row
+		const cpmc::PatchAreaGpu& next = packed.areas[1];  // level 1's (4 x 3), at 2 2
+		CHECK_EQ(next.start, atlas->levelOffsets[1] + 2u * 4u + 2u);
+		CHECK_EQ(next.stride, 4u);
+		CHECK_EQ(next.source, 6u);
+		CHECK_EQ(packed.texels[7], atlas->texels[next.start + 1]);
+	}
+	CHECK(!dirty.Waiting(patched));
+	CHECK(dirty.Take(*atlas).areas.empty());
+	// At most so many areas a pass, as a dispatch has at most so many groups: the rest wait for the next.
+	dirty.Add(cpmc::PatchAtlas(*atlas, 5, 4, 3, 2, Pixels(3, 2, 11)));
+	CHECK_EQ(dirty.Take(*atlas, 1).areas.size(), size_t(1));
+	CHECK_EQ(dirty.Size(), size_t(1));
+	CHECK_EQ(dirty.Take(*atlas, 1).areas.size(), size_t(1));
+	CHECK(dirty.Empty());
+}
+```
+
+- [ ] **Step 2: Build; it must fail**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C" | sort -u | head -3
+```
+Expected: `'AtlasDirty': is not a member of 'cpmc'`.
+
+- [ ] **Step 3: Edit `src/render/Atlas.h` to declare it**
+
+```cpp
+#pragma once
+```
+```cpp
+#pragma once
+
+#include "render/FrameConstants.h"
+```
+```cpp
+#include <optional>
+#include <span>
+#include <string>
+#include <string_view>
+```
+```cpp
+#include <optional>
+#include <set>
+#include <span>
+#include <string>
+#include <string_view>
+#include <tuple>
+```
+```cpp
+std::vector<AtlasArea> PatchAtlas(Atlas& aAtlas, uint32_t aX, uint32_t aY, uint32_t aWidth, uint32_t aHeight, std::span<const uint8_t> aRgba);
+```
+```cpp
+std::vector<AtlasArea> PatchAtlas(Atlas& aAtlas, uint32_t aX, uint32_t aY, uint32_t aWidth, uint32_t aHeight, std::span<const uint8_t> aRgba);
+
+// Part 5: the atlas's areas that patches changed, waiting for the upload list: each once, however often it was patched
+// since, as the CPU's atlas holds its newest texels.
+class AtlasDirty
+{
+public:
+	void   Add(std::span<const AtlasArea> aAreas);
+	bool   Waiting(const AtlasArea& aArea) const;  // patched since the last Take: a patch to it now replaces that one
+	bool   Empty() const { return areas_.empty(); }
+	size_t Size() const { return areas_.size(); }
+	void   Clear() { areas_.clear(); }
+
+	// The waiting areas packed for the patch pass (PatchCS): its table, and their texels from aAtlas, one area after
+	// another, row by row. An area that doesn't lie inside its level of aAtlas is left out. At most aMostAreas come, as
+	// a dispatch has at most so many groups; the rest wait for the next pass.
+	struct Packed
+	{
+		std::vector<PatchAreaGpu> areas;
+		std::vector<uint32_t>     texels;
+	};
+	Packed Take(const Atlas& aAtlas, size_t aMostAreas = SIZE_MAX);
+
+private:
+	std::set<std::tuple<uint32_t, uint32_t, uint32_t, uint32_t, uint32_t>> areas_;  // level, x, y, width, height
+};
+```
+
+- [ ] **Step 4: Edit `src/render/Atlas.cpp` to add it**
+
+```cpp
+	return areas;
+}
+}
+```
+```cpp
+	return areas;
+}
+
+void AtlasDirty::Add(std::span<const AtlasArea> aAreas)
+{
+	for (const AtlasArea& area : aAreas)
+	{
+		areas_.insert({ area.level, area.x, area.y, area.width, area.height });
+	}
+}
+
+bool AtlasDirty::Waiting(const AtlasArea& aArea) const
+{
+	return areas_.contains({ aArea.level, aArea.x, aArea.y, aArea.width, aArea.height });
+}
+
+AtlasDirty::Packed AtlasDirty::Take(const Atlas& aAtlas, size_t aMostAreas)
+{
+	Packed packed;
+	auto   next = areas_.begin();
+	for (; next != areas_.end() && packed.areas.size() < aMostAreas; ++next)
+	{
+		const auto& [level, x, y, width, height] = *next;
+		if (level >= aAtlas.Levels())
+		{
+			continue;
+		}
+		const uint32_t levelWidth = LevelSide(aAtlas.width, level);
+		const uint32_t levelHeight = LevelSide(aAtlas.height, level);
+		const uint64_t start = uint64_t(aAtlas.levelOffsets[level]) + uint64_t(y) * levelWidth + x;
+		if (width == 0 || height == 0 || uint64_t(x) + width > levelWidth || uint64_t(y) + height > levelHeight ||
+		    start + uint64_t(height - 1) * levelWidth + width > aAtlas.texels.size())
+		{
+			continue;
+		}
+		PatchAreaGpu area;
+		area.start = uint32_t(start);
+		area.stride = levelWidth;
+		area.width = width;
+		area.height = height;
+		area.source = uint32_t(packed.texels.size());
+		for (uint32_t row = 0; row < height; ++row)
+		{
+			const uint32_t* from = aAtlas.texels.data() + start + size_t(row) * levelWidth;
+			packed.texels.insert(packed.texels.end(), from, from + width);
+		}
+		packed.areas.push_back(area);
+	}
+	areas_.erase(areas_.begin(), next);
+	return packed;
+}
+}
+```
+
+- [ ] **Step 5: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `519 test(s), 0 failure(s)`.
+
+- [ ] **Step 6: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "minecraft-entities: the atlas's patched areas wait once each, packed for the GPU with their newest texels" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 48: The renderer patches the atlas
+
+The renderer's side of the spec's "Animated textures on the GPU":
+- **`ApplyAtlasPatch`** patches the CPU's atlas at once (`PatchAtlas`), under the renderer's lock, and the areas it
+  changed wait for the next upload list; a patch to an area still waiting replaces the one before, which counts as
+  dropped. Until the atlas is on the GPU, its whole upload carries them. With `set animate 0`, or no atlas it fits,
+  nothing changes, and it's counted.
+- **The atlas buffer** is made with unordered access (`MakeBuffer` takes the resource's flags now), and its whole upload
+  drops the areas waiting.
+- **The patch pass,** in the upload list, on the game's main queue, after the uploads: the waiting areas packed
+  (`Take`, at most 65,535) into one upload buffer, kept and reused, grown to the largest pass; the atlas buffer from
+  the common state into unordered access, one dispatch of `PatchCS` (through the original `Dispatch`, past the hook, as
+  every call of ours), and back, timed by two timestamps. Every draw of ours sees each patch whole, before or after it.
+  An `Upload` that has only patches to write records a list too. If the pass's root signature, pipeline, timing or
+  upload buffer can't be made, or the atlas's upload failed, the waiting areas are dropped, logged once: the GPU's atlas
+  keeps the frames it has, and the CPU's stays current for its next whole upload.
+- **`set animate 0|1`** (1 by default), and the stats: patches applied, dropped and refused, their bytes, the areas
+  waiting, the passes, and the CPU's time a patch (with the packing) and the GPU's a pass.
+
+The renderer needs the game, so its own tests are the build and the existing ones; run D tries it.
+
+**Files:**
+- Modify: `src/render/Gpu.h`, `src/render/Gpu.cpp`, `src/render/Renderer.h`, `src/render/Renderer.cpp`
+
+- [ ] **Step 1: Edit `src/render/Gpu.h` for a buffer's flags**
+
+```cpp
+// A buffer in aHeap (default or readback), in aState.
+ComPtr<ID3D12Resource> MakeBuffer(ID3D12Device* aDevice, uint64_t aBytes, D3D12_HEAP_TYPE aHeap, D3D12_RESOURCE_STATES aState);
+```
+```cpp
+// A buffer in aHeap (default or readback), in aState, with aFlags (spike 7's Part 5: unordered access for the atlas).
+ComPtr<ID3D12Resource> MakeBuffer(ID3D12Device* aDevice, uint64_t aBytes, D3D12_HEAP_TYPE aHeap, D3D12_RESOURCE_STATES aState,
+                                  D3D12_RESOURCE_FLAGS aFlags = D3D12_RESOURCE_FLAG_NONE);
+```
+
+- [ ] **Step 2: Edit `src/render/Gpu.cpp` to make it with them**
+
+```cpp
+ComPtr<ID3D12Resource> MakeBuffer(ID3D12Device* aDevice, uint64_t aBytes, D3D12_HEAP_TYPE aHeap, D3D12_RESOURCE_STATES aState)
+```
+```cpp
+ComPtr<ID3D12Resource> MakeBuffer(ID3D12Device* aDevice, uint64_t aBytes, D3D12_HEAP_TYPE aHeap, D3D12_RESOURCE_STATES aState,
+                                  D3D12_RESOURCE_FLAGS aFlags)
+```
+```cpp
+	desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+```
+```cpp
+	desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+	desc.Flags = aFlags;
+```
+
+- [ ] **Step 3: Edit `src/render/Renderer.h` for the patches, the pass and the setting**
+
+```cpp
+	// and outline, and Part 5's blend
+```
+```cpp
+	// and outline, and Part 5's blend and animate
+```
+```cpp
+	uint32_t GlowLight() const;  // set glowlight
+```
+```cpp
+	uint32_t GlowLight() const;  // set glowlight
+
+	// Spike 7's Part 5: an animated sprite's frame, aWidth x aHeight RGBA8 pixels at aX aY of the atlas's top level,
+	// patched into the atlas at once (PatchAtlas), its levels under it rebuilt. The areas it changed wait for the next
+	// Update's upload list, whose patch pass writes them into the GPU's atlas; a patch to an area still waiting replaces
+	// the one before, which counts as dropped. Until the atlas is on the GPU, its whole upload carries them. With set
+	// animate 0, or no atlas it fits, nothing changes, and it's counted.
+	void ApplyAtlasPatch(uint32_t aX, uint32_t aY, uint32_t aWidth, uint32_t aHeight, std::span<const uint8_t> aRgba);
+```
+```cpp
+		bool        blendOn = true;              // Part 5's set blend
+```
+```cpp
+		bool        blendOn = true;              // Part 5's set blend
+		// Part 5's animated textures, in the last second
+		bool        animateOn = true;          // set animate
+		uint64_t    patchesApplied = 0;        // into the CPU's atlas
+		uint64_t    patchesDropped = 0;        // replaced by a newer one before the upload list wrote it, or with set animate 0
+		uint64_t    patchesRefused = 0;        // with no atlas they fit
+		uint64_t    patchBytes = 0;            // of the patches applied
+		size_t      patchAreasWaiting = 0;     // for the next upload list, now
+		uint64_t    patchPasses = 0;           // upload lists that wrote patches into the GPU's atlas
+		double      patchCpuMsAverage = -1.0;  // a patch's, rebuilding its levels, with the packing; below 0: none
+		double      patchGpuMsAverage = -1.0;  // a patch pass's, on the GPU; below 0: none timed
+```
+```cpp
+	void UploadEntityTextures(uint64_t aReady, std::vector<gpu::ComPtr<ID3D12Resource>>& aStaging, bool& aFailed);
+```
+```cpp
+	void UploadEntityTextures(uint64_t aReady, std::vector<gpu::ComPtr<ID3D12Resource>>& aStaging, bool& aFailed);
+	// Part 5: the atlas's waiting areas, packed and written into the GPU's atlas by the patch pass, in Upload's list.
+	void RecordPatches();
+	bool EnsurePatchObjects();  // the patch pass's root signature, pipeline and timing; false, logged once, if not
+```
+```cpp
+	gpu::ComPtr<ID3D12Resource>                                    atlasBuffer_;
+	uint64_t                                                       atlasReady_ = 0;
+	bool                                                           atlasUploaded_ = false;
+```
+```cpp
+	gpu::ComPtr<ID3D12Resource>                                    atlasBuffer_;  // with unordered access, for the patch pass
+	uint64_t                                                       atlasReady_ = 0;
+	bool                                                           atlasUploaded_ = false;
+	// Part 5's animated textures: the areas waiting for the patch pass, and its objects. Its upload buffer is reused: Upload
+	// records a list only once the last one is done.
+	bool                                                           animate_ = true;  // set animate
+	AtlasDirty                                                     dirty_;
+	gpu::ComPtr<ID3D12RootSignature>                               patchRootSignature_;
+	gpu::ComPtr<ID3D12PipelineState>                               patchPipeline_;
+	bool                                                           patchFailed_ = false;  // logged; until the shaders are reloaded
+	gpu::ComPtr<ID3D12Resource>                                    patchUpload_;
+	uint8_t*                                                       patchUploadMapped_ = nullptr;
+	uint64_t                                                       patchUploadBytes_ = 0;
+	gpu::ComPtr<ID3D12QueryHeap>                                   patchQueries_;  // 2 timestamps, around the pass
+	gpu::ComPtr<ID3D12Resource>                                    patchTimings_;  // readback
+	uint64_t*                                                      patchTimingsMapped_ = nullptr;
+	bool                                                           patchTimed_ = false;  // the last upload list timed a pass
+	double                                                         patchCpuMsSum_ = 0.0;
+	uint64_t                                                       patchCpuSamples_ = 0;
+	double                                                         patchGpuMsSum_ = 0.0;
+	uint64_t                                                       patchGpuSamples_ = 0;
+```
+
+- [ ] **Step 4: Edit `src/render/Renderer.cpp` to patch the atlas and write the GPU's**
+
+```cpp
+	atlasUploaded_ = false;
+	log_.Push(std::format("atlas: {} x {}, {} levels, {} blocks", atlas_->width, atlas_->height, atlas_->Levels(), atlas_->blocks.size()));
+```
+```cpp
+	atlasUploaded_ = false;
+	dirty_.Clear();  // a new atlas: its whole upload is due
+	log_.Push(std::format("atlas: {} x {}, {} levels, {} blocks", atlas_->width, atlas_->height, atlas_->Levels(), atlas_->blocks.size()));
+```
+```cpp
+	atlasUploaded_ = false;
+}
+```
+```cpp
+	atlasUploaded_ = false;
+	dirty_.Clear();  // a new atlas, at its sprites' first frames: its whole upload is due
+}
+```
+```cpp
+	forwardPipelinesFailed_ = false;
+```
+```cpp
+	forwardPipelinesFailed_ = false;
+	patchPipeline_.Reset();
+	patchFailed_ = false;
+```
+```cpp
+	}
+	aError = std::format("there's no setting called \"{}\"", aName);
+```
+```cpp
+	}
+	if (aName == "animate")
+	{
+		if (aValue != 0.0 && aValue != 1.0)
+		{
+			aError = "animate is 1 to play Minecraft's animated textures, or 0 to leave the atlas as it is";
+			return false;
+		}
+		animate_ = aValue == 1.0;
+		return true;
+	}
+	aError = std::format("there's no setting called \"{}\"", aName);
+```
+```cpp
+	pendingEntities_ = std::move(aFrame);
+```
+```cpp
+	pendingEntities_ = std::move(aFrame);
+}
+
+void Renderer::ApplyAtlasPatch(uint32_t aX, uint32_t aY, uint32_t aWidth, uint32_t aHeight, std::span<const uint8_t> aRgba)
+{
+	const auto      start = std::chrono::steady_clock::now();
+	std::lock_guard lock(mutex_);
+	if (!animate_)
+	{
+		++stats_.patchesDropped;  // set animate 0: the atlas stays as it is
+		return;
+	}
+	const std::vector<AtlasArea> areas = atlas_ ? cpmc::PatchAtlas(*atlas_, aX, aY, aWidth, aHeight, aRgba) : std::vector<AtlasArea>();
+	if (areas.empty())
+	{
+		++stats_.patchesRefused;  // no atlas, or one it doesn't fit
+		return;
+	}
+	++stats_.patchesApplied;
+	stats_.patchBytes += aRgba.size();
+	if (atlasUploaded_)
+	{
+		if (dirty_.Waiting(areas.front()))
+		{
+			++stats_.patchesDropped;  // the sprite's last frame never reached the GPU: this one replaces it
+		}
+		dirty_.Add(areas);  // for the next patch pass; until then, the whole atlas's upload carries it
+	}
+	patchCpuMsSum_ += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+	++patchCpuSamples_;
+```
+```cpp
+	retired_.Free(completed);
+	const bool atlasDue = atlas_ && !atlasUploaded_;
+	if ((pending_.Size() == 0 && !atlasDue && pendingTextures_.empty()) || completed < uploadFence_)
+```
+```cpp
+	retired_.Free(completed);
+	if (patchTimed_ && completed >= uploadFence_)
+	{
+		// Part 5: the last upload list's patch pass, timed around its dispatch.
+		patchTimed_ = false;
+		if (patchTimingsMapped_[1] > patchTimingsMapped_[0] && timestampFrequency_ > 0)
+		{
+			patchGpuMsSum_ += double(patchTimingsMapped_[1] - patchTimingsMapped_[0]) * 1000.0 / double(timestampFrequency_);
+			++patchGpuSamples_;
+		}
+	}
+	const bool atlasDue = atlas_ && !atlasUploaded_;
+	if ((pending_.Size() == 0 && !atlasDue && pendingTextures_.empty() && dirty_.Empty()) || completed < uploadFence_)
+```
+```cpp
+	const auto upload = [&](const void* aData, uint64_t aBytes) -> gpu::ComPtr<ID3D12Resource> {
+		auto  target = gpu::MakeBuffer(device_, aBytes, D3D12_HEAP_TYPE_DEFAULT, D3D12_RESOURCE_STATE_COMMON);
+```
+```cpp
+	const auto upload = [&](const void* aData, uint64_t aBytes, D3D12_RESOURCE_FLAGS aFlags = D3D12_RESOURCE_FLAG_NONE) -> gpu::ComPtr<ID3D12Resource> {
+		auto  target = gpu::MakeBuffer(device_, aBytes, D3D12_HEAP_TYPE_DEFAULT, D3D12_RESOURCE_STATE_COMMON, aFlags);
+```
+```cpp
+		atlasBuffer_ = upload(atlas_->texels.data(), atlas_->texels.size() * sizeof(uint32_t));
+```
+```cpp
+		// With unordered access, for Part 5's patch pass; the CPU's atlas holds every patch so far.
+		atlasBuffer_ = upload(atlas_->texels.data(), atlas_->texels.size() * sizeof(uint32_t), D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+```
+```cpp
+		atlasUploaded_ = true;
+```
+```cpp
+		atlasUploaded_ = true;
+		dirty_.Clear();
+```
+```cpp
+	UploadEntityTextures(ready, staging, failed);
+```
+```cpp
+	UploadEntityTextures(ready, staging, failed);
+	RecordPatches();
+```
+```cpp
+	pendingTextures_.clear();
+}
+```
+```cpp
+	pendingTextures_.clear();
+}
+
+void Renderer::RecordPatches()
+{
+	if (dirty_.Empty())
+	{
+		return;
+	}
+	if (!atlas_ || !atlasBuffer_ || !EnsurePatchObjects())
+	{
+		// No atlas on the GPU, its upload failed, or no patch pass: the GPU's atlas keeps the frames it has, and the
+		// CPU's stays current for its next whole upload.
+		dirty_.Clear();
+		return;
+	}
+	const auto               start = std::chrono::steady_clock::now();
+	const AtlasDirty::Packed packed = dirty_.Take(*atlas_, D3D12_CS_DISPATCH_MAX_THREAD_GROUPS_PER_DIMENSION);
+	if (packed.areas.empty())
+	{
+		return;
+	}
+	// One buffer: the area table, then the texels from the next 256 bytes on. The last upload list that read it is done
+	// (Upload records a list only then), so it's written in place, or replaced at once when it's too small.
+	const uint64_t tableBytes = packed.areas.size() * sizeof(PatchAreaGpu);
+	const uint64_t texelsAt = (tableBytes + 255) / 256 * 256;
+	const uint64_t bytes = texelsAt + packed.texels.size() * sizeof(uint32_t);
+	if (bytes > patchUploadBytes_)
+	{
+		if (patchUploadMapped_)
+		{
+			patchUpload_->Unmap(0, nullptr);
+		}
+		patchUpload_.Reset();
+		patchUploadMapped_ = nullptr;
+		patchUploadBytes_ = 0;
+		const uint64_t size = std::max<uint64_t>(std::bit_ceil(bytes), 64ull << 10);
+		auto           buffer = gpu::MakeBuffer(device_, size, D3D12_HEAP_TYPE_UPLOAD, D3D12_RESOURCE_STATE_GENERIC_READ);
+		void*          mapped = nullptr;
+		if (!buffer || FAILED(buffer->Map(0, nullptr, &mapped)))
+		{
+			patchFailed_ = true;
+			patchPipeline_.Reset();
+			log_.Push("renderer: couldn't create the atlas patches' upload buffer, so Minecraft's animated textures stay as they are on the GPU");
+			return;
+		}
+		buffer->SetName(L"BlockRender atlas patches");
+		patchUpload_ = buffer;
+		patchUploadMapped_ = static_cast<uint8_t*>(mapped);
+		patchUploadBytes_ = size;
+	}
+	std::memcpy(patchUploadMapped_, packed.areas.data(), size_t(tableBytes));
+	std::memcpy(patchUploadMapped_ + texelsAt, packed.texels.data(), packed.texels.size() * sizeof(uint32_t));
+	PatchConstants constants;
+	constants.areas = uint32_t(packed.areas.size());
+	constants.texels = uint32_t(packed.texels.size());
+	constants.atlasTexels = uint32_t(atlas_->texels.size());
+	// The atlas, in the common state between lists, takes the writes, then goes back for the draws to read.
+	const d3d::Originals&        original = d3d::Original();
+	const D3D12_RESOURCE_BARRIER into = Transition(atlasBuffer_.Get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+	const D3D12_RESOURCE_BARRIER back = Transition(atlasBuffer_.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COMMON);
+	original.resourceBarrier(uploadList_.Get(), 1, &into);
+	uploadList_->SetComputeRootSignature(patchRootSignature_.Get());
+	uploadList_->SetPipelineState(patchPipeline_.Get());
+	uploadList_->SetComputeRoot32BitConstants(0, 4, &constants, 0);
+	uploadList_->SetComputeRootShaderResourceView(1, patchUpload_->GetGPUVirtualAddress());
+	uploadList_->SetComputeRootShaderResourceView(2, patchUpload_->GetGPUVirtualAddress() + texelsAt);
+	uploadList_->SetComputeRootUnorderedAccessView(3, atlasBuffer_->GetGPUVirtualAddress());
+	uploadList_->EndQuery(patchQueries_.Get(), D3D12_QUERY_TYPE_TIMESTAMP, 0);
+	original.dispatch(uploadList_.Get(), constants.areas, 1, 1);  // a group an area; past the hook, as every call of ours
+	uploadList_->EndQuery(patchQueries_.Get(), D3D12_QUERY_TYPE_TIMESTAMP, 1);
+	original.resourceBarrier(uploadList_.Get(), 1, &back);
+	uploadList_->ResolveQueryData(patchQueries_.Get(), D3D12_QUERY_TYPE_TIMESTAMP, 0, 2, patchTimings_.Get(), 0);
+	patchTimed_ = true;
+	++stats_.patchPasses;
+	patchCpuMsSum_ += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+}
+
+bool Renderer::EnsurePatchObjects()
+{
+	if (patchPipeline_)
+	{
+		return true;
+	}
+	if (patchFailed_ || !shaders_ || !d3d::Original().dispatch)
+	{
+		return false;
+	}
+	const auto fail = [this](const char* aWhat) {
+		patchFailed_ = true;
+		log_.Push(std::format("renderer: couldn't create the atlas patch pass's {}, so Minecraft's animated textures stay as they are on the "
+		                      "GPU; everything else is drawn",
+		                      aWhat));
+		return false;
+	};
+	if (!patchRootSignature_)
+	{
+		// b0 the pass's constants, t0 the areas, t1 their texels, u0 the atlas: root descriptors, as the draws'.
+		D3D12_ROOT_PARAMETER parameters[4]{};
+		parameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
+		parameters[0].Constants = { 0, 0, 4 };
+		parameters[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV;
+		parameters[1].Descriptor = { 0, 0 };
+		parameters[2].ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV;
+		parameters[2].Descriptor = { 1, 0 };
+		parameters[3].ParameterType = D3D12_ROOT_PARAMETER_TYPE_UAV;
+		parameters[3].Descriptor = { 0, 0 };
+		const D3D12_ROOT_SIGNATURE_DESC rootDesc{ 4, parameters, 0, nullptr, D3D12_ROOT_SIGNATURE_FLAG_NONE };
+		gpu::ComPtr<ID3DBlob>           blob;
+		gpu::ComPtr<ID3DBlob>           error;
+		if (FAILED(D3D12SerializeRootSignature(&rootDesc, D3D_ROOT_SIGNATURE_VERSION_1, &blob, &error)) ||
+		    FAILED(device_->CreateRootSignature(0, blob->GetBufferPointer(), blob->GetBufferSize(), IID_PPV_ARGS(&patchRootSignature_))))
+		{
+			return fail("root signature");
+		}
+		patchRootSignature_->SetName(L"BlockRender patch root signature");
+	}
+	if (!patchQueries_)
+	{
+		const D3D12_QUERY_HEAP_DESC queryDesc{ D3D12_QUERY_HEAP_TYPE_TIMESTAMP, 2, 0 };
+		auto                        timings = gpu::MakeBuffer(device_, 2 * sizeof(uint64_t), D3D12_HEAP_TYPE_READBACK, D3D12_RESOURCE_STATE_COPY_DEST);
+		void*                       mapped = nullptr;
+		if (!timings || FAILED(timings->Map(0, nullptr, &mapped)) || FAILED(device_->CreateQueryHeap(&queryDesc, IID_PPV_ARGS(&patchQueries_))))
+		{
+			patchQueries_.Reset();
+			return fail("timing queries");
+		}
+		timings->SetName(L"BlockRender patch timings");
+		patchTimings_ = timings;
+		patchTimingsMapped_ = static_cast<uint64_t*>(mapped);
+	}
+	D3D12_COMPUTE_PIPELINE_STATE_DESC desc{};
+	desc.pRootSignature = patchRootSignature_.Get();
+	desc.CS = { shaders_->patch.data(), shaders_->patch.size() };
+	gpu::ComPtr<ID3D12PipelineState> pipeline;
+	if (FAILED(device_->CreateComputePipelineState(&desc, IID_PPV_ARGS(&pipeline))))
+	{
+		return fail("pipeline");
+	}
+	pipeline->SetName(L"BlockRender patch pipeline");
+	patchPipeline_ = pipeline;
+	return true;
+}
+```
+```cpp
+	stats.forwardGpuMsAverage = forwardGpuSamples_ ? forwardGpuMsSum_ / double(forwardGpuSamples_) : -1.0;
+	stats_ = {};
+	gpuMsSum_ = frameMsSum_ = updateMsSum_ = hudCopyMsSum_ = hudGpuMsSum_ = entityGpuMsSum_ = forwardGpuMsSum_ = 0.0;
+	gpuSamples_ = frameSamples_ = updateSamples_ = hudCopySamples_ = hudGpuSamples_ = entityGpuSamples_ = forwardGpuSamples_ = 0;
+```
+```cpp
+	stats.forwardGpuMsAverage = forwardGpuSamples_ ? forwardGpuMsSum_ / double(forwardGpuSamples_) : -1.0;
+	stats.animateOn = animate_;
+	stats.patchAreasWaiting = dirty_.Size();
+	stats.patchCpuMsAverage = patchCpuSamples_ ? patchCpuMsSum_ / double(patchCpuSamples_) : -1.0;
+	stats.patchGpuMsAverage = patchGpuSamples_ ? patchGpuMsSum_ / double(patchGpuSamples_) : -1.0;
+	stats_ = {};
+	gpuMsSum_ = frameMsSum_ = updateMsSum_ = hudCopyMsSum_ = hudGpuMsSum_ = entityGpuMsSum_ = forwardGpuMsSum_ = 0.0;
+	gpuSamples_ = frameSamples_ = updateSamples_ = hudCopySamples_ = hudGpuSamples_ = entityGpuSamples_ = forwardGpuSamples_ = 0;
+	patchCpuMsSum_ = patchGpuMsSum_ = 0.0;
+	patchCpuSamples_ = patchGpuSamples_ = 0;
+```
+
+- [ ] **Step 5: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `519 test(s), 0 failure(s)`.
+
+- [ ] **Step 6: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "minecraft-entities: the renderer patches the atlas, its upload list writing the changed areas into the GPU's" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 49: BlockRender 0.22.0 wires Part 5 in
+
+- **The plugin's sink:** `AtlasRegion` hands each patch to `ApplyAtlasPatch`; `Texture` notes each texture for
+  `Entities` as well as uploading it; Minecraft's clear drops the notes too (`ClearAll`); and the frame's geometry takes
+  `glowlight`, for the kinds.
+- **The status** (the spec's "Measurements and the status"):
+  - the `entities` line: the newest scene's blended and additive batches, `the newest N batches (B blended, A
+    additive)`, and `blend on|off` after the other settings;
+  - the `atlas` line: the patches in the last second, `patches N applied, R refused and D dropped in the last second (X
+    MB), P passes, CPU …, GPU …, W areas waiting, animate on|off`, then `; K from before the atlas, skipped` once there
+    are any. A bad patch counts with the ring's rejected messages, as a bad section does.
+- **The version** goes to 0.22.0, in the log line, `Query` and the DLL's.
+
+**Files:**
+- Modify: `tests/TestStatus.cpp`, `src/Status.h`, `src/Status.cpp`, `src/Plugin.cpp`, `CMakeLists.txt`
+
+- [ ] **Step 1: Edit `tests/TestStatus.cpp` to change the tests of the lines, and add the patches'**
+
+```cpp
+	link.updateMsWorst = 1.2;
+```
+```cpp
+	link.updateMsWorst = 1.2;
+	link.patchesApplied = 812;
+	link.patchesDropped = 3;
+	link.patchMb = 7.52;
+	link.patchPasses = 60;
+	link.patchCpuMsAverage = 0.02;
+	link.patchGpuMsAverage = 0.011;
+	link.patchAreasWaiting = 4;
+```
+```cpp
+	                  "1.200 ms worst"));
+```
+```cpp
+	                  "1.200 ms worst; patches 812 applied, 0 refused and 3 dropped in the last second (7.52 MB), 60 passes, CPU "
+	                  "0.020 ms average a patch, GPU 0.011 ms average a pass, 4 areas waiting, animate on"));
+```
+```cpp
+	CHECK(Has(status, "atlas=none yet; 0 translucent triangles dropped; update not measured"));
+```
+```cpp
+	CHECK(Has(status, "atlas=none yet; 0 translucent triangles dropped; update not measured; patches 0 applied, 0 refused and 0 "
+	                  "dropped in the last second (0.00 MB), 0 passes, CPU not measured, GPU not measured, 0 areas waiting, "
+	                  "animate on"));
+```
+```cpp
+	CHECK(Has(status, "processes=Cyberpunk 50% of a core, 100 MB; Minecraft not running"));
+```
+```cpp
+	CHECK(Has(status, "processes=Cyberpunk 50% of a core, 100 MB; Minecraft not running"));
+}
+
+TEST(StatusWritesTheAtlasPatches)
+{
+	// Part 5: patches refused with no atlas they fit, dropped with set animate 0, and the link's from before the atlas.
+	cpmc::StatusReport report;
+	cpmc::LinkReport   link;
+	link.patchesRefused = 2;
+	link.patchesDropped = 40;
+	link.animateOn = false;
+	link.patchesBeforeAtlas = 5;
+	report.link = link;
+	CHECK(Has(cpmc::FormatStatus(report), "atlas=none yet; 0 translucent triangles dropped; update not measured; patches 0 applied, 2 "
+	                                      "refused and 40 dropped in the last second (0.00 MB), 0 passes, CPU not measured, GPU not "
+	                                      "measured, 0 areas waiting, animate off; 5 from before the atlas, skipped"));
+```
+```cpp
+	CHECK(Has(status, "entities=on: 0 scenes a second (0.00 MB/s); the newest 0 batches, 0 vertices, 0 glowing from block light 15, 0 "
+	                  "translucent; 0 textures (0.00 MB), 0 left out; drawn in 0 frames, 0 draws skipped, GPU not measured; the forward "
+	                  "list in 0 frames, the bias hint in 0, GPU not measured; outline on, dlsshint 1; world: nothing"));
+```
+```cpp
+	CHECK(Has(status, "entities=on: 0 scenes a second (0.00 MB/s); the newest 0 batches (0 blended, 0 additive), 0 vertices, 0 glowing "
+	                  "from block light 15, 0 translucent; 0 textures (0.00 MB), 0 left out; drawn in 0 frames, 0 draws skipped, GPU not "
+	                  "measured; the forward list in 0 frames, the bias hint in 0, GPU not measured; outline on, dlsshint 1, blend on; "
+	                  "world: nothing"));
+```
+```cpp
+	link.dlssHint = 0;
+	report.link = link;
+	CHECK(Has(cpmc::FormatStatus(report),
+	          "entities=on: 60 scenes a second (7.25 MB/s); the newest 12 batches, 4152 vertices, 720 glowing from block light 14, 78 "
+	          "translucent; 14 textures (3.64 MB), 0 left out; drawn in 59 frames, 2 draws skipped, GPU 0.050 ms average; the forward "
+	          "list in 57 frames, the bias hint in 56, GPU 0.020 ms average; outline off, dlsshint 0; world: 1 arrow, 1 block, 1 item, 4 "
+	          "shadows; the nearest mob 5.0 m away; 2 forward lists skipped (the GPU is still busy with an earlier frame); 1 frames "
+	          "waited for a snapshot; 3 draws past a snapshot's 8 MB"));
+```
+```cpp
+	link.dlssHint = 0;
+	link.sceneBlended = 3;
+	link.sceneAdditive = 1;
+	link.blendOn = false;
+	report.link = link;
+	CHECK(Has(cpmc::FormatStatus(report),
+	          "entities=on: 60 scenes a second (7.25 MB/s); the newest 12 batches (3 blended, 1 additive), 4152 vertices, 720 glowing "
+	          "from block light 14, 78 translucent; 14 textures (3.64 MB), 0 left out; drawn in 59 frames, 2 draws skipped, GPU 0.050 ms "
+	          "average; the forward list in 57 frames, the bias hint in 56, GPU 0.020 ms average; outline off, dlsshint 0, blend off; "
+	          "world: 1 arrow, 1 block, 1 item, 4 shadows; the nearest mob 5.0 m away; 2 forward lists skipped (the GPU is still busy "
+	          "with an earlier frame); 1 frames waited for a snapshot; 3 draws past a snapshot's 8 MB"));
+```
+
+- [ ] **Step 2: Build; it must fail**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C" | sort -u | head -3
+```
+Expected: `'blendOn': is not a member of 'cpmc::LinkReport'`.
+
+- [ ] **Step 3: Edit `src/Status.h` to add the figures**
+
+```cpp
+	uint32_t              sceneTranslucent = 0;     // in translucent batches
+```
+```cpp
+	uint32_t              sceneTranslucent = 0;     // in translucent batches
+	uint32_t              sceneBlended = 0;         // Part 5: its batches drawn blended before DLSS
+	uint32_t              sceneAdditive = 0;        // and added
+```
+```cpp
+	int                   dlssHint = 1;             // set dlsshint
+```
+```cpp
+	int                   dlssHint = 1;             // set dlsshint
+	bool                  blendOn = true;           // set blend
+```
+```cpp
+	double      updateMsWorst = -1.0;
+```
+```cpp
+	double      updateMsWorst = -1.0;
+	// Part 5's animated textures: SkyCraft's patches to the atlas, in the last second
+	uint64_t    patchesApplied = 0;        // into the CPU's atlas
+	uint64_t    patchesRefused = 0;        // with no atlas they fit
+	uint64_t    patchesDropped = 0;        // replaced before the upload list wrote them, or with set animate 0
+	double      patchMb = 0.0;             // of those applied
+	uint64_t    patchPasses = 0;           // upload lists that wrote them into the GPU's atlas
+	double      patchCpuMsAverage = -1.0;  // a patch's, with the packing; below 0: none
+	double      patchGpuMsAverage = -1.0;  // a pass's, on the GPU; below 0: none timed
+	size_t      patchAreasWaiting = 0;     // for the next pass, now
+	bool        animateOn = true;          // set animate
+	uint64_t    patchesBeforeAtlas = 0;    // the link's, since the start: for an atlas it hadn't seen, skipped
+```
+
+- [ ] **Step 4: Edit `src/Status.cpp` to write them**
+
+```cpp
+// Minecraft's entities (spike 7): the scenes coming, the newest, the textures, what's drawn, step B's forward list and
+// its settings, and the world entities.
+std::string FormatEntities(const LinkReport& aLink)
+{
+	std::string out = std::format("entities={}: {:.0f} scenes a second ({:.2f} MB/s); the newest {} batches, {} vertices, {} glowing from "
+	                              "block light {}, {} translucent; {} textures ({:.2f} MB), {} left out; drawn in {} frames, {} draws "
+	                              "skipped, GPU {}; the forward list in {} frames, the bias hint in {}, GPU {}; outline {}, dlsshint {}; "
+	                              "world: {}",
+	                              aLink.entitiesOn ? "on" : "off", aLink.scenesPerSecond, aLink.sceneMbPerSecond, aLink.sceneBatches,
+	                              aLink.sceneVertices, aLink.sceneGlowing, aLink.glowLight, aLink.sceneTranslucent, aLink.entityTextures,
+	                              aLink.entityTextureMb, aLink.entityTexturesLeftOut, aLink.entityFrames, aLink.entityDrawsSkipped,
+	                              MsAverage(aLink.entityGpuMsAverage), aLink.forwardFrames, aLink.forwardHinted,
+	                              MsAverage(aLink.forwardGpuMsAverage), aLink.outlineOn ? "on" : "off", aLink.dlssHint,
+	                              OneLine(aLink.worldEntities));
+```
+```cpp
+// Minecraft's entities (spike 7): the scenes coming, the newest and its batches of each kind Part 5 draws before DLSS,
+// the textures, what's drawn, step B's forward list and its settings, and the world entities.
+std::string FormatEntities(const LinkReport& aLink)
+{
+	std::string out = std::format("entities={}: {:.0f} scenes a second ({:.2f} MB/s); the newest {} batches ({} blended, {} additive), {} "
+	                              "vertices, {} glowing from block light {}, {} translucent; {} textures ({:.2f} MB), {} left out; drawn "
+	                              "in {} frames, {} draws skipped, GPU {}; the forward list in {} frames, the bias hint in {}, GPU {}; "
+	                              "outline {}, dlsshint {}, blend {}; world: {}",
+	                              aLink.entitiesOn ? "on" : "off", aLink.scenesPerSecond, aLink.sceneMbPerSecond, aLink.sceneBatches,
+	                              aLink.sceneBlended, aLink.sceneAdditive, aLink.sceneVertices, aLink.sceneGlowing, aLink.glowLight,
+	                              aLink.sceneTranslucent, aLink.entityTextures, aLink.entityTextureMb, aLink.entityTexturesLeftOut,
+	                              aLink.entityFrames, aLink.entityDrawsSkipped, MsAverage(aLink.entityGpuMsAverage), aLink.forwardFrames,
+	                              aLink.forwardHinted, MsAverage(aLink.forwardGpuMsAverage), aLink.outlineOn ? "on" : "off",
+	                              aLink.dlssHint, aLink.blendOn ? "on" : "off", OneLine(aLink.worldEntities));
+```
+```cpp
+	out += std::format("atlas={}; {} translucent triangles dropped; update {}\n", aLink.atlas, aLink.translucentDropped,
+	                   Ms(aLink.updateMsAverage, aLink.updateMsWorst));
+```
+```cpp
+	out += std::format("atlas={}; {} translucent triangles dropped; update {}; patches {} applied, {} refused and {} dropped in the last "
+	                   "second ({:.2f} MB), {} passes, CPU {}, GPU {}, {} areas waiting, animate {}{}\n",
+	                   aLink.atlas, aLink.translucentDropped, Ms(aLink.updateMsAverage, aLink.updateMsWorst), aLink.patchesApplied,
+	                   aLink.patchesRefused, aLink.patchesDropped, aLink.patchMb, aLink.patchPasses,
+	                   MsAverage(aLink.patchCpuMsAverage, " a patch"), MsAverage(aLink.patchGpuMsAverage, " a pass"),
+	                   aLink.patchAreasWaiting, aLink.animateOn ? "on" : "off",
+	                   aLink.patchesBeforeAtlas > 0 ? std::format("; {} from before the atlas, skipped", aLink.patchesBeforeAtlas) : "");
+```
+
+- [ ] **Step 5: Edit `src/Plugin.cpp` for the sink, the frame, the status and 0.22.0**
+
+```cpp
+constexpr const char* kVersion = "0.21.0";
+```
+```cpp
+constexpr const char* kVersion = "0.22.0";
+```
+```cpp
+		g_entities.Clear();
+```
+```cpp
+		g_entities.ClearAll();
+```
+```cpp
+	// Spike 7: Minecraft's entity textures, its scenes of entities and particles, and its world-entity table.
+	void Texture(const cpmc::link::TextureImage& aTexture) override
+	{
+		g_entityTextureSizes[aTexture.id] = { aTexture.width, aTexture.height };
+```
+```cpp
+	// Part 5: an animated sprite's frame, into the atlas
+	void AtlasRegion(const cpmc::link::AtlasPatch& aPatch) override
+	{
+		g_renderer->ApplyAtlasPatch(aPatch.x, aPatch.y, aPatch.width, aPatch.height, aPatch.rgba);
+	}
+
+	// Spike 7: Minecraft's entity textures, each noted for whether it's see-through (Part 5), its scenes of entities and
+	// particles, and its world-entity table.
+	void Texture(const cpmc::link::TextureImage& aTexture) override
+	{
+		g_entityTextureSizes[aTexture.id] = { aTexture.width, aTexture.height };
+		g_entities.Texture(aTexture.id, aTexture.rgba);
+```
+```cpp
+	report.sceneTranslucent = counts.translucent;
+```
+```cpp
+	report.sceneTranslucent = counts.translucent;
+	report.sceneBlended = counts.blended;
+	report.sceneAdditive = counts.additive;
+```
+```cpp
+	report.dlssHint = aStats.dlssHint;
+```
+```cpp
+	report.dlssHint = aStats.dlssHint;
+	report.blendOn = aStats.blendOn;
+```
+```cpp
+	report.updateMsWorst = aStats.updateMsWorst;
+```
+```cpp
+	report.updateMsWorst = aStats.updateMsWorst;
+	report.patchesApplied = aStats.patchesApplied;
+	report.patchesRefused = aStats.patchesRefused;
+	report.patchesDropped = aStats.patchesDropped;
+	report.patchMb = double(aStats.patchBytes) / 1048576.0;
+	report.patchPasses = aStats.patchPasses;
+	report.patchCpuMsAverage = aStats.patchCpuMsAverage;
+	report.patchGpuMsAverage = aStats.patchGpuMsAverage;
+	report.patchAreasWaiting = aStats.patchAreasWaiting;
+	report.animateOn = aStats.animateOn;
+	report.patchesBeforeAtlas = g_link ? g_link->State().patchesBeforeAtlas : 0;
+```
+```cpp
+		// the targeted block's outline while build mode is on, paused or not.
+		g_entities.InWorld(g_link->State().inWorld);
+		if (g_renderer->ModeName() == "gbuffer")
+		{
+			g_renderer->SetEntities(g_entities.Frame(g_link->State().minecraftEye, g_router->On()));
+```
+```cpp
+		// the targeted block's outline while build mode is on, paused or not, and each batch's kind at set glowlight.
+		g_entities.InWorld(g_link->State().inWorld);
+		if (g_renderer->ModeName() == "gbuffer")
+		{
+			g_renderer->SetEntities(g_entities.Frame(g_link->State().minecraftEye, g_router->On(), g_renderer->GlowLight()));
+```
+
+- [ ] **Step 6: Edit `CMakeLists.txt` for 0.22.0**
+
+```cmake
+project(BlockRender VERSION 0.21.0 LANGUAGES C CXX)
+```
+```cmake
+project(BlockRender VERSION 0.22.0 LANGUAGES C CXX)
+```
+
+- [ ] **Step 7: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `520 test(s), 0 failure(s)`.
+
+- [ ] **Step 8: Check that BlockRender imports nothing from PhysX**
+
+```bash
+DUMPBIN=$(ls "/c/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/"*/bin/Hostx64/x64/dumpbin.exe | head -1)
+"$DUMPBIN" -imports -nologo /d/Cyberpunk-Minecraft/spikes/block-render/build/RelWithDebInfo/BlockRender.dll | grep -i "\.dll$"
+```
+Expected: `KERNEL32.dll` and the other DLLs it imports, none of them PhysX's.
+
+- [ ] **Step 9: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "minecraft-entities: BlockRender 0.22.0 wires Part 5 in: each texture noted, the patches applied, and their status" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 50: In the game: run D
+
+Run D of the spec's "Step C's blended mark and animated textures (Part 5)", with the user, on BlockRender 0.22.0, linked
+to SkyCraft's Minecraft in the `CyberCraft` instance with CyberCraft Tweaks 1.6.0 (Task 44). Minecraft's player in
+creative, from the Fun row; combat off. DRED stays on. Minecraft's window stays beside the game's on the main monitor,
+for side-by-side looks, its time standing still at day, as the user's world has it.
+
+**Before the user looks,** name what isn't drawn as Minecraft draws it, so it isn't taken for a fault:
+- the breeze's wind and the charged creeper's armour stand still: Minecraft scrolls them, which Part 5 leaves out;
+- the blended layers are lit by Minecraft's light, which is its day, not the game's time: at night they may look too
+  bright beside what the game lights (risk 15);
+- BlockRender's blocks don't glow, so at night lava and sea lanterns are lit by the game's light alone: the animated
+  blocks are looked at by day;
+- the animated blocks play at Minecraft's pace, not always in its phase: SkyCraft plays them by the world's game time,
+  Minecraft by its own count.
+
+**What the agent sends,** each a request, as `mc` and Minecraft's command, typed into Minecraft's chat ahead of its
+player:
+- **the six blocks,** 9 m ahead, each marker first, tagged `sp7b` and its kind, and its block at it, so V moving
+  between the requests can't part them (Part 3), set without updates (`strict`): lava in a cauldron (`sp7lava`), a lit
+  campfire (`sp7flame`), magma (`sp7magma`), a sea lantern (`sp7sea`), prismarine (`sp7prismarine`) and a lantern
+  (`sp7lantern`):
+  ```text
+  mc /execute rotated ~ 0 positioned ^5 ^ ^9 run summon minecraft:marker ~ ~ ~ {Tags:["sp7b","sp7lava"]}
+  mc /execute at @e[tag=sp7lava] run setblock ~ ~ ~ minecraft:lava_cauldron strict
+  mc /execute rotated ~ 0 positioned ^3 ^ ^9 run summon minecraft:marker ~ ~ ~ {Tags:["sp7b","sp7flame"]}
+  mc /execute at @e[tag=sp7flame] run setblock ~ ~ ~ minecraft:campfire strict
+  mc /execute rotated ~ 0 positioned ^1 ^ ^9 run summon minecraft:marker ~ ~ ~ {Tags:["sp7b","sp7magma"]}
+  mc /execute at @e[tag=sp7magma] run setblock ~ ~ ~ minecraft:magma_block strict
+  mc /execute rotated ~ 0 positioned ^-1 ^ ^9 run summon minecraft:marker ~ ~ ~ {Tags:["sp7b","sp7sea"]}
+  mc /execute at @e[tag=sp7sea] run setblock ~ ~ ~ minecraft:sea_lantern strict
+  mc /execute rotated ~ 0 positioned ^-3 ^ ^9 run summon minecraft:marker ~ ~ ~ {Tags:["sp7b","sp7prismarine"]}
+  mc /execute at @e[tag=sp7prismarine] run setblock ~ ~ ~ minecraft:prismarine strict
+  mc /execute rotated ~ 0 positioned ^-5 ^ ^9 run summon minecraft:marker ~ ~ ~ {Tags:["sp7b","sp7lantern"]}
+  mc /execute at @e[tag=sp7lantern] run setblock ~ ~ ~ minecraft:lantern strict
+  ```
+- **the seven mobs,** 6 or 7 m ahead, as Task 43's script summons them, each `mc` and the script's command after
+  `type`.
+
+The overlay's Clear removes them all: the blocks at their `sp7b` markers to air, without updates, then everything
+tagged `sp7` and `sp7b`.
+
+**If the game freezes,** read the logs and the newest folder in `%LOCALAPPDATA%\REDEngine\ReportQueue`, and force-close
+it only when the user asks. If a check fails, stop and find the cause with superpowers:systematic-debugging before
+going on. Fixes become new tasks.
+
+These commands come back, as in run C:
+- **Send a request,** atomically: the plugin runs it within a second. Replace `entities` with the request, with each
+  `"` in it written `\"`, and send the next only once the status's `request=` line shows the last.
+  ```bash
+  P=/e/Cyberpunk2077/red4ext/plugins/BlockRender; printf '%s\n' "entities" > "$P/request.tmp" && mv "$P/request.tmp" "$P/blockrender.request"
+  ```
+- **The log's newest lines:**
+  ```bash
+  L=$(ls -t /e/Cyberpunk2077/red4ext/logs | grep -i blockrender | head -1); tail -30 "/e/Cyberpunk2077/red4ext/logs/$L"
+  ```
+- **The status:**
+  ```bash
+  cat /e/Cyberpunk2077/bin/x64/plugins/cyber_engine_tweaks/mods/blockrender_hud/status.txt
+  ```
+- **Minecraft's log, for the chat's replies:**
+  ```bash
+  grep -E "\[CHAT\]" "/c/Users/BLOXY/AppData/Roaming/ModrinthApp/profiles/CyberCraft/logs/latest.log" | tail -10
+  ```
+
+**Files:**
+- Modify: `docs/spikes/2026-10-06-minecraft-entities-results.md`
+
+- [ ] **Step 1: Deploy (the game must not be running)**
+
+```bash
+tasklist | grep -i -c "cyberpunk2077.exe"
+```
+Expected: `0`. If it's `1`, ask the user to quit the game first, because a running game locks the DLL.
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+P=/e/Cyberpunk2077/red4ext/plugins/BlockRender
+H=/e/Cyberpunk2077/bin/x64/plugins/cyber_engine_tweaks/mods/blockrender_hud
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default -DCP2077_DIR=E:/Cyberpunk2077 > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C|error MSB"; \
+  "$CMAKE" --preset default -DCP2077_DIR= > /dev/null; \
+  cmp build/RelWithDebInfo/BlockRender.dll "$P/BlockRender.dll" && cmp shaders/blocks.hlsl "$P/shaders/blocks.hlsl" \
+  && cmp tools/blockrender_hud/init.lua "$H/init.lua" && echo installed
+```
+Expected: `installed`. The second configure clears `CP2077_DIR` again.
+
+- [ ] **Step 2: In the game: BlockRender 0.22.0 loads**
+
+Ask the user to start the `CyberCraft` instance, then the game, and to wait at the game's main menu. Then:
+```bash
+L=$(ls -t /e/Cyberpunk2077/red4ext/logs | grep -i blockrender | head -1); grep -E "loaded|ERROR|error" "/e/Cyberpunk2077/red4ext/logs/$L" | head -5
+```
+Expected: `BlockRender 0.22.0 loaded (game 2.31…), …; dred on, debug layer off; …`, and no error lines.
+
+- [ ] **Step 3: In the game: load by day, link, creative**
+
+Ask the user to load a save on an open pavement by day, with at least 12 m clear ahead of V, and to click Link, then
+Creative in the overlay's Fun row. Expected: in the log, `link on: …; drawing is gbuffer` (if not, ask the user to
+click the overlay's `G-buffer` button); in Minecraft's log, `[CHAT] Set own game mode to Creative Mode`; in the status,
+`entities=on: …; outline on, dlsshint 1, blend on; …`, and the atlas line's `patches N applied, 0 refused and …
+dropped in the last second`, N in the hundreds, then `animate on`. Then name what isn't drawn as Minecraft draws it
+("Before the user looks", above).
+
+- [ ] **Step 4: In the game: the animated blocks by day (check 1)**
+
+Send the six blocks' twelve requests, one at a time. Ask the user to look at them, Minecraft's window beside, and say
+whether each animates as Minecraft's: the lava in the cauldron, the campfire's flames and lit logs, the magma, the sea
+lantern, the prismarine and the lantern's flame. Expected: each animating, at Minecraft's pace; in the status's atlas
+line, about 20 `passes`, one for each Minecraft tick's patches, `dropped` few or none, and the CPU's and GPU's times a
+few hundredths of a millisecond at most. Then send `set animate 0`: the blocks stand still, and the status counts every
+patch dropped, `animate off`; then `set animate 1`: they play again. Send `set animate 2`: refused, `animate is 1 to
+play Minecraft's animated textures, or 0 to leave the atlas as it is`.
+
+- [ ] **Step 5: In the game: the seven mobs by day (check 2)**
+
+Send the seven mobs' requests, one at a time. Ask the user to look at them, side by side with Minecraft's, with a
+screenshot of each. Expected:
+- the slime's outer layer, the allay and the vex see-through, their bodies showing through as in Minecraft;
+- the warden's layers faint and pulsing over its body, not solid, and without flicker where they lie on it (risk 16);
+- the creeper's armour a soft glow added over its body, its stripes see-through, standing still;
+- the breeze's wind see-through and still, its eyes faint, its body as before;
+- the piglin lit by the game, as before;
+- in the status, `the newest N batches (B blended, 1 additive)`, B about 9 (the slime's outer layer, the allay, the vex,
+  the breeze's wind and eyes, and the warden's four), and the forward list drawn in about as many frames as the game's
+  frame rate.
+Then send `set blend 0`: the layers go back to cut-outs in the G-buffer, as 0.21.0 drew them; then `set blend 1`. Ask
+the user which looks more like Minecraft. Send `set blend 2`: refused, `blend is 1 to blend the entity layers Minecraft
+blends before DLSS, or 0 to draw them as cut-outs`.
+
+- [ ] **Step 6: In the game: at night (check 3)**
+
+Ask the user to use the game's Skip Time to the night, and look at the mobs and the blocks. Expected: the warden's
+layers and the breeze's eyes glow, faint; note how bright the slime's outer layer, the allay and the vex look beside
+what the game lights, against Minecraft's day (risk 15); the blocks lit by the game's light alone, as BlockRender's
+blocks always are, still animating.
+
+- [ ] **Step 7: In the game: cost (check 4)**
+
+With the mobs and the blocks in view, read the status three times, a few seconds apart. Note the forward list's GPU
+time, the patches' CPU and GPU times and passes, the update time (the frame's sort of the layers is in it), the frame
+time (`frame=`), and the entities' GPU time.
+
+- [ ] **Step 8: In the game: Clear, and no crash or freeze (check 5)**
+
+Ask the user to click Clear. Expected: in Minecraft's log, `Changed the block at …` for each of the six blocks,
+`Killed …` for the mobs and the markers; within about 7 s, the status's `the newest 0 batches (0 blended, 0
+additive)` and `world: nothing`; on screen, nothing left. Then ask the user to click Unlink and Link again. Expected:
+the game ran without a crash or a freeze throughout.
+
+- [ ] **Step 9: Ask the user to quit the game and stop Minecraft**
+
+If the user disabled Entity Model Features and Entity Texture Features in Task 44, ask whether to put them back now.
+If so, with Minecraft stopped:
+```bash
+M=/c/Users/BLOXY/AppData/Roaming/ModrinthApp/profiles/CyberCraft/mods
+for j in entity_model_features-3.3.11-26.3-fabric entity_texture_features-7.2.5-26.3-fabric; do mv "$M/$j.jar.disabled" "$M/$j.jar"; done; ls "$M"
+```
+Expected: both `.jar` again, beside `cybercraft-tweaks-1.6.0.jar`.
+
+- [ ] **Step 10: Read the log once more**
+
+```bash
+L=$(ls -t /e/Cyberpunk2077/red4ext/logs | grep -i blockrender | head -1); grep -E "renderer:|set |link" "/e/Cyberpunk2077/red4ext/logs/$L" | head -200
+```
+Everything the steps above logged, for the results.
+
+- [ ] **Step 11: Record run D's results in `docs/spikes/2026-10-06-minecraft-entities-results.md`**
+
+A "Run D" section: the versions; each check above with its outcome and numbers: the animated blocks by day, `set
+animate`; the seven mobs side by side with Minecraft's, with the screenshots, and `set blend`; the night; the costs;
+and anything that surprised. Then the spike's answer at the top, brought up to date.
+
+- [ ] **Step 12: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add docs/spikes docs/superpowers/plans/2026-10-06-minecraft-entities.md \
+  && git commit -q -m "minecraft-entities: run D's results" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 51: Close the spike
+
+- [ ] **Step 1: Add "How Part 5 went" to this plan**
+
+At the end, after "Found while planning Part 5": what ran as written, what changed, and what Task 44's `mclink` run and
+run D found.
+
+- [ ] **Step 2: Bring the spec up to date**
+
+In its "Changes while executing Part 5": anything Part 5 changed in the design, and what's left for later, such as
+Cyberpunk's time of day setting Minecraft's.
+
+- [ ] **Step 3: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add docs/superpowers \
+  && git commit -q -m "minecraft-entities plan: how Part 5 went" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+- [ ] **Step 4: Finish the branch**
+
+Use superpowers:finishing-a-development-branch: the tests pass (520), and the user chooses whether
+`spike/minecraft-entities` merges into `main`, as spikes 1 to 6 did.
+
+## Found while planning Part 5
+
+The spec's "Changes while planning Part 5" lists what planning changed in the design. In the plan itself:
+- **`batchFor` calls `batch` three times,** for the block atlas, the items' atlas and an entity texture, each with
+  `SOLID`: the mixin's `@ModifyArg` takes all three, so a blended layer on either atlas goes translucent too. Task 37's
+  check counts them.
+- **The mixin's two halves,** as Part 4's: `submitModel`'s head notes the flags, and `batchFor`, which `submitModel`
+  calls first, on the render thread, takes them. `MarkEmissive`'s full light goes on as before: the light and the flags
+  are apart.
+- **A layer the mod marks but BlockRender draws as a model** (a piglin, a breeze's body) comes with flags 122 where it
+  came with 121. The G-buffer's entity shaders cut out by the texel's alpha whatever the flags, read the direction from
+  bits 4 to 6 alike, and use no mipmaps either way, so it's drawn as before.
+- **The test mobs' textures,** read again from Minecraft 26.3's jar: see-through `slime.png` (58.8%), `allay.png`
+  (15.2%), `vex.png` (13.4%), `breeze_wind.png` and `warden_bioluminescent_layer.png` (100%); opaque `piglin.png`
+  (0.32%) and `creeper.png` (0.12%), and with none partly see-through `breeze.png`, `breeze_eyes.png`, `warden.png`,
+  the warden's heart and spots and `creeper_armor.png`. A breeze's body is `entity_translucent` (`BreezeModel`), so
+  `mclink` shows it `translucent, drawn as a model`.
+- **The dispatch goes past the hook:** the upload list's `Dispatch` would go through the hooked vtable, as the frame
+  log hooks it, so the patch pass calls the original, as every call of ours does, and isn't made without it.
+- **Patches come about 20 times a second,** a Minecraft tick's together, so the patch pass runs about 20 times a second,
+  whatever the frame rate.
+- **The world at x 880 sends no sections** (Task 34's run had none), so the placed blocks' sections are among the first
+  20, which `mclink` describes.
+- **The user's Entity Model Features and Entity Texture Features** were enabled again after Task 34, which had them
+  disabled: Task 44 asks whether they stay on for Part 5's tests.
+- **Dropped patches** count those a newer patch replaced before the upload list wrote them, as the spec has it
+  (`AtlasDirty::Waiting`, Tasks 47 and 48); the first draft counted only `set animate 0`'s.
+- **Taken patches count toward the ring's budget,** which the first draft of Task 39's test didn't check: its end now
+  sends two patches against a small budget, and the second must wait an update.
+- **The failing builds** were found first by building each task's tests over the code before it, so each "must fail"
+  step names an error that build gives.
+- **The mutations:** 50, each caught. One tried first, dropping `tuning.z` from `BlendedPS`, wasn't: the shader reads
+  the frame's constants elsewhere too, so the test's reflection still finds them. It gave way to two that add an output
+  to `BlendedPS` and `AdditivePS`, which the test's count of outputs catches.
+- **The replay** passed as written: CyberCraft Tweaks 1.6.0 built with no warning, and the bytecode check found
+  `batchFor`'s three `batch` calls, each with `SOLID`; each "must fail" build failed with its error, and the script test
+  failed and then passed; zero compiler warnings, 520 tests; `mclink`'s self-check found the mapping free and Minecraft
+  absent; BlockRender imports none of PhysX's DLLs; and each task's files were identical to the scratch clone's.
