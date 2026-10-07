@@ -32,6 +32,9 @@ struct BlockShaders
 	std::vector<uint8_t> hint;           // HintPS
 	std::vector<uint8_t> outlineVertex;  // OutlineVS
 	std::vector<uint8_t> outline;        // OutlinePS
+	std::vector<uint8_t> blended;        // BlendedPS (Part 5)
+	std::vector<uint8_t> additive;       // AdditivePS
+	std::vector<uint8_t> patch;          // PatchCS, a compute shader
 };
 
 // Every entry point of shaders/blocks.hlsl, from its text. Nothing, with the messages in aError, if any fails.

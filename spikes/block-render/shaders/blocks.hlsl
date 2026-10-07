@@ -334,6 +334,7 @@ float4 TranslucentPS(EntityOut i) : SV_Target0
 
 // Step B: DLSS's bias hint under the translucent particles (set dlsshint 1), 1 where TranslucentPS draws, so DLSS takes
 // their colour from this frame rather than from its history: the motion vectors there are the surface's behind them.
+// Part 5's blended and additive layers too.
 float HintPS(EntityOut i) : SV_Target0
 {
     if (EntityTexel(i.uv).a * i.colour.a < 0.1)
@@ -341,6 +342,45 @@ float HintPS(EntityOut i) : SV_Target0
         discard;
     }
     return 1.0;
+}
+
+// Minecraft's two lights for entities in the overworld (Lighting.updateLevel's DIFFUSE_LIGHT_0 and _1), normalize(0.2,
+// 1, -0.7) and normalize(-0.2, 1, 0.7) in its axes, here in the world's: Minecraft (x, y, z) is world (x, -z, y).
+static const float3 kLight0 = float3(0.161690, 0.565916, 0.808452);
+static const float3 kLight1 = float3(-0.161690, -0.565916, 0.808452);
+
+// Part 5 (the spec's "Step B"): an entity layer Minecraft blends, blended into the scene's colour as a translucent
+// particle is, but cut out where the texel's own alpha is under 0.1, as Minecraft's entity shader cuts (ALPHA_CUTOUT,
+// before the vertex colour). Lit as a particle, unlit from entityTuning.y's block light (the emissive layers), and shaded
+// per face as Minecraft's PER_FACE_LIGHTING shades it: min(1, (L0.n + L1.n) * 0.6 + 0.4) of its sRGB colour, each dot
+// at least 0, with n the triangle's own normal turned toward the camera, which is Minecraft's back-face rule.
+float4 BlendedPS(EntityOut i) : SV_Target0
+{
+    const float3 own = OwnNormal(i.world);  // before the discard, which ends the pixel's part in the derivatives
+    const float4 texel = EntityTexel(i.uv);
+    if (texel.a < 0.1)
+    {
+        discard;
+    }
+    const float3 normal = EntityNormal(i.flags, own, i.world);
+    const float  face = min(1.0, (max(0.0, dot(kLight0, normal)) + max(0.0, dot(kLight1, normal))) * 0.6 + 0.4);
+    const uint   block = i.light & 0xFF;
+    const float  level = (float)min(max(block, (i.light >> 8) & 0xFF), 15u) / 15.0;
+    const float  light = block >= (uint)entityTuning.y ? 1.0 : level / (4.0 - 3.0 * level);
+    return float4(Linear(texel.rgb * i.colour.rgb * face) * light * tuning.z, texel.a * i.colour.a);
+}
+
+// Part 5: an entity layer Minecraft adds rather than blends (energy_swirl, a charged creeper's armour): its colour added
+// to the scene's, whose pipeline adds ONE to ONE as Minecraft's ADDITIVE does, unlit and unshaded (EMISSIVE,
+// NO_CARDINAL_LIGHTING), cut out where the texel's own alpha is under 0.1.
+float4 AdditivePS(EntityOut i) : SV_Target0
+{
+    const float4 texel = EntityTexel(i.uv);
+    if (texel.a < 0.1)
+    {
+        discard;
+    }
+    return float4(Linear(texel.rgb * i.colour.rgb) * tuning.z, 0.0);
 }
 
 struct OutlineOut
@@ -432,4 +472,49 @@ float4 HudPS(float4 position : SV_Position) : SV_Target0
     const uint row = hudInfo.w != 0 ? hudInfo.y - 1 - texel.y : texel.y;
     const uint packed = hudImage[row * hudInfo.x + texel.x];
     return float4(packed & 0xFF, (packed >> 8) & 0xFF, (packed >> 16) & 0xFF, packed >> 24) / 255.0;
+}
+
+// Spike 7's Part 5: the atlas's animated sprites (the spec's "Animated textures on the GPU"). The upload list writes the
+// areas its patches changed, at every level, into the atlas buffer, with its own root signature: b0 the pass's
+// constants, t0 the areas, t1 their texels packed one area after another, u0 the atlas. src/render/FrameConstants.h
+// mirrors PatchArea and Patch.
+struct PatchArea
+{
+    uint  start;   // its first texel in the atlas buffer: the level's start, plus y times the level's width, plus x
+    uint  stride;  // the level's width
+    uint  width;
+    uint  height;
+    uint  source;  // its first texel in patchTexels
+    uint3 unused;
+};
+
+cbuffer Patch : register(b0)
+{
+    uint4 patchInfo;  // the areas; the texels packed; the atlas buffer's length in texels; 0
+};
+
+StructuredBuffer<PatchArea> patchAreas  : register(t0);
+StructuredBuffer<uint>      patchTexels : register(t1);
+RWStructuredBuffer<uint>    patchAtlas  : register(u0);
+
+// A group an area, its 64 threads taking its texels in turn. Root descriptors carry no bounds, so every read and write
+// is checked against the counts the CPU gave as well.
+[numthreads(64, 1, 1)]
+void PatchCS(uint3 group : SV_GroupID, uint thread : SV_GroupIndex)
+{
+    if (group.x >= patchInfo.x)
+    {
+        return;
+    }
+    const PatchArea area = patchAreas[group.x];
+    for (uint t = thread; t < area.width * area.height; t += 64)
+    {
+        const uint row = t / area.width;
+        const uint to = area.start + row * area.stride + (t - row * area.width);
+        const uint from = area.source + t;
+        if (to < patchInfo.z && from < patchInfo.y)
+        {
+            patchAtlas[to] = patchTexels[from];
+        }
+    }
 }

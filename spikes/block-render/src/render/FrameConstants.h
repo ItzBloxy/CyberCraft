@@ -42,6 +42,29 @@ struct EntityConstants
 };
 static_assert(sizeof(EntityConstants) == 32);
 
+// Spike 7's Part 5: the patch pass's root constants, in b0 of its own root signature (PatchCS's Patch).
+struct PatchConstants
+{
+	uint32_t areas = 0;        // in its area table
+	uint32_t texels = 0;       // packed after one another
+	uint32_t atlasTexels = 0;  // the atlas buffer's length
+	uint32_t unused = 0;
+};
+static_assert(sizeof(PatchConstants) == 16);
+
+// One area of the patch pass's table (PatchCS's PatchArea): where one level's patched rectangle goes in the atlas
+// buffer, and where its texels lie among those packed.
+struct PatchAreaGpu
+{
+	uint32_t start = 0;   // its first texel in the atlas buffer: the level's start, plus y times the level's width, plus x
+	uint32_t stride = 0;  // the level's width
+	uint32_t width = 0;
+	uint32_t height = 0;
+	uint32_t source = 0;  // its first texel among those packed
+	uint32_t unused[3]{};
+};
+static_assert(sizeof(PatchAreaGpu) == 32);
+
 // The HUD pass's root constants, in b1 where the blocks have SectionConstants.
 struct HudConstants
 {

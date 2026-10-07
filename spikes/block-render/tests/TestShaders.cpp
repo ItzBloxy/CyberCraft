@@ -47,6 +47,18 @@ UINT Outputs(const std::vector<uint8_t>& aCode)
 	}
 	return desc.OutputParameters;
 }
+
+// A structured buffer's stride, which reflection gives as its "samples".
+UINT Stride(const std::vector<uint8_t>& aCode, const char* aName)
+{
+	Microsoft::WRL::ComPtr<ID3D12ShaderReflection> reflection;
+	D3D12_SHADER_INPUT_BIND_DESC                   desc{};
+	if (FAILED(D3DReflect(aCode.data(), aCode.size(), IID_PPV_ARGS(&reflection))) || FAILED(reflection->GetResourceBindingDescByName(aName, &desc)))
+	{
+		return 0;
+	}
+	return desc.NumSamples;
+}
 }
 
 TEST(ShadersCompileFromTheShaderFile)
@@ -145,6 +157,25 @@ TEST(ShadersDrawStepBsForwardPass)
 		CHECK_EQ(Outputs(shaders->translucent), 1u);  // the scene's colour
 		CHECK_EQ(Outputs(shaders->hint), 1u);         // the bias hint
 		CHECK_EQ(Outputs(shaders->outline), 1u);      // the scene's colour
+	}
+}
+
+TEST(ShadersDrawPart5sLayersAndPatches)
+{
+	std::string error;
+	const auto  shaders = cpmc::CompileBlockShaders(ShaderSource(), error);
+	CHECK(shaders.has_value());
+	if (shaders)
+	{
+		CHECK_EQ(ConstantBufferSize(shaders->blended, "Frame"), UINT(sizeof(cpmc::FrameConstants)));
+		CHECK_EQ(ConstantBufferSize(shaders->blended, "Entity"), UINT(sizeof(cpmc::EntityConstants)));
+		CHECK_EQ(ConstantBufferSize(shaders->additive, "Entity"), UINT(sizeof(cpmc::EntityConstants)));
+		CHECK_EQ(Outputs(shaders->blended), 1u);   // the scene's colour
+		CHECK_EQ(Outputs(shaders->additive), 1u);
+		CHECK_EQ(ConstantBufferSize(shaders->patch, "Patch"), UINT(sizeof(cpmc::PatchConstants)));
+		CHECK_EQ(Stride(shaders->patch, "patchAreas"), UINT(sizeof(cpmc::PatchAreaGpu)));
+		CHECK_EQ(Stride(shaders->patch, "patchTexels"), 4u);
+		CHECK_EQ(Stride(shaders->patch, "patchAtlas"), 4u);
 	}
 }
 
