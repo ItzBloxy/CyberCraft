@@ -9499,13 +9499,13 @@ These commands come back, as in run B:
 **Files:**
 - Modify: `docs/spikes/2026-10-06-minecraft-entities-results.md`
 
-- [ ] **Step 1: In the game: load, at night, link, creative**
+- [x] **Step 1: In the game: load, at night, link, creative**
 
 Ask the user to start the `CyberCraft` instance, then the game; to load a save on an open pavement, with at least 10 m
 clear ahead of V; to use the game's Skip Time to the night; and to click Link, then Creative in the overlay's Fun row.
 Expected: in the BlockRender log, `link on: …; drawing is gbuffer`; in the status, `entities=on`.
 
-- [ ] **Step 2: In the game: the emissive layers at night**
+- [x] **Step 2: In the game: the emissive layers at night**
 
 Send the four summons of Task 33's script as `mc` requests, one at a time: the spider, the enderman, the warden and the
 charged creeper. Ask the user to look at each, with a screenshot. Expected: the spider's and the enderman's eyes glow,
@@ -9513,14 +9513,14 @@ as in Minecraft at night; the warden's glowing parts (its spots, its heart) glow
 charged creeper's armour glows; their bodies are lit as before. In the status, `glowing from block light 15` counts
 their vertices. Then ask the user to click Clear: the four go.
 
-- [ ] **Step 3: Ask the user to quit the game and stop Minecraft**
+- [x] **Step 3: Ask the user to quit the game and stop Minecraft**
 
-- [ ] **Step 4: Record run C's results in `docs/spikes/2026-10-06-minecraft-entities-results.md`**
+- [x] **Step 4: Record run C's results in `docs/spikes/2026-10-06-minecraft-entities-results.md`**
 
 A "Run C" section: the versions; each mob's emissive layer at night, with what the user saw and the screenshots; and
 the spike's answer at the top, brought up to date.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add docs/spikes docs/superpowers/plans/2026-10-06-minecraft-entities.md \

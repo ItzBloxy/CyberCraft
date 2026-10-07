@@ -5,17 +5,19 @@ Spike 7 draws Minecraft's entities, block entities, particles and world entities
 them, with `mclink`, without the game; later steps add their sections as they run, and the spike's answer goes at the
 top once step A is in.
 
-**The answer, from steps A and B (runs A and B): yes, but for emissive layers.** Minecraft's mobs, block entities,
-particles and world entities (items, arrows, tridents, cracks) are drawn in Night City where Minecraft has them, posed
-and animated as Minecraft poses them, in Minecraft's draw order (CyberCraft Tweaks 1.4.0). The game lights the opaque
-ones as its own geometry, ambient occlusion and reflections included, and what Minecraft makes full-bright glows at night
-through the G-buffer's emission. The translucent particles (fireworks' sparks, potions' swirls, campfire smoke) are
-blended in before DLSS, looking as Minecraft's by day and at night, and the targeted block's outline shows in build
-mode. Nothing smeared, the particles neither, without DLSS's bias hint, and it all costs about 0.03 ms of GPU a frame,
-0.3 ms at the peak of a 125-TNT blast. One thing isn't right yet: layers Minecraft makes glow by their render type,
-such as a spider's eyes, are lit like the rest ("Run B"), so step C's emissive mark is still to build. Run A's three
-problems, the overlay's block entities losing their markers, Shift+F6 leaving build mode and the overlay's buttons
-moving, are fixed (Part 3, "Run B").
+**The answer, from steps A, B and C (runs A, B and C): yes, but for blended emissive layers.** Minecraft's mobs,
+block entities, particles and world entities (items, arrows, tridents, cracks) are drawn in Night City where Minecraft
+has them, posed and animated as Minecraft poses them, in Minecraft's draw order (CyberCraft Tweaks 1.4.0). The game
+lights the opaque ones as its own geometry, ambient occlusion and reflections included, and what Minecraft makes
+full-bright glows at night through the G-buffer's emission. The translucent particles (fireworks' sparks, potions'
+swirls, campfire smoke) are blended in before DLSS, looking as Minecraft's by day and at night, and the targeted block's
+outline shows in build mode. Nothing smeared, the particles neither, without DLSS's bias hint, and it all costs about
+0.03 ms of GPU a frame, 0.3 ms at the peak of a 125-TNT blast. The layers Minecraft makes glow by their render type glow
+too, with CyberCraft Tweaks 1.5.0: a spider's and an enderman's eyes look as in Minecraft ("Run C"). One thing isn't
+right yet: the emissive layers Minecraft blends, the warden's glowing parts and a charged creeper's armour, are drawn
+solid, and far too bright, so they need a blended look of their own. Run A's three problems, the overlay's block
+entities losing their markers, Shift+F6 leaving build mode and the overlay's buttons moving, are fixed (Part 3, "Run
+B").
 
 ## Step 0: what Minecraft sends of its entities, with `mclink`, without the game
 
@@ -479,3 +481,46 @@ the mark, the spider's eyes had none.
 - **Rain can't hurt the enderman:** endermen take rain damage even with their AI off (`LivingEntity.aiStep`), but the
   `SkyCraft` world's game rules `advance_weather` and `advance_time` are off and it isn't raining. Minecraft's time of
   day stands still too, which the later task of setting it from Cyberpunk's will have to change.
+
+## Run C: step C's emissive mark in the game
+
+Date: 2026-10-07, 16:05 to 16:09. BlockRender 0.21.0, as run B left it (Part 4 deployed nothing), in Cyberpunk 2077
+2.31 on an RTX 3070, DRED on, linked to SkyCraft 0.1.2 with CyberCraft Tweaks 1.5.0 in the `CyberCraft` instance
+(Minecraft 26.3, 51 mods). Drawing in `gbuffer` mode, Minecraft's player in creative, combat off; night in the game
+(Skip Time), while Minecraft's world kept its own fixed time. The user played and took the screenshots
+(`2026-10-06-minecraft-entities-results/run-c/`); the agent sent the four summons as `mc` requests, as `emissive.txt`
+types them, and read the logs and the status. Plan: Task 35.
+
+### Verdict
+
+**The mark works, but two of the three render types need blending.** Every emissive layer glows at night, and the
+spider's and the enderman's eyes look as in Minecraft (the user: "Perfecto"). The warden's layers and the charged
+creeper's armour, which Minecraft blends, are drawn solid, as "What it means for run C" foresaw, and look far too
+strong: the user would "much rather blended, this is a bit much". So step C needs a blended look for
+`entity_translucent_emissive` and `energy_swirl`, a design of its own.
+
+### The checks
+
+1. **The spider** (`spider-eyes-night.webp`): its red eyes glow in the dark, over a body lit by the street like the
+   rest. The status: 2 batches, 792 vertices, 396 of them glowing (the eyes' layer), drawn in every frame.
+2. **The enderman** (`enderman-eyes-night.webp`): its purple eyes glow, and its portal particles drift around it, as in
+   Minecraft. With the spider, 660 vertices glowing: the eyes' 252, and 12 of the particles at the ends of their lives.
+3. **The warden** (`warden-night.webp`): its bioluminescent patches, around its face, over its ribs and on its lower
+   legs, glow white and cyan, solid, far brighter than Minecraft's faint, see-through glow. Its pulsing spots and its
+   heart weren't looked at apart: the solid patches settled it.
+4. **The charged creeper** (`charged-creeper-night.webp`): its armour's swirl covers it in solid white and blue
+   stripes, glowing so brightly that the creeper hardly shows under them. In Minecraft the swirl is added faintly over
+   the body, and scrolls; here it's solid and still.
+5. **The cost:** with all four, 11 batches and 2,952 vertices, 1,194 of them glowing; the entities' GPU time 0.025 ms a
+   frame, drawn in 65 frames a second, nothing skipped but 2 draws as the warden's textures came in, before they were
+   on the GPU. The forward list drew nothing: every layer was a cut-out.
+6. **Clear** removed the four (`Killed 4 entities`), and the game ran without a crash or a freeze, and quit normally.
+
+### What it means
+
+- **Step C's emissive mark stays as it is:** the eyes need nothing more.
+- **The warden's layers and the charged creeper's armour need a blended look:** Minecraft 26.3 blends
+  `entity_translucent_emissive` by alpha, and adds `energy_swirl` to what's under it, scrolling its texture, while
+  SkyCraft sends every entity layer as a cut-out. BlockRender's forward list, which blends the translucent particles
+  before DLSS, is the likely place to draw them. The same would serve the translucent entity parts the spec leaves out,
+  such as a slime's outer layer.
