@@ -102,6 +102,32 @@ TEST(EntitiesAddTheWorldEntitiesAfterTheScene)
 	CHECK_EQ(frame.vertices[3].flags, kShapeFlags);
 }
 
+TEST(EntitiesAddTheOutlineInBuildMode)
+{
+	Entities         entities;
+	link::WorldTable table;
+	table.entities = { Record(proto::kWeCrack, 885.0f, 6.0f, 2010.0f) };
+	table.outline = std::array<float, 6>{ 885.0f, 6.0f, 2010.0f, 886.0f, 7.0f, 2011.0f };
+	entities.World(table);
+	CHECK_EQ(entities.Frame(kEye).draws.size(), size_t(1));  // outside build mode, the crack alone
+	const EntityFrame frame = entities.Frame(kEye, true);
+	// The crack's draw, then the outline's, its 12 edges' ends after everything else.
+	CHECK_EQ(frame.draws.size(), size_t(2));
+	CHECK_EQ(frame.vertices.size(), size_t(36 + 24));
+	if (frame.draws.size() != 2 || frame.vertices.size() != 60)
+	{
+		return;
+	}
+	CHECK_EQ(frame.draws[1].first, 36u);
+	CHECK_EQ(frame.draws[1].count, 24u);
+	CHECK_EQ(frame.draws[1].texture, 0u);
+	CHECK(frame.draws[1].kind == EntityDraw::Kind::Outline);
+	CHECK_NEAR(frame.vertices[36].x, 4.998f, 1e-4);  // from the whole block of Minecraft's eye
+	table.outline.reset();
+	entities.World(table);
+	CHECK_EQ(entities.Frame(kEye, true).draws.size(), size_t(1));  // nothing targeted
+}
+
 TEST(EntitiesWithoutASceneUseMinecraftsEye)
 {
 	Entities         entities;

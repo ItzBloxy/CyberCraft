@@ -2186,11 +2186,12 @@ bool OnUpdate(RED4ext::CGameApplication*)
 	SendHurts(seconds);
 	if (g_link)
 	{
-		// Spike 7: this frame's entities, which the renderer's Update copies into a snapshot, drawn only into the G-buffer.
+		// Spike 7: this frame's entities, which the renderer's Update copies into a snapshot, drawn only in gbuffer mode, with
+		// the targeted block's outline while build mode is on, paused or not.
 		g_entities.InWorld(g_link->State().inWorld);
 		if (g_renderer->ModeName() == "gbuffer")
 		{
-			g_renderer->SetEntities(g_entities.Frame(g_link->State().minecraftEye));
+			g_renderer->SetEntities(g_entities.Frame(g_link->State().minecraftEye, g_router->On()));
 		}
 	}
 	const auto [time, folderName] = Timestamps();

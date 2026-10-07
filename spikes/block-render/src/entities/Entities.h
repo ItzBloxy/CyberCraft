@@ -25,6 +25,7 @@ struct EntityDraw
 		Model,        // into the G-buffer: the scene's opaque batches, and the world entities' shapes
 		Translucent,  // the scene's blended batches, for step B's forward pass
 		Crack,        // multiplied into the G-buffer's base colour
+		Outline,      // step B's too: the targeted block's edges, a pair of vertices each, widened into strips
 	};
 
 	uint32_t first = 0;
@@ -36,8 +37,10 @@ struct EntityDraw
 struct EntityFrame
 {
 	Vec3d                   origin;    // a whole block, in Minecraft axes: every position is relative to it
-	std::vector<Vertex>     vertices;  // the scene's as they came, then the world entities' shapes, then their cracks
-	std::vector<EntityDraw> draws;     // the scene's batches in the order they came, then one of shapes and one of cracks
+	std::vector<Vertex>     vertices;  // the scene's as they came, then the world entities' shapes, their cracks, and the
+	                                   // outline
+	std::vector<EntityDraw> draws;     // the scene's batches in the order they came, then one each of shapes, cracks and
+	                                   // the outline
 };
 
 class Entities
@@ -49,7 +52,9 @@ public:
 	void InWorld(bool aInWorld);                   // out of its world, or gone, the scene goes: SkyCraft stops sending
 
 	// This frame's geometry. aEye, Minecraft's eye (McState), gives the origin when there's no scene: its whole block.
-	EntityFrame Frame(const Vec3d& aEye) const;
+	// aOutline, while build mode is on, adds the outline of the block Minecraft's player targets: outside it, V's clicks
+	// don't reach Minecraft, so an outline would mislead.
+	EntityFrame Frame(const Vec3d& aEye, bool aOutline = false) const;
 
 	// The newest scene: its batches and vertices, how many of those have block light of at least aGlowLight, and how many
 	// are in translucent batches.

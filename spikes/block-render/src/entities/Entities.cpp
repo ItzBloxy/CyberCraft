@@ -44,7 +44,7 @@ void Entities::InWorld(bool aInWorld)
 	}
 }
 
-EntityFrame Entities::Frame(const Vec3d& aEye) const
+EntityFrame Entities::Frame(const Vec3d& aEye, bool aOutline) const
 {
 	EntityFrame frame;
 	frame.origin = origin_ ? *origin_ : Vec3d{ std::floor(aEye.x), std::floor(aEye.y), std::floor(aEye.z) };
@@ -74,6 +74,12 @@ EntityFrame Entities::Frame(const Vec3d& aEye) const
 	if (const uint32_t count = uint32_t(frame.vertices.size()) - cracks; count > 0)
 	{
 		frame.draws.push_back({ cracks, count, 0, EntityDraw::Kind::Crack });
+	}
+	if (aOutline && world_.outline)
+	{
+		const uint32_t outline = uint32_t(frame.vertices.size());
+		AppendOutline(*world_.outline, frame.origin, frame.vertices);
+		frame.draws.push_back({ outline, uint32_t(frame.vertices.size()) - outline, 0, EntityDraw::Kind::Outline });
 	}
 	return frame;
 }
