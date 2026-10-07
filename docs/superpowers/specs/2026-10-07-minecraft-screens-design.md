@@ -3,7 +3,8 @@
 Date: 2026-10-07. Status: agreed with the user section by section in the brainstorm. "Found while writing", near the
 end, lists what writing it out added to what was agreed. Then revised after a deep self-review at the user's request,
 which checked each claim against its source and walked through step 0 and run E as they would run: "Changes from the
-deep review", at the end, lists what changed and what was checked. The sections above it include those changes.
+deep review", at the end, lists what changed and what was checked. Planning Part 1 (step 0) settled more: "Changes
+while planning Part 1". The sections above them include those changes.
 
 ## Purpose
 
@@ -319,8 +320,10 @@ by Minecraft's frame and the HUD image's transfer, about 2 to 3 frames, as the u
   - `render/Hud` (`CursorCovers`, the arrow's test, mirrored by `HudPS`), `render/FrameConstants` (`HudConstants`),
     `render/Renderer` (the cursor's constants at Present), `shaders/blocks.hlsl` (`HudPS` draws the arrow);
   - `Status`, `Plugin` (the hook, the pointer speed, the version).
-- **mclink:** three verbs for checking Minecraft's side: `cursor <x> <y>` (`kInCursor`), `text <string>` (each
-  character as `kInText`), `pause` (`kInOpenMenu`); and `tools/mclink/screens.txt`.
+- **mclink:** five verbs for checking Minecraft's side: `cursor <x> <y>` (`kInCursor`), `text <string>` (each
+  character as `kInText`), `pause` (`kInOpenMenu`), `wait-screen open|closed [seconds]` and `hud-box <x0> <y0> <x1>
+  <y1>` (a HUD image box's mean colour); its status shows Minecraft's GUI scale, which the link keeps from McState;
+  and `tools/mclink/screens.txt`.
 - **CyberCraft Tweaks and SkyCraft** stay as they are: SkyCraft's mod does all Minecraft needs.
 
 ## Testing
@@ -332,21 +335,21 @@ Each step checks against something real before the next one depends on it.
 The user starts Minecraft; mclink takes the game's place on the link and runs `tools/mclink/screens.txt`, saving HUD
 images. mclink always asks for a 1280 × 720 HUD. The script turns `build on`: with build mode off, SkyState says a menu
 is open and SkyCraft lets go of every key each frame, so F3 couldn't stay held for the switcher, nor a button for a
-drag. Before it runs, a `/data get entity @s Inventory` and the player's game mode, read from Minecraft's log, show
-which main-inventory slots are empty and what to set back.
-- **the cursor's pixels:** in survival, whose inventory has a fixed layout (the creative one has tabs), E opens the
-  inventory. Its 176 by 166 GUI pixels are centred in the window at the user's GUI scale 2, which the script checks
-  against McState's `guiScale`. The cursor goes to a slot's centre, and the image shows the slot's hover highlight
-  under it;
-- **moving an item:** a stick and a stone go into two of the empty slots with `/item replace`, so none of the user's
-  items is replaced. They're moved by `cursor` and `click`, then Esc closes the inventory (the typer refuses while one
-  is open), and `/execute if items …` reports in chat that they landed where intended;
-- **typing:** T opens chat, then `text /say screens` and Enter; Minecraft's log has the line;
+drag. It touches nothing of the user's inventory, and leaves the game mode as it was.
+- **the cursor's pixels:** a test chest at 882 7 2007, two blocks east of the stand-in V at its eye's height, holding
+  a stick in slot 0 and a stone in slot 1 (`/item replace block`), is opened by a right-click. At the user's GUI scale
+  2, which the status shows from McState's `guiScale`, its 176 by 168 GUI pixels are centred in the window. The cursor
+  goes to an empty slot's centre, and `hud-box` shows the slot's hover highlight there and not in the slot beside it;
+- **moving an item:** the stick and the stone are moved by `cursor` and `click`, then Esc closes the chest (the typer
+  refuses while a screen is open), and `/execute if items …` reports in chat that they landed where intended;
+- **typing:** T opens chat, then `text` types a chat line with Danish letters and AltGr's characters, and Enter sends
+  it; Minecraft's log has the line, its letters whole;
 - **the switcher:** F3 down, F4, F3 up; the chat says the game mode changed, and a second round sets it back;
-- **the pause menu:** `pause` opens it, Esc closes it;
-- **the end:** the two test slots are emptied with `/item replace … with air`, the game mode read before is set back,
-  `build off`, and the user's hotbar is as they keep it (golden apples in slot 6, golden carrots in 7, TNT in 8, flint
-  and steel in 9).
+- **the pause menu:** `pause` opens it, Esc closes it; **the inventory:** E opens it, Esc closes it;
+- **the end:** `build off`; the chest is removed with what's in it (`setblock … air strict`, which drops nothing), and a
+  `/kill` clears any item dropped near it.
+
+`wait-screen open|closed` waits for McState's screen flag at each step.
 
 ### Unit tests (ctest, no game)
 
@@ -489,3 +492,19 @@ routing rules.
   - run E's steps under the routing rules, among them E's character dropped by the gate, the inventory closed by E or
     Esc, the F3+F4 switcher closing as F3 is let go, O's pause menu, F8's Esc, Shift+F6 and Alt-Tab with a screen
     open, and Danish typing through AltGr and dead keys.
+
+## Changes while planning Part 1
+
+The plan's Part 1 is step 0 alone (Tasks 1 to 5); Part 2, BlockRender 0.23.0 and run E, is planned from step 0's
+results. Planning it changed step 0 ("Step 0: Minecraft's side, with mclink" above):
+- **A chest instead of the inventory** for the cursor's pixels and the moves. The deep review's version needed the
+  user's inventory read first, test items only in slots found empty, and the game mode read and set back. A test chest
+  needs none of it: its slots are its own, filled with `/item replace block`, and it tests what a right-click opens
+  too. The switcher's two rounds leave the game mode as it was without reading it, since the switcher opens on the last
+  game mode. E still opens the inventory, without moves.
+- **Two more verbs:** `wait-screen open|closed`, so the script waits for each screen as McState reports it, and
+  `hud-box`, so the hover check is a number in the log: an empty chest slot is grey 139 (`generic_54.png`), and 26.3's
+  hover highlight, two 24 by 24 white sprites at alpha 96 and 32, makes it about 192.
+- **The link keeps McState's GUI scale,** which mclink's status prints: the slots' pixels hold only at the user's scale
+  2, and nothing read it.
+- **The typed line is a chat line,** not `/say`, which would read the `@` as the start of an entity selector.
