@@ -33,11 +33,13 @@ steps"):
 1. **Step A, into the G-buffer:** everything opaque (mobs, lit TNT, falling blocks, block entities, opaque particles,
    which make a whole TNT explosion) and the world entities (items, arrows, tridents, cracks), lit by the game as the
    blocks are, with Minecraft's glow written as the G-buffer's emission.
-2. **Step B, a forward pass before DLSS:** translucent particles blended, the targeted block's outline, DLSS's bias
-   hint where our things have no motion vectors of their own, and an unlit glow if step A's emission doesn't work.
+2. **Step B, a forward pass before DLSS:** translucent particles blended, the targeted block's outline in build mode,
+   and DLSS's bias hint under the particles, which have no motion vectors of their own. Run A found step A's emission
+   works, so there's no unlit glow.
 3. **Step C, where a step shows a need: the Minecraft side.** CyberCraft Tweaks keeps Minecraft's draw order for
    layered models (villagers' clothes, spider eyes) and marks emissive render types, which SkyCraft's capture drops.
-   Step 0 showed the draw order is needed, so it comes before step A; the emissive mark waits for run A.
+   Step 0 showed the draw order is needed, so it comes before step A; the emissive mark waits for run B's look at the
+   spider's eyes at night, which run A didn't take.
 
 ## Decisions from the brainstorm
 
@@ -413,11 +415,12 @@ update.
   newest one becoming the frame's snapshot. If none is free, the copy waits for the next frame. A frame over 8 MB keeps
   its draws in order while they fit, and the rest are counted as skipped.
 - **A frame's snapshot is held** from its G-buffer list's recording until the GPU passes the fence after the last list
-  of ours that can read it: the frame's forward list (step B), or, if that doesn't come, the next G-buffer list. Holding
-  it only to the G-buffer list's own fence would let `Update` rewrite it before the forward list reads it, mixing two
-  frames' vertices under one frame's draws. The fence after a list, not before it, as `Retired` learnt from Task 52.
-- **The G-buffer pass** takes the newest snapshot and records which; the forward pass of the same frame takes that one.
-  Until step B, the G-buffer list is the only one that reads a snapshot, so it's held to the fence after that list.
+  of ours that reads it. The G-buffer list takes the newest (`TakeNewest`); when the snapshot has anything for the
+  frame's forward list (step B), the G-buffer list takes it a second time for it (`Take`), and the forward list holds
+  it to the fence after itself. If the forward list doesn't come, or is skipped, that hold is given back (`Abandon`),
+  and the snapshot is held to the G-buffer list's fence alone. Holding it only to the G-buffer list's own fence would
+  let `Update` rewrite it before the forward list reads it, mixing two frames' vertices under one frame's draws. The
+  fence after a list, not before it, as `Retired` learnt from Task 52.
 
 ### Step A: into the G-buffer
 
@@ -460,28 +463,41 @@ SRV (t3, the entity textures):
 
 ### Step B: before DLSS
 
-A second list of ours, put before the DLSS list (the DLSS evaluate's list, `latest_.list`) while in `gbuffer` mode:
-- **when:** only in a frame whose G-buffer list drew, with that frame's snapshot, camera and jitter; it reads what that
-  list wrote into the tagged depth;
-- **its lists:** a ring of 8 of its own, as the HUD pass has;
-- **its targets:** the tagged colour, motion vectors, depth, and `biasCurrentColorHint`, each moved from the state the
-  DLSS list found it in and back, as `RecordPredlss` does.
+A second list of ours, the forward list, put before the DLSS list (the DLSS evaluate's list, `latest_.list`) while in
+`gbuffer` mode:
+- **when:** only in a frame whose G-buffer list drew a snapshot with anything for it: translucent draws, or the outline
+  while `set outline` is 1. That list leaves it the frame's DLSS list, tags, camera, constants (the jitter with them)
+  and extent, and holds the snapshot for it ("The snapshot ring"); the forward list is recorded with those when that
+  DLSS list is submitted, and reads what the G-buffer list wrote into the tagged depth. A claim whose forward list
+  never came is let go at the next G-buffer list, and at a change of mode;
+- **its lists:** a ring of 8 of its own, with its own constants and timing queries, as the HUD pass has; and its own
+  thread-local record, since one submission could hold both of a frame's lists of ours;
+- **its targets:** the tagged colour and `biasCurrentColorHint` as render targets, and the tagged depth read-only, each
+  moved from the state the DLSS list finds it in and back, as `RecordPredlss` does. The motion vectors aren't touched;
+- **skipped,** it lets the snapshot go, counts the skip and keeps its reason, and never switches drawing off.
 
-What it draws, in order:
-1. **The glow fallback,** only with `set glowpass 1`, for when run A finds the material target's A isn't emission:
-   glowing triangles leave the G-buffer pass and are drawn here, opaque and unlit, `Linear(texel × colour) × exposure`,
-   writing the tagged depth and motion vectors. They cover the game's glass and smoke, which this pass comes after.
-2. **The translucent particles:** blended (source alpha), depth tested greater-or-equal, writing neither depth nor
-   motion. A particle with block light of at least `glowlight` is unlit (`Linear(texel × colour) × exposure`); any
-   other takes Minecraft's light curve, `l / (4 − 3l)` of its brighter light level, times that. `exposure` is
-   `predlss`'s setting, 2.5, chosen by eye in spike 3's run 4: the one hand-set value, since the game tags no exposure.
-3. **The outline,** only in build mode, with `set outline 1`: each edge widened in the vertex shader into a strip
-   facing the camera, `max(2.5, 2560 / 1920 × 2.5)` output pixels scaled to the render width (about 2.2 pixels), black
-   at 40%, blended, depth tested greater-or-equal. Outside build mode Minecraft's player aims where V looks, but V's
-   clicks don't reach Minecraft, so an outline there would mislead.
-4. **DLSS's bias hint,** `set dlsshint`: at 1, the default, 1.0 under the translucent particles, which have no motion
-   vectors of their own; at 2, also under the scene's `model` pixels, found by redrawing them with an equal depth test
-   against the tagged depth; at 0, nothing. It's the game's own mechanism for what its motion vectors can't follow.
+What it draws, in order, each tested against the tagged depth, greater-or-equal as the entities, writing no depth and
+culling nothing:
+1. **The translucent particles:** blended (source alpha), the colour's alpha left alone. A particle with block light
+   of at least `glowlight` is unlit (`Linear(texel × colour) × exposure`); any other takes Minecraft's light curve,
+   `l / (4 − 3l)` of its brighter light level, times that. Under 0.1 of alpha is left out, as Minecraft's particle
+   shader leaves it. `exposure` is `predlss`'s setting, 2.5, chosen by eye in spike 3's run 4: the one hand-set value,
+   since the game tags no exposure.
+2. **The outline,** while build mode is on, paused or not, with `set outline 1`: each edge widened in the vertex shader
+   into a strip facing the camera, as Minecraft's lines shader widens its own, `max(2.5, output width / 1920 × 2.5)`
+   output pixels scaled to the render width (about 2.2 pixels at 2560 and 1707); an end behind the camera is first
+   brought along the edge to just in front of it. Black at Minecraft's 40%, blended so it darkens the scene's linear
+   colour to `Linear(0.6)`, about a third, as Minecraft's darkens its sRGB framebuffer's colours to 0.6. Outside
+   build mode Minecraft's player aims where V looks, but V's clicks don't reach Minecraft, so an outline there would
+   mislead; paused, it shows what build mode will aim at.
+3. **DLSS's bias hint,** `set dlsshint` 1 (the default): 1 under the translucent particles, which have no motion
+   vectors of their own, by drawing them again into the hint; at 0, nothing. The hint must be an `R8_UNORM` render
+   target the colour's size, as step 1 found it, or the forward list draws without it. It's the game's own mechanism
+   for what its motion vectors can't follow. Spike 3's frame log shows the DLSS list starting with five barriers and no
+   draw, dispatch or clear, its two dispatches after a change of targets, most likely DLSS's own. Run B's `dump hint`,
+   copied as DLSS gets it, shows whether these marks reach DLSS, and whether the game clears the hint each frame. If
+   the game writes it after the forward list, the hint's draw moves into the DLSS list at the evaluate, where the dumps'
+   copies go.
 
 ### Costs measured
 
@@ -584,16 +600,22 @@ Then the Clear button clears it all.
 
 ### Step B's code, and run B
 
-The forward list, its shaders and settings, built and deployed with the game closed. In the game:
-- fireworks, a splash potion and campfire smoke, by day and at night: blended, hidden behind nearer things, and as
-  bright as Minecraft's at both times. If night is too bright, that's recorded, and a night factor (the game's hour is
-  readable) gets a design of its own;
-- the outline in build mode: steady and unbroken while V moves; if DLSS breaks it up, it moves to Present, drawn over
-  the finished image against a copy of the depth, as spike 3's step 2 did;
-- `dlsshint` 0, 1 and 2 compared, moving and still;
-- the glow fallback, if run A needed it.
+The forward list, its shaders and settings, with run A's fixes (Shift+F6's pause; the overlay's block entities at
+their markers, and its still rows), built and deployed with the game closed. First the overlay's Spawn rows are
+typed into Minecraft with `mclink` (`tools/mclink/spawn.txt`), without the game. Then in the game:
+- fireworks, a splash potion and campfire smoke, by day: blended, hidden behind nearer things, and as bright as
+  Minecraft's, side by side;
+- DLSS's bias hint: `dump hint` with the smoke in view shows its marks, and again once the smoke has gone shows no
+  trace of it, so the game clears the hint each frame; `dlsshint` 0 and 1 compared, still and turning;
+- the outline in build mode: steady and unbroken while V moves, about as thick as Minecraft's; if DLSS breaks it up,
+  it moves to Present, drawn over the finished image against a copy of the depth, as spike 3's step 2 did;
+- Shift+F6 pausing build mode, and build mode going on as the overlay closes; the overlay's block entities each at its
+  marker while V walks, and Clear leaving nothing;
+- at night: the particles beside Minecraft's (if too bright, a night factor, from the game's hour, gets a design of
+  its own), and the spider's eyes, which decide step C's emissive mark;
+- the forward list's cost, and no crash or freeze.
 
-### Step C's emissive mark, if run A needs it
+### Step C's emissive mark, if run B needs it
 
 CyberCraft Tweaks again, installed with the user's leave and Minecraft stopped; `mclink` shows the batches' flags; then
 run A's check 2 again in the game.
@@ -608,12 +630,15 @@ run A's check 2 again in the game.
   looks wrong.
 - **`set glow <0 to 1>`** (0.9): what a glowing triangle writes into the material target's A.
 - **`set glowlight <1 to 15>`** (15): the block light from which a triangle glows.
-- **`set glowpass 0|1`** (0; step B): 1 draws glowing triangles unlit in the forward list instead.
-- **`set dlsshint 0|1|2`** (1; step B): the bias hint's reach.
+- **`set dlsshint 0|1`** (1; step B): DLSS's bias hint under the translucent particles, or nowhere.
 - **`set outline 0|1`** (1; step B): the outline in build mode.
 - **`exposure`** stays `predlss`'s setting, shared with step B's unlit colours.
 - **`entities`** (a request): the newest scene's batches (texture, size, flags, count), the textures (id, size) and the
   world entities by kind, into the log.
+- **`dump hint`** (step B; a request): DLSS's bias hint as DLSS gets it, saved with the other tagged buffers at the
+  evaluate; `dump all` takes it too.
+- **`overlay open|closed`** (Part 3; a request): CET's overlay opened or closed, as the overlay says from CET's
+  events, which pauses build mode while it's open.
 - **The overlay's Spawn rows** (Fun): each button types its commands as `mc` requests, each test thing ahead of
   Minecraft's player, level (`/execute rotated ~ 0 positioned ^ ^ ^N`, as the named sets do), tagged as in step 0. Each
   kind has its own distance, so none lands on another:
@@ -624,9 +649,12 @@ run A's check 2 again in the game.
     drops no item if it falls out of the world (`DropItem`);
   - block entities 8 m ahead, 3 m apart: a chest, a bed (its foot and its head, two blocks, each with a marker), a sign
     and a banner with patterns, and a torch, for its flame (the bed, the sign and the torch are block models in 26.3,
-    drawn with the blocks);
+    drawn with the blocks). Each marker goes first, tagged with its kind, and its block at it, so V moving between
+    the requests can't part them (Part 3);
   - items 3 m ahead: a dropped item and a dropped grass block (its top tinted);
-  - for step B: a firework, a splash potion and a campfire.
+  - for step B, the Particles row: a firework 6 m ahead, which bursts overhead; a splash potion that breaks 3 m ahead
+    and 3 m to the left; and a lit campfire 3 m ahead and 3 m to the right, placed at its marker as the block entities
+    are.
 
   **Clear** clears what they made, by tag, leaving no drops: the placed blocks set to air `strict`, without block
   updates, so neither half of the bed breaks the other with a drop. A lit TNT and a big blast come from the named sets
@@ -642,7 +670,8 @@ A new status line, `entities`, shown by the overlay:
 - world entities by kind, and whether there's an outline;
 - the nearest mob's distance from V, from the world table's shadow records (`kWeShadow`: players' and mobs' feet);
 - the GPU time of our entity draws, and of the forward list (step B);
-- frames the G-buffer list drew entities in, and how many of those the forward list drew too (step B).
+- frames the G-buffer list drew entities in, how many the forward list drew (step B) and how many of those with the
+  bias hint, its skips with the last one's reason, and the `outline` and `dlsshint` settings.
 
 ## Safety
 
@@ -685,12 +714,14 @@ A new status line, `entities`, shown by the overlay:
   flying north and up, a crack's box, the outline's 24 vertices).
 - **`EntityTextures`:** appending, growth, the cap, and a clear.
 - **`Snapshots`:** a buffer never reused while a recorded list's fence is ahead; a frame's snapshot held past its
-  G-buffer list's fence until its forward list's, or the next G-buffer list's when no forward list comes; the forward
-  pass gets the G-buffer pass's snapshot.
+  G-buffer list's fence until its forward list's, or given back when no forward list comes.
+- **The forward list's pure parts:** the bias hint's checks, the outline's width, and whether a snapshot has anything
+  for the forward list.
+- **Build mode** (Part 3): Shift+F6 and the overlay's word pause it, and it goes on when the overlay closes.
 - **The shader's constants:** the grown b1 checked against the compiled shader's reflection, as `TestShaders` does now.
-- **`Requests`:** the `entities` request, and the new settings parsed. Their ranges (`entities`, `glow`, `glowlight`,
-  `glowpass`, `dlsshint`, `outline`) are the renderer's, as every drawing setting's are, which no unit test reaches:
-  run A sends values out of range.
+- **`Requests`:** the `entities`, `overlay` and `dump hint` requests, and the new settings parsed. Their ranges
+  (`entities`, `glow`, `glowlight`, `dlsshint`, `outline`) are the renderer's, as every drawing setting's are, which
+  no unit test reaches: run A sends values out of range.
 
 Each new test is broken once to prove it can fail.
 
@@ -704,12 +735,13 @@ Runs A and B, as "The steps" has them.
 
 ## Risks
 
-1. **The material target's A isn't emission:** then nothing glows in step A. Step B's `glowpass` is the fallback, at the
-   cost of covering the game's glass.
+1. **The material target's A isn't emission:** then nothing glows in step A. Run A found it is, so step B has no glow
+   fallback.
 2. **Two lists of ours in one frame** have never run together: the forward list depends on the G-buffer list's frame,
    snapshot and tagged depth. Run B checks they pair up (the status counts frames drawn by one and not the other).
-3. **Smearing:** motion vectors from camera movement alone may leave trails behind moving mobs and fast particles.
-   `dlsshint`, then step C's motion, are the answers, in that order.
+3. **Smearing:** motion vectors from camera movement alone may leave trails behind moving mobs and fast particles. Run A
+   saw none behind the models; the bias hint goes under the translucent particles, and step C's motion is the next
+   answer.
 4. **Layer order:** villagers' clothes and spider eyes may show wrong (step C).
 5. **The scene is a frame old** (as the HUD's images), and a Minecraft hitch freezes it for a frame or two. Something
    moving at a sprinting player's 5.6 m/s is drawn about 8 cm behind at 68 frames a second.
@@ -945,3 +977,43 @@ Step C's `mclink` run (Task 7) and a check of the overlay's Spawn rows typed int
 2. **Beds, signs and torches are block models in 26.3,** in the section meshes SkyCraft sends, so BlockRender draws
    them with the blocks already; of the Spawn row's block entities, step A draws the chest and the banner ("Purpose",
    run A's check 4).
+
+## Changes while planning Part 3
+
+Part 3 was planned from run A's results (`docs/spikes/2026-10-06-minecraft-entities-results.md`) and the user's choices
+on its problems. Its code was written and tested in a scratch clone first, then reviewed against BlockRender's code,
+SkyCraft's and spike 3's frame log, before the plan was written from it. These changed the design; the sections above
+include them:
+1. **Step B is trimmed to what run A left:** the material target's A is emission, so there's no glow fallback (`set
+   glowpass` is gone); nothing smeared, so the bias hint goes under the translucent particles alone (`set dlsshint` is 0
+   or 1, never 2); and the game's ambient occlusion darkens the ground under mobs, so there are no contact shadows. The
+   forward list's targets lose the motion vectors, which only the glow fallback wrote.
+2. **Shift+F6 pauses build mode while CET's overlay is open,** the user's choice over leaving it, as spike 4 had it:
+   while the overlay is open every input is its and the game's, the mouse's movement adds no turn to V's teleports,
+   Minecraft lets go of everything as build mode pauses, and build mode goes on when the overlay closes. The overlay
+   tells BlockRender when it opens and closes (`overlay open|closed`, from CET's events), which keeps the pause right if
+   it was toggled another way.
+3. **The overlay places each block entity at its own marker,** the marker first and tagged with its kind, so V moving
+   between the requests can't part a block from its marker, as in run A; and its top lines are always drawn, so its
+   rows don't move under a click.
+4. **Unlink keeps Minecraft's entities drawn,** as it keeps its blocks: the user's choice, so nothing changes.
+5. **The forward list pairs with its frame** through what the G-buffer list leaves it: the frame's DLSS list, tags,
+   camera, constants and extent, and the snapshot, taken a second time for it (`Snapshots::Take`). A claim whose
+   forward list never came is let go at the next G-buffer list or a change of mode, and a skipped forward list lets it
+   go at once. The forward list has its own ring, constants and timing queries, and its own thread-local record, so a
+   submission holding both lists signals and submits each.
+6. **The outline shows while build mode is on, paused or not:** paused, it shows what build mode will aim at.
+   `Entities::Frame` takes build mode's state, and the renderer's `set outline` hides it.
+7. **The outline darkens the scene's linear colour to `Linear(0.6)`,** about a third, which is what Minecraft's black at
+   40% does to its sRGB framebuffer's colours; 40% in linear would darken it far less on screen. Its width is
+   Minecraft's in output pixels, scaled to DLSS's render width, from the back buffer's width as the last Present saw
+   it (2.5 pixels before one).
+8. **The bias hint is drawn by drawing the translucent particles again into it,** only where the game tags an
+   `R8_UNORM` render target the colour's size, as step 1 found it. Spike 3's frame log shows the DLSS list starting
+   with barriers alone; `dump hint`, a new dump target, shows in run B whether the marks reach DLSS and whether the game
+   clears the hint each frame.
+9. **The Particles row** makes step B's test things: a firework, a splash potion, and a campfire placed at its marker.
+   An `mclink` script of every Spawn row (`tools/mclink/spawn.txt`) checks them all against Minecraft before run B.
+10. **The status's `entities` line** shows the forward list: its frames, those with the hint, its GPU time and skips,
+    and the two settings; the overlay's `Entities` line, its frames.
+11. **BlockRender 0.21.0.**

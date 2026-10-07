@@ -1,4 +1,4 @@
-# Minecraft's Entities Implementation Plan, Parts 1 and 2 (steps 0, A and C's draw order)
+# Minecraft's Entities Implementation Plan, Parts 1 to 3 (steps 0, A, B and C's draw order)
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 >
@@ -32,7 +32,10 @@ Nothing changes in the game: BlockRender's own sink takes none of the new calls 
 **Part 2** (Tasks 6 to 17) draws Minecraft's entities into the game's G-buffer (step A), after step C's draw order,
 which step 0 showed is needed: CyberCraft Tweaks 1.4.0 keeps Minecraft's draw order in what SkyCraft sends. It was
 planned after step 0, from its results, and its own section below says how it's built.
-**Part 3** (step B, and what run A asks for) is planned after run A.
+**Part 3** (Tasks 18 to 31) draws Minecraft's translucent particles, the targeted block's outline in build mode and
+DLSS's bias hint before DLSS (step B), and fixes what run A found: Shift+F6 pauses build mode, and the overlay keeps
+its block entities at their markers and its rows still. It was planned after run A, from its results, and its own
+section below says how it's built.
 
 ---
 
@@ -5853,14 +5856,14 @@ cd /d/Cyberpunk-Minecraft && git add docs/spikes/2026-10-06-minecraft-entities-r
 At the end, after "Found while executing Part 2": what ran as written, what changed, and what step C's `mclink` run and
 run A found.
 
-- [ ] **Step 2: Plan Part 3**
+- [x] **Step 2: Plan Part 3**
 
 Use superpowers:writing-plans to add Part 3's tasks, from Task 18 on, to this plan: step B (the forward list: the
 translucent particles, the outline in build mode and DLSS's bias hint), with what run A asks for, such as the glow
 fallback or step C's emissive flag. Verify them as Parts 1 and 2 were. Changes to the spec found while planning go in
 its "Changes while planning Part 3".
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add docs/superpowers \
@@ -5942,3 +5945,3105 @@ Part 2 ran on 2026-10-07, the user starting the games and playing run A.
 - **Changed while running:** Task 16's commit added the screenshots' folder,
   `docs/spikes/2026-10-06-minecraft-entities-results/run-a/`, beside the results; Clear and its commands were also sent
   as requests by the agent at times, as the overlay's button sends them.
+
+---
+
+## Part 3: step B, and what run A asks for
+
+Part 3 draws the rest of what Minecraft shows before DLSS (the spec's "Step B: before DLSS"): the translucent particles,
+blended into the scene's colour; the targeted block's outline in build mode; and DLSS's bias hint under the particles.
+It also fixes what run A found. It was planned after run A (Task 16), from its results; the spec's "Changes while
+planning Part 3" lists what planning settled in the design, and "Found while planning Part 3", at the end, what it
+settled in the plan.
+- **Tasks 18 and 19** are run A's fixes. Shift+F6 pauses build mode while CET's overlay is open, the user's choice,
+  instead of ending it. The overlay places each block entity at its own marker, keeps its rows still, and tells
+  BlockRender when CET's overlay opens and closes.
+- **Tasks 20 to 22** make step B's plain C++, tested without the game: the outline's shape, the frame's outline draw
+  in build mode, and the forward list's pure parts (a frame's snapshot held for it, the bias hint's checks, the
+  outline's width, and when there's anything for it).
+- **Tasks 23 and 24** draw them: the shaders, then the renderer's forward list.
+- **Task 25** shows the forward list in the status. **Task 26** makes BlockRender 0.21.0, whose `dump hint` saves the
+  bias hint as DLSS gets it. **Task 27** gives the overlay its Particles row.
+- **Task 28** writes an `mclink` script of the overlay's Spawn rows, and **Task 29** runs it in Minecraft, without the
+  game. **Task 30** is run B, in the game. **Task 31** closes the spike.
+
+Test counts: 493 at the start of Part 3. Then 497 after Task 18, 498 after Task 20, 499 after Task 21, 503 after Task
+22, 504 after Task 23 and 505 after Task 26. Tasks 19, 24, 25, 27 and 28 add none: 25 and 28 change tests.
+
+### What run A found
+
+From the results' "Run A" (`docs/spikes/2026-10-06-minecraft-entities-results.md`), what Part 3 builds on:
+- **The material target's A is emission,** steady at the default `glow` 0.9: step B has no glow fallback
+  (`set glowpass`).
+- **Nothing smeared,** so DLSS's bias hint goes under the translucent particles alone: `set dlsshint` is 0 or 1, never 2.
+- **The game's ambient occlusion darkens the ground under mobs,** so there are no contact shadows to draw.
+- **The entities cost 0.02 ms of GPU a frame,** 0.31 ms at the peak of a 125-TNT blast.
+- **Three problems,** for the user to choose among (the results' "Problems"): the user chose all three fixes, and for
+  Shift+F6, pausing build mode rather than leaving it:
+  - the overlay's block entities parting from their markers when V moved, so Clear missed blocks (Task 19);
+  - the overlay's buttons moving as its lines came and went (Task 19);
+  - Shift+F6, which opens CET's overlay, leaving build mode (Task 18).
+- **Unlink keeps Minecraft's entities drawn,** as it keeps its blocks: the user chose to keep it so.
+- **The spider's eyes,** which Minecraft makes glow by their render type, weren't looked at closely at night: run B
+  looks before step C's emissive mark is decided.
+
+## Before you start (Part 3)
+
+- **Part 1's "Before you start" holds,** its shell, Edit steps and commits included.
+- **Already verified:** all the code in Part 3 has been compiled and tested once already, in a scratch clone.
+  - Tasks 18 to 28 were then replayed in a fresh clone by a script that applied every file step exactly as written,
+    and checked every build, test and overlay step's expected result. The results:
+    - zero compiler warnings at `/W4`;
+    - 505 C++ tests passing;
+    - the replayed files identical to the scratch clone's.
+  - Each new or changed test was broken once, by a mutation of the code it covers, and failed as it should: 36
+    mutations.
+  - The overlay's new rows were played through with CET's functions stubbed: each button's commands, in order, and
+    Clear's. Task 28's script types the very commands the overlay's buttons type.
+  - The bias hint was checked against spike 3's frame log: the DLSS list starts with five barriers and no draw,
+    dispatch or clear, and its two dispatches come after a change of targets, most likely DLSS's own. Run B's `dump
+    hint`, copied as DLSS gets it, shows whether the forward list's marks reach DLSS.
+
+  So a failure while following the plan most likely means a transcription slip: compare against the plan's code first.
+- **What only Minecraft and the game can test:** the Spawn rows typed into Minecraft (Task 29), and everything drawn
+  (Task 30), including whether the bias hint's marks reach DLSS and the game clears the hint each frame (run B's `dump
+  hint`).
+- **The user:**
+  - **does everything in Minecraft, the Modrinth App and the game,** as in Parts 1 and 2: never drive their mouse or
+    keyboard; ask, then wait for them to say they're done;
+  - **approves changes to their Minecraft world:** Task 29's script makes and clears test things at x 880 in the
+    `SkyCraft` world; in Task 30 the overlay's Spawn rows make test things ahead of Minecraft's player, and Clear removes
+    them, leaving no drops.
+- **The game:** builds deploy only with `CP2077_DIR` set, which only Task 30's deploy step sets, with the game closed.
+  `mclink` needs the game closed too, since the game would hold the mapping.
+- **No faults:** as in Parts 1 and 2. The forward list reads only its frame's snapshot, held for it until the fence
+  after it; every way it can be skipped lets the snapshot go; and a skipped forward list never switches drawing off.
+
+## File map (Part 3)
+
+| File | Responsibility |
+|---|---|
+| `src/input/BuildMode.*`, `src/input/Router.*` | Shift+F6 and the overlay's word pause build mode, and its log lines |
+| `src/Requests.*` | The `overlay open\|closed` request, and `dump hint` |
+| `src/Status.*` | The build line's pause, and the entities line's forward list |
+| `tools/blockrender_hud/init.lua` | Block entities at their markers, still rows, the overlay's opening and closing, and the Particles row |
+| `src/entities/WorldShapes.*` | The outline's 12 edges |
+| `src/entities/Entities.*` | The frame's outline draw in build mode, and whether the forward pass has work |
+| `src/render/Snapshots.*` | A frame's snapshot held for its forward list |
+| `src/render/Predlss.*` | The bias hint's checks, and the outline's width |
+| `shaders/blocks.hlsl`, `src/render/Shaders.*`, `src/render/FrameConstants.h` | The particles', bias hint's and outline's shaders |
+| `src/render/Renderer.*` | The forward list before the DLSS list, its pipelines, settings and stats |
+| `src/log/Dumps.*` | `dump hint` |
+| `src/Plugin.cpp`, `CMakeLists.txt` | The overlay request, build mode for the outline, the forward list's status, 0.21.0 |
+| `tools/mclink/spawn.txt` | The overlay's Spawn rows and Clear, typed into Minecraft |
+| `tests/*` | Their units' new tests |
+
+---
+
+### Task 18: Shift+F6 pauses build mode while CET's overlay is open
+
+Run A found Shift+F6, which opens CET's overlay, leaving build mode, as spike 4 made it, among the keys that open the
+game's menus; the user chose to pause build mode instead (the spec's "Changes while planning Part 3"):
+- **`BuildMode` knows whether CET's overlay is open.** Shift+F6 toggles it, on its press with either Shift held, not
+  its repeats, whether build mode is on or off; and the overlay's own word sets it (`SetOverlay`), in case it was
+  toggled some other way. F6 is no longer one of the menu keys.
+- **While the overlay is open and build mode is on, build mode is paused:** every input is the overlay's and the game's,
+  none forwarded and none hidden, and the menu keys end nothing. Minecraft lets go of everything as it pauses, and a
+  press's repeats and release still go where the press went. The mouse's movement turns nothing (`TakeMouseX` gives
+  none), so the overlay's cursor can't add spike 5's turn to V's teleports. When the overlay closes, build mode goes on
+  where it was.
+- **The router** logs `build mode paused: CET's overlay is open` and `build mode goes on: CET's overlay closed`, and
+  takes the overlay's word from the plugin.
+- **The `overlay open|closed` request** is the overlay's word (Task 19), and the status's build line says `on, paused
+  while CET's overlay is open`.
+
+**Files:**
+- Modify: `tests/TestBuildMode.cpp`, `tests/TestRouter.cpp`, `tests/TestRequests.cpp`, `tests/TestStatus.cpp`,
+  `src/input/BuildMode.h`, `src/input/BuildMode.cpp`, `src/input/Router.h`, `src/input/Router.cpp`, `src/Requests.h`,
+  `src/Requests.cpp`, `src/Status.h`, `src/Status.cpp`, `src/Plugin.cpp`
+
+- [ ] **Step 1: Edit `tests/TestBuildMode.cpp` to add the failing tests of the pause**
+
+```cpp
+	CHECK(mode.On());
+	mode.Key(Press(0x36), Ready());                    // the right Shift
+	CHECK(mode.Key(Press(0x40), Ready()).releaseAll);  // Shift+F6: CET's overlay
+	CHECK_STR(mode.Why(), "Shift+F6 left it");
+	mode = On();
+	mode.Key(Press(0x2A, true), Ready());  // the fake Shift Windows sends around some extended keys isn't Shift
+	CHECK(Passes(mode.Key(Press(0x40), Ready())));
+	CHECK(mode.On());
+```
+```cpp
+	mode.Key(Release(0x40), Ready());
+	CHECK(mode.On() && !mode.Paused());
+	mode.Key(Press(0x36), Ready());                    // the right Shift
+	CHECK(mode.Key(Press(0x40), Ready()).releaseAll);  // Shift+F6: CET's overlay, which pauses build mode, not ends it
+	CHECK(mode.On() && mode.Paused());
+	mode = On();
+	mode.Key(Press(0x2A, true), Ready());  // the fake Shift Windows sends around some extended keys isn't Shift
+	CHECK(Passes(mode.Key(Press(0x40), Ready())));
+	CHECK(mode.On() && !mode.Paused());
+```
+```cpp
+TEST(BuildModeLeavesOnShiftF6WithLeftShiftForwarded)
+```
+```cpp
+TEST(BuildModePausesWhileCetsOverlayIsOpen)
+```
+```cpp
+	CHECK(!mode.On());
+	CHECK(f6.releaseAll && !f6.hideKey);  // and CET's overlay opens
+	CHECK_STR(mode.Why(), "Shift+F6 left it");
+	const Decision release = mode.Key(Release(0x2A), Ready());  // its press went to Minecraft, which let go of everything
+	CHECK(release.hideKey && release.forwarded == 0);
+}
+```
+```cpp
+	CHECK(mode.On() && mode.Paused());
+	CHECK(f6.releaseAll && !f6.hideKey && f6.forwarded == 0);  // Minecraft lets go of everything, and CET's overlay opens
+	CHECK(Passes(mode.Key(Press(0x40), Ready())));               // F6's repeat changes nothing
+	mode.Key(Release(0x40), Ready());
+	CHECK(mode.Paused());
+	const Decision release = mode.Key(Release(0x2A), Ready());  // its press went to Minecraft, which let go of everything
+	CHECK(release.hideKey && release.forwarded == 0);
+	// Paused, every input is the overlay's and the game's, and the menu keys end nothing.
+	CHECK(Passes(mode.Mouse({ RI_MOUSE_LEFT_BUTTON_DOWN, 0 }, Ready())));
+	CHECK(Passes(mode.Mouse({ RI_MOUSE_LEFT_BUTTON_UP, 0 }, Ready())));
+	CHECK(Passes(mode.Mouse({ RI_MOUSE_WHEEL, 120 }, Ready())));
+	CHECK(Passes(mode.Key(Press(0x04), Ready())));  // 3
+	CHECK(Passes(mode.Key(Press(0x11), Ready())));  // W
+	CHECK(Passes(mode.Key(Press(0x01), Ready())));  // Esc
+	CHECK(mode.On() && mode.Paused());
+	// Shift+F6 again closes the overlay, and build mode goes on where it was. W's release goes where its press went.
+	mode.Key(Press(0x2A), Ready());
+	const Decision close = mode.Key(Press(0x40), Ready());
+	CHECK(!close.releaseAll && !close.hideKey);
+	CHECK(mode.On() && !mode.Paused());
+	CHECK(Passes(mode.Key(Release(0x11), Ready())));
+	const Decision click = mode.Mouse({ RI_MOUSE_LEFT_BUTTON_DOWN, 0 }, Ready());
+	CHECK(click.hideButtons == RI_MOUSE_LEFT_BUTTON_DOWN && click.forwarded == 1);
+}
+
+TEST(BuildModeKnowsTheOverlayWhileOff)
+{
+	BuildMode mode;
+	mode.Key(Press(0x2A), Ready());
+	CHECK(Passes(mode.Key(Press(0x40), Ready())));  // CET's overlay opens with build mode off
+	mode.Key(Release(0x40), Ready());
+	mode.Key(Release(0x2A), Ready());
+	mode.Key(Press(kF8), Ready());  // build mode goes on behind the overlay: paused at once
+	CHECK(mode.On() && mode.Paused());
+	CHECK(Passes(mode.Mouse({ RI_MOUSE_RIGHT_BUTTON_DOWN, 0 }, Ready())));
+	mode.Key(Press(0x2A), Ready());
+	mode.Key(Press(0x40), Ready());  // and the overlay closes
+	CHECK(mode.On() && !mode.Paused());
+}
+
+TEST(BuildModeTakesTheOverlaysOwnWord)
+{
+	// The overlay says when it opens and closes (CET's events), which keeps build mode right if it was toggled another way.
+	BuildMode mode = On();
+	mode.Key(Press(0x11), Ready());  // W, to Minecraft
+	CHECK(mode.SetOverlay(true));    // paused: Minecraft must let go of everything
+	CHECK(mode.Paused());
+	const Decision release = mode.Key(Release(0x11), Ready());
+	CHECK(release.hideKey && release.forwarded == 0);
+	CHECK(!mode.SetOverlay(true));  // already open
+	CHECK(!mode.SetOverlay(false));
+	CHECK(!mode.Paused());
+	BuildMode off;
+	CHECK(!off.SetOverlay(true));  // off: nothing to let go of
+	CHECK(!off.Paused());
+}
+```
+
+- [ ] **Step 2: Edit `tests/TestRouter.cpp` to add the failing test of the router's pause**
+
+```cpp
+TEST(RouterPushesNothingOnceTheLinkIsGone)
+```
+```cpp
+TEST(RouterPausesBuildModeForCetsOverlay)
+{
+	Building building;
+	auto     shift = Key(0x2A, VK_SHIFT);
+	Inspect(building.router, shift);
+	building.mapping.Inputs();
+	auto f6 = Key(0x40, VK_F6);
+	Inspect(building.router, f6);
+	CHECK_EQ(KeyOf(f6).VKey, USHORT(VK_F6));  // CET's overlay opens
+	auto inputs = building.mapping.Inputs();
+	CHECK(inputs.size() == 1 && inputs[0].type == proto::kInReleaseAll);  // and Minecraft lets go of everything
+	CHECK(building.router.On());
+	CHECK(building.router.Report().paused);
+	CHECK(Logged(building.log, "build mode paused: CET's overlay is open"));
+	auto click = Mouse(RI_MOUSE_LEFT_BUTTON_DOWN);
+	Inspect(building.router, click);
+	CHECK_EQ(MouseOf(click).usButtonFlags, USHORT(RI_MOUSE_LEFT_BUTTON_DOWN));  // the overlay's click
+	CHECK(building.mapping.Inputs().empty());
+	CHECK(!Logged(building.log, "build mode goes on: CET's overlay closed"));  // not while it's open
+	auto move = Mouse(0, 0, 9, 0);
+	Inspect(building.router, move);
+	CHECK_EQ(building.router.TakeMouseX(), 0ll);  // the overlay's cursor turns nothing
+	building.router.SetOverlay(false);  // the overlay says it closed
+	CHECK(!building.router.Report().paused);
+	CHECK(Logged(building.log, "build mode goes on: CET's overlay closed"));
+	Inspect(building.router, move);
+	CHECK_EQ(building.router.TakeMouseX(), 9ll);
+	building.router.SetOverlay(true);  // and opened
+	inputs = building.mapping.Inputs();
+	CHECK(inputs.size() == 1 && inputs[0].type == proto::kInReleaseAll);
+	CHECK(building.router.Report().paused);
+}
+
+TEST(RouterPushesNothingOnceTheLinkIsGone)
+```
+
+- [ ] **Step 3: Edit `tests/TestRequests.cpp` to add the failing test of the request**
+
+```cpp
+TEST(RequestsForTheEntities)
+```
+```cpp
+TEST(RequestsForCetsOverlay)
+{
+	std::string error;
+	const auto  open = cpmc::ParseRequest("overlay open", error);
+	CHECK(open && open->kind == cpmc::Request::Kind::Overlay && open->what == "open");
+	const auto closed = cpmc::ParseRequest("overlay closed", error);
+	CHECK(closed && closed->kind == cpmc::Request::Kind::Overlay && closed->what == "closed");
+	CHECK(!cpmc::ParseRequest("overlay shut", error));
+	CHECK_STR(error, "overlay takes open or closed");
+}
+
+TEST(RequestsForTheEntities)
+```
+
+- [ ] **Step 4: Edit `tests/TestStatus.cpp` to add the failing check of the build line**
+
+```cpp
+	                                      "keyboard and mouse events read"));
+```
+```cpp
+	                                      "keyboard and mouse events read"));
+	link.buildPaused = true;
+	report.link = link;
+	CHECK(cpmc::FormatStatus(report).find("\nbuild=on, paused while CET's overlay is open; slot 3;") != std::string::npos);
+	link.buildPaused = false;
+```
+
+- [ ] **Step 5: Build; it must fail**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C" | sort -u | head -3
+```
+Expected: `'Paused': is not a member of 'cpmc::input::BuildMode'`.
+
+- [ ] **Step 6: Edit `src/input/BuildMode.h` to declare the pause**
+
+```cpp
+// A press's repeats and its release go where the press went, so neither side is left holding an input that only the
+// other saw let go. Pure, and not thread-safe: the router (input/Router.h) holds its lock around every call.
+```
+```cpp
+// Since spike 7's Part 3, Shift+F6, which opens and closes CET's overlay, pauses it instead: while the overlay is open
+// every input is the overlay's and the game's, and build mode goes on when it closes. A press's repeats and its release
+// go where the press went, so neither side is left holding an input that only the other saw let go. Pure, and not
+// thread-safe: the router (input/Router.h) holds its lock around every call.
+```
+```cpp
+	bool LostFront();
+
+	bool               On() const { return on_; }
+```
+```cpp
+	bool LostFront();
+	// CET's overlay opened or closed, as the overlay itself says (CET's events), in case it was toggled some other way
+	// than Shift+F6. True if this pauses build mode, so Minecraft must let go of everything.
+	bool SetOverlay(bool aOpen);
+
+	bool               On() const { return on_; }
+	bool               Paused() const { return on_ && overlay_; }  // on, behind CET's overlay
+```
+```cpp
+	void   Scroll(int16_t aWheel);
+```
+```cpp
+	void   Scroll(int16_t aWheel);
+	void   LetGo();  // Minecraft lets go of what it holds: those inputs' repeats and releases go nowhere
+```
+```cpp
+	std::array<Holder, kInputs> held_{};
+	bool                        f8Down_ = false;
+```
+```cpp
+	std::array<Holder, kInputs> held_{};
+	bool                        overlay_ = false;  // CET's overlay is open, as Shift+F6 and the overlay say
+	bool                        f8Down_ = false;
+	bool                        f6Down_ = false;
+```
+
+- [ ] **Step 7: Edit `src/input/BuildMode.cpp` for Shift+F6, the overlay's word and the pause**
+
+```cpp
+// The keys that open the game's menus (Esc, I, M, J, P, K, H and T), and Shift with F6, which opens CET's overlay: its
+// name, or null.
+const char* MenuKey(const RawKey& aKey, bool aShift)
+```
+```cpp
+// The keys that open the game's menus (Esc, I, M, J, P, K, H and T): its name, or null.
+const char* MenuKey(const RawKey& aKey)
+```
+```cpp
+	case kF6: return aShift ? "Shift+F6" : nullptr;
+```
+```cpp
+```
+```cpp
+	if (on_ && !aKey.up)
+	{
+		if (const char* menu = MenuKey(aKey, leftShift_ || rightShift_))
+```
+```cpp
+	if (!aKey.extended && aKey.scanCode == kF6)
+	{
+		// Shift+F6 opens and closes CET's overlay, which pauses build mode while it's open, so its clicks don't reach
+		// Minecraft. The overlay sees the key, and an F6 alone or a repeat changes nothing.
+		const bool press = !aKey.up && !f6Down_;
+		f6Down_ = !aKey.up;
+		if (press && (leftShift_ || rightShift_))
+		{
+			decision.releaseAll = SetOverlay(!overlay_);
+		}
+		return decision;
+	}
+	if (on_ && !overlay_ && !aKey.up)
+	{
+		if (const char* menu = MenuKey(aKey))
+```
+```cpp
+	if ((aMouse.buttons & RI_MOUSE_WHEEL) && on_)
+```
+```cpp
+	if ((aMouse.buttons & RI_MOUSE_WHEEL) && on_ && !overlay_)
+```
+```cpp
+	why_ = std::move(aWhy);
+```
+```cpp
+	why_ = std::move(aWhy);
+	LetGo();
+	return true;
+}
+
+bool BuildMode::LostFront()
+{
+	held_.fill(Holder::None);
+	f8Down_ = false;
+	f6Down_ = false;
+	leftShift_ = false;
+	rightShift_ = false;
+	return on_;
+}
+
+bool BuildMode::SetOverlay(bool aOpen)
+{
+	const bool pauses = aOpen && !overlay_ && on_;
+	overlay_ = aOpen;
+	if (pauses)
+	{
+		LetGo();
+	}
+	return pauses;
+}
+
+void BuildMode::LetGo()
+{
+```
+```cpp
+	return true;
+}
+
+bool BuildMode::LostFront()
+{
+	held_.fill(Holder::None);
+	f8Down_ = false;
+	leftShift_ = false;
+	rightShift_ = false;
+	return on_;
+```
+```cpp
+```
+```cpp
+		holder = on_ ? Holder::Minecraft : Holder::Game;  // a press goes where build mode says
+```
+```cpp
+		holder = on_ && !overlay_ ? Holder::Minecraft : Holder::Game;  // a press goes where build mode says
+```
+
+- [ ] **Step 8: Edit `src/input/Router.h` to declare the overlay's word and the pause's log**
+
+```cpp
+	std::string        last;           // the last input forwarded
+```
+```cpp
+	std::string        last;           // the last input forwarded
+	bool               paused = false;  // on, behind CET's overlay
+```
+```cpp
+	// The mouse's movement along x since the last call, in raw counts: for the turn a teleport adds back (spike 5).
+```
+```cpp
+	// The mouse's movement along x since the last call, in raw counts: for the turn a teleport adds back (spike 5). None
+	// while build mode is paused: the mouse is CET's overlay's then.
+```
+```cpp
+	void FrontLost();
+
+private:
+	// With the lock held.
+	void Apply(const Decision& aDecision, bool aWasOn, const std::string& aWhyBefore);
+```
+```cpp
+	void FrontLost();
+	// From the main thread: CET's overlay opened or closed, as the overlay itself says (spike 7's `overlay` request).
+	void SetOverlay(bool aOpen);
+
+private:
+	// With the lock held.
+	void Apply(const Decision& aDecision, bool aWasOn, bool aWasPaused, const std::string& aWhyBefore);
+	void LogPause(bool aWasPaused);  // build mode paused, or going on again, since aWasPaused
+```
+
+- [ ] **Step 9: Edit `src/input/Router.cpp` to pass them on and log them**
+
+```cpp
+		situation.inFront = inFront;
+		const bool        wasOn = mode_.On();
+		const std::string whyBefore = mode_.Why();
+		const Decision    decision = mode_.Mouse({ mouse.usButtonFlags, int16_t(mouse.usButtonData) }, situation);
+```
+```cpp
+		situation.inFront = inFront;
+		const bool        wasOn = mode_.On();
+		const bool        wasPaused = mode_.Paused();
+		const std::string whyBefore = mode_.Why();
+		const Decision    decision = mode_.Mouse({ mouse.usButtonFlags, int16_t(mouse.usButtonData) }, situation);
+```
+```cpp
+			std::memcpy(body, &mouse, sizeof mouse);
+		}
+		Apply(decision, wasOn, whyBefore);
+	}
+```
+```cpp
+			std::memcpy(body, &mouse, sizeof mouse);
+		}
+		Apply(decision, wasOn, wasPaused, whyBefore);
+	}
+```
+```cpp
+		const bool        wasOn = mode_.On();
+		const std::string whyBefore = mode_.Why();
+```
+```cpp
+		const bool        wasOn = mode_.On();
+		const bool        wasPaused = mode_.Paused();
+		const std::string whyBefore = mode_.Why();
+```
+```cpp
+		Apply(decision, wasOn, whyBefore);
+```
+```cpp
+		Apply(decision, wasOn, wasPaused, whyBefore);
+```
+```cpp
+	return mouseX_.exchange(0);
+```
+```cpp
+	const int64_t   counts = mouseX_.exchange(0);
+	std::lock_guard lock(mutex_);
+	return mode_.Paused() ? 0 : counts;  // CET's overlay's cursor, which turns nothing
+```
+```cpp
+	log_.Push("build mode on");
+```
+```cpp
+	log_.Push("build mode on");
+	LogPause(false);
+```
+```cpp
+	return { mode_.On(), mode_.Why(), mode_.Slot(), read_.load(), mode_.Forwarded(), mode_.Hidden(), mode_.Last() };
+```
+```cpp
+	return { mode_.On(), mode_.Why(), mode_.Slot(), read_.load(), mode_.Forwarded(), mode_.Hidden(), mode_.Last(), mode_.Paused() };
+```
+```cpp
+void Router::Apply(const Decision& aDecision, bool aWasOn, const std::string& aWhyBefore)
+```
+```cpp
+void Router::SetOverlay(bool aOpen)
+{
+	std::lock_guard lock(mutex_);
+	const bool      wasPaused = mode_.Paused();
+	if (mode_.SetOverlay(aOpen))
+	{
+		Push({ proto::kInReleaseAll, 0, 0, 0, 0 });
+	}
+	LogPause(wasPaused);
+}
+
+void Router::Apply(const Decision& aDecision, bool aWasOn, bool aWasPaused, const std::string& aWhyBefore)
+```
+```cpp
+		log_.Push("build mode stays off: " + mode_.Why());
+	}
+}
+```
+```cpp
+		log_.Push("build mode stays off: " + mode_.Why());
+	}
+	LogPause(aWasPaused);
+}
+
+void Router::LogPause(bool aWasPaused)
+{
+	if (mode_.Paused() && !aWasPaused)
+	{
+		log_.Push("build mode paused: CET's overlay is open");
+	}
+	else if (!mode_.Paused() && aWasPaused && mode_.On())
+	{
+		log_.Push("build mode goes on: CET's overlay closed");
+	}
+}
+```
+
+- [ ] **Step 10: Edit `src/Requests.h` to add the request**
+
+```cpp
+//                               log)
+struct Request
+```
+```cpp
+//                               log)
+//   overlay open|closed        (spike 7's Part 3: CET's overlay opened or closed, as the overlay says, which pauses build
+//                               mode while it's open)
+struct Request
+```
+```cpp
+		Entities,
+```
+```cpp
+		Entities,
+		Overlay,
+```
+
+- [ ] **Step 11: Edit `src/Requests.cpp` to parse it**
+
+```cpp
+	}
+	if (command == "mc")
+```
+```cpp
+	}
+	if (command == "overlay")
+	{
+		if (arguments != 1 || !OneOf(words[1], { "open", "closed" }))
+		{
+			return Fail(aError, "overlay takes open or closed");
+		}
+		return Request{ Request::Kind::Overlay, std::string(words[1]) };
+	}
+	if (command == "mc")
+```
+
+- [ ] **Step 12: Edit `src/Status.h` to add the pause**
+
+```cpp
+	std::string        buildWhy;             // why it's off
+```
+```cpp
+	std::string        buildWhy;             // why it's off
+	bool               buildPaused = false;  // on, behind CET's overlay (spike 7's Part 3)
+```
+
+- [ ] **Step 13: Edit `src/Status.cpp` to write it**
+
+```cpp
+	                   aLink.buildMode ? std::string("on") : "off: " + OneLine(aLink.buildWhy),
+```
+```cpp
+	                   aLink.buildMode ? std::string(aLink.buildPaused ? "on, paused while CET's overlay is open" : "on")
+	                                   : "off: " + OneLine(aLink.buildWhy),
+```
+
+- [ ] **Step 14: Edit `src/Plugin.cpp` for the request and the status**
+
+```cpp
+	case cpmc::Request::Kind::Entities: EntitiesRequest(); break;
+```
+```cpp
+	case cpmc::Request::Kind::Entities: EntitiesRequest(); break;
+	case cpmc::Request::Kind::Overlay:
+		g_router->SetOverlay(request->what == "open");
+		Report(std::format("overlay {}: build mode {}", request->what,
+		                   g_router->Report().paused ? "paused while it's open" : g_router->On() ? "on" : "off"));
+		break;
+```
+```cpp
+	report.buildWhy = input.why;
+```
+```cpp
+	report.buildWhy = input.why;
+	report.buildPaused = input.paused;
+```
+
+- [ ] **Step 15: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `497 test(s), 0 failure(s)`.
+
+- [ ] **Step 16: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "minecraft-entities: Shift+F6 pauses build mode while CET's overlay is open, and the overlay's own word keeps it right" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 19: The overlay places each block entity at its marker, keeps its rows still, and tells of CET's overlay
+
+Run A's other two problems, and the overlay's side of Task 18:
+- **Each block entity at its own marker:** the overlay sends a request a second, each typed from where Minecraft's player
+  is then, so in run A a block placed from the player parted from its marker when V moved in between, and Clear missed
+  it. Now each kind's marker goes first, tagged with its kind (`sp7chest`, `sp7bed`, …, beside `sp7b`), and its block
+  goes where that marker is (`/execute at @e[tag=sp7chest] run setblock ~ ~ ~ …`); the bed's head's marker is summoned a
+  block north of its foot's marker, then the head placed at it.
+- **Still rows:** the `Last request` and `Requests waiting to be sent` lines are always drawn (`none yet`, `none`), so
+  the rows below don't move as requests come and go, and a click lands where it was aimed.
+- **CET's overlay opening and closing** (CET's `onOverlayOpen` and `onOverlayClose` events) go to BlockRender as
+  `overlay open` and `overlay closed`, first in the queue, so they don't wait behind the Fun rows' commands, and in
+  place of any still waiting, since only the latest is true.
+
+**Files:**
+- Modify: `tools/blockrender_hud/init.lua`
+
+- [ ] **Step 1: Edit `tools/blockrender_hud/init.lua`**
+
+```lua
+-- combat, Minecraft's entities), and a line each for the last request's reply and the requests waiting to be sent, build
+-- mode (F8) with its drive and whether V is hidden, the bodies, the NPCs, combat, Minecraft's blasts, its entities, and
+-- V. Three folded sections hold the rest: "More controls" (the drawing mode, Minecraft's HUD, commands typed into
+-- Minecraft, the drive log, the ground and its shapes, the NPCs' list, V's punch, V hidden or seen in build mode, and a
+-- blast ahead of V), "Fun" (Minecraft's game mode, items for the hotbar and the hand, armor, a heal, and things to spawn
+-- ahead and clear again, typed into Minecraft's chat) and "Full status" (every status line, and the frame time).
+```
+```lua
+-- combat, Minecraft's entities), and a line each for the last request's reply and the requests waiting to be sent,
+-- build mode (F8) with its drive and whether V is hidden, the bodies, the NPCs, combat, Minecraft's blasts, its
+-- entities, and V. It tells BlockRender when CET's overlay opens and closes, which pauses build mode while it's open.
+-- Three folded sections hold the rest: "More controls" (the drawing mode, Minecraft's HUD, commands typed into
+-- Minecraft, the drive log, the ground and its shapes, the NPCs' list, V's punch, V hidden or seen in build mode, and a
+-- blast ahead of V), "Fun" (Minecraft's game mode, items for the hotbar and the hand, armor, a heal, and things to
+-- spawn ahead and clear again, typed into Minecraft's chat) and "Full status" (every status line, and the frame time).
+```
+```lua
+-- Side by side, 3 blocks apart, each block with its marker, and a torch for its flame. A bed is two blocks: its head goes
+-- north of its foot, which the gap keeps off its neighbours.
+local blockEntities = {}
+for _, placed in ipairs({ { "^-6", "~ ~ ~", "chest" }, { "^-3", "~ ~ ~", "red_bed[facing=north,part=foot]" },
+    { "^-3", "~ ~ ~-1", "red_bed[facing=north,part=head]" }, { "^", "~ ~ ~", "oak_sign" },
+    { "^3", "~ ~ ~", 'white_banner{patterns:[{pattern:"minecraft:stripe_top",color:"red"},{pattern:"minecraft:creeper",color:"black"}]}' },
+    { "^6", "~ ~ ~", "torch" } }) do
+    table.insert(blockEntities, ahead(placed[1] .. " ^ ^8") .. "setblock " .. placed[2] .. " minecraft:" .. placed[3])
+    table.insert(blockEntities, ahead(placed[1] .. " ^ ^8") .. "summon minecraft:marker " .. placed[2] .. ' {Tags:["sp7b"]}')
+```
+```lua
+-- Side by side, 3 blocks apart, and a torch for its flame. Each block's marker goes first, tagged with its kind, then the
+-- block goes where its markers are: the overlay sends a command a second, each from where Minecraft's player is then, so
+-- a block placed from the player would part from its marker if V moved in between, and Clear would miss it (spike 7's
+-- run A). A bed is two blocks: its head's marker goes north of its foot's, which the gap keeps off its neighbours.
+local blockEntities = {}
+for _, placed in ipairs({ { "^-6", "chest", "chest" }, { "^-3", "bed", "red_bed[facing=north,part=foot]" },
+    { "^", "sign", "oak_sign" },
+    { "^3", "banner", 'white_banner{patterns:[{pattern:"minecraft:stripe_top",color:"red"},{pattern:"minecraft:creeper",color:"black"}]}' },
+    { "^6", "torch", "torch" } }) do
+    local tag = "sp7" .. placed[2]
+    table.insert(blockEntities, ahead(placed[1] .. " ^ ^8") .. 'summon minecraft:marker ~ ~ ~ {Tags:["sp7b","' .. tag .. '"]}')
+    table.insert(blockEntities, "/execute at @e[tag=" .. tag .. "] run setblock ~ ~ ~ minecraft:" .. placed[3])
+    if placed[2] == "bed" then
+        table.insert(blockEntities, '/execute at @e[tag=sp7bed] run summon minecraft:marker ~ ~ ~-1 {Tags:["sp7b","sp7bedhead"]}')
+        table.insert(blockEntities, "/execute at @e[tag=sp7bedhead] run setblock ~ ~ ~ minecraft:red_bed[facing=north,part=head]")
+    end
+```
+```lua
+registerForEvent("onUpdate", function(delta)
+```
+```lua
+-- CET's overlay opening and closing, told to BlockRender, which pauses build mode while it's open. Shift+F6 pauses it at
+-- once; this keeps it right if the overlay was opened or closed some other way. First in the queue, so it doesn't wait
+-- behind the Fun rows' commands, and in place of any still waiting, since only the latest is true.
+local function tellOverlay(state)
+    for i = #queued, 1, -1 do
+        if queued[i]:match("^overlay ") then
+            table.remove(queued, i)
+        end
+    end
+    table.insert(queued, 1, "overlay " .. state)
+end
+
+registerForEvent("onOverlayOpen", function()
+    tellOverlay("open")
+end)
+
+registerForEvent("onOverlayClose", function()
+    tellOverlay("closed")
+end)
+
+registerForEvent("onUpdate", function(delta)
+```
+```lua
+        if reply ~= nil then
+            ImGui.Text("Last request: " .. reply)
+        end
+        if #queued > 0 then
+            ImGui.Text(string.format("Requests waiting to be sent: %d, about one a second", #queued))
+        end
+```
+```lua
+        -- Both always there, so the rows below don't move as requests come and go, and a click lands where it was aimed.
+        ImGui.Text("Last request: " .. (reply or "none yet"))
+        ImGui.Text(#queued > 0 and string.format("Requests waiting to be sent: %d, about one a second", #queued)
+            or "Requests waiting to be sent: none")
+```
+
+- [ ] **Step 2: Check the overlay's syntax**
+
+```bash
+luac -p /d/Cyberpunk-Minecraft/spikes/block-render/tools/blockrender_hud/init.lua && echo "syntax ok"
+```
+Expected: `syntax ok`.
+
+- [ ] **Step 3: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "minecraft-entities: the overlay places each block entity at its own marker, keeps its rows still, and tells BlockRender when CET's overlay opens and closes" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 20: The outline's shape
+
+The targeted block's outline, from the world table's box (the spec's "Entities: one frame's geometry"), as SkyCraft's
+`BuildOutline` makes it: the box's 12 edges, each a pair of vertices, inflated by 0.002, four edges along each axis in
+its order. Black at Minecraft 26.3's alpha, 102 (40%). The forward list widens each edge into a strip (Task 23).
+
+**Files:**
+- Modify: `tests/TestWorldShapes.cpp`, `src/entities/WorldShapes.h`, `src/entities/WorldShapes.cpp`
+
+- [ ] **Step 1: Edit `tests/TestWorldShapes.cpp` to add the failing test**
+
+```cpp
+#include <cmath>
+```
+```cpp
+#include <array>
+#include <cmath>
+```
+```cpp
+TEST(WorldShapesShadowsAndOthersAddNothing)
+```
+```cpp
+TEST(WorldShapesOutlineIsTheBoxsTwelveEdges)
+{
+	// The targeted block's box, a slab's from its low corner to its high, Minecraft axes.
+	const std::array<float, 6> box{ 885.0f, 6.0f, 2010.0f, 886.0f, 6.5f, 2011.0f };
+	std::vector<Vertex>        vertices;
+	AppendOutline(box, kOrigin, vertices);
+	CHECK_EQ(vertices.size(), size_t(24));
+	if (vertices.size() != 24)
+	{
+		return;
+	}
+	// Inflated by 0.002 as SkyCraft's: the first edge runs east from the low corner, the last south to the high corner.
+	CheckAt(vertices[0], 4.998f, -0.002f, 2.998f);
+	CheckAt(vertices[1], 6.002f, -0.002f, 2.998f);
+	CheckAt(vertices[22], 6.002f, 0.502f, 2.998f);
+	CheckAt(vertices[23], 6.002f, 0.502f, 4.002f);
+	// Each edge's two ends: the box's corners, apart along one axis alone, four edges along each.
+	int along[3] = {};
+	for (size_t e = 0; e < 12; ++e)
+	{
+		const Vertex& a = vertices[e * 2];
+		const Vertex& b = vertices[e * 2 + 1];
+		const float   d[3] = { std::abs(b.x - a.x), std::abs(b.y - a.y), std::abs(b.z - a.z) };
+		const int     moved = (d[0] > 1e-4f) + (d[1] > 1e-4f) + (d[2] > 1e-4f);
+		CHECK_EQ(moved, 1);
+		for (int k = 0; k < 3; ++k)
+		{
+			along[k] += d[k] > 1e-4f ? 1 : 0;
+		}
+	}
+	CHECK_EQ(along[0], 4);
+	CHECK_EQ(along[1], 4);
+	CHECK_EQ(along[2], 4);
+	for (const Vertex& vertex : vertices)
+	{
+		CHECK_EQ(vertex.r + vertex.g + vertex.b, 0);  // black, at Minecraft 26.3's alpha
+		CHECK_EQ(int(vertex.a), 102);
+	}
+}
+
+TEST(WorldShapesShadowsAndOthersAddNothing)
+```
+
+- [ ] **Step 2: Build; it must fail**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C" | sort -u | head -3
+```
+Expected: `'AppendOutline': identifier not found`.
+
+- [ ] **Step 3: Edit `src/entities/WorldShapes.h` to declare it**
+
+```cpp
+#include <cstdint>
+```
+```cpp
+#include <array>
+#include <cstdint>
+```
+```cpp
+void AppendCrack(const proto::WorldEntity& aRecord, const Vec3d& aOrigin, std::vector<Vertex>& aOut);
+```
+```cpp
+void AppendCrack(const proto::WorldEntity& aRecord, const Vec3d& aOrigin, std::vector<Vertex>& aOut);
+
+// Step B: the outline of the block Minecraft's player targets, aBox (its low corner, then its high, Minecraft axes):
+// its 12 edges, each a pair of vertices, relative to aOrigin, appended to aOut. Inflated by kOutlineGrow, as SkyCraft's
+// BuildOutline does, and black at Minecraft 26.3's alpha. The forward pass widens each edge into a strip.
+constexpr float    kOutlineGrow = 0.002f;
+constexpr uint32_t kOutlineRgba = 0x66000000u;  // black at alpha 102, 40%
+void               AppendOutline(const std::array<float, 6>& aBox, const Vec3d& aOrigin, std::vector<Vertex>& aOut);
+```
+
+- [ ] **Step 4: Edit `src/entities/WorldShapes.cpp` to add it**
+
+```cpp
+		Box(Relative(aRecord, aOrigin), { aRecord.ext[0], aRecord.ext[1], aRecord.ext[2] }, 0.0f, aRecord.uv[0], aRecord.uv[0], aRecord.uv[0], 0,
+		    aOut);
+	}
+}
+}
+```
+```cpp
+		Box(Relative(aRecord, aOrigin), { aRecord.ext[0], aRecord.ext[1], aRecord.ext[2] }, 0.0f, aRecord.uv[0], aRecord.uv[0], aRecord.uv[0], 0,
+		    aOut);
+	}
+}
+
+void AppendOutline(const std::array<float, 6>& aBox, const Vec3d& aOrigin, std::vector<Vertex>& aOut)
+{
+	constexpr float g = kOutlineGrow;
+	const Point     low{ float(aBox[0] - aOrigin.x) - g, float(aBox[1] - aOrigin.y) - g, float(aBox[2] - aOrigin.z) - g };
+	const Point     high{ float(aBox[3] - aOrigin.x) + g, float(aBox[4] - aOrigin.y) + g, float(aBox[5] - aOrigin.z) + g };
+	// The corners' bits: 1 is +x, 2 is +y, 4 is +z. The edges in BuildOutline's order: four along x, four along y, four
+	// along z.
+	static constexpr int kEdges[12][2] = { { 0, 1 }, { 2, 3 }, { 4, 5 }, { 6, 7 }, { 0, 2 }, { 1, 3 },
+		                                   { 4, 6 }, { 5, 7 }, { 0, 4 }, { 1, 5 }, { 2, 6 }, { 3, 7 } };
+	for (const auto& edge : kEdges)
+	{
+		for (const int corner : edge)
+		{
+			aOut.push_back(At({ (corner & 1) ? high[0] : low[0], (corner & 2) ? high[1] : low[1], (corner & 4) ? high[2] : low[2] }, 0.0f, 0.0f,
+			                  kOutlineRgba));
+		}
+	}
+}
+}
+```
+
+- [ ] **Step 5: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `498 test(s), 0 failure(s)`.
+
+- [ ] **Step 6: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "minecraft-entities: the targeted block's outline, its 12 edges inflated as SkyCraft's" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 21: The outline in build mode
+
+The frame's geometry takes the outline while build mode is on, paused or not (the spec's "Step B: before DLSS"):
+outside it, Minecraft's player aims where V looks, but V's clicks don't reach Minecraft, so an outline would mislead;
+paused, it shows what build mode will aim at when the overlay closes.
+- **`Entities::Frame`** gains `aOutline`: with it, and an outline in the table, the outline's vertices go after the
+  cracks' as one draw of a new kind, `Outline`. Without it, nothing changes, so the existing tests keep their calls.
+- **The plugin** passes build mode's state.
+
+**Files:**
+- Modify: `tests/TestEntities.cpp`, `src/entities/Entities.h`, `src/entities/Entities.cpp`, `src/Plugin.cpp`
+
+- [ ] **Step 1: Edit `tests/TestEntities.cpp` to add the failing test**
+
+```cpp
+TEST(EntitiesWithoutASceneUseMinecraftsEye)
+```
+```cpp
+TEST(EntitiesAddTheOutlineInBuildMode)
+{
+	Entities         entities;
+	link::WorldTable table;
+	table.entities = { Record(proto::kWeCrack, 885.0f, 6.0f, 2010.0f) };
+	table.outline = std::array<float, 6>{ 885.0f, 6.0f, 2010.0f, 886.0f, 7.0f, 2011.0f };
+	entities.World(table);
+	CHECK_EQ(entities.Frame(kEye).draws.size(), size_t(1));  // outside build mode, the crack alone
+	const EntityFrame frame = entities.Frame(kEye, true);
+	// The crack's draw, then the outline's, its 12 edges' ends after everything else.
+	CHECK_EQ(frame.draws.size(), size_t(2));
+	CHECK_EQ(frame.vertices.size(), size_t(36 + 24));
+	if (frame.draws.size() != 2 || frame.vertices.size() != 60)
+	{
+		return;
+	}
+	CHECK_EQ(frame.draws[1].first, 36u);
+	CHECK_EQ(frame.draws[1].count, 24u);
+	CHECK_EQ(frame.draws[1].texture, 0u);
+	CHECK(frame.draws[1].kind == EntityDraw::Kind::Outline);
+	CHECK_NEAR(frame.vertices[36].x, 4.998f, 1e-4);  // from the whole block of Minecraft's eye
+	table.outline.reset();
+	entities.World(table);
+	CHECK_EQ(entities.Frame(kEye, true).draws.size(), size_t(1));  // nothing targeted
+}
+
+TEST(EntitiesWithoutASceneUseMinecraftsEye)
+```
+
+- [ ] **Step 2: Build; it must fail**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C" | sort -u | head -3
+```
+Expected: `'cpmc::entities::Entities::Frame': function does not take 2 arguments`.
+
+- [ ] **Step 3: Edit `src/entities/Entities.h` for the outline's draw**
+
+```cpp
+		Crack,        // multiplied into the G-buffer's base colour
+```
+```cpp
+		Crack,        // multiplied into the G-buffer's base colour
+		Outline,      // step B's too: the targeted block's edges, a pair of vertices each, widened into strips
+```
+```cpp
+	std::vector<Vertex>     vertices;  // the scene's as they came, then the world entities' shapes, then their cracks
+	std::vector<EntityDraw> draws;     // the scene's batches in the order they came, then one of shapes and one of cracks
+```
+```cpp
+	std::vector<Vertex>     vertices;  // the scene's as they came, then the world entities' shapes, their cracks, and the
+	                                   // outline
+	std::vector<EntityDraw> draws;     // the scene's batches in the order they came, then one each of shapes, cracks and
+	                                   // the outline
+```
+```cpp
+	EntityFrame Frame(const Vec3d& aEye) const;
+```
+```cpp
+	// aOutline, while build mode is on, adds the outline of the block Minecraft's player targets: outside it, V's clicks
+	// don't reach Minecraft, so an outline would mislead.
+	EntityFrame Frame(const Vec3d& aEye, bool aOutline = false) const;
+```
+
+- [ ] **Step 4: Edit `src/entities/Entities.cpp` to add it in build mode**
+
+```cpp
+EntityFrame Entities::Frame(const Vec3d& aEye) const
+```
+```cpp
+EntityFrame Entities::Frame(const Vec3d& aEye, bool aOutline) const
+```
+```cpp
+		frame.draws.push_back({ cracks, count, 0, EntityDraw::Kind::Crack });
+```
+```cpp
+		frame.draws.push_back({ cracks, count, 0, EntityDraw::Kind::Crack });
+	}
+	if (aOutline && world_.outline)
+	{
+		const uint32_t outline = uint32_t(frame.vertices.size());
+		AppendOutline(*world_.outline, frame.origin, frame.vertices);
+		frame.draws.push_back({ outline, uint32_t(frame.vertices.size()) - outline, 0, EntityDraw::Kind::Outline });
+```
+
+- [ ] **Step 5: Edit `src/Plugin.cpp` to pass build mode's state**
+
+```cpp
+		// Spike 7: this frame's entities, which the renderer's Update copies into a snapshot, drawn only into the G-buffer.
+		g_entities.InWorld(g_link->State().inWorld);
+		if (g_renderer->ModeName() == "gbuffer")
+		{
+			g_renderer->SetEntities(g_entities.Frame(g_link->State().minecraftEye));
+```
+```cpp
+		// Spike 7: this frame's entities, which the renderer's Update copies into a snapshot, drawn only in gbuffer mode, with
+		// the targeted block's outline while build mode is on, paused or not.
+		g_entities.InWorld(g_link->State().inWorld);
+		if (g_renderer->ModeName() == "gbuffer")
+		{
+			g_renderer->SetEntities(g_entities.Frame(g_link->State().minecraftEye, g_router->On()));
+```
+
+- [ ] **Step 6: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `499 test(s), 0 failure(s)`.
+
+- [ ] **Step 7: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "minecraft-entities: the frame's outline draw while build mode is on" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 22: The forward list's pure parts
+
+What the renderer's forward list (Task 24) works out without the GPU:
+- **A frame's snapshot held for its forward list** (the spec's "The snapshot ring"): the G-buffer list takes the newest
+  (`TakeNewest`), and when there's anything for the forward list it takes the same one again (`Take`), so the snapshot
+  is held until the fence after the forward list, or until it's given back (`Abandon`) if the forward list doesn't come.
+  Holding it only to the G-buffer list's fence would let the main thread rewrite it before the forward list reads it.
+- **The bias hint's checks** (`CheckHintTarget`), beside the tagged buffers': an `R8_UNORM` render target the colour's
+  size, a plain 2D texture with one subresource, as step 1 found it.
+- **The outline's width** (`OutlinePixels`): Minecraft 26.3 draws its own `max(2.5, window width / 1920 × 2.5)` pixels
+  wide, which DLSS's render width scales down: about 2.2 render pixels at 2560 output and 1707 render, as the user has.
+- **Whether a snapshot has anything for the forward list** (`ForwardDraws`): translucent draws, or the outline while
+  `set outline` is 1.
+
+**Files:**
+- Modify: `tests/TestSnapshots.cpp`, `tests/TestPredlss.cpp`, `tests/TestEntities.cpp`, `src/render/Snapshots.h`,
+  `src/render/Snapshots.cpp`, `src/render/Predlss.h`, `src/render/Predlss.cpp`, `src/entities/Entities.h`,
+  `src/entities/Entities.cpp`
+
+- [ ] **Step 1: Edit `tests/TestSnapshots.cpp` to add the failing test of the hold**
+
+```cpp
+TEST(SnapshotsAbandonedListHoldsNothing)
+```
+```cpp
+TEST(SnapshotsHeldForTheFramesForwardList)
+{
+	Snapshots snapshots(2);
+	snapshots.Written(0);
+	CHECK_EQ(snapshots.TakeNewest().value_or(9), 0u);  // the frame's G-buffer list
+	CHECK(snapshots.Take(0));                          // and, for the same frame, its forward list
+	CHECK(!snapshots.Take(2));                         // no such snapshot
+	snapshots.Written(1);                              // the next frame
+	snapshots.Submitted(0, 5);                         // the G-buffer list went
+	CHECK(!snapshots.Writable(5).has_value());         // the forward list hasn't: it would read the next frame's
+	snapshots.Submitted(0, 8);                         // it went, the fence after it 8
+	CHECK(!snapshots.Writable(7).has_value());
+	CHECK_EQ(snapshots.Writable(8).value_or(9), 0u);
+	// A forward list that doesn't come holds it no longer than its G-buffer list.
+	snapshots.Written(0);
+	snapshots.TakeNewest();
+	snapshots.Take(0);
+	snapshots.Written(1);
+	snapshots.Submitted(0, 12);
+	snapshots.Abandon(0);
+	CHECK_EQ(snapshots.Writable(12).value_or(9), 0u);
+}
+
+TEST(SnapshotsAbandonedListHoldsNothing)
+```
+
+- [ ] **Step 2: Edit `tests/TestPredlss.cpp` to add the failing tests of the hint and the width**
+
+```cpp
+TEST(PredlssViewsTheDepthAsD32)
+```
+```cpp
+TEST(PredlssTakesTheBiasHintStep1Found)
+{
+	const D3D12_RESOURCE_DESC hint = Texture(DXGI_FORMAT_R8_UNORM, D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET | D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+	std::string               why;
+	CHECK(cpmc::CheckHintTarget(hint, kColour, why));
+	CHECK_STR(why, "");
+	D3D12_RESOURCE_DESC computeOnly = hint;
+	computeOnly.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+	CHECK(!cpmc::CheckHintTarget(computeOnly, kColour, why));
+	CHECK_STR(why, "the bias hint isn't a render target");
+	D3D12_RESOURCE_DESC wider = hint;
+	wider.Format = DXGI_FORMAT_R16_UNORM;
+	CHECK(!cpmc::CheckHintTarget(wider, kColour, why));
+	CHECK_STR(why, "the bias hint is R16_UNORM");
+	D3D12_RESOURCE_DESC smaller = hint;
+	smaller.Height = 480;
+	CHECK(!cpmc::CheckHintTarget(smaller, kColour, why));
+	CHECK_STR(why, "the bias hint is 1707 x 480, the colour 1707 x 960");
+}
+
+TEST(PredlssOutlineIsMinecraftsWidth)
+{
+	// 2.5 output pixels per 1920 of width, never under 2.5, scaled to the render width.
+	CHECK_NEAR(cpmc::OutlinePixels(2560, 1707), 2560.0 / 1920.0 * 2.5 * 1707.0 / 2560.0, 1e-5);  // about 2.2
+	CHECK_NEAR(cpmc::OutlinePixels(1280, 1280), 2.5, 1e-6);
+	CHECK_NEAR(cpmc::OutlinePixels(1920, 960), 1.25, 1e-6);
+	CHECK_NEAR(cpmc::OutlinePixels(0, 1707), 2.5, 1e-6);  // the output's width not seen yet
+}
+
+TEST(PredlssViewsTheDepthAsD32)
+```
+
+- [ ] **Step 3: Edit `tests/TestEntities.cpp` to add the failing test of the forward pass's work**
+
+```cpp
+TEST(EntitiesWithoutASceneUseMinecraftsEye)
+```
+```cpp
+TEST(EntitiesSayWhenTheForwardPassHasWork)
+{
+	using Kind = EntityDraw::Kind;
+	CHECK(!ForwardDraws({ { 0, 3, 0, Kind::Model }, { 3, 36, 0, Kind::Crack } }, true));  // all into the G-buffer
+	CHECK(ForwardDraws({ { 0, 3, 0, Kind::Model }, { 3, 6, 4, Kind::Translucent } }, false));
+	CHECK(ForwardDraws({ { 0, 24, 0, Kind::Outline } }, true));
+	CHECK(!ForwardDraws({ { 0, 24, 0, Kind::Outline } }, false));  // set outline 0
+}
+
+TEST(EntitiesWithoutASceneUseMinecraftsEye)
+```
+
+- [ ] **Step 4: Build; it must fail**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C" | sort -u | head -3
+```
+Expected: `'Take': is not a member of 'cpmc::Snapshots'`.
+
+- [ ] **Step 5: Edit `src/render/Snapshots.h` to declare the second take**
+
+```cpp
+// list: after it, not before it, as Retired learnt from Task 52. The newest is never written over, so a list can always
+// take it. Pure; the renderer locks around it.
+```
+```cpp
+// list: after it, not before it, as Retired learnt from Task 52. In step B the frame's forward list takes it too, and it's
+// held until the fence after that one. The newest is never written over, so a list can always take it. Pure; the
+// renderer locks around it.
+```
+```cpp
+	std::optional<uint32_t> TakeNewest();
+```
+```cpp
+	std::optional<uint32_t> TakeNewest();
+	// Step B: a second list takes aIndex, a frame's G-buffer list's, for that frame's forward list, held as TakeNewest
+	// holds it. Holding it only to the G-buffer list's fence would let the main thread rewrite it before the forward
+	// list reads it. False if there's no such snapshot.
+	bool                    Take(uint32_t aIndex);
+```
+
+- [ ] **Step 6: Edit `src/render/Snapshots.cpp` to add it**
+
+```cpp
+void Snapshots::Submitted(uint32_t aIndex, uint64_t aFence)
+```
+```cpp
+bool Snapshots::Take(uint32_t aIndex)
+{
+	if (aIndex >= holds_.size())
+	{
+		return false;
+	}
+	++holds_[aIndex].onTheirWay;
+	return true;
+}
+
+void Snapshots::Submitted(uint32_t aIndex, uint64_t aFence)
+```
+
+- [ ] **Step 7: Edit `src/render/Predlss.h` to declare the hint's checks and the outline's width**
+
+```cpp
+// into the tagged scaling input colour, motion vectors and depth.
+```
+```cpp
+// into the tagged scaling input colour, motion vectors and depth. Spike 7's step B puts its forward list there too.
+```
+```cpp
+                         std::string& aWhy);
+```
+```cpp
+                         std::string& aWhy);
+
+// Step B: DLSS's bias hint, which the forward list draws into, must be an R8_UNORM render target the colour's size, a
+// plain 2D texture with one subresource, as step 1 found it. aWhy says what failed.
+bool CheckHintTarget(const D3D12_RESOURCE_DESC& aHint, const D3D12_RESOURCE_DESC& aColour, std::string& aWhy);
+
+// Step B: the outline's width in render pixels. Minecraft 26.3 draws its own max(2.5, aOutputWidth / 1920 x 2.5) pixels
+// wide; DLSS scales the render width up to the output's. 2.5 while the output's width isn't known (0).
+float OutlinePixels(uint32_t aOutputWidth, uint32_t aRenderWidth);
+```
+
+- [ ] **Step 8: Edit `src/render/Predlss.cpp` to add them**
+
+```cpp
+#include <format>
+```
+```cpp
+#include <algorithm>
+#include <format>
+```
+```cpp
+	return aWhy.empty();
+```
+```cpp
+	return aWhy.empty();
+}
+
+bool CheckHintTarget(const D3D12_RESOURCE_DESC& aHint, const D3D12_RESOURCE_DESC& aColour, std::string& aWhy)
+{
+	aWhy = Problem("bias hint", "is", aHint, DXGI_FORMAT_R8_UNORM, D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET, "a render target");
+	if (aWhy.empty() && (aHint.Width != aColour.Width || aHint.Height != aColour.Height))
+	{
+		aWhy = std::format("the bias hint is {} x {}, the colour {} x {}", aHint.Width, aHint.Height, aColour.Width, aColour.Height);
+	}
+	return aWhy.empty();
+}
+
+float OutlinePixels(uint32_t aOutputWidth, uint32_t aRenderWidth)
+{
+	if (aOutputWidth == 0)
+	{
+		return 2.5f;
+	}
+	return std::max(2.5f, float(aOutputWidth) / 1920.0f * 2.5f) * float(aRenderWidth) / float(aOutputWidth);
+```
+
+- [ ] **Step 9: Edit `src/entities/Entities.h` to declare the forward pass's work**
+
+```cpp
+	Kind     kind = Kind::Model;
+};
+```
+```cpp
+	Kind     kind = Kind::Model;
+};
+
+// Whether step B's forward pass has any of aDraws to draw: translucent ones, or the outline while aOutline (set outline).
+bool ForwardDraws(const std::vector<EntityDraw>& aDraws, bool aOutline);
+```
+
+- [ ] **Step 10: Edit `src/entities/Entities.cpp` to add it**
+
+```cpp
+{
+void Entities::Scene(const link::SceneMessage& aScene)
+```
+```cpp
+{
+bool ForwardDraws(const std::vector<EntityDraw>& aDraws, bool aOutline)
+{
+	return std::any_of(aDraws.begin(), aDraws.end(), [aOutline](const EntityDraw& aDraw) {
+		return aDraw.kind == EntityDraw::Kind::Translucent || (aOutline && aDraw.kind == EntityDraw::Kind::Outline);
+	});
+}
+
+void Entities::Scene(const link::SceneMessage& aScene)
+```
+
+- [ ] **Step 11: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `503 test(s), 0 failure(s)`.
+
+- [ ] **Step 12: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "minecraft-entities: a frame's snapshot held for its forward list, the bias hint's checks, the outline's width, and when the forward pass has work" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 23: Step B's shaders
+
+New entry points beside the entities' (the spec's "Step B: before DLSS"), with the same root signature and constants;
+the frame's `entityTuning.z` carries the outline's width (`OutlinePixels`):
+- **`TranslucentPS`:** a translucent particle, into the scene's colour, which the pipeline blends with its alpha.
+  `Linear(texel × vertex colour) × light × exposure`, where the light is Minecraft's curve, `l / (4 − 3l)` of the brighter
+  of its block and sky light, or 1 from `glowlight`'s block light, as a triangle glows in the G-buffer; `exposure` is
+  `predlss`'s, 2.5. Under 0.1 of alpha is left out, as Minecraft's particle shader leaves it.
+- **`HintPS`:** 1 into DLSS's bias hint wherever `TranslucentPS` draws, so DLSS takes the particles' colour from this
+  frame rather than from its history: the motion vectors there are the surface's behind them.
+- **`OutlineVS`:** each of the outline's edges, a pair of the snapshot's vertices, widened into a strip facing the camera,
+  as Minecraft's lines shader widens its own: six vertices an edge, two triangles, with the frame's jitter. An end
+  behind the camera is first brought along the edge to just in front of it, so the strip's direction stays right; an
+  edge wholly behind it draws nothing.
+- **`OutlinePS`:** black, blended so it darkens the scene's linear colour to `Linear(0.6)`, about a third, as
+  Minecraft's 40% darkens its sRGB framebuffer's colours to 0.6.
+
+**Files:**
+- Modify: `tests/TestShaders.cpp`, `shaders/blocks.hlsl`, `src/render/FrameConstants.h`, `src/render/Shaders.h`,
+  `src/render/Shaders.cpp`
+
+- [ ] **Step 1: Edit `tests/TestShaders.cpp` to add the failing test**
+
+```cpp
+TEST(ShadersReportCompileErrors)
+```
+```cpp
+TEST(ShadersDrawStepBsForwardPass)
+{
+	std::string error;
+	const auto  shaders = cpmc::CompileBlockShaders(ShaderSource(), error);
+	CHECK(shaders.has_value());
+	if (shaders)
+	{
+		CHECK(!shaders->outlineVertex.empty());
+		CHECK_EQ(ConstantBufferSize(shaders->outlineVertex, "Frame"), UINT(sizeof(cpmc::FrameConstants)));
+		CHECK_EQ(ConstantBufferSize(shaders->outlineVertex, "Entity"), UINT(sizeof(cpmc::EntityConstants)));
+		CHECK_EQ(ConstantBufferSize(shaders->translucent, "Frame"), UINT(sizeof(cpmc::FrameConstants)));
+		CHECK_EQ(ConstantBufferSize(shaders->translucent, "Entity"), UINT(sizeof(cpmc::EntityConstants)));
+		CHECK_EQ(Outputs(shaders->translucent), 1u);  // the scene's colour
+		CHECK_EQ(Outputs(shaders->hint), 1u);         // the bias hint
+		CHECK_EQ(Outputs(shaders->outline), 1u);      // the scene's colour
+	}
+}
+
+TEST(ShadersReportCompileErrors)
+```
+
+- [ ] **Step 2: Build; it must fail**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C" | sort -u | head -3
+```
+Expected: `'translucent': is not a member of 'cpmc::BlockShaders'`.
+
+- [ ] **Step 3: Edit `shaders/blocks.hlsl` to add the shaders**
+
+```hlsl
+    float4 entityTuning;              // spike 7: a glowing triangle's emission; the block light it glows from; 0; 0
+```
+```hlsl
+    float4 entityTuning;              // spike 7: a glowing triangle's emission; the block light it glows from; the outline's
+                                      // width in render pixels (step B); 0
+```
+```hlsl
+// Spike 4: Minecraft's HUD image (its hotbar, crosshair, chat, hand and held item), drawn over the finished frame at
+```
+```hlsl
+// Step B (the spec's "Step B: before DLSS"): a translucent particle, blended into the scene's colour just before DLSS, as
+// Minecraft blends it, over what the game has drawn and hidden behind what's nearer in the tagged depth. Lit by
+// Minecraft's light curve, l / (4 - 3l) of the brighter of its block and sky light (l from 0 to 1), or unlit from
+// entityTuning.y's block light, as a triangle glows in the G-buffer; times exposure, as predlss's blocks. Under 0.1 of
+// alpha is left out, as Minecraft's particle shader leaves it.
+float4 TranslucentPS(EntityOut i) : SV_Target0
+{
+    const float4 texel = EntityTexel(i.uv);
+    const float  alpha = texel.a * i.colour.a;
+    if (alpha < 0.1)
+    {
+        discard;
+    }
+    const uint  block = i.light & 0xFF;
+    const float level = (float)min(max(block, (i.light >> 8) & 0xFF), 15u) / 15.0;
+    const float light = block >= (uint)entityTuning.y ? 1.0 : level / (4.0 - 3.0 * level);
+    return float4(Linear(texel.rgb * i.colour.rgb) * light * tuning.z, alpha);
+}
+
+// Step B: DLSS's bias hint under the translucent particles (set dlsshint 1), 1 where TranslucentPS draws, so DLSS takes
+// their colour from this frame rather than from its history: the motion vectors there are the surface's behind them.
+float HintPS(EntityOut i) : SV_Target0
+{
+    if (EntityTexel(i.uv).a * i.colour.a < 0.1)
+    {
+        discard;
+    }
+    return 1.0;
+}
+
+struct OutlineOut
+{
+    float4 position : SV_Position;
+    float4 colour   : COLOR0;
+};
+
+// A snapshot vertex's clip position, with the frame's jitter, as EntityVS places it.
+float4 JitteredClip(float3 aPosition)
+{
+    // Minecraft (x, y, z) is world (x, -z, y).
+    const float4 clip = mul(float4(entityOffset + float3(aPosition.x, -aPosition.z, aPosition.y), 1.0), cameraToClip);
+    return float4(clip.xy + jitter.xy * clip.w, clip.zw);
+}
+
+// The strip's six corners, two triangles: which end of the edge each is at, and which side of it.
+static const uint  kStripEnd[6] = { 0, 0, 1, 1, 0, 1 };
+static const float kStripSide[6] = { 1.0, -1.0, 1.0, 1.0, -1.0, -1.0 };
+
+// Step B: the targeted block's outline (set outline 1, in build mode), as Minecraft's lines shader draws its own: each
+// edge, a pair of the snapshot's vertices, widened into a strip facing the camera, entityTuning.z render pixels across,
+// six vertices an edge. An end behind the camera is first brought along the edge to just in front of it, so the strip's
+// direction stays right; an edge wholly behind it draws nothing.
+OutlineOut OutlineVS(uint id : SV_VertexID)
+{
+    const uint   first = entityFirst + id / 6 * 2;
+    const Vertex a = vertices[first];
+    float4       from = JitteredClip(a.position);
+    float4       to = JitteredClip(vertices[first + 1].position);
+    OutlineOut   o;
+    o.colour = float4(a.colour & 0xFF, (a.colour >> 8) & 0xFF, (a.colour >> 16) & 0xFF, a.colour >> 24) / 255.0;
+    const float ahead = 1e-3;  // clip w: metres in front of the camera
+    if (from.w < ahead && to.w < ahead)
+    {
+        o.position = float4(2.0, 2.0, 2.0, 1.0);  // outside the view, so clipped
+        return o;
+    }
+    if (from.w < ahead)
+    {
+        from = lerp(from, to, (ahead - from.w) / (to.w - from.w));
+    }
+    else if (to.w < ahead)
+    {
+        to = lerp(to, from, (ahead - to.w) / (from.w - to.w));
+    }
+    const float2 half = target.xy * 0.5;  // from clip units to pixels
+    const float2 along = (to.xy / to.w - from.xy / from.w) * half;
+    const float2 direction = dot(along, along) > 1e-8 ? normalize(along) : float2(1.0, 0.0);
+    const float2 side = float2(-direction.y, direction.x) * entityTuning.z * 0.5 / half;
+    const uint   corner = id % 6;
+    const float4 at = kStripEnd[corner] == 0 ? from : to;
+    o.position = float4(at.xy + side * kStripSide[corner] * at.w, at.zw);
+    return o;
+}
+
+// Step B's outline, blended: black darkens the scene's linear colour to Linear(0.6), about a third, as Minecraft's 40%
+// darkens the sRGB colours of its framebuffer to 0.6 of what they were.
+float4 OutlinePS(OutlineOut i) : SV_Target0
+{
+    return float4(Linear(i.colour.rgb), 1.0 - Linear((1.0 - i.colour.a).xxx).x);
+}
+
+// Spike 4: Minecraft's HUD image (its hotbar, crosshair, chat, hand and held item), drawn over the finished frame at
+```
+
+- [ ] **Step 4: Edit `src/render/FrameConstants.h` to name the outline's width**
+
+```cpp
+	                              // glowlight); 0; 0
+```
+```cpp
+	                              // glowlight); the outline's width in render pixels (step B, OutlinePixels); 0
+```
+
+- [ ] **Step 5: Edit `src/render/Shaders.h` to add them**
+
+```cpp
+	std::vector<uint8_t> entityDepth;   // EntityDepthPS
+```
+```cpp
+	std::vector<uint8_t> entityDepth;   // EntityDepthPS
+	std::vector<uint8_t> translucent;    // TranslucentPS (step B)
+	std::vector<uint8_t> hint;           // HintPS
+	std::vector<uint8_t> outlineVertex;  // OutlineVS
+	std::vector<uint8_t> outline;        // OutlinePS
+```
+
+- [ ] **Step 6: Edit `src/render/Shaders.cpp` to compile them**
+
+```cpp
+	}
+	return BlockShaders{ std::move(*vertex), std::move(*present), std::move(*predlss), std::move(*gbuffer),
+		                 std::move(*depth), std::move(*hudVertex), std::move(*hud), std::move(*entityVertex),
+		                 std::move(*entity), std::move(*crack), std::move(*entityDepth) };
+```
+```cpp
+	}
+	auto translucent = CompileShader(aSource, "blocks.hlsl", "TranslucentPS", "ps_5_1", aError);
+	if (!translucent)
+	{
+		return std::nullopt;
+	}
+	auto hint = CompileShader(aSource, "blocks.hlsl", "HintPS", "ps_5_1", aError);
+	if (!hint)
+	{
+		return std::nullopt;
+	}
+	auto outlineVertex = CompileShader(aSource, "blocks.hlsl", "OutlineVS", "vs_5_1", aError);
+	if (!outlineVertex)
+	{
+		return std::nullopt;
+	}
+	auto outline = CompileShader(aSource, "blocks.hlsl", "OutlinePS", "ps_5_1", aError);
+	if (!outline)
+	{
+		return std::nullopt;
+	}
+	return BlockShaders{ std::move(*vertex), std::move(*present), std::move(*predlss), std::move(*gbuffer),
+		                 std::move(*depth), std::move(*hudVertex), std::move(*hud), std::move(*entityVertex),
+		                 std::move(*entity), std::move(*crack), std::move(*entityDepth), std::move(*translucent),
+		                 std::move(*hint), std::move(*outlineVertex), std::move(*outline) };
+```
+
+- [ ] **Step 7: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `504 test(s), 0 failure(s)`.
+
+- [ ] **Step 8: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "minecraft-entities: step B's shaders: translucent particles lit by Minecraft's curve, DLSS's bias hint under them, and the outline's strips" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 24: The renderer's forward list
+
+A second list of ours, just before the frame's DLSS list, in `gbuffer` mode (the spec's "Step B: before DLSS"):
+- **When:** a G-buffer list that drew a snapshot with anything for it (`ForwardDraws`) leaves its frame's DLSS list,
+  tags, camera, constants and extent, and holds the snapshot for it (`Take`); a claim an earlier frame left, its
+  forward list never come, is let go first. When that DLSS list is submitted, `ListBefore` records the forward list
+  with what it was left. A change of mode lets the claim go too.
+- **Its objects,** made at its first use: a ring of 8 lists and allocators, its own constants (a copy of the G-buffer
+  list's, so they're the frame's) and timing queries, and three pipelines. A separate thread-local record, so a
+  submission holding both of a frame's lists of ours signals and submits each.
+- **Its targets:** the tagged colour and DLSS's bias hint as render targets, and the tagged depth, read-only, each moved
+  from the state the DLSS list finds it in and back, as `RecordPredlss` does. The motion vectors aren't touched.
+- **What it draws:** the translucent particles, blended into the colour; then the outline, while `set outline` is 1;
+  then the bias hint under the particles, while `set dlsshint` is 1 and the game tags one as step 1 found it. All are
+  tested against the tagged depth, greater-or-equal as the entities, and write no depth; none is culled.
+- **Skipped,** it lets the snapshot go, counts the skip and says why, and never switches drawing off: the blocks and
+  the G-buffer's entities go on.
+- **Its settings,** `dlsshint` 0 or 1 and `outline` 0 or 1, both 1 at first, and its stats: frames drawn, those with
+  the hint, skips and the last one's reason, and its GPU time.
+
+**Files:**
+- Modify: `src/render/Renderer.h`, `src/render/Renderer.cpp`
+
+- [ ] **Step 1: Edit `src/render/Renderer.h` for the forward list**
+
+```cpp
+//   entities in the same list, after the blocks: the newest snapshot's models, then their cracks, then their depth.
+```
+```cpp
+//   entities in the same list, after the blocks: the newest snapshot's models, then their cracks, then their depth.
+//   Its step B puts a second list of ours, the forward list, just before that frame's DLSS list, with the same
+//   snapshot, camera and jitter: the translucent particles and the outline, blended into the tagged colour, then DLSS's
+//   bias hint under the particles, each tested against the tagged depth.
+```
+```cpp
+	// metalness, roughness, materialb, gbmotion and gbdepth; spike 7's entities, glow and glowlight
+```
+```cpp
+	// metalness, roughness, materialb, gbmotion and gbdepth; spike 7's entities, glow and glowlight, and step B's dlsshint
+	// and outline
+```
+```cpp
+		double      entityGpuMsAverage = -1.0;  // the entities' draws in the G-buffer, on the GPU; below 0: none drawn
+```
+```cpp
+		double      entityGpuMsAverage = -1.0;  // the entities' draws in the G-buffer, on the GPU; below 0: none drawn
+		// Step B's forward list
+		bool        outlineOn = true;            // set outline
+		int         dlssHint = 1;                // set dlsshint
+		uint64_t    forwardFrames = 0;           // forward lists drawn, in the last second
+		uint64_t    forwardHinted = 0;           // of those, the ones that drew DLSS's bias hint
+		uint64_t    forwardSkipped = 0;          // frames whose forward list couldn't be drawn, in the last second
+		std::string forwardLastSkip;             // why, the last time
+		double      forwardGpuMsAverage = -1.0;  // the forward list, on the GPU; below 0: none drawn
+```
+```cpp
+		SlTag                      depth;
+```
+```cpp
+		SlTag                      depth;
+		SlTag                      hint;  // DLSS's bias hint (step B)
+```
+```cpp
+	void CopyEntities();  // spike 7: Update's, the frame's geometry into a free snapshot
+```
+```cpp
+	void CopyEntities();  // spike 7: Update's, the frame's geometry into a free snapshot
+	// Step B's forward list, before the DLSS list its frame's G-buffer list left it (forward_): null if it's skipped,
+	// which lets go of the frame's snapshot and never switches drawing off.
+	ID3D12CommandList* RecordForward(ID3D12CommandQueue* aQueue, ID3D12GraphicsCommandList* aDlssList);
+	bool               EnsureForwardObjects();  // its lists, constants and timing queries
+	bool               EnsureForwardPipelines(bool aReversed);  // false, logged once, if they can't be made
+	void               ForwardSkip(const std::string& aWhy);
+	void               DropForward();  // a forward list that won't come: its frame's snapshot let go
+	void               ReadForwardTimings(uint32_t aSlot);
+```
+```cpp
+	// motion vectors. DSVs: our depth buffer; predlss's depth; gbuffer's G-buffer depth and tagged depth.
+```
+```cpp
+	// motion vectors; the forward list's colour and bias hint. DSVs: our depth buffer; predlss's depth; gbuffer's
+	// G-buffer depth and tagged depth; the forward list's tagged depth, read-only.
+```
+```cpp
+	Stats    stats_;
+```
+```cpp
+	// Step B's forward list. A G-buffer list that drew a snapshot with something for it leaves its frame's DLSS list, its
+	// tags, camera and constants, and the snapshot, held for the forward list (Snapshots::Take) until that's recorded,
+	// skipped or dropped.
+	struct Forward
+	{
+		const void*    list = nullptr;  // the frame's DLSS list; compared, never used
+		Evaluate       evaluate;
+		CameraFrame    camera;
+		FrameConstants constants{};
+		sl::Extent     extent{};
+		uint32_t       snapshot = 0;
+	};
+	bool                                                       outline_ = true;  // set outline: the outline in build mode
+	int                                                        dlssHint_ = 1;    // set dlsshint: 1 under the particles, 0 nowhere
+	std::optional<Forward>                                     forward_;
+	std::atomic<const void*>                                   forwardList_{ nullptr };  // forward_->list, read without the lock
+	gpu::ComPtr<ID3D12PipelineState>                           translucentPipeline_;
+	gpu::ComPtr<ID3D12PipelineState>                           outlinePipeline_;
+	gpu::ComPtr<ID3D12PipelineState>                           hintPipeline_;
+	bool                                                       forwardReversed_ = false;
+	bool                                                       forwardPipelinesFailed_ = false;  // until the shaders are reloaded
+	std::array<gpu::ComPtr<ID3D12CommandAllocator>, kSlots>    forwardAllocators_;
+	std::array<gpu::ComPtr<ID3D12GraphicsCommandList>, kSlots> forwardLists_;
+	std::array<uint64_t, kSlots>                               forwardSlotFence_{};
+	std::array<std::optional<uint32_t>, kSlots>                forwardSlotSnapshot_{};  // the snapshot each slot's list holds
+	uint64_t                                                   forwardRecordings_ = 0;
+	gpu::ComPtr<ID3D12Resource>                                forwardConstants_;  // upload: kSlots x kConstantsStride bytes
+	uint8_t*                                                   forwardConstantsMapped_ = nullptr;
+	gpu::ComPtr<ID3D12QueryHeap>                               forwardQueries_;
+	gpu::ComPtr<ID3D12Resource>                                forwardTimings_;  // readback: kSlots x 2 timestamps
+	uint64_t*                                                  forwardTimingsMapped_ = nullptr;
+	double                                                     forwardGpuMsSum_ = 0.0;
+	uint64_t                                                   forwardGpuSamples_ = 0;
+
+	Stats    stats_;
+```
+
+- [ ] **Step 2: Edit `src/render/Renderer.cpp` to record it**
+
+```cpp
+constexpr uint32_t kRtvs = 7;
+```
+```cpp
+constexpr uint32_t kForwardRtvs = 7;  // step B: the colour, then the bias hint
+constexpr uint32_t kRtvs = 9;
+```
+```cpp
+constexpr uint32_t kDsvs = 4;
+```
+```cpp
+constexpr uint32_t kForwardDsv = 4;  // step B: the tagged depth, read-only
+constexpr uint32_t kDsvs = 5;
+```
+```cpp
+thread_local std::optional<uint32_t> t_insertedSlot;
+```
+```cpp
+thread_local std::optional<uint32_t> t_insertedSlot;
+// Step B: the forward list's slot, kept apart, as one call could hold both of a frame's lists of ours.
+thread_local std::optional<uint32_t> t_insertedForward;
+```
+```cpp
+	gbufferEnd_ = nullptr;
+	knownStates_.Forget();
+```
+```cpp
+	gbufferEnd_ = nullptr;
+	DropForward();
+	knownStates_.Forget();
+```
+```cpp
+	entityPipelinesFailed_ = false;
+```
+```cpp
+	entityPipelinesFailed_ = false;
+	translucentPipeline_.Reset();
+	outlinePipeline_.Reset();
+	hintPipeline_.Reset();
+	forwardPipelinesFailed_ = false;
+```
+```cpp
+		glowLight_ = uint32_t(aValue);
+```
+```cpp
+		glowLight_ = uint32_t(aValue);
+		return true;
+	}
+	if (aName == "dlsshint")
+	{
+		if (aValue != 0.0 && aValue != 1.0)
+		{
+			aError = "dlsshint is 1 to mark Minecraft's translucent particles for DLSS, or 0 for nothing";
+			return false;
+		}
+		dlssHint_ = int(aValue);
+		return true;
+	}
+	if (aName == "outline")
+	{
+		if (aValue != 0.0 && aValue != 1.0)
+		{
+			aError = "outline is 1 to draw the targeted block's outline in build mode, or 0 to hide it";
+			return false;
+		}
+		outline_ = aValue == 1.0;
+```
+```cpp
+bool Renderer::EnsureDepthTarget(uint32_t aWidth, uint32_t aHeight)
+```
+```cpp
+bool Renderer::EnsureForwardObjects()
+{
+	if (forwardTimingsMapped_)
+	{
+		return true;
+	}
+	const D3D12_QUERY_HEAP_DESC queryDesc{ D3D12_QUERY_HEAP_TYPE_TIMESTAMP, kSlots * 2, 0 };
+	if (!forwardConstants_)
+	{
+		forwardConstants_ = gpu::MakeBuffer(device_, kSlots * kConstantsStride, D3D12_HEAP_TYPE_UPLOAD, D3D12_RESOURCE_STATE_GENERIC_READ);
+	}
+	if (!forwardTimings_)
+	{
+		forwardTimings_ = gpu::MakeBuffer(device_, kSlots * 2 * sizeof(uint64_t), D3D12_HEAP_TYPE_READBACK, D3D12_RESOURCE_STATE_COPY_DEST);
+	}
+	if (!forwardConstants_ || !forwardTimings_ ||
+	    (!forwardQueries_ && FAILED(device_->CreateQueryHeap(&queryDesc, IID_PPV_ARGS(&forwardQueries_)))))
+	{
+		return false;
+	}
+	for (uint32_t slot = 0; slot < kSlots; ++slot)
+	{
+		if (forwardLists_[slot])
+		{
+			continue;
+		}
+		if (FAILED(device_->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&forwardAllocators_[slot]))) ||
+		    FAILED(device_->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, forwardAllocators_[slot].Get(), nullptr,
+		                                      IID_PPV_ARGS(&forwardLists_[slot]))))
+		{
+			forwardLists_[slot].Reset();
+			return false;
+		}
+		d3d::Original().close(forwardLists_[slot].Get());
+		forwardLists_[slot]->SetName(L"BlockRender forward");
+	}
+	if (!forwardConstantsMapped_)
+	{
+		void* mapped = nullptr;
+		if (FAILED(forwardConstants_->Map(0, nullptr, &mapped)))
+		{
+			return false;
+		}
+		forwardConstants_->SetName(L"BlockRender forward constants");
+		forwardConstantsMapped_ = static_cast<uint8_t*>(mapped);
+	}
+	void* mapped = nullptr;
+	if (FAILED(forwardTimings_->Map(0, nullptr, &mapped)))
+	{
+		return false;
+	}
+	forwardTimings_->SetName(L"BlockRender forward timings");
+	forwardTimingsMapped_ = static_cast<uint64_t*>(mapped);  // last: mapped timings mean everything is ready
+	return true;
+}
+
+bool Renderer::EnsureForwardPipelines(bool aReversed)
+{
+	if (translucentPipeline_ && forwardReversed_ == aReversed)
+	{
+		return true;
+	}
+	if (forwardPipelinesFailed_ || !shaders_)
+	{
+		return false;
+	}
+	// The translucent particles: blended over the scene's colour as Minecraft blends them, its alpha left alone; tested
+	// against the tagged depth as the entities are, greater-or-equal, and never written; two-sided.
+	D3D12_GRAPHICS_PIPELINE_STATE_DESC particles{};
+	particles.pRootSignature = rootSignature_.Get();
+	particles.VS = { shaders_->entityVertex.data(), shaders_->entityVertex.size() };
+	particles.PS = { shaders_->translucent.data(), shaders_->translucent.size() };
+	D3D12_RENDER_TARGET_BLEND_DESC& blend = particles.BlendState.RenderTarget[0];
+	blend.BlendEnable = TRUE;
+	blend.SrcBlend = D3D12_BLEND_SRC_ALPHA;
+	blend.DestBlend = D3D12_BLEND_INV_SRC_ALPHA;
+	blend.BlendOp = D3D12_BLEND_OP_ADD;
+	blend.SrcBlendAlpha = D3D12_BLEND_ONE;
+	blend.DestBlendAlpha = D3D12_BLEND_ZERO;
+	blend.BlendOpAlpha = D3D12_BLEND_OP_ADD;
+	blend.LogicOp = D3D12_LOGIC_OP_NOOP;
+	blend.RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_RED | D3D12_COLOR_WRITE_ENABLE_GREEN | D3D12_COLOR_WRITE_ENABLE_BLUE;
+	particles.SampleMask = UINT_MAX;
+	particles.RasterizerState = BlockRasterizer(0);
+	particles.DepthStencilState.DepthEnable = TRUE;
+	particles.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ZERO;
+	particles.DepthStencilState.DepthFunc = aReversed ? D3D12_COMPARISON_FUNC_GREATER_EQUAL : D3D12_COMPARISON_FUNC_LESS_EQUAL;
+	particles.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+	particles.NumRenderTargets = 1;
+	particles.RTVFormats[0] = DXGI_FORMAT_R16G16B16A16_FLOAT;
+	particles.DSVFormat = DXGI_FORMAT_D32_FLOAT;
+	particles.SampleDesc.Count = 1;
+	// The outline: the same, its strips made from the edges by OutlineVS.
+	D3D12_GRAPHICS_PIPELINE_STATE_DESC outline = particles;
+	outline.VS = { shaders_->outlineVertex.data(), shaders_->outlineVertex.size() };
+	outline.PS = { shaders_->outline.data(), shaders_->outline.size() };
+	// DLSS's bias hint: 1 under the particles, unblended, into the R8 hint.
+	D3D12_GRAPHICS_PIPELINE_STATE_DESC hint = particles;
+	hint.PS = { shaders_->hint.data(), shaders_->hint.size() };
+	hint.BlendState.RenderTarget[0] = {};
+	hint.BlendState.RenderTarget[0].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_RED;
+	hint.RTVFormats[0] = DXGI_FORMAT_R8_UNORM;
+	gpu::ComPtr<ID3D12PipelineState> particlePipeline;
+	gpu::ComPtr<ID3D12PipelineState> outlinePipeline;
+	gpu::ComPtr<ID3D12PipelineState> hintPipeline;
+	if (FAILED(device_->CreateGraphicsPipelineState(&particles, IID_PPV_ARGS(&particlePipeline))) ||
+	    FAILED(device_->CreateGraphicsPipelineState(&outline, IID_PPV_ARGS(&outlinePipeline))) ||
+	    FAILED(device_->CreateGraphicsPipelineState(&hint, IID_PPV_ARGS(&hintPipeline))))
+	{
+		forwardPipelinesFailed_ = true;
+		log_.Push("renderer: couldn't create the forward list's pipelines, so Minecraft's translucent particles and the outline aren't "
+		          "drawn; everything else still is");
+		return false;
+	}
+	particlePipeline->SetName(L"BlockRender translucent particles pipeline");
+	outlinePipeline->SetName(L"BlockRender outline pipeline");
+	hintPipeline->SetName(L"BlockRender bias hint pipeline");
+	translucentPipeline_ = particlePipeline;
+	outlinePipeline_ = outlinePipeline;
+	hintPipeline_ = hintPipeline;
+	forwardReversed_ = aReversed;
+	return true;
+}
+
+bool Renderer::EnsureDepthTarget(uint32_t aWidth, uint32_t aHeight)
+```
+```cpp
+		Fail(std::format("{} frames in a row were skipped ({})", kSkipsBeforeOff, aWhy));
+	}
+}
+```
+```cpp
+		Fail(std::format("{} frames in a row were skipped ({})", kSkipsBeforeOff, aWhy));
+	}
+}
+
+void Renderer::ForwardSkip(const std::string& aWhy)
+{
+	++stats_.forwardSkipped;
+	stats_.forwardLastSkip = aWhy;
+}
+
+void Renderer::DropForward()
+{
+	if (forward_)
+	{
+		snapshotRing_.Abandon(forward_->snapshot);
+		forward_.reset();
+	}
+	forwardList_ = nullptr;
+}
+```
+```cpp
+			++entityGpuSamples_;
+		}
+	}
+```
+```cpp
+			++entityGpuSamples_;
+		}
+	}
+}
+
+void Renderer::ReadForwardTimings(uint32_t aSlot)
+{
+	const uint64_t begin = forwardTimingsMapped_[aSlot * 2];
+	const uint64_t end = forwardTimingsMapped_[aSlot * 2 + 1];
+	if (end > begin && timestampFrequency_ > 0)
+	{
+		forwardGpuMsSum_ += double(end - begin) * 1000.0 / double(timestampFrequency_);
+		++forwardGpuSamples_;
+	}
+```
+```cpp
+	stats.entityGpuMsAverage = entityGpuSamples_ ? entityGpuMsSum_ / double(entityGpuSamples_) : -1.0;
+	stats_ = {};
+	gpuMsSum_ = frameMsSum_ = updateMsSum_ = hudCopyMsSum_ = hudGpuMsSum_ = entityGpuMsSum_ = 0.0;
+	gpuSamples_ = frameSamples_ = updateSamples_ = hudCopySamples_ = hudGpuSamples_ = entityGpuSamples_ = 0;
+```
+```cpp
+	stats.entityGpuMsAverage = entityGpuSamples_ ? entityGpuMsSum_ / double(entityGpuSamples_) : -1.0;
+	stats.outlineOn = outline_;
+	stats.dlssHint = dlssHint_;
+	stats.forwardGpuMsAverage = forwardGpuSamples_ ? forwardGpuMsSum_ / double(forwardGpuSamples_) : -1.0;
+	stats_ = {};
+	gpuMsSum_ = frameMsSum_ = updateMsSum_ = hudCopyMsSum_ = hudGpuMsSum_ = entityGpuMsSum_ = forwardGpuMsSum_ = 0.0;
+	gpuSamples_ = frameSamples_ = updateSamples_ = hudCopySamples_ = hudGpuSamples_ = entityGpuSamples_ = forwardGpuSamples_ = 0;
+```
+```cpp
+	constants.jitter[1] = float(jitter[1]);
+```
+```cpp
+	constants.jitter[1] = float(jitter[1]);
+	constants.entity[2] = OutlinePixels(backWidth_.load(), aExtent.width);  // step B's, as Minecraft draws its own
+```
+```cpp
+		d3d::Original().drawInstanced(aList, draw.count, 1, 0, 0);
+```
+```cpp
+		// An outline's vertices are its edges' ends, a pair an edge, from each of which OutlineVS makes six.
+		const uint32_t vertices = draw.kind == entities::EntityDraw::Kind::Outline ? draw.count / 2 * 6 : draw.count;
+		d3d::Original().drawInstanced(aList, vertices, 1, 0, 0);
+```
+```cpp
+				evaluate.depth = tag;
+```
+```cpp
+				evaluate.depth = tag;
+			}
+			else if (tag.type == sl::kBufferTypeBiasCurrentColorHint)
+			{
+				evaluate.hint = tag;
+```
+```cpp
+		return ours;
+```
+```cpp
+		return ours;
+	}
+	if (list == forwardList_.load())
+	{
+		// Step B: the DLSS list of a frame whose G-buffer list left something for the forward list.
+		std::lock_guard lock(mutex_);
+		if (mode_.load() != Mode::Gbuffer || !forward_ || forward_->list != list)
+		{
+			return nullptr;
+		}
+		return RecordForward(aQueue, static_cast<ID3D12GraphicsCommandList*>(aList));
+```
+```cpp
+	stats_.entityFrames += snapshot ? 1 : 0;
+	t_insertedSlot = slot;
+```
+```cpp
+	stats_.entityFrames += snapshot ? 1 : 0;
+	// Step B: the frame's forward list, before its DLSS list, if the snapshot has anything for it, with the snapshot held
+	// for it. A claim an earlier frame left, whose forward list never came, is let go.
+	DropForward();
+	if (snapshot && entities::ForwardDraws(snapshots_[*snapshot].draws, outline_) && snapshotRing_.Take(*snapshot))
+	{
+		forward_ = Forward{ latest_.list, latest_, *camera, constants, extent, *snapshot };
+		forwardList_ = latest_.list;
+	}
+	t_insertedSlot = slot;
+	retired_.ListRecorded();  // until OnSubmitted signals after it, what it draws isn't freed
+	return list;
+}
+
+ID3D12CommandList* Renderer::RecordForward(ID3D12CommandQueue* aQueue, ID3D12GraphicsCommandList* aDlssList)
+{
+	// The frame's hold on its snapshot moves to our list, or is let go if the list can't be drawn.
+	const Forward forward = *std::exchange(forward_, std::nullopt);
+	forwardList_ = nullptr;
+	const auto skip = [&](const std::string& aWhy) -> ID3D12CommandList* {
+		snapshotRing_.Abandon(forward.snapshot);
+		ForwardSkip(aWhy);
+		return nullptr;
+	};
+	const uint64_t completed = fence_->GetCompletedValue();
+	if (completed == UINT64_MAX)
+	{
+		snapshotRing_.Abandon(forward.snapshot);
+		Fail(std::format("the device was removed (0x{:08x})", uint32_t(device_->GetDeviceRemovedReason())));
+		return nullptr;
+	}
+	if (aQueue != queue_)
+	{
+		return skip("the DLSS list went to another queue than the main one");
+	}
+	if (!atlasBuffer_ || completed < atlasReady_)
+	{
+		return skip("the atlas isn't on the GPU");
+	}
+	// The colour and the depth passed the G-buffer list's checks for this same frame (CheckPredlssTargets).
+	auto*            colour = static_cast<ID3D12Resource*>(forward.evaluate.colour.resource);
+	auto*            depth = static_cast<ID3D12Resource*>(forward.evaluate.depth.resource);
+	auto*            hint = static_cast<ID3D12Resource*>(forward.evaluate.hint.resource);
+	const ListState* dlss = d3d::Tracker().Find(aDlssList);
+	if (!dlss || dlss->Recording() || int64_t(d3d::CurrentFrame()) - int64_t(dlss->Frame()) > kTrackedFramesAgo)
+	{
+		return skip("the DLSS list wasn't tracked from its Reset");
+	}
+	const std::optional<uint32_t> colourState = StateBeforeList(*dlss, colour, forward.evaluate.colour.state);
+	const std::optional<uint32_t> depthState = StateBeforeList(*dlss, depth, forward.evaluate.depth.state);
+	if (!colourState || !depthState)
+	{
+		return skip("the colour's or the depth's state before the DLSS list isn't known");
+	}
+	// DLSS's bias hint, while set dlsshint is 1, if the game tags one as step 1 found it and its state is known.
+	std::string             why;
+	std::optional<uint32_t> hintState;
+	if (dlssHint_ == 1 && hint && CheckHintTarget(hint->GetDesc(), colour->GetDesc(), why))
+	{
+		hintState = StateBeforeList(*dlss, hint, forward.evaluate.hint.state);
+	}
+	if (!EnsureForwardObjects())
+	{
+		return skip("couldn't create the forward list's objects");
+	}
+	if (!EnsureForwardPipelines(forward.camera.reversedDepth))
+	{
+		return skip("the forward list's pipelines couldn't be made");
+	}
+	const uint32_t slot = uint32_t(forwardRecordings_ % kSlots);
+	if (completed < forwardSlotFence_[slot])
+	{
+		return skip("the GPU is still busy with an earlier frame");
+	}
+	if (forwardSlotFence_[slot] != 0)
+	{
+		ReadForwardTimings(slot);
+	}
+	std::memcpy(forwardConstantsMapped_ + slot * kConstantsStride, &forward.constants, sizeof(forward.constants));
+
+	// Our own list: calls the hooks watch go through their originals, so nothing of ours reaches the tracker.
+	const d3d::Originals&      original = d3d::Original();
+	ID3D12GraphicsCommandList* list = forwardLists_[slot].Get();
+	if (FAILED(forwardAllocators_[slot]->Reset()) || FAILED(original.reset(list, forwardAllocators_[slot].Get(), translucentPipeline_.Get())))
+	{
+		snapshotRing_.Abandon(forward.snapshot);
+		Fail("couldn't reset a command list");
+		return nullptr;
+	}
+	list->EndQuery(forwardQueries_.Get(), D3D12_QUERY_TYPE_TIMESTAMP, slot * 2);
+	std::vector<Move> wanted = { { colour, *colourState, D3D12_RESOURCE_STATE_RENDER_TARGET },
+		                         { depth, *depthState, D3D12_RESOURCE_STATE_DEPTH_READ } };
+	if (hintState)
+	{
+		wanted.push_back({ hint, *hintState, D3D12_RESOURCE_STATE_RENDER_TARGET });
+	}
+	const std::vector<Move>                   into = MovesInto(wanted);
+	const std::vector<D3D12_RESOURCE_BARRIER> toTargets = Barriers(into);
+	if (!toTargets.empty())
+	{
+		original.resourceBarrier(list, UINT(toTargets.size()), toTargets.data());
+	}
+	const D3D12_CPU_DESCRIPTOR_HANDLE colourRtv = Offset(rtvHeap_->GetCPUDescriptorHandleForHeapStart(), kForwardRtvs, rtvIncrement_);
+	const D3D12_CPU_DESCRIPTOR_HANDLE hintRtv = Offset(rtvHeap_->GetCPUDescriptorHandleForHeapStart(), kForwardRtvs + 1, rtvIncrement_);
+	const D3D12_CPU_DESCRIPTOR_HANDLE dsv = Offset(dsvHeap_->GetCPUDescriptorHandleForHeapStart(), kForwardDsv, dsvIncrement_);
+	D3D12_RENDER_TARGET_VIEW_DESC     colourView{};
+	colourView.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+	colourView.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;
+	original.createRtv(device_, colour, &colourView, colourRtv);
+	if (hintState)
+	{
+		D3D12_RENDER_TARGET_VIEW_DESC hintView = colourView;
+		hintView.Format = DXGI_FORMAT_R8_UNORM;
+		original.createRtv(device_, hint, &hintView, hintRtv);
+	}
+	D3D12_DEPTH_STENCIL_VIEW_DESC depthView{};
+	depthView.Format = DepthViewFormat(depth->GetDesc().Format);
+	depthView.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
+	depthView.Flags = D3D12_DSV_FLAG_READ_ONLY_DEPTH;  // tested, never written
+	original.createDsv(device_, depth, &depthView, dsv);
+	const sl::Extent&    extent = forward.extent;
+	const D3D12_VIEWPORT viewport{ float(extent.left), float(extent.top), float(extent.width), float(extent.height), 0.0f, 1.0f };
+	const D3D12_RECT     scissor{ LONG(extent.left), LONG(extent.top), LONG(extent.left + extent.width), LONG(extent.top + extent.height) };
+	list->RSSetViewports(1, &viewport);
+	list->RSSetScissorRects(1, &scissor);
+	list->SetGraphicsRootSignature(rootSignature_.Get());
+	list->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+	list->SetGraphicsRootConstantBufferView(0, forwardConstants_->GetGPUVirtualAddress() + slot * kConstantsStride);
+	list->SetGraphicsRootShaderResourceView(3, atlasBuffer_->GetGPUVirtualAddress());
+	list->SetGraphicsRootShaderResourceView(4, atlasBuffer_->GetGPUVirtualAddress());  // t2: only step 2's shader reads it
+	// The translucent particles, then the outline, blended into the colour; then the bias hint under the particles.
+	const SnapshotGpu& shot = snapshots_[forward.snapshot];
+	original.omSetRenderTargets(list, 1, &colourRtv, FALSE, &dsv);
+	DrawEntities(list, forward.camera, completed, shot, entities::EntityDraw::Kind::Translucent, true);
+	if (outline_)
+	{
+		list->SetPipelineState(outlinePipeline_.Get());
+		DrawEntities(list, forward.camera, completed, shot, entities::EntityDraw::Kind::Outline, false);
+	}
+	if (hintState)
+	{
+		list->SetPipelineState(hintPipeline_.Get());
+		original.omSetRenderTargets(list, 1, &hintRtv, FALSE, &dsv);
+		DrawEntities(list, forward.camera, completed, shot, entities::EntityDraw::Kind::Translucent, false);
+	}
+	const std::vector<D3D12_RESOURCE_BARRIER> back = Barriers(MovesBack(into));
+	if (!back.empty())
+	{
+		original.resourceBarrier(list, UINT(back.size()), back.data());
+	}
+	list->EndQuery(forwardQueries_.Get(), D3D12_QUERY_TYPE_TIMESTAMP, slot * 2 + 1);
+	list->ResolveQueryData(forwardQueries_.Get(), D3D12_QUERY_TYPE_TIMESTAMP, slot * 2, 2, forwardTimings_.Get(), slot * 2 * sizeof(uint64_t));
+	if (FAILED(original.close(list)))
+	{
+		snapshotRing_.Abandon(forward.snapshot);
+		Fail("couldn't close a command list");
+		return nullptr;
+	}
+	++forwardRecordings_;
+	forwardSlotSnapshot_[slot] = forward.snapshot;
+	++stats_.forwardFrames;
+	stats_.forwardHinted += hintState ? 1 : 0;
+	t_insertedForward = slot;
+```
+```cpp
+	if (!t_insertedSlot)
+	{
+		return;
+	}
+	const uint32_t  slot = *t_insertedSlot;
+	t_insertedSlot.reset();
+	std::lock_guard lock(mutex_);
+	slotFence_[slot] = Signal();  // signalled whatever the mode is now: our list went to the GPU
+	retired_.ListSubmitted(slotFence_[slot]);
+	if (const std::optional<uint32_t> snapshot = std::exchange(slotSnapshot_[slot], std::nullopt))
+	{
+		snapshotRing_.Submitted(*snapshot, slotFence_[slot]);
+	}
+	++stats_.drawn;
+	consecutiveSkips_ = 0;
+```
+```cpp
+	if (!t_insertedSlot && !t_insertedForward)
+	{
+		return;
+	}
+	const std::optional<uint32_t> slot = std::exchange(t_insertedSlot, std::nullopt);
+	const std::optional<uint32_t> forward = std::exchange(t_insertedForward, std::nullopt);
+	std::lock_guard               lock(mutex_);
+	const uint64_t                fence = Signal();  // signalled whatever the mode is now: our lists went to the GPU
+	if (slot)
+	{
+		slotFence_[*slot] = fence;
+		retired_.ListSubmitted(fence);
+		if (const std::optional<uint32_t> snapshot = std::exchange(slotSnapshot_[*slot], std::nullopt))
+		{
+			snapshotRing_.Submitted(*snapshot, fence);
+		}
+		++stats_.drawn;
+		consecutiveSkips_ = 0;
+	}
+	if (forward)
+	{
+		forwardSlotFence_[*forward] = fence;
+		retired_.ListSubmitted(fence);
+		if (const std::optional<uint32_t> snapshot = std::exchange(forwardSlotSnapshot_[*forward], std::nullopt))
+		{
+			snapshotRing_.Submitted(*snapshot, fence);
+		}
+	}
+```
+```cpp
+	slotSnapshot_ = {};
+```
+```cpp
+	slotSnapshot_ = {};
+	forward_.reset();
+	forwardList_ = nullptr;
+	forwardSlotSnapshot_ = {};
+	if (forwardConstantsMapped_)
+	{
+		forwardConstants_->Unmap(0, nullptr);
+		forwardConstantsMapped_ = nullptr;
+	}
+	if (forwardTimingsMapped_)
+	{
+		forwardTimings_->Unmap(0, nullptr);
+		forwardTimingsMapped_ = nullptr;
+	}
+	forwardConstants_.Reset();
+	forwardTimings_.Reset();
+	forwardQueries_.Reset();
+	forwardLists_ = {};
+	forwardAllocators_ = {};
+	translucentPipeline_.Reset();
+	outlinePipeline_.Reset();
+	hintPipeline_.Reset();
+```
+
+- [ ] **Step 3: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `504 test(s), 0 failure(s)`.
+
+- [ ] **Step 4: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "minecraft-entities: the forward list before the DLSS list: translucent particles and the outline blended into the tagged colour, and DLSS's bias hint under the particles" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 25: The status shows the forward list
+
+The status's `entities` line (the spec's "Measurements and the status") gains, after the G-buffer's figures: the frames
+the forward list drew, those with the bias hint, its GPU time, and the two settings, `outline` and `dlsshint`; and the
+forward lists skipped, with the last one's reason, when there are any. The overlay's `Entities` line shows the forward
+list's frames from Task 27.
+
+**Files:**
+- Modify: `tests/TestStatus.cpp`, `src/Status.h`, `src/Status.cpp`, `src/Plugin.cpp`
+
+- [ ] **Step 1: Edit `tests/TestStatus.cpp` to change the test of the line**
+
+```cpp
+	                  "translucent; 0 textures (0.00 MB), 0 left out; drawn in 0 frames, 0 draws skipped, GPU not measured; world: nothing"));
+```
+```cpp
+	                  "translucent; 0 textures (0.00 MB), 0 left out; drawn in 0 frames, 0 draws skipped, GPU not measured; the forward "
+	                  "list in 0 frames, the bias hint in 0, GPU not measured; outline on, dlsshint 1; world: nothing"));
+```
+```cpp
+	link.snapshotCut = 3;
+	report.link = link;
+	CHECK(Has(cpmc::FormatStatus(report),
+	          "entities=on: 60 scenes a second (7.25 MB/s); the newest 12 batches, 4152 vertices, 720 glowing from block light 14, 78 "
+	          "translucent; 14 textures (3.64 MB), 0 left out; drawn in 59 frames, 2 draws skipped, GPU 0.050 ms average; world: 1 arrow, "
+	          "1 block, 1 item, 4 shadows; the nearest mob 5.0 m away; 1 frames waited for a snapshot; 3 draws past a snapshot's 8 MB"));
+```
+```cpp
+	link.snapshotCut = 3;
+	link.forwardFrames = 57;
+	link.forwardHinted = 56;
+	link.forwardSkipped = 2;
+	link.forwardLastSkip = "the GPU is still busy with an earlier frame";
+	link.forwardGpuMsAverage = 0.02;
+	link.outlineOn = false;
+	link.dlssHint = 0;
+	report.link = link;
+	CHECK(Has(cpmc::FormatStatus(report),
+	          "entities=on: 60 scenes a second (7.25 MB/s); the newest 12 batches, 4152 vertices, 720 glowing from block light 14, 78 "
+	          "translucent; 14 textures (3.64 MB), 0 left out; drawn in 59 frames, 2 draws skipped, GPU 0.050 ms average; the forward "
+	          "list in 57 frames, the bias hint in 56, GPU 0.020 ms average; outline off, dlsshint 0; world: 1 arrow, 1 block, 1 item, 4 "
+	          "shadows; the nearest mob 5.0 m away; 2 forward lists skipped (the GPU is still busy with an earlier frame); 1 frames "
+	          "waited for a snapshot; 3 draws past a snapshot's 8 MB"));
+```
+
+- [ ] **Step 2: Build; it must fail**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C" | sort -u | head -3
+```
+Expected: `'forwardFrames': is not a member of 'cpmc::LinkReport'`.
+
+- [ ] **Step 3: Edit `src/Status.h` to add the forward list's figures**
+
+```cpp
+	double                entityGpuMsAverage = -1.0;  // their draws, on the GPU; below 0: not measured
+```
+```cpp
+	double                entityGpuMsAverage = -1.0;  // their draws, on the GPU; below 0: not measured
+	uint64_t              forwardFrames = 0;        // step B: forward lists drawn, in the last second
+	uint64_t              forwardHinted = 0;        // of those, the ones that drew DLSS's bias hint
+	uint64_t              forwardSkipped = 0;       // frames whose forward list couldn't be drawn, in the last second
+	std::string           forwardLastSkip;          // why, the last time
+	double                forwardGpuMsAverage = -1.0;  // the forward list, on the GPU; below 0: not measured
+	bool                  outlineOn = true;         // set outline
+	int                   dlssHint = 1;             // set dlsshint
+```
+
+- [ ] **Step 4: Edit `src/Status.cpp` to write them**
+
+```cpp
+// Minecraft's entities (spike 7): the scenes coming, the newest, the textures, what's drawn, and the world entities.
+```
+```cpp
+// Minecraft's entities (spike 7): the scenes coming, the newest, the textures, what's drawn, step B's forward list and
+// its settings, and the world entities.
+```
+```cpp
+	                              "skipped, GPU {}; world: {}",
+	                              aLink.entitiesOn ? "on" : "off", aLink.scenesPerSecond, aLink.sceneMbPerSecond, aLink.sceneBatches,
+	                              aLink.sceneVertices, aLink.sceneGlowing, aLink.glowLight, aLink.sceneTranslucent, aLink.entityTextures,
+	                              aLink.entityTextureMb, aLink.entityTexturesLeftOut, aLink.entityFrames, aLink.entityDrawsSkipped,
+	                              MsAverage(aLink.entityGpuMsAverage), OneLine(aLink.worldEntities));
+	if (aLink.nearestMob)
+	{
+		out += std::format("; the nearest mob {:.1f} m away", *aLink.nearestMob);
+```
+```cpp
+	                              "skipped, GPU {}; the forward list in {} frames, the bias hint in {}, GPU {}; outline {}, dlsshint {}; "
+	                              "world: {}",
+	                              aLink.entitiesOn ? "on" : "off", aLink.scenesPerSecond, aLink.sceneMbPerSecond, aLink.sceneBatches,
+	                              aLink.sceneVertices, aLink.sceneGlowing, aLink.glowLight, aLink.sceneTranslucent, aLink.entityTextures,
+	                              aLink.entityTextureMb, aLink.entityTexturesLeftOut, aLink.entityFrames, aLink.entityDrawsSkipped,
+	                              MsAverage(aLink.entityGpuMsAverage), aLink.forwardFrames, aLink.forwardHinted,
+	                              MsAverage(aLink.forwardGpuMsAverage), aLink.outlineOn ? "on" : "off", aLink.dlssHint,
+	                              OneLine(aLink.worldEntities));
+	if (aLink.nearestMob)
+	{
+		out += std::format("; the nearest mob {:.1f} m away", *aLink.nearestMob);
+	}
+	if (aLink.forwardSkipped > 0)
+	{
+		out += std::format("; {} forward lists skipped ({})", aLink.forwardSkipped, OneLine(aLink.forwardLastSkip));
+```
+
+- [ ] **Step 5: Edit `src/Plugin.cpp` to pass them on**
+
+```cpp
+	report.entityGpuMsAverage = aStats.entityGpuMsAverage;
+```
+```cpp
+	report.entityGpuMsAverage = aStats.entityGpuMsAverage;
+	report.forwardFrames = aStats.forwardFrames;
+	report.forwardHinted = aStats.forwardHinted;
+	report.forwardSkipped = aStats.forwardSkipped;
+	report.forwardLastSkip = aStats.forwardLastSkip;
+	report.forwardGpuMsAverage = aStats.forwardGpuMsAverage;
+	report.outlineOn = aStats.outlineOn;
+	report.dlssHint = aStats.dlssHint;
+```
+
+- [ ] **Step 6: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `504 test(s), 0 failure(s)`.
+
+- [ ] **Step 7: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "minecraft-entities: the entities status line shows the forward list, its bias hint and GPU time, and the outline and dlsshint settings" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 26: BlockRender 0.21.0, and `dump hint`
+
+- **`dump hint`** saves DLSS's bias hint as DLSS gets it, copied at the evaluate with the other tagged buffers, and
+  `dump all` takes it too. Run B uses it to see the particles' marks reach DLSS, and whether the game clears the hint
+  each frame: if it didn't, the marks would stay behind where the particles were.
+- **The version** goes to 0.21.0.
+
+**Files:**
+- Modify: `tests/TestRequests.cpp`, `src/Requests.h`, `src/Requests.cpp`, `src/log/Dumps.h`, `src/log/Dumps.cpp`,
+  `src/Plugin.cpp`, `CMakeLists.txt`
+
+- [ ] **Step 1: Edit `tests/TestRequests.cpp` to add the failing test**
+
+```cpp
+	CHECK_EQ(set->number, 0.25);
+```
+```cpp
+	CHECK_EQ(set->number, 0.25);
+}
+
+TEST(RequestsDumpTheBiasHint)
+{
+	const auto hint = Parse("dump hint");  // step B: DLSS's bias hint, as DLSS gets it
+	CHECK(hint.has_value() && hint->kind == Request::Kind::Dump && hint->what == "hint");
+	CHECK_STR(ErrorOf("dump hints"), "dump takes one of: depth, mvec, color, gbuffer, hint, all");
+```
+
+- [ ] **Step 2: Build and run the tests; the new one must fail**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | grep -v "^PASS" | tail -4
+```
+Expected: `FAIL RequestsDumpTheBiasHint` and `505 test(s), 2 failure(s)`, its two checks.
+
+- [ ] **Step 3: Edit `src/Requests.h` to name it**
+
+```cpp
+//   dump depth|mvec|color|gbuffer|all
+```
+```cpp
+//   dump depth|mvec|color|gbuffer|hint|all  (hint: spike 7's step B, DLSS's bias hint at the evaluate)
+```
+
+- [ ] **Step 4: Edit `src/Requests.cpp` to parse it**
+
+```cpp
+		if (arguments != 1 || !OneOf(words[1], { "depth", "mvec", "color", "gbuffer", "all" }))
+		{
+			return Fail(aError, "dump takes one of: depth, mvec, color, gbuffer, all");
+```
+```cpp
+		if (arguments != 1 || !OneOf(words[1], { "depth", "mvec", "color", "gbuffer", "hint", "all" }))
+		{
+			return Fail(aError, "dump takes one of: depth, mvec, color, gbuffer, hint, all");
+```
+
+- [ ] **Step 5: Edit `src/log/Dumps.h` to say so**
+
+```cpp
+// buffers are copied at the DLSS evaluate (depth, mvec, color), and the G-buffer candidates as their passes end
+// (gbuffer). The game records its G-buffer pass over many lists, so each set of candidate targets keeps one copy,
+// which every pass with those targets records again: the last in submission order wins, which is the whole G-buffer.
+```
+```cpp
+// buffers are copied at the DLSS evaluate (depth, mvec, color, and spike 7's hint, DLSS's bias hint), and the G-buffer
+// candidates as their passes end (gbuffer). The game records its G-buffer pass over many lists, so each set of
+// candidate targets keeps one copy, which every pass with those targets records again: the last in submission order
+// wins, which is the whole G-buffer.
+```
+
+- [ ] **Step 6: Edit `src/log/Dumps.cpp` to copy the hint**
+
+```cpp
+		what_ = { "depth", "mvec", "color", "gbuffer" };
+```
+```cpp
+		what_ = { "depth", "mvec", "color", "gbuffer", "hint" };
+```
+```cpp
+		                                                { sl::kBufferTypeScalingInputColor, "color" } };
+```
+```cpp
+		                                                { sl::kBufferTypeScalingInputColor, "color" },
+		                                                { sl::kBufferTypeBiasCurrentColorHint, "hint" } };
+```
+
+- [ ] **Step 7: Edit `src/Plugin.cpp` for 0.21.0**
+
+```cpp
+constexpr const char* kVersion = "0.20.0";
+```
+```cpp
+constexpr const char* kVersion = "0.21.0";
+```
+
+- [ ] **Step 8: Edit `CMakeLists.txt` for 0.21.0**
+
+```cmake
+project(BlockRender VERSION 0.20.0 LANGUAGES C CXX)
+```
+```cmake
+project(BlockRender VERSION 0.21.0 LANGUAGES C CXX)
+```
+
+- [ ] **Step 9: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `505 test(s), 0 failure(s)`.
+
+- [ ] **Step 10: Check that BlockRender imports nothing from PhysX**
+
+```bash
+DUMPBIN=$(ls "/c/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/"*/bin/Hostx64/x64/dumpbin.exe | head -1)
+"$DUMPBIN" -imports -nologo /d/Cyberpunk-Minecraft/spikes/block-render/build/RelWithDebInfo/BlockRender.dll | grep -i "\.dll$"
+```
+Expected: `KERNEL32.dll` and the other DLLs it imports, none of them PhysX's.
+
+- [ ] **Step 11: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "minecraft-entities: BlockRender 0.21.0, whose dump hint saves DLSS's bias hint as DLSS gets it" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 27: The overlay's Particles row
+
+Step B's test things, in the Fun section's new row (the spec's "Requests and settings"), each tagged as the others:
+- **Firework:** a rocket 6 m ahead, which bursts into red sparks about 10 m up a second later: look up for it.
+- **Splash potion:** a potion of regeneration 2 m above the ground 3 m ahead and 3 m to the left (`^` counts left
+  first), which breaks on the ground half a second later in a swirl.
+- **Campfire:** a lit campfire 3 m ahead and 3 m to the right, its marker first and the block at the marker, as the
+  block entities are (Task 19), whose smoke rises until Clear.
+
+Each has its own place, away from the Spawn rows' others. The overlay's `Entities` line also shows the forward list's
+frames.
+
+**Files:**
+- Modify: `tools/blockrender_hud/init.lua`
+
+- [ ] **Step 1: Edit `tools/blockrender_hud/init.lua`**
+
+```lua
+local entities = nil     -- the entities line (spike 7): on or off, scenes a second, frames drawn, textures, the nearest mob
+```
+```lua
+local entities = nil     -- the entities line (spike 7): on or off, scenes a second, frames drawn and with the forward
+                         -- list (step B), textures, the nearest mob
+```
+```lua
+-- marker tagged sp7b, so Clear removes them all and spares the NPCs' stand-ins. Each kind has its own distance, so none
+-- lands on another: the dropped items and the sand 3 blocks ahead, the mobs 5, the block entities 8 and the herd 11 and
+-- 13. The mobs have no loot and the sand vanishes where it lands, so nothing is left behind. A TNT's blast breaks the
+-- placed blocks and drops them, so Clear comes before any TNT.
+```
+```lua
+-- marker tagged sp7b, so Clear removes them all and spares the NPCs' stand-ins. Each kind has its own place, so none
+-- lands on another: the dropped items and the sand 3 blocks ahead, the potion and the campfire 3 ahead to either side,
+-- the mobs 5, the firework 6, the block entities 8 and the herd 11 and 13. The mobs have no loot and the sand vanishes
+-- where it lands, so nothing is left behind. A TNT's blast breaks the placed blocks and drops them, so Clear comes
+-- before any TNT.
+```
+```lua
+        { label = "Slime", commands = { mob("^-4 ^ ^5", "slime", ",Size:0") } },
+```
+```lua
+        { label = "Slime", commands = { mob("^-4 ^ ^5", "slime", ",Size:0") } },
+    } },
+    -- Step B's translucent particles: a firework bursting overhead, 6 blocks ahead (look up for it); a splash potion
+    -- that breaks on the ground 3 ahead and 3 to the left (^ is left first); and a lit campfire 3 ahead and 3 to the
+    -- right, whose smoke rises until Clear, placed at its marker as the block entities are.
+    { label = "Particles, ahead:", buttons = {
+        { label = "Firework", commands = { ahead("^ ^ ^6") .. "summon minecraft:firework_rocket ~ ~ ~ "
+            .. '{LifeTime:20,Tags:["sp7"],FireworksItem:{id:"minecraft:firework_rocket",count:1,components:'
+            .. '{"minecraft:fireworks":{explosions:[{shape:"large_ball",colors:[I;16711680]}]}}}}' } },
+        { label = "Splash potion", commands = { ahead("^3 ^ ^3") .. "summon minecraft:splash_potion ~ ~2 ~ "
+            .. '{Tags:["sp7"],Item:{id:"minecraft:splash_potion",count:1,components:'
+            .. '{"minecraft:potion_contents":{potion:"minecraft:regeneration"}}}}' } },
+        { label = "Campfire", commands = {
+            ahead("^-3 ^ ^3") .. 'summon minecraft:marker ~ ~ ~ {Tags:["sp7b","sp7campfire"]}',
+            "/execute at @e[tag=sp7campfire] run setblock ~ ~ ~ minecraft:campfire",
+        } },
+```
+```lua
+            local drawn = line:match("; drawn in (%d+ frames)")
+            local textures = line:match("; (%d+ textures) %(")
+            local nearest = line:match("; the nearest mob ([%d.]+ m) away")
+            entities = entityState .. (scenes and (", " .. scenes) or "") .. (drawn and (", drawn in " .. drawn) or "")
+```
+```lua
+            local drawn = line:match("; drawn in (%d+ frames)")
+            local forward = line:match("; the forward list in (%d+ frames)")
+            local textures = line:match("; (%d+ textures) %(")
+            local nearest = line:match("; the nearest mob ([%d.]+ m) away")
+            entities = entityState .. (scenes and (", " .. scenes) or "") .. (drawn and (", drawn in " .. drawn) or "")
+                .. (forward and (", the forward list in " .. forward) or "")
+```
+
+- [ ] **Step 2: Check the overlay's syntax**
+
+```bash
+luac -p /d/Cyberpunk-Minecraft/spikes/block-render/tools/blockrender_hud/init.lua && echo "syntax ok"
+```
+Expected: `syntax ok`.
+
+- [ ] **Step 3: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "minecraft-entities: the overlay's Particles row: a firework, a splash potion, and a campfire placed at its marker" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 28: An `mclink` script of the overlay's Spawn rows
+
+`tools/mclink/spawn.txt` types every command the overlay's Spawn rows and Clear type, in the order their buttons do, at
+step 0's spot, with a scene after each group and the status at the end, so Task 29 can check them all against the real
+Minecraft before the game: the block entities at their markers (Task 19), the particles as translucent batches, and
+Clear leaving nothing. After the campfire the stand-in V looks down at it, so Minecraft's player targets it, and the
+world table carries its outline. It's kept with the other scripts, and the test that parses them takes it too.
+
+**Files:**
+- Create: `tools/mclink/spawn.txt`
+- Modify: `tests/TestMcLinkScript.cpp`
+
+- [ ] **Step 1: Edit `tests/TestMcLinkScript.cpp` to parse it too**
+
+```cpp
+	                          "entities.txt" })
+```
+```cpp
+	                          "entities.txt", "spawn.txt" })
+```
+
+- [ ] **Step 2: Build and run the tests; the new one must fail**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | grep -v "^PASS" | tail -4
+```
+Expected: `FAIL ScriptsInTheRepoParse` and `505 test(s), 2 failure(s)`: the file isn't there yet.
+
+- [ ] **Step 3: Write `tools/mclink/spawn.txt`**
+
+```text
+# Spike 7's Part 3: the overlay's Spawn rows and Clear, typed as its buttons type them, at step 0's spot, against
+# SkyCraft's real mod, without the game. It checks each command against Minecraft 26.3, each block entity at its marker,
+# step B's particles as translucent batches, the outline of a block Minecraft's player looks at, and that Clear leaves
+# nothing: the last status's solids line has no block, and the last scene nothing. Start Minecraft first; this waits for
+# its world.
+status
+wait-world 180
+ground city
+at 880.5 6.14 2007.5
+look 270 0
+dump E:\Cyberpunk2077\red4ext\plugins\PhysXProbe\dumps\2026-10-01_14-37-07\collision.obj
+link on
+wait-ground 30
+wait 2
+type /gamemode creative
+scene
+# Mobs, 5 m ahead
+type /execute rotated ~ 0 positioned ^ ^ ^5 run summon minecraft:pig ~ ~ ~ {Tags:["sp7"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty"}
+type /execute rotated ~ 0 positioned ^-2 ^ ^5 run summon minecraft:villager ~ ~ ~ {Tags:["sp7"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty",VillagerData:{type:"minecraft:plains",profession:"minecraft:farmer",level:2}}
+type /execute rotated ~ 0 positioned ^2 ^ ^5 run summon minecraft:spider ~ ~ ~ {Tags:["sp7"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty",NoAI:1b}
+type /execute rotated ~ 0 positioned ^4 ^ ^5 run summon minecraft:blaze ~ ~1 ~ {Tags:["sp7"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty",NoAI:1b}
+type /execute rotated ~ 0 positioned ^-4 ^ ^5 run summon minecraft:slime ~ ~ ~ {Tags:["sp7"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty",Size:0}
+wait 3
+scene
+# The falling sand, which vanishes where it lands
+type /execute rotated ~ 0 positioned ^ ^ ^3 run summon minecraft:falling_block ~ ~12 ~ {BlockState:"minecraft:sand",DropItem:0b,CancelDrop:1b,Tags:["sp7"]}
+wait 3
+# The block entities, each placed at its marker, 8 m ahead
+type /execute rotated ~ 0 positioned ^-6 ^ ^8 run summon minecraft:marker ~ ~ ~ {Tags:["sp7b","sp7chest"]}
+type /execute at @e[tag=sp7chest] run setblock ~ ~ ~ minecraft:chest
+type /execute rotated ~ 0 positioned ^-3 ^ ^8 run summon minecraft:marker ~ ~ ~ {Tags:["sp7b","sp7bed"]}
+type /execute at @e[tag=sp7bed] run setblock ~ ~ ~ minecraft:red_bed[facing=north,part=foot]
+type /execute at @e[tag=sp7bed] run summon minecraft:marker ~ ~ ~-1 {Tags:["sp7b","sp7bedhead"]}
+type /execute at @e[tag=sp7bedhead] run setblock ~ ~ ~ minecraft:red_bed[facing=north,part=head]
+type /execute rotated ~ 0 positioned ^ ^ ^8 run summon minecraft:marker ~ ~ ~ {Tags:["sp7b","sp7sign"]}
+type /execute at @e[tag=sp7sign] run setblock ~ ~ ~ minecraft:oak_sign
+type /execute rotated ~ 0 positioned ^3 ^ ^8 run summon minecraft:marker ~ ~ ~ {Tags:["sp7b","sp7banner"]}
+type /execute at @e[tag=sp7banner] run setblock ~ ~ ~ minecraft:white_banner{patterns:[{pattern:"minecraft:stripe_top",color:"red"},{pattern:"minecraft:creeper",color:"black"}]}
+type /execute rotated ~ 0 positioned ^6 ^ ^8 run summon minecraft:marker ~ ~ ~ {Tags:["sp7b","sp7torch"]}
+type /execute at @e[tag=sp7torch] run setblock ~ ~ ~ minecraft:torch
+wait 2
+scene
+# The dropped items, 3 m ahead
+type /execute rotated ~ 0 positioned ^-1 ^ ^3 run summon minecraft:item ~ ~1 ~ {Item:{id:"minecraft:diamond",count:1},PickupDelay:32767,Tags:["sp7"]}
+type /execute rotated ~ 0 positioned ^1 ^ ^3 run summon minecraft:item ~ ~1 ~ {Item:{id:"minecraft:grass_block",count:1},PickupDelay:32767,Tags:["sp7"]}
+wait 2
+scene
+# Step B's particles. The firework bursts overhead, so the stand-in V looks up at it: Minecraft extracts only the
+# particles in its view.
+look 270 -45
+type /execute rotated ~ 0 positioned ^ ^ ^6 run summon minecraft:firework_rocket ~ ~ ~ {LifeTime:20,Tags:["sp7"],FireworksItem:{id:"minecraft:firework_rocket",count:1,components:{"minecraft:fireworks":{explosions:[{shape:"large_ball",colors:[I;16711680]}]}}}}
+wait 1.5
+scene
+look 270 0
+# The splash potion breaks on the ground half a second after it's summoned.
+type /execute rotated ~ 0 positioned ^3 ^ ^3 run summon minecraft:splash_potion ~ ~2 ~ {Tags:["sp7"],Item:{id:"minecraft:splash_potion",count:1,components:{"minecraft:potion_contents":{potion:"minecraft:regeneration"}}}}
+wait 1
+scene
+# The campfire's smoke rises from 3 m ahead and 3 m to the right. Then the stand-in V looks down at the campfire,
+# 45 degrees right of ahead: Minecraft's player targets it, and the world table has its outline.
+type /execute rotated ~ 0 positioned ^-3 ^ ^3 run summon minecraft:marker ~ ~ ~ {Tags:["sp7b","sp7campfire"]}
+type /execute at @e[tag=sp7campfire] run setblock ~ ~ ~ minecraft:campfire
+wait 3
+scene
+look 315 17
+wait 1
+scene
+look 270 0
+# The herd, 11 and 13 m ahead
+type /execute rotated ~ 0 positioned ^-4 ^ ^11 run summon minecraft:pig ~ ~ ~ {Tags:["sp7"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty"}
+type /execute rotated ~ 0 positioned ^-2 ^ ^11 run summon minecraft:pig ~ ~ ~ {Tags:["sp7"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty"}
+type /execute rotated ~ 0 positioned ^ ^ ^11 run summon minecraft:pig ~ ~ ~ {Tags:["sp7"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty"}
+type /execute rotated ~ 0 positioned ^2 ^ ^11 run summon minecraft:pig ~ ~ ~ {Tags:["sp7"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty"}
+type /execute rotated ~ 0 positioned ^4 ^ ^11 run summon minecraft:pig ~ ~ ~ {Tags:["sp7"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty"}
+type /execute rotated ~ 0 positioned ^-4 ^ ^13 run summon minecraft:pig ~ ~ ~ {Tags:["sp7"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty"}
+type /execute rotated ~ 0 positioned ^-2 ^ ^13 run summon minecraft:pig ~ ~ ~ {Tags:["sp7"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty"}
+type /execute rotated ~ 0 positioned ^ ^ ^13 run summon minecraft:pig ~ ~ ~ {Tags:["sp7"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty"}
+type /execute rotated ~ 0 positioned ^2 ^ ^13 run summon minecraft:pig ~ ~ ~ {Tags:["sp7"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty"}
+type /execute rotated ~ 0 positioned ^4 ^ ^13 run summon minecraft:pig ~ ~ ~ {Tags:["sp7"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty"}
+wait 4
+scene
+status
+# Clear: the placed blocks by their markers, without block updates, then everything tagged. The puffs a killed mob
+# leaves last up to 5 s, and the campfire's smoke a little longer: the last scene, 7 s on, has nothing in it.
+type /execute at @e[tag=sp7b] run setblock ~ ~ ~ minecraft:air strict
+type /kill @e[tag=sp7]
+type /kill @e[tag=sp7b]
+wait 7
+scene
+status
+quit
+```
+
+- [ ] **Step 4: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `505 test(s), 0 failure(s)`.
+
+- [ ] **Step 5: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "minecraft-entities: an mclink script typing the overlay's Spawn rows into Minecraft, with step B's particles and an outline" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 29: In Minecraft: the Spawn rows
+
+Task 28's script, with the user, against SkyCraft's mod and CyberCraft Tweaks 1.4.0 in the `CyberCraft` instance,
+without the game. It checks each command against Minecraft 26.3 before run B, as Part 2 did after Task 7.
+- **If a check fails,** stop and find the cause with superpowers:systematic-debugging before going on. A command that
+  needs a change changes in the overlay (Task 27 or 19) and in the script together, as a new task.
+
+**Files:**
+- Modify: `docs/spikes/2026-10-06-minecraft-entities-results.md`
+
+- [ ] **Step 1: Check that the game isn't running**
+
+```bash
+tasklist | grep -i -c "cyberpunk2077.exe"
+```
+Expected: `0`. If it's `1`, ask the user to quit the game: it would hold the mapping.
+
+- [ ] **Step 2: Ask the user for their leave, and to start Minecraft**
+
+Ask the user for their leave to run the script at x 880 in the `SkyCraft` world, which clears what it makes; then to
+start the `CyberCraft` instance from the Modrinth App, and say when its title screen shows. Then:
+```bash
+L="/c/Users/BLOXY/AppData/Roaming/ModrinthApp/profiles/CyberCraft/logs/latest.log"
+grep -m1 "cybercraft_tweaks" "$L"; grep "SkyCraft:" "$L" | tail -2; echo "mixin errors: $(grep -c -i -E "mixin.*(error|fail)" "$L")"
+```
+Expected: `cybercraft_tweaks 1.4.0` in Fabric's list of mods, `SkyCraft: can't open Skyrim's shared memory yet (Windows
+error 2: …)`, and `mixin errors: 0`.
+
+- [ ] **Step 3: Run the script**
+
+```bash
+L="/c/Users/BLOXY/AppData/Roaming/ModrinthApp/profiles/CyberCraft/logs/latest.log"; before=$(wc -l < "$L"); \
+  cd /d/Cyberpunk-Minecraft/spikes/block-render && mkdir -p build/spawn \
+  && ./build/RelWithDebInfo/mclink.exe tools/mclink/spawn.txt | tee build/spawn/spawn.log; echo "exit: ${PIPESTATUS[0]}"; \
+  tail -n +$((before + 1)) "$L" | grep -E "\[CHAT\]|WARN|ERROR" | tee build/spawn/minecraft.log
+```
+Give it 4 minutes. Expected:
+- **Every command answered** in Minecraft's chat (`Summoned new …`, `Changed the block at …`), and no `WARN` or `ERROR`
+  line about one.
+- **The block entities' scene:** the chest's and the banner's batches, as in Part 2; in the status at the herd's end,
+  the `solids` line's blocks around the stand-in V at 4: the chest, the bed's two halves and the campfire (the sign,
+  the banner and the torch aren't solid).
+- **The particles' scenes:** batches flagged `translucent` after the firework (its sparks), the potion (its swirl) and
+  the campfire (its smoke).
+- **The outline:** after `look 315 17`, the scene's world line ends `; an outline`, with a line `outline from 883.000
+  6.000 2010.000 to 884.000 6.438 2011.000`, the campfire's box, or close to it.
+- **Clear left nothing:** the last scene has no batches and its world line says `nothing`; the last status's `solids`
+  line has 0 blocks around the stand-in V; and `exit: 0`.
+
+- [ ] **Step 4: Ask the user to stop Minecraft**
+
+Its window is hidden while `mclink` drives it, so the user stops it from the Modrinth App.
+
+- [ ] **Step 5: Record the run in `docs/spikes/2026-10-06-minecraft-entities-results.md`**
+
+A "The Spawn rows with `mclink` (Part 3)" section after run A's: the versions; each group's answer; the particles'
+batches and their vertex counts; the outline's box; what Clear left; and anything that surprised.
+
+- [ ] **Step 6: Commit**
+
+With the plan, its steps ticked up to this one.
+```bash
+cd /d/Cyberpunk-Minecraft && git add docs/spikes/2026-10-06-minecraft-entities-results.md docs/superpowers/plans/2026-10-06-minecraft-entities.md \
+  && git commit -q -m "minecraft-entities: the Spawn rows with mclink, before run B" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 30: In the game: run B
+
+Run B of the spec's "The steps", with the user, on BlockRender 0.21.0, linked to SkyCraft's Minecraft in the
+`CyberCraft` instance with CyberCraft Tweaks 1.4.0. Minecraft's player in creative, from the Fun row; combat off. DRED
+stays on. Minecraft's window stays beside the game's on the main monitor, for side-by-side looks.
+
+**Before the user looks,** name what still isn't drawn, so it isn't taken for a fault:
+- signs' words and name tags: SkyCraft sends no text;
+- a slime's outer layer, drawn solid rather than see-through: SkyCraft marks every entity layer solid;
+- the particles at night: lit by Minecraft's light alone, not the game's night, so they may look too bright (check 6).
+
+**The order matters,** as in run A: Clear comes before any TNT. If the game freezes, read the logs and the newest folder
+in `%LOCALAPPDATA%\REDEngine\ReportQueue`, and force-close it only when the user asks. If a check fails, stop and find
+the cause with superpowers:systematic-debugging before going on. Fixes become new tasks.
+
+These commands come back, as in run A:
+- **Send a request,** atomically: the plugin runs it within a second. Replace `entities` with the command, and send the
+  next only once the status's `request=` line shows the last.
+  ```bash
+  P=/e/Cyberpunk2077/red4ext/plugins/BlockRender; printf '%s\n' "entities" > "$P/request.tmp" && mv "$P/request.tmp" "$P/blockrender.request"
+  ```
+- **The log's newest lines:**
+  ```bash
+  L=$(ls -t /e/Cyberpunk2077/red4ext/logs | grep -i blockrender | head -1); tail -30 "/e/Cyberpunk2077/red4ext/logs/$L"
+  ```
+- **The status:**
+  ```bash
+  cat /e/Cyberpunk2077/bin/x64/plugins/cyber_engine_tweaks/mods/blockrender_hud/status.txt
+  ```
+- **Minecraft's log, for the chat's replies:**
+  ```bash
+  grep -E "\[CHAT\]" "/c/Users/BLOXY/AppData/Roaming/ModrinthApp/profiles/CyberCraft/logs/latest.log" | tail -10
+  ```
+- **The newest dump, viewed** (`dump hint` saves `tag-biasCurrentColorHint.dds`; the viewer writes a PNG beside it and
+  prints each channel's range):
+  ```bash
+  D=$(ls -td /e/Cyberpunk2077/red4ext/plugins/BlockRender/dumps/*/ | head -1); cd /d/Cyberpunk-Minecraft/spikes/block-render/tools \
+    && uv run --no-project -q --with numpy --with pillow python view_dump.py "$D"
+  ```
+
+**Files:**
+- Modify: `docs/spikes/2026-10-06-minecraft-entities-results.md`
+
+- [ ] **Step 1: Deploy (the game must not be running)**
+
+```bash
+tasklist | grep -i -c "cyberpunk2077.exe"
+```
+Expected: `0`. If it's `1`, ask the user to quit the game first, because a running game locks the DLL.
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+P=/e/Cyberpunk2077/red4ext/plugins/BlockRender
+H=/e/Cyberpunk2077/bin/x64/plugins/cyber_engine_tweaks/mods/blockrender_hud
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default -DCP2077_DIR=E:/Cyberpunk2077 > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C|error MSB"; \
+  "$CMAKE" --preset default -DCP2077_DIR= > /dev/null; \
+  cmp build/RelWithDebInfo/BlockRender.dll "$P/BlockRender.dll" && cmp shaders/blocks.hlsl "$P/shaders/blocks.hlsl" \
+  && cmp tools/blockrender_hud/init.lua "$H/init.lua" && echo installed
+```
+Expected: `installed`. The second configure clears `CP2077_DIR` again.
+
+- [ ] **Step 2: In the game: BlockRender 0.21.0 loads**
+
+Ask the user to start the `CyberCraft` instance, then the game, and to wait at the game's main menu. Then:
+```bash
+L=$(ls -t /e/Cyberpunk2077/red4ext/logs | grep -i blockrender | head -1); grep -E "loaded|ERROR|error" "/e/Cyberpunk2077/red4ext/logs/$L" | head -5
+```
+Expected: `BlockRender 0.21.0 loaded (game 2.31…), …; dred on, debug layer off; …`, and no error lines.
+
+- [ ] **Step 3: In the game: load, link, creative**
+
+Ask the user to load a save on an open pavement by day, with at least 15 m clear ahead of V and a wall or a parked car
+near, and to click Link, then Creative in the overlay's Fun row. Expected: in the log, `link on: …; drawing is gbuffer`
+(if not, ask the user to click the overlay's `G-buffer` button); in Minecraft's log, `[CHAT] Set own game mode to
+Creative Mode`; in the status, `entities=on: …; the forward list in 0 frames, the bias hint in 0, GPU not measured;
+outline on, dlsshint 1; …`, and the overlay's top lines `Last request: …` and `Requests waiting to be sent: none`. Then
+name what isn't drawn ("Before the user looks", above).
+
+- [ ] **Step 4: In the game: the particles by day (check 1)**
+
+Ask the user to click the Particles row's Firework and look up 6 m ahead; then Splash potion, looking 3 m ahead and a
+little left; then Campfire, looking 3 m ahead and a little right; and to compare each with Minecraft's window. Then to
+walk so the wall or the car comes between V and the campfire's smoke. Expected:
+- the firework's red sparks, the potion's pink swirl and the campfire's grey smoke, each see-through, as bright as
+  Minecraft's (the user's judgement, side by side), and hidden behind the wall or the car where it's nearer;
+- in the status, `the forward list in` about as many frames as the game's frame rate while particles are in view, `the
+  bias hint in` as many, `GPU` a few hundredths of a millisecond, and no `forward lists skipped`; in the overlay's
+  `Entities` line, `the forward list in N frames`.
+
+- [ ] **Step 5: In the game: DLSS's bias hint (check 2)**
+
+With the campfire's smoke in view, send `dump hint`, then view it. Expected: the smoke's shape in white (1) in
+`tag-biasCurrentColorHint.png`, over whatever the game writes there itself, which the record notes. If the smoke's
+shape isn't there, the game writes the hint after the forward list: `set dlsshint 0`, and the hint's draw moves into
+the DLSS list at the evaluate, where the dumps' copies go (a new task). Then ask the user to
+watch the smoke, standing still and turning V, while you send `set dlsshint 0`, then, after their reply, `set
+dlsshint 1`: ask which leaves less of a trail or ghost behind the smoke as V turns.
+
+Then ask the user to click Clear, and once the smoke has gone (about 10 s), send `dump hint` again and view it.
+Expected: no trace of the smoke's shape: the game clears the hint each frame, so the marks don't stay behind. If they
+stay, `set dlsshint 0` until the forward list clears them itself (a new task).
+
+- [ ] **Step 6: In the game: the outline in build mode (check 3)**
+
+Ask the user to click Campfire again, press F8 for build mode, and look at the campfire, then at the ground beside it,
+holding a block (Blocks in hand's Stone bricks). Expected: a thin black outline around the campfire's box, then around
+the block a held block would fill, about as thick as Minecraft's (side by side), steady and unbroken while V walks and
+turns. Send `set outline 0`: it goes; `set outline 1`: it's back. Then F8 again: build mode off, and the outline goes.
+
+- [ ] **Step 7: In the game: Shift+F6 pauses build mode (check 4)**
+
+Ask the user to press F8 for build mode, then Shift+F6. Expected: CET's overlay opens; the status's build line `build=on,
+paused while CET's overlay is open; …`, the log `build mode paused: CET's overlay is open`; the overlay's buttons click
+(ask the user to click `Full status` open and closed); the mouse doesn't turn Minecraft's player, and a click doesn't
+reach Minecraft; the outline stays. Then Shift+F6 again: the overlay closes, the log says `build mode goes on: CET's
+overlay closed`, and a right click places a block, as in build mode. Then F8: build mode off.
+
+- [ ] **Step 8: In the game: the overlay's fixes (check 5)**
+
+Ask the user to click More's Block entities and walk slowly forward while its 12 requests go (about 12 s), watching
+the overlay: its rows stay where they are as the requests come and go. Expected: the chest, the bed whole, the sign, the
+banner and the torch, each 8 m ahead of where V was when its marker went down, so spread a little along V's walk; in
+Minecraft's log, a `[CHAT]` reply to each, none an error. Then ask the user to click Clear. Expected: every placed block
+gone, the status's `the newest 0 batches` and `world: nothing` within about 10 s, and nothing left on the ground.
+
+- [ ] **Step 9: In the game: at night (check 6)**
+
+Ask the user to use the game's Skip Time to the night, then click Campfire, Splash potion and Firework, and the Mobs
+row's Spider. Expected: note how bright the particles look beside Minecraft's (which keeps its own time), and whether
+the spider's eyes look as in Minecraft, where they glow, or dark. Too-bright particles at night get a design of their
+own; dark eyes decide step C's emissive mark. Then ask the user to click Clear.
+
+- [ ] **Step 10: In the game: cost (check 7)**
+
+Ask the user to click Campfire, Splash potion and Firework a few times each, and read the status three times, a few
+seconds apart. Note the forward list's GPU time, the frame time (`frame=`), and the entities' GPU time. Then ask the
+user to click Clear.
+
+- [ ] **Step 11: In the game: no crash or freeze (check 8)**
+
+Ask the user to click Unlink: Minecraft's entities stay drawn, as its blocks do (the user's choice), then Link again.
+Expected: the game ran without a crash or a freeze throughout.
+
+- [ ] **Step 12: Ask the user to quit the game and stop Minecraft**
+
+- [ ] **Step 13: Read the log once more**
+
+```bash
+L=$(ls -t /e/Cyberpunk2077/red4ext/logs | grep -i blockrender | head -1); grep -E "renderer:|build mode|overlay|set |dump" "/e/Cyberpunk2077/red4ext/logs/$L" | head -200
+```
+Everything the steps above logged, for the results.
+
+- [ ] **Step 14: Record run B's results in `docs/spikes/2026-10-06-minecraft-entities-results.md`**
+
+A "Run B" section: the versions; each check above with its outcome and numbers: the particles by day, hidden and
+compared with Minecraft's; the bias hint's dumps and the trails with `dlsshint` 0 and 1; the outline; Shift+F6; the
+overlay's fixes; the night; the costs; and anything that surprised. Then the spike's answer at the top, for steps A and
+B.
+
+- [ ] **Step 15: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add docs/spikes/2026-10-06-minecraft-entities-results.md docs/superpowers/plans/2026-10-06-minecraft-entities.md \
+  && git commit -q -m "minecraft-entities: run B's results" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 31: Close the spike
+
+- [ ] **Step 1: Add "How Part 3 went" to this plan**
+
+At the end, after "Found while planning Part 3": what ran as written, what changed, and what Task 29's `mclink` run and
+run B found.
+
+- [ ] **Step 2: Bring the spec up to date**
+
+In its "Changes while executing Part 3": anything run B changed in the design, and what's left for later (a night
+factor for the particles, step C's emissive mark), each with what run B saw.
+
+- [ ] **Step 3: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add docs/superpowers \
+  && git commit -q -m "minecraft-entities plan: how Part 3 went" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+- [ ] **Step 4: Finish the branch**
+
+Use superpowers:finishing-a-development-branch: the tests pass (505), and the user chooses whether
+`spike/minecraft-entities` merges into `main`, as spikes 1 to 6 did.
+
+## Found while planning Part 3
+
+The spec's "Changes while planning Part 3" lists what planning settled in the design. In the plan itself:
+- **The mouse's turn while paused:** spike 5's `set turn` adds the mouse's movement, read from the raw input BlockRender
+  sees, to V's teleports in build mode; paused, that would have turned V as the user moved the cursor over CET's overlay,
+  if the game still reads the raw input then. `TakeMouseX` gives none while paused (Task 18).
+- **The overlay's last request's line** came and went too: it showed only after the first reply, moving the rows below
+  it once, so it's always drawn now, beside the waiting line (Task 19).
+- **The mutations:** 36, all caught in the end. Two weren't at first:
+  - the router's test didn't check that build mode stays paused, unlogged, while the overlay is open: a mutation that
+    logged it going on at the overlay's first click slipped through, so the test now checks there's no such line before
+    the overlay closes (Task 18);
+  - a `float3` in place of the frame constants' last `float4` pads to the same 288 bytes, so that mutation adds a member
+    instead (Task 23).
+- **The overlay's buttons were played through** with CET's functions stubbed: each button's commands in order, and
+  Clear's. Task 28's script was made from them, so it types the very commands the buttons type.
+- **The firework's command is 254 characters,** within the 256 that BlockRender's typer and Minecraft's chat take.
+- **The campfire stands in the block of Minecraft's player's feet,** as the block entities do: on the city's ground it
+  can sit partly sunk, as run A's torch did, and its smoke rises from it either way.
+- **The bias hint's state:** the DLSS list's first transition takes it from unordered access (0x8), as step 1 found, as
+  it does the colour; the forward list moves both to render targets and back.
+- **The frame log splits a list at each change of targets,** not at the evaluate: the DLSS list's barriers come first,
+  then its two dispatches after a change of targets, most likely DLSS's own but not certainly. So whether the forward
+  list's marks reach DLSS is run B's `dump hint` to show, copied at the evaluate as DLSS gets the hint; Task 30 says
+  what to do if they don't.
+- **The test counts:** Task 18 adds 4 tests (497), Tasks 20 and 21 one each, Task 22 four, Task 23 one and Task 26 one
+  (505). Tasks 25 and 28 change a test each.
+- **The replay** passed as written: every build, expected failure and test count, the overlay's syntax and the DLL's
+  imports, with each task's files identical to the scratch clone's.
