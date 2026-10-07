@@ -9530,19 +9530,19 @@ cd /d/Cyberpunk-Minecraft && git add docs/spikes docs/superpowers/plans/2026-10-
 
 ---
 
-### Task 36: Close the spike
+### Task 36: Close Part 4, and plan Part 5
 
-- [ ] **Step 1: Add "How Part 4 went" to this plan**
+- [x] **Step 1: Add "How Part 4 went" to this plan**
 
 At the end, after "Found while planning Part 4": what ran as written, what changed, and what Task 34's `mclink` run and
 run C found.
 
-- [ ] **Step 2: Bring the spec up to date**
+- [x] **Step 2: Bring the spec up to date**
 
 In its "Changes while executing Part 4": anything Part 4 changed in the design, and what's left for later, such as
 Cyberpunk's time of day setting Minecraft's.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add docs/superpowers \
@@ -9550,10 +9550,13 @@ cd /d/Cyberpunk-Minecraft && git add docs/superpowers \
        -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
 ```
 
-- [ ] **Step 4: Finish the branch**
+- [ ] **Step 4: Plan Part 5**
 
-Use superpowers:finishing-a-development-branch: the tests pass (505), and the user chooses whether
-`spike/minecraft-entities` merges into `main`, as spikes 1 to 6 did.
+After run C the user chose to blend what Minecraft blends, as Part 5, with the translucent entity parts and animated
+textures ("How Part 4 went"); the spec's "Changes while designing Part 5" records the design, which the user approved
+after its deep review. Use superpowers:writing-plans to add Part 5's tasks, from Task 37 on, to this plan, verified as
+Parts 1 to 4 were; finishing the branch moves to Part 5's close. Changes to the spec found while planning go in its
+"Changes while planning Part 5".
 
 ## Found while planning Part 4
 
@@ -9571,3 +9574,25 @@ The spec's "Changes while planning Part 4" lists what planning settled in the de
   try stopped on Task 32's Expected paragraph, which named the target method in backticks: the plan runner takes every
   backticked word there as output to find, and the check doesn't print the method's name, so the paragraph names it
   without them.
+
+## How Part 4 went
+
+Part 4 ran on 2026-10-07, the user starting the games and playing run C.
+- **Before it ran,** the user asked for a read of this plan, the spec and their context: nothing in them changed.
+- **Ran as written:** Tasks 32 and 33, through the plan runner, each task's code identical to the verified clone's;
+  CyberCraft Tweaks 1.5.0 built with no warning, and 505 tests passed.
+- **Task 34** passed: Minecraft loaded 1.5.0 with no mixin error, and every emissive layer's batch came with full light
+  (the spider's and the enderman's eyes, the warden's layers and the charged creeper's armour, every vertex), the bodies
+  with none. The warden's layers came and went with their alpha, and the enderman's portal particles glowed as they
+  aged, which is Minecraft's own light.
+- **Run C (Task 35)** found the mark works, and what it can't do alone:
+  - the spider's and the enderman's eyes glow at night as in Minecraft (the user: "Perfecto");
+  - the warden's glowing layers and the charged creeper's armour glow, but drawn solid and far too bright, where
+    Minecraft blends the warden's and adds the armour: the user would "much rather blended".
+- **Found:** the creaking's and the copper golem's glowing eyes are `eyes`, not `entity_translucent_emissive`, as
+  "Minecraft 26.3's emissive render types" above, `MarkEmissive`'s comment and the mod's README have it. The mark takes
+  both render types, so 1.5.0 does what it meant to; 1.6.0's comment and README say it right.
+- **The user's choices after run C:** blend what Minecraft blends, as Part 5, before the spike closes; bring in the
+  translucent entity parts and animated textures; leave the swirl's scrolling out; and approach 1, the mod marking and
+  step B's forward list blending. The spec's "Changes while designing Part 5" records the design and its deep review.
+  So Task 36's last step plans Part 5 instead of finishing the branch.
