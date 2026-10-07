@@ -82,6 +82,7 @@ add_library(render_core STATIC
 	src/log/DriveLog.cpp
 	src/render/PendingSections.cpp
 	src/render/Hud.cpp
+	src/render/EntityTextures.cpp
 	src/Measurements.cpp
 	src/ProcessUsage.cpp
 	src/input/Scancodes.cpp
@@ -220,6 +221,7 @@ add_executable(render_tests
 	tests/TestWorldTable.cpp
 	tests/TestWorldShapes.cpp
 	tests/TestEntities.cpp
+	tests/TestEntityTextures.cpp
 	tools/mclink/DumpObj.cpp
 	tools/mclink/McLinkScript.cpp
 )
