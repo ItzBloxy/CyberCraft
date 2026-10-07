@@ -10,7 +10,7 @@
 #include <vector>
 
 // Drawing before DLSS (step 3): the parts that need no GPU. Our list goes just before the game's DLSS list, and draws
-// into the tagged scaling input colour, motion vectors and depth.
+// into the tagged scaling input colour, motion vectors and depth. Spike 7's step B puts its forward list there too.
 namespace cpmc
 {
 // The checks before every draw (the spec's "Safety"): the colour must be an R16G16B16A16_FLOAT render target, the
@@ -18,6 +18,14 @@ namespace cpmc
 // must be the same size, and plain 2D textures with one subresource each. aWhy says what failed.
 bool CheckPredlssTargets(const D3D12_RESOURCE_DESC& aColour, const D3D12_RESOURCE_DESC& aMotion, const D3D12_RESOURCE_DESC& aDepth,
                          std::string& aWhy);
+
+// Step B: DLSS's bias hint, which the forward list draws into, must be an R8_UNORM render target the colour's size, a
+// plain 2D texture with one subresource, as step 1 found it. aWhy says what failed.
+bool CheckHintTarget(const D3D12_RESOURCE_DESC& aHint, const D3D12_RESOURCE_DESC& aColour, std::string& aWhy);
+
+// Step B: the outline's width in render pixels. Minecraft 26.3 draws its own max(2.5, aOutputWidth / 1920 x 2.5) pixels
+// wide; DLSS scales the render width up to the output's. 2.5 while the output's width isn't known (0).
+float OutlinePixels(uint32_t aOutputWidth, uint32_t aRenderWidth);
 
 // The format of a depth-stencil view of a depth buffer in aFormat: D32_FLOAT for R32_TYPELESS or D32_FLOAT, UNKNOWN for
 // anything else.

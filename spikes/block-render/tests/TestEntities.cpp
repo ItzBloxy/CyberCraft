@@ -128,6 +128,15 @@ TEST(EntitiesAddTheOutlineInBuildMode)
 	CHECK_EQ(entities.Frame(kEye, true).draws.size(), size_t(1));  // nothing targeted
 }
 
+TEST(EntitiesSayWhenTheForwardPassHasWork)
+{
+	using Kind = EntityDraw::Kind;
+	CHECK(!ForwardDraws({ { 0, 3, 0, Kind::Model }, { 3, 36, 0, Kind::Crack } }, true));  // all into the G-buffer
+	CHECK(ForwardDraws({ { 0, 3, 0, Kind::Model }, { 3, 6, 4, Kind::Translucent } }, false));
+	CHECK(ForwardDraws({ { 0, 24, 0, Kind::Outline } }, true));
+	CHECK(!ForwardDraws({ { 0, 24, 0, Kind::Outline } }, false));  // set outline 0
+}
+
 TEST(EntitiesWithoutASceneUseMinecraftsEye)
 {
 	Entities         entities;

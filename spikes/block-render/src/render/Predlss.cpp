@@ -2,6 +2,7 @@
 
 #include "log/FrameLogData.h"
 
+#include <algorithm>
 #include <format>
 
 namespace cpmc
@@ -54,6 +55,25 @@ bool CheckPredlssTargets(const D3D12_RESOURCE_DESC& aColour, const D3D12_RESOURC
 		                   aColour.Height, aMotion.Width, aMotion.Height, aDepth.Width, aDepth.Height);
 	}
 	return aWhy.empty();
+}
+
+bool CheckHintTarget(const D3D12_RESOURCE_DESC& aHint, const D3D12_RESOURCE_DESC& aColour, std::string& aWhy)
+{
+	aWhy = Problem("bias hint", "is", aHint, DXGI_FORMAT_R8_UNORM, D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET, "a render target");
+	if (aWhy.empty() && (aHint.Width != aColour.Width || aHint.Height != aColour.Height))
+	{
+		aWhy = std::format("the bias hint is {} x {}, the colour {} x {}", aHint.Width, aHint.Height, aColour.Width, aColour.Height);
+	}
+	return aWhy.empty();
+}
+
+float OutlinePixels(uint32_t aOutputWidth, uint32_t aRenderWidth)
+{
+	if (aOutputWidth == 0)
+	{
+		return 2.5f;
+	}
+	return std::max(2.5f, float(aOutputWidth) / 1920.0f * 2.5f) * float(aRenderWidth) / float(aOutputWidth);
 }
 
 DXGI_FORMAT DepthViewFormat(DXGI_FORMAT aFormat)

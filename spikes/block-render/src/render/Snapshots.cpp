@@ -39,6 +39,16 @@ std::optional<uint32_t> Snapshots::TakeNewest()
 	return newest_;
 }
 
+bool Snapshots::Take(uint32_t aIndex)
+{
+	if (aIndex >= holds_.size())
+	{
+		return false;
+	}
+	++holds_[aIndex].onTheirWay;
+	return true;
+}
+
 void Snapshots::Submitted(uint32_t aIndex, uint64_t aFence)
 {
 	if (aIndex < holds_.size() && holds_[aIndex].onTheirWay > 0)

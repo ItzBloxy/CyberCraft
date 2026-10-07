@@ -34,6 +34,9 @@ struct EntityDraw
 	Kind     kind = Kind::Model;
 };
 
+// Whether step B's forward pass has any of aDraws to draw: translucent ones, or the outline while aOutline (set outline).
+bool ForwardDraws(const std::vector<EntityDraw>& aDraws, bool aOutline);
+
 struct EntityFrame
 {
 	Vec3d                   origin;    // a whole block, in Minecraft axes: every position is relative to it

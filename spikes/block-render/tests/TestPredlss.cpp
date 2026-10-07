@@ -66,6 +66,35 @@ TEST(PredlssRefusesOtherTargets)
 	CHECK(Refused(mipped, kMotion, kDepth, "the colour has more than one subresource"));
 }
 
+TEST(PredlssTakesTheBiasHintStep1Found)
+{
+	const D3D12_RESOURCE_DESC hint = Texture(DXGI_FORMAT_R8_UNORM, D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET | D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+	std::string               why;
+	CHECK(cpmc::CheckHintTarget(hint, kColour, why));
+	CHECK_STR(why, "");
+	D3D12_RESOURCE_DESC computeOnly = hint;
+	computeOnly.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+	CHECK(!cpmc::CheckHintTarget(computeOnly, kColour, why));
+	CHECK_STR(why, "the bias hint isn't a render target");
+	D3D12_RESOURCE_DESC wider = hint;
+	wider.Format = DXGI_FORMAT_R16_UNORM;
+	CHECK(!cpmc::CheckHintTarget(wider, kColour, why));
+	CHECK_STR(why, "the bias hint is R16_UNORM");
+	D3D12_RESOURCE_DESC smaller = hint;
+	smaller.Height = 480;
+	CHECK(!cpmc::CheckHintTarget(smaller, kColour, why));
+	CHECK_STR(why, "the bias hint is 1707 x 480, the colour 1707 x 960");
+}
+
+TEST(PredlssOutlineIsMinecraftsWidth)
+{
+	// 2.5 output pixels per 1920 of width, never under 2.5, scaled to the render width.
+	CHECK_NEAR(cpmc::OutlinePixels(2560, 1707), 2560.0 / 1920.0 * 2.5 * 1707.0 / 2560.0, 1e-5);  // about 2.2
+	CHECK_NEAR(cpmc::OutlinePixels(1280, 1280), 2.5, 1e-6);
+	CHECK_NEAR(cpmc::OutlinePixels(1920, 960), 1.25, 1e-6);
+	CHECK_NEAR(cpmc::OutlinePixels(0, 1707), 2.5, 1e-6);  // the output's width not seen yet
+}
+
 TEST(PredlssViewsTheDepthAsD32)
 {
 	CHECK(cpmc::DepthViewFormat(DXGI_FORMAT_R32_TYPELESS) == DXGI_FORMAT_D32_FLOAT);

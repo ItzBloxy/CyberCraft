@@ -10,6 +10,13 @@
 
 namespace cpmc::entities
 {
+bool ForwardDraws(const std::vector<EntityDraw>& aDraws, bool aOutline)
+{
+	return std::any_of(aDraws.begin(), aDraws.end(), [aOutline](const EntityDraw& aDraw) {
+		return aDraw.kind == EntityDraw::Kind::Translucent || (aOutline && aDraw.kind == EntityDraw::Kind::Outline);
+	});
+}
+
 void Entities::Scene(const link::SceneMessage& aScene)
 {
 	++scenes_;

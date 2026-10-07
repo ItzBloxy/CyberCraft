@@ -47,6 +47,29 @@ TEST(SnapshotsTakenTwiceWaitForBoth)
 	CHECK_EQ(snapshots.Writable(8).value_or(9), 0u);
 }
 
+TEST(SnapshotsHeldForTheFramesForwardList)
+{
+	Snapshots snapshots(2);
+	snapshots.Written(0);
+	CHECK_EQ(snapshots.TakeNewest().value_or(9), 0u);  // the frame's G-buffer list
+	CHECK(snapshots.Take(0));                          // and, for the same frame, its forward list
+	CHECK(!snapshots.Take(2));                         // no such snapshot
+	snapshots.Written(1);                              // the next frame
+	snapshots.Submitted(0, 5);                         // the G-buffer list went
+	CHECK(!snapshots.Writable(5).has_value());         // the forward list hasn't: it would read the next frame's
+	snapshots.Submitted(0, 8);                         // it went, the fence after it 8
+	CHECK(!snapshots.Writable(7).has_value());
+	CHECK_EQ(snapshots.Writable(8).value_or(9), 0u);
+	// A forward list that doesn't come holds it no longer than its G-buffer list.
+	snapshots.Written(0);
+	snapshots.TakeNewest();
+	snapshots.Take(0);
+	snapshots.Written(1);
+	snapshots.Submitted(0, 12);
+	snapshots.Abandon(0);
+	CHECK_EQ(snapshots.Writable(12).value_or(9), 0u);
+}
+
 TEST(SnapshotsAbandonedListHoldsNothing)
 {
 	Snapshots snapshots(2);
