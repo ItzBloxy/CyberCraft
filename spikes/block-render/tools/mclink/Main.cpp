@@ -9,22 +9,26 @@
 // drive puts it, as the plugin teleports V. With the city's ground, Night City's shape comes from a dump spike 1 saved.
 // Made-up NPCs go into SkyCraft's actor table, as the plugin writes the game's. It reports what Minecraft sends, its solid
 // blocks and its hits on the NPCs among it, which of those hits are a blast's own, as the plugin tells them by the NPCs'
-// feet, and when each blast's push would come; its entity textures, scenes and world-entity table; and refuses to start
-// while another game side uses the mapping.
+// feet, and when each blast's push would come; its entity textures, scenes and world-entity table, each batch's kind as
+// BlockRender draws it, and the atlas's patches, applied to a copy of the atlas as BlockRender keeps it; and refuses to
+// start while another game side uses the mapping.
 #include "DumpObj.h"
 #include "McLinkScript.h"
 
 #include "Coords.h"
+#include "entities/Entities.h"
 #include "link/Actors.h"
 #include "link/Combat.h"
 #include "link/Link.h"
 #include "link/Mapping.h"
 #include "log/DdsWriter.h"
+#include "render/Atlas.h"
 
 #include <Windows.h>
 #include <timeapi.h>
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
@@ -33,6 +37,8 @@
 #include <format>
 #include <fstream>
 #include <map>
+#include <optional>
+#include <set>
 #include <sstream>
 #include <thread>
 
@@ -70,13 +76,14 @@ bool WriteDds(const std::string& aPath, uint32_t aWidth, uint32_t aHeight, const
 }
 
 // Spike 7: a scene as step 0 reports it, with how many of each batch's vertices have block light 15, which the plugin
-// takes as glowing (the spec's "Step A: into the G-buffer").
+// takes as glowing (the spec's "Step A: into the G-buffer"), and the kind it draws each batch as (Part 5).
 struct SceneSummary
 {
 	struct Batch
 	{
-		SceneBatch batch;
-		uint32_t   glow = 0;
+		SceneBatch                 batch;
+		uint32_t                   glow = 0;
+		entities::EntityDraw::Kind kind = entities::EntityDraw::Kind::Model;
 	};
 	Vec3d              origin;
 	std::vector<Batch> batches;
@@ -86,7 +93,8 @@ struct SceneSummary
 	uint64_t           bytes = 0;        // the message's payload
 };
 
-SceneSummary Summarize(const SceneMessage& aScene)
+// aSeeThrough: whether each texture, by id, is see-through (entities::SeeThrough).
+SceneSummary Summarize(const SceneMessage& aScene, const std::map<uint32_t, bool>& aSeeThrough)
 {
 	SceneSummary summary;
 	summary.origin = aScene.origin;
@@ -100,6 +108,9 @@ SceneSummary Summarize(const SceneMessage& aScene)
 		{
 			entry.glow += (vertices[i].light & 0xFF) >= 15 ? 1 : 0;
 		}
+		const auto note = aSeeThrough.find(batch.texture);
+		entry.kind = entities::KindOf(batch, std::span<const Vertex>(vertices).subspan(batch.first, batch.count),
+		                              note != aSeeThrough.end() && note->second, 15);
 		summary.glow += entry.glow;
 		summary.translucent += (batch.flags & 1) ? batch.count : 0;
 		summary.batches.push_back(entry);
@@ -115,6 +126,9 @@ struct Report : LinkSink
 		atlasWidth = aAtlas.width;
 		atlasHeight = aAtlas.height;
 		atlas.assign(aAtlas.rgba.begin(), aAtlas.rgba.end());
+		std::string error;
+		built = AtlasFromRgba(aAtlas.width, aAtlas.height, aAtlas.rgba, error);  // its sprites at their first frames
+		patched.clear();
 		Say("atlas: {} x {}, {:.1f} MB", aAtlas.width, aAtlas.height, double(aAtlas.rgba.size()) / 1048576.0);
 	}
 
@@ -131,19 +145,39 @@ struct Report : LinkSink
 	{
 		Say("clear all");
 		textures.clear();  // SkyCraft sends its textures again, its ids from 1
+		seeThrough.clear();
+		built.reset();  // and its atlas
+		patched.clear();
 	}
 
-	// Spike 7: each entity texture, kept to be saved.
+	// Spike 7: each entity texture, kept to be saved, and whether it's see-through (Part 5).
 	void Texture(const TextureImage& aTexture) override
 	{
 		textures[aTexture.id] = { aTexture.width, aTexture.height, { aTexture.rgba.begin(), aTexture.rgba.end() } };
-		Say("texture {}: {} x {}, {:.2f} MB", aTexture.id, aTexture.width, aTexture.height, double(aTexture.rgba.size()) / 1048576.0);
+		seeThrough[aTexture.id] = entities::SeeThrough(aTexture.rgba);
+		Say("texture {}: {} x {}, {:.2f} MB{}", aTexture.id, aTexture.width, aTexture.height, double(aTexture.rgba.size()) / 1048576.0,
+		    seeThrough[aTexture.id] ? ", see-through" : "");
+	}
+
+	// Spike 7's Part 5: an animated sprite's frame, patched into the atlas as BlockRender patches its own.
+	void AtlasRegion(const AtlasPatch& aPatch) override
+	{
+		++patches;
+		patchBytes += aPatch.rgba.size();
+		if (built && !PatchAtlas(*built, aPatch.x, aPatch.y, aPatch.width, aPatch.height, aPatch.rgba).empty())
+		{
+			patched.insert({ aPatch.x, aPatch.y, aPatch.width, aPatch.height });
+		}
+		else
+		{
+			++patchesRefused;
+		}
 	}
 
 	// Spike 7: the newest scene, summed up, and the largest since the last report.
 	void Scene(const SceneMessage& aScene) override
 	{
-		scene = Summarize(aScene);
+		scene = Summarize(aScene, seeThrough);
 		++scenes;
 		sceneBytes += scene.bytes;
 		if (scene.bytes > largest.bytes)
@@ -217,7 +251,8 @@ struct Report : LinkSink
 	void Log(const std::string& aLine) override { Say("{}", aLine); }
 
 	// The section's blocks, as the extent of its vertices, and the atlas texel at the centre of its first triangle's UVs:
-	// inside that face's sprite, where a corner's UV can land on the next sprite over.
+	// inside that face's sprite, where a corner's UV can land on the next sprite over. Once patches have come (Part 5),
+	// how many of its triangles lie on an animated sprite, by the centre of their UVs.
 	void Describe(const SectionMesh& aMesh) const
 	{
 		if (aMesh.vertices.empty())
@@ -246,10 +281,27 @@ struct Report : LinkSink
 			const uint8_t* texel = &atlas[(size_t(y) * atlasWidth + x) * 4];
 			sample = std::format("; its first triangle's texel ({}, {}) is rgba({}, {}, {}, {})", x, y, texel[0], texel[1], texel[2], texel[3]);
 		}
+		std::string animated;
+		if (!patched.empty() && atlasWidth > 0 && atlasHeight > 0)
+		{
+			size_t on = 0;
+			for (size_t t = 0; t + 2 < aMesh.vertices.size(); t += 3)
+			{
+				const Vertex*  corner = aMesh.vertices.data() + t;
+				const float    u = (corner[0].u + corner[1].u + corner[2].u) / 3.0f;
+				const float    v = (corner[0].v + corner[1].v + corner[2].v) / 3.0f;
+				const uint32_t x = std::min(uint32_t(std::clamp(u, 0.0f, 1.0f) * atlasWidth), atlasWidth - 1);
+				const uint32_t y = std::min(uint32_t(std::clamp(v, 0.0f, 1.0f) * atlasHeight), atlasHeight - 1);
+				on += std::any_of(patched.begin(), patched.end(), [x, y](const std::array<uint32_t, 4>& aRect) {
+					return x >= aRect[0] && x - aRect[0] < aRect[2] && y >= aRect[1] && y - aRect[1] < aRect[3];
+				}) ? 1 : 0;
+			}
+			animated = std::format("; {} of its {} triangles on animated sprites", on, aMesh.vertices.size() / 3);
+		}
 		const std::string dropped = aMesh.translucentDropped ? std::format(" ({} translucent triangles dropped)", aMesh.translucentDropped) : "";
-		Say("section {} {} {}: {} vertices{}, blocks x {:.2f} to {:.2f}, y {:.2f} to {:.2f}, z {:.2f} to {:.2f}{}", aMesh.x, aMesh.y, aMesh.z,
+		Say("section {} {} {}: {} vertices{}, blocks x {:.2f} to {:.2f}, y {:.2f} to {:.2f}, z {:.2f} to {:.2f}{}{}", aMesh.x, aMesh.y, aMesh.z,
 		    aMesh.vertices.size(), dropped, aMesh.x * 16.0 + low[0], aMesh.x * 16.0 + high[0], aMesh.y * 16.0 + low[1],
-		    aMesh.y * 16.0 + high[1], aMesh.z * 16.0 + low[2], aMesh.z * 16.0 + high[2], sample);
+		    aMesh.y * 16.0 + high[1], aMesh.z * 16.0 + low[2], aMesh.z * 16.0 + high[2], sample, animated);
 	}
 
 	std::vector<uint8_t> atlas;
@@ -277,6 +329,13 @@ struct Report : LinkSink
 	uint64_t                        scenes = 0;
 	uint64_t                        sceneBytes = 0;
 	WorldTable                      world;  // the newest
+	// Part 5
+	std::map<uint32_t, bool>          seeThrough;  // each texture's, by id
+	std::optional<cpmc::Atlas>        built;       // the atlas as BlockRender keeps it, every patch applied
+	std::set<std::array<uint32_t, 4>> patched;     // the rectangles patched since the atlas came: x, y, width, height
+	uint64_t                          patches = 0;  // that came, since the start
+	uint64_t                          patchBytes = 0;
+	uint64_t                          patchesRefused = 0;  // PatchAtlas had no atlas for, or found outside it
 };
 
 // Spike 7's step 0: the newest scene, batch by batch, and the world-entity table, record by record.
@@ -293,7 +352,7 @@ void PrintScene(const Report& aReport)
 		                         : texture != aReport.textures.end() ? std::format("texture {} ({} x {})", batch.texture, texture->second.width,
 		                                                                            texture->second.height)
 		                                                               : std::format("texture {} (not received)", batch.texture);
-		Say("  batch {}: {}, {} vertices from {}{}, {} glow", b, what, batch.count, batch.first, (batch.flags & 1) ? ", translucent" : "",
+		Say("  batch {}: {}, {} vertices from {}{}, {} glow", b, what, batch.count, batch.first, entities::KindWords(batch, s.batches[b].kind),
 		    s.batches[b].glow);
 	}
 	Say("world: {}", WorldWords(aReport.world));
@@ -362,6 +421,8 @@ void PrintStatus(const Link& aLink, const Report& aReport, const Vec3d& aFeet)
 	    "{} updates found it mid-write{}",
 	    s.messages[proto::kRenScene], s.messages[proto::kRenTexture], s.entitiesBeforeAtlas, aReport.textures.size(), s.worldEntities,
 	    s.worldLeftOut, s.worldTorn, s.outline ? "; an outline" : "");
+	Say("atlas patches: {} ({:.2f} MB), {} rectangles patched, {} refused; {} from before the atlas, skipped", aReport.patches,
+	    double(aReport.patchBytes) / 1048576.0, aReport.patched.size(), aReport.patchesRefused, s.patchesBeforeAtlas);
 	Say("drive: {}, teleport {} applied of {}; V's eye height {:.2f}; render delay {:.1f} ms, {} frames waited for a tick, {} targets skipped",
 	    DriveStateName(s.drive), s.teleportAck, s.teleportSeq, s.eyeHeight, s.renderDelayMs, s.waitedFrames, s.driveSkipped);
 	Say("ground: the {}, epoch {}; {}; {} batches read ({} unread), {} regions sent ({} triangles); the worker: {} threads, {} regions "
@@ -488,6 +549,8 @@ int main(int aArgc, char** aArgv)
 	uint64_t reportedHuds = 0;
 	uint64_t reportedScenes = 0;
 	uint64_t reportedSceneBytes = 0;
+	uint64_t reportedPatches = 0;
+	uint64_t reportedPatchBytes = 0;
 	for (double tick = Now();; tick += kFrame)
 	{
 		const double now = Now();
@@ -565,12 +628,19 @@ int main(int aArgc, char** aArgv)
 				    double(textureBytes) / 1048576.0, WorldWords(report.world));
 				report.largest = {};
 			}
+			if (report.patches != reportedPatches)
+			{
+				Say("patches: {:.0f}/s, {:.2f} MB/s; {} rectangles patched since the atlas came", double(report.patches - reportedPatches) / seconds,
+				    double(report.patchBytes - reportedPatchBytes) / 1048576.0 / seconds, report.patched.size());
+			}
 			lastReport = now;
 			reportedFrames = state.minecraftFrames;
 			reportedBytes = state.drainedBytes;
 			reportedHuds = report.huds;
 			reportedScenes = report.scenes;
 			reportedSceneBytes = report.sceneBytes;
+			reportedPatches = report.patches;
+			reportedPatchBytes = report.patchBytes;
 		}
 
 		if (next >= script->size())

@@ -104,6 +104,15 @@ void SortBackToFront(std::vector<Vertex>& aVertices, uint32_t aFirst, uint32_t a
 	std::copy(sorted.begin(), sorted.end(), aVertices.begin() + aFirst);
 }
 
+std::string KindWords(const link::SceneBatch& aBatch, EntityDraw::Kind aKind)
+{
+	if ((aBatch.flags & 1) == 0)
+	{
+		return {};
+	}
+	return aKind == EntityDraw::Kind::Model ? std::string(", translucent, drawn as a model") : std::format(", {}", KindName(aKind));
+}
+
 void Entities::Scene(const link::SceneMessage& aScene)
 {
 	++scenes_;
@@ -254,12 +263,8 @@ std::vector<std::string> Entities::Lines(uint32_t aGlowLight, const std::map<uin
 		{
 			glowing += (vertices_[i].light & 0xFF) >= aGlowLight ? 1 : 0;
 		}
-		// A translucent batch's kind: a particle's, a blended or an additive layer's, or a marked layer that's opaque.
-		const EntityDraw::Kind kind = BatchKind(batch, aGlowLight);
-		const std::string      drawn = (batch.flags & 1) == 0            ? std::string()
-		                               : kind == EntityDraw::Kind::Model ? std::string(", translucent, drawn as a model")
-		                                                                 : std::format(", {}", KindName(kind));
-		lines.push_back(std::format("  batch {}: {}, {} vertices from {}{}, {} glowing", b, texture, batch.count, batch.first, drawn, glowing));
+		lines.push_back(std::format("  batch {}: {}, {} vertices from {}{}, {} glowing", b, texture, batch.count, batch.first,
+		                            KindWords(batch, BatchKind(batch, aGlowLight)), glowing));
 	}
 	lines.push_back("world: " + link::WorldWords(world_));
 	return lines;

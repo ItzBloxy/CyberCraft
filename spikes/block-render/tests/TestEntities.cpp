@@ -196,6 +196,17 @@ TEST(EntitiesKnowEachKindOfLayer)
 	CHECK_STR(KindName(Kind::Additive), "additive");
 }
 
+TEST(EntitiesNameEachBatchsKind)
+{
+	using Kind = EntityDraw::Kind;
+	const link::SceneBatch translucent{ 4, 0, 6, 1 };
+	CHECK_STR(KindWords({ 4, 0, 6, 0 }, Kind::Model), "");  // not translucent: nothing said
+	CHECK_STR(KindWords(translucent, Kind::Translucent), ", translucent");
+	CHECK_STR(KindWords(translucent, Kind::Blended), ", blended");
+	CHECK_STR(KindWords(translucent, Kind::Additive), ", additive");
+	CHECK_STR(KindWords(translucent, Kind::Model), ", translucent, drawn as a model");
+}
+
 TEST(EntitiesSortLayersBackToFront)
 {
 	// Three quads at x 0, 1 and 2, seen from x 5: the farthest, at 0, first. Then two triangles by their own centres.

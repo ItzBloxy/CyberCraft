@@ -63,6 +63,10 @@ EntityDraw::Kind KindOf(const link::SceneBatch& aBatch, std::span<const Vertex> 
 // isn't a multiple of 6. Positions and aEye alike are relative to the frame's origin. Ties keep their order.
 void SortBackToFront(std::vector<Vertex>& aVertices, uint32_t aFirst, uint32_t aCount, const Vec3d& aEye);
 
+// How the entities request and mclink tell a batch drawn as aKind: nothing for one that isn't translucent; for one
+// that is, ", translucent" (a particle), ", blended", ", additive", or ", translucent, drawn as a model".
+std::string KindWords(const link::SceneBatch& aBatch, EntityDraw::Kind aKind);
+
 struct EntityFrame
 {
 	Vec3d                   origin;    // a whole block, in Minecraft axes: every position is relative to it
