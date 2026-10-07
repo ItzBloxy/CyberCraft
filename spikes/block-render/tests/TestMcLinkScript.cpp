@@ -12,7 +12,7 @@ TEST(ScriptsInTheRepoParse)
 {
 	// The tests run in spikes/block-render, where the scripts are.
 	for (const char* name : { "step1.txt", "again.txt", "eye.txt", "drive.txt", "relink.txt", "city.txt", "npcs.txt", "hurts.txt", "blasts.txt",
-	                          "entities.txt", "spawn.txt" })
+	                          "entities.txt", "spawn.txt", "emissive.txt" })
 	{
 		std::ifstream     in(std::string("tools/mclink/") + name, std::ios::binary);
 		std::stringstream text;

@@ -1,0 +1,32 @@
+# Spike 7's Part 4: the layers Minecraft draws emissive, sent with full light by CyberCraft Tweaks 1.5.0, against
+# SkyCraft's real mod, without the game. At step 0's spot, one mob of each emissive render type stands 5 or 6 blocks
+# ahead of the stand-in V, who looks at them: a spider and an enderman (eyes), a warden (entity_translucent_emissive)
+# and a charged creeper (energy_swirl). Each has its AI off, so none moves, attacks or explodes, and no loot, and is
+# tagged sp7. Every vertex of each emissive layer's batch should glow (block light 15), and the bodies' none. The end
+# kills them, leaving nothing. Start Minecraft first; this waits for its world.
+status
+wait-world 180
+ground city
+at 880.5 6.14 2007.5
+look 270 0
+dump E:\Cyberpunk2077\red4ext\plugins\PhysXProbe\dumps\2026-10-01_14-37-07\collision.obj
+link on
+wait-ground 30
+wait 2
+type /gamemode creative
+scene
+type /execute rotated ~ 0 positioned ^3 ^ ^5 run summon minecraft:spider ~ ~ ~ {Tags:["sp7"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty",NoAI:1b}
+type /execute rotated ~ 0 positioned ^1 ^ ^5 run summon minecraft:enderman ~ ~ ~ {Tags:["sp7"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty",NoAI:1b}
+type /execute rotated ~ 0 positioned ^-1.5 ^ ^6 run summon minecraft:warden ~ ~ ~ {Tags:["sp7"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty",NoAI:1b}
+type /execute rotated ~ 0 positioned ^-4 ^ ^5 run summon minecraft:creeper ~ ~ ~ {Tags:["sp7"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty",NoAI:1b,powered:1b}
+wait 3
+scene
+wait 1
+scene
+status
+# The clear: a killed mob takes a second to die, and its puffs up to 5 s more, so the last scene, 7 s on, is empty.
+type /kill @e[tag=sp7]
+wait 7
+scene
+status
+quit

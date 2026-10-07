@@ -64,5 +64,7 @@ the mod, nothing is revealed behind them.
 `spikes/block-render/tools/mclink/blast.txt` blows up TNT on Night City's ground at a fresh spot: with the mod, the solid
 blocks around it are the same afterwards as before. `spikes/block-render/tools/mclink/blasts.txt` sets Minecraft's
 player's health to half, all and a twentieth of its max, and reads each back with `/data`.
+`spikes/block-render/tools/mclink/emissive.txt` summons a spider, an enderman, a warden and a charged creeper: with the
+mod, every vertex of their emissive layers' batches glows (block light 15), and their bodies' don't.
 `spikes/block-render/tools/mclink/entities.txt` prints each scene's batches in the order they come: with the mod, a
 villager's body comes before its biome's clothes, those before its profession's, and those before its level's badge.
