@@ -166,6 +166,20 @@ TEST(EntitiesSayWhenTheForwardPassHasWork)
 	CHECK(ForwardDraws({ { 0, 3, 0, Kind::Model }, { 3, 6, 4, Kind::Additive } }, false));
 }
 
+TEST(EntitiesUnblendWithBlendOff)
+{
+	using Kind = EntityDraw::Kind;
+	std::vector<EntityDraw> draws = { { 0, 6, 4, Kind::Blended }, { 6, 6, 5, Kind::Additive }, { 12, 6, 12, Kind::Translucent },
+		                              { 18, 24, 0, Kind::Outline }, { 42, 36, 0, Kind::Crack } };
+	UnblendDraws(draws);
+	CHECK(draws[0].kind == Kind::Model);
+	CHECK(draws[1].kind == Kind::Model);
+	CHECK(draws[2].kind == Kind::Translucent);  // particles are as they were
+	CHECK(draws[3].kind == Kind::Outline);
+	CHECK(draws[4].kind == Kind::Crack);
+	CHECK(!ForwardDraws({ draws[0], draws[1] }, false));  // nothing left for the forward pass
+}
+
 TEST(EntitiesTellASeeThroughTexture)
 {
 	CHECK(SeeThrough(Texels(343, 0, 46)));     // a vex's share: 46 of 343

@@ -47,8 +47,9 @@ namespace cpmc
 //   targets, its end by its transitions, and the states our barriers start from by both. Spike 7 draws Minecraft's
 //   entities in the same list, after the blocks: the newest snapshot's models, then their cracks, then their depth.
 //   Its step B puts a second list of ours, the forward list, just before that frame's DLSS list, with the same
-//   snapshot, camera and jitter: the translucent particles and the outline, blended into the tagged colour, then DLSS's
-//   bias hint under the particles, each tested against the tagged depth.
+//   snapshot, camera and jitter: the translucent particles, Part 5's blended and additive entity layers and the outline,
+//   blended into the tagged colour, then DLSS's bias hint under the particles and the layers, each tested against the
+//   tagged depth.
 class Renderer : public HookEvents
 {
 public:
@@ -63,8 +64,8 @@ public:
 	const Atlas* AtlasData() const;
 	bool         ReloadShaders(std::string& aError);
 	// brightness, tolerance, cull, origin.x/y/z; for predlss, exposure, jittersign and mvsign; for gbuffer, stencil,
-	// metalness, roughness, materialb, gbmotion and gbdepth; spike 7's entities, glow and glowlight, and step B's dlsshint
-	// and outline
+	// metalness, roughness, materialb, gbmotion and gbdepth; spike 7's entities, glow and glowlight, step B's dlsshint
+	// and outline, and Part 5's blend
 	bool         Set(std::string_view aName, double aValue, std::string& aError);
 	void         UploadSection(const SectionPos& aSection, std::vector<Vertex> aVertices);  // no vertices: remove it
 	void         ClearSections();  // every section, and every upload waiting
@@ -149,6 +150,7 @@ public:
 		uint64_t    forwardSkipped = 0;          // frames whose forward list couldn't be drawn, in the last second
 		std::string forwardLastSkip;             // why, the last time
 		double      forwardGpuMsAverage = -1.0;  // the forward list, on the GPU; below 0: none drawn
+		bool        blendOn = true;              // Part 5's set blend
 	};
 	Stats TakeStats();  // since the last call
 	void  Shutdown();   // waits for the GPU, then releases everything
@@ -247,6 +249,15 @@ private:
 	struct SnapshotGpu;
 	void DrawEntities(ID3D12GraphicsCommandList* aList, const CameraFrame& aCamera, uint64_t aCompleted, const SnapshotGpu& aSnapshot,
 	                  entities::EntityDraw::Kind aKind, bool aCount);
+	// Part 5: or those of the kinds aKinds has, in the snapshot's order, each with its kind's pipeline, set only when it
+	// changes (null: the one set already).
+	struct KindPipeline
+	{
+		entities::EntityDraw::Kind kind = entities::EntityDraw::Kind::Model;
+		ID3D12PipelineState*       pipeline = nullptr;
+	};
+	void DrawEntities(ID3D12GraphicsCommandList* aList, const CameraFrame& aCamera, uint64_t aCompleted, const SnapshotGpu& aSnapshot,
+	                  std::span<const KindPipeline> aKinds, bool aCount);
 	// Spike 7: the textures waiting, into the one buffer, grown first if they don't fit, recorded into Upload's list.
 	void UploadEntityTextures(uint64_t aReady, std::vector<gpu::ComPtr<ID3D12Resource>>& aStaging, bool& aFailed);
 	void CopyEntities();  // spike 7: Update's, the frame's geometry into a free snapshot
@@ -433,11 +444,14 @@ private:
 	};
 	bool                                                       outline_ = true;  // set outline: the outline in build mode
 	int                                                        dlssHint_ = 1;    // set dlsshint: 1 under the particles, 0 nowhere
+	bool                                                       blend_ = true;    // Part 5's set blend: blended layers before DLSS
 	std::optional<Forward>                                     forward_;
 	std::atomic<const void*>                                   forwardList_{ nullptr };  // forward_->list, read without the lock
 	gpu::ComPtr<ID3D12PipelineState>                           translucentPipeline_;
 	gpu::ComPtr<ID3D12PipelineState>                           outlinePipeline_;
 	gpu::ComPtr<ID3D12PipelineState>                           hintPipeline_;
+	gpu::ComPtr<ID3D12PipelineState>                           blendedPipeline_;   // Part 5
+	gpu::ComPtr<ID3D12PipelineState>                           additivePipeline_;
 	bool                                                       forwardReversed_ = false;
 	bool                                                       forwardPipelinesFailed_ = false;  // until the shaders are reloaded
 	std::array<gpu::ComPtr<ID3D12CommandAllocator>, kSlots>    forwardAllocators_;

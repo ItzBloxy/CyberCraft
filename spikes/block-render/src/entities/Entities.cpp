@@ -38,6 +38,17 @@ bool ForwardDraws(const std::vector<EntityDraw>& aDraws, bool aOutline)
 	});
 }
 
+void UnblendDraws(std::vector<EntityDraw>& aDraws)
+{
+	for (EntityDraw& draw : aDraws)
+	{
+		if (draw.kind == EntityDraw::Kind::Blended || draw.kind == EntityDraw::Kind::Additive)
+		{
+			draw.kind = EntityDraw::Kind::Model;
+		}
+	}
+}
+
 bool SeeThrough(std::span<const uint8_t> aRgba)
 {
 	uint64_t kept = 0;    // texels that aren't clear

@@ -44,6 +44,10 @@ const char* KindName(EntityDraw::Kind aKind);
 // aOutline (set outline).
 bool ForwardDraws(const std::vector<EntityDraw>& aDraws, bool aOutline);
 
+// Part 5's set blend 0: every blended and additive draw of aDraws drawn as a model again, a cut-out in the G-buffer, as
+// BlockRender 0.21.0 drew every entity layer.
+void UnblendDraws(std::vector<EntityDraw>& aDraws);
+
 // Part 5: bit 7 of an entity vertex's flags, which CyberCraft Tweaks 1.6.0 sets on a layer Minecraft adds rather than
 // blends. SkyCraft keys a batch's flags in 8 bits, and its own flags leave this one free.
 constexpr uint32_t kFlagAdditive = 1u << 7;

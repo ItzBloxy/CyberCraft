@@ -252,6 +252,8 @@ bool Renderer::ReloadShaders(std::string& aError)
 	translucentPipeline_.Reset();
 	outlinePipeline_.Reset();
 	hintPipeline_.Reset();
+	blendedPipeline_.Reset();
+	additivePipeline_.Reset();
 	forwardPipelinesFailed_ = false;
 	hudShadersFailed_ = false;
 	return true;
@@ -446,6 +448,16 @@ bool Renderer::Set(std::string_view aName, double aValue, std::string& aError)
 			return false;
 		}
 		outline_ = aValue == 1.0;
+		return true;
+	}
+	if (aName == "blend")
+	{
+		if (aValue != 0.0 && aValue != 1.0)
+		{
+			aError = "blend is 1 to blend the entity layers Minecraft blends before DLSS, or 0 to draw them as cut-outs";
+			return false;
+		}
+		blend_ = aValue == 1.0;
 		return true;
 	}
 	aError = std::format("there's no setting called \"{}\"", aName);
@@ -1004,24 +1016,40 @@ bool Renderer::EnsureForwardPipelines(bool aReversed)
 	hint.BlendState.RenderTarget[0] = {};
 	hint.BlendState.RenderTarget[0].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_RED;
 	hint.RTVFormats[0] = DXGI_FORMAT_R8_UNORM;
+	// Part 5: the entity layers Minecraft blends, blended as the particles with their own shader; and those it adds, their
+	// colour added, ONE to ONE, as Minecraft's ADDITIVE.
+	D3D12_GRAPHICS_PIPELINE_STATE_DESC layers = particles;
+	layers.PS = { shaders_->blended.data(), shaders_->blended.size() };
+	D3D12_GRAPHICS_PIPELINE_STATE_DESC added = particles;
+	added.PS = { shaders_->additive.data(), shaders_->additive.size() };
+	added.BlendState.RenderTarget[0].SrcBlend = D3D12_BLEND_ONE;
+	added.BlendState.RenderTarget[0].DestBlend = D3D12_BLEND_ONE;
 	gpu::ComPtr<ID3D12PipelineState> particlePipeline;
 	gpu::ComPtr<ID3D12PipelineState> outlinePipeline;
 	gpu::ComPtr<ID3D12PipelineState> hintPipeline;
+	gpu::ComPtr<ID3D12PipelineState> blendedPipeline;
+	gpu::ComPtr<ID3D12PipelineState> additivePipeline;
 	if (FAILED(device_->CreateGraphicsPipelineState(&particles, IID_PPV_ARGS(&particlePipeline))) ||
 	    FAILED(device_->CreateGraphicsPipelineState(&outline, IID_PPV_ARGS(&outlinePipeline))) ||
-	    FAILED(device_->CreateGraphicsPipelineState(&hint, IID_PPV_ARGS(&hintPipeline))))
+	    FAILED(device_->CreateGraphicsPipelineState(&hint, IID_PPV_ARGS(&hintPipeline))) ||
+	    FAILED(device_->CreateGraphicsPipelineState(&layers, IID_PPV_ARGS(&blendedPipeline))) ||
+	    FAILED(device_->CreateGraphicsPipelineState(&added, IID_PPV_ARGS(&additivePipeline))))
 	{
 		forwardPipelinesFailed_ = true;
-		log_.Push("renderer: couldn't create the forward list's pipelines, so Minecraft's translucent particles and the outline aren't "
-		          "drawn; everything else still is");
+		log_.Push("renderer: couldn't create the forward list's pipelines, so Minecraft's translucent particles, its blended layers and "
+		          "the outline aren't drawn; everything else still is");
 		return false;
 	}
 	particlePipeline->SetName(L"BlockRender translucent particles pipeline");
 	outlinePipeline->SetName(L"BlockRender outline pipeline");
 	hintPipeline->SetName(L"BlockRender bias hint pipeline");
+	blendedPipeline->SetName(L"BlockRender blended layers pipeline");
+	additivePipeline->SetName(L"BlockRender additive layers pipeline");
 	translucentPipeline_ = particlePipeline;
 	outlinePipeline_ = outlinePipeline;
 	hintPipeline_ = hintPipeline;
+	blendedPipeline_ = blendedPipeline;
+	additivePipeline_ = additivePipeline;
 	forwardReversed_ = aReversed;
 	return true;
 }
@@ -1392,6 +1420,10 @@ void Renderer::CopyEntities()
 			++stats_.snapshotCut;
 		}
 	}
+	if (!blend_)
+	{
+		entities::UnblendDraws(snapshot.draws);  // set blend 0: every entity layer a cut-out in the G-buffer, as before Part 5
+	}
 	snapshotRing_.Written(*index);
 	pendingEntities_.reset();
 }
@@ -1427,6 +1459,7 @@ Renderer::Stats Renderer::TakeStats()
 	stats.entityGpuMsAverage = entityGpuSamples_ ? entityGpuMsSum_ / double(entityGpuSamples_) : -1.0;
 	stats.outlineOn = outline_;
 	stats.dlssHint = dlssHint_;
+	stats.blendOn = blend_;
 	stats.forwardGpuMsAverage = forwardGpuSamples_ ? forwardGpuMsSum_ / double(forwardGpuSamples_) : -1.0;
 	stats_ = {};
 	gpuMsSum_ = frameMsSum_ = updateMsSum_ = hudCopyMsSum_ = hudGpuMsSum_ = entityGpuMsSum_ = forwardGpuMsSum_ = 0.0;
@@ -1508,6 +1541,13 @@ void Renderer::DrawSections(ID3D12GraphicsCommandList* aList, const CameraFrame&
 void Renderer::DrawEntities(ID3D12GraphicsCommandList* aList, const CameraFrame& aCamera, uint64_t aCompleted, const SnapshotGpu& aSnapshot,
                             entities::EntityDraw::Kind aKind, bool aCount)
 {
+	const KindPipeline kinds[] = { { aKind, nullptr } };
+	DrawEntities(aList, aCamera, aCompleted, aSnapshot, kinds, aCount);
+}
+
+void Renderer::DrawEntities(ID3D12GraphicsCommandList* aList, const CameraFrame& aCamera, uint64_t aCompleted, const SnapshotGpu& aSnapshot,
+                            std::span<const KindPipeline> aKinds, bool aCount)
+{
 	// The snapshot's positions are relative to its origin, a whole block: camera-relative, as a section's corner is.
 	const Vec3d     corner = WorldFromMc(aSnapshot.origin);
 	EntityConstants constants{};
@@ -1516,9 +1556,11 @@ void Renderer::DrawEntities(ID3D12GraphicsCommandList* aList, const CameraFrame&
 	constants.offset[2] = float(corner.z - aCamera.origin.z);
 	aList->SetGraphicsRootShaderResourceView(2, aSnapshot.buffer->GetGPUVirtualAddress());
 	aList->SetGraphicsRootShaderResourceView(5, (entityTextures_ ? entityTextures_ : atlasBuffer_)->GetGPUVirtualAddress());
+	ID3D12PipelineState* bound = nullptr;  // the pipeline this call set last
 	for (const entities::EntityDraw& draw : aSnapshot.draws)
 	{
-		if (draw.kind != aKind)
+		const auto kind = std::find_if(aKinds.begin(), aKinds.end(), [&draw](const KindPipeline& aEntry) { return aEntry.kind == draw.kind; });
+		if (kind == aKinds.end())
 		{
 			continue;
 		}
@@ -1538,6 +1580,11 @@ void Renderer::DrawEntities(ID3D12GraphicsCommandList* aList, const CameraFrame&
 			constants.textureStart = place->start;
 			constants.textureWidth = place->width;
 			constants.textureHeight = place->height;
+		}
+		if (kind->pipeline && kind->pipeline != bound)
+		{
+			aList->SetPipelineState(kind->pipeline);
+			bound = kind->pipeline;
 		}
 		aList->SetGraphicsRoot32BitConstants(1, 8, &constants, 0);
 		// An outline's vertices are its edges' ends, a pair an edge, from each of which OutlineVS makes six.
@@ -2281,20 +2328,25 @@ ID3D12CommandList* Renderer::RecordForward(ID3D12CommandQueue* aQueue, ID3D12Gra
 	list->SetGraphicsRootConstantBufferView(0, forwardConstants_->GetGPUVirtualAddress() + slot * kConstantsStride);
 	list->SetGraphicsRootShaderResourceView(3, atlasBuffer_->GetGPUVirtualAddress());
 	list->SetGraphicsRootShaderResourceView(4, atlasBuffer_->GetGPUVirtualAddress());  // t2: only step 2's shader reads it
-	// The translucent particles, then the outline, blended into the colour; then the bias hint under the particles.
+	// The translucent particles and Part 5's blended and additive layers, in the scene's order, each kind with its pipeline;
+	// then the outline, blended into the colour; then the bias hint under the particles and the layers.
+	using Kind = entities::EntityDraw::Kind;
 	const SnapshotGpu& shot = snapshots_[forward.snapshot];
 	original.omSetRenderTargets(list, 1, &colourRtv, FALSE, &dsv);
-	DrawEntities(list, forward.camera, completed, shot, entities::EntityDraw::Kind::Translucent, true);
+	const KindPipeline layers[] = { { Kind::Translucent, translucentPipeline_.Get() }, { Kind::Blended, blendedPipeline_.Get() },
+		                            { Kind::Additive, additivePipeline_.Get() } };
+	DrawEntities(list, forward.camera, completed, shot, layers, true);
 	if (outline_)
 	{
 		list->SetPipelineState(outlinePipeline_.Get());
-		DrawEntities(list, forward.camera, completed, shot, entities::EntityDraw::Kind::Outline, false);
+		DrawEntities(list, forward.camera, completed, shot, Kind::Outline, false);
 	}
 	if (hintState)
 	{
 		list->SetPipelineState(hintPipeline_.Get());
 		original.omSetRenderTargets(list, 1, &hintRtv, FALSE, &dsv);
-		DrawEntities(list, forward.camera, completed, shot, entities::EntityDraw::Kind::Translucent, false);
+		const KindPipeline hinted[] = { { Kind::Translucent, nullptr }, { Kind::Blended, nullptr }, { Kind::Additive, nullptr } };
+		DrawEntities(list, forward.camera, completed, shot, hinted, false);
 	}
 	const std::vector<D3D12_RESOURCE_BARRIER> back = Barriers(MovesBack(into));
 	if (!back.empty())
