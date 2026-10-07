@@ -1913,7 +1913,7 @@ villager's badge first.
   `minecraft/cybercraft-tweaks/src/main/resources/fabric.mod.json`, `minecraft/cybercraft-tweaks/README.md`,
   `tools/mclink/entities.txt`
 
-- [ ] **Step 1: Write `minecraft/cybercraft-tweaks/src/main/java/dev/cybercraft/tweaks/mixin/KeepDrawOrder.java`**
+- [x] **Step 1: Write `minecraft/cybercraft-tweaks/src/main/java/dev/cybercraft/tweaks/mixin/KeepDrawOrder.java`**
 
 ```java
 package dev.cybercraft.tweaks.mixin;
@@ -1996,7 +1996,7 @@ public abstract class KeepDrawOrder {
 }
 ```
 
-- [ ] **Step 2: Edit `minecraft/cybercraft-tweaks/src/main/resources/cybercraft_tweaks.mixins.json` to add it, on the client**
+- [x] **Step 2: Edit `minecraft/cybercraft-tweaks/src/main/resources/cybercraft_tweaks.mixins.json` to add it, on the client**
 
 ```json
   "mixins": ["NoBlastBlocks", "NoDigging", "SetHealth"],
@@ -2006,7 +2006,7 @@ public abstract class KeepDrawOrder {
   "client": ["KeepDrawOrder"],
 ```
 
-- [ ] **Step 3: Edit `minecraft/cybercraft-tweaks/src/main/resources/fabric.mod.json` for 1.4.0**
+- [x] **Step 3: Edit `minecraft/cybercraft-tweaks/src/main/resources/fabric.mod.json` for 1.4.0**
 
 ```json
   "version": "1.3.0",
@@ -2019,7 +2019,7 @@ public abstract class KeepDrawOrder {
   "description": "SkyCraft adjusted for Cyberpunk 2077's Night City: nothing digs into the game's ground, so blasts leave no blocks floating above it; V's health share carries into Minecraft's player as build mode starts; and what SkyCraft sends of Minecraft's entities keeps their layers in Minecraft's draw order.",
 ```
 
-- [ ] **Step 4: Edit `minecraft/cybercraft-tweaks/README.md` to say what it does**
+- [x] **Step 4: Edit `minecraft/cybercraft-tweaks/README.md` to say what it does**
 
 ```markdown
   max health, and Minecraft's log says so.
@@ -2044,7 +2044,7 @@ player's health to half, all and a twentieth of its max, and reads each back wit
 villager's body comes before its biome's clothes, those before its profession's, and those before its level's badge.
 ```
 
-- [ ] **Step 5: Build CyberCraft Tweaks, and check that SkyCraft's exporter has what the mixin takes**
+- [x] **Step 5: Build CyberCraft Tweaks, and check that SkyCraft's exporter has what the mixin takes**
 
 ```bash
 cd /d/Cyberpunk-Minecraft/minecraft/cybercraft-tweaks && out=$(bash build.sh 2>&1); echo "$out" | tail -2; \
@@ -2058,7 +2058,7 @@ Expected: `built build/cybercraft-tweaks-1.4.0.jar against 26.3-`, then `warning
 `java.util.Map<java.lang.Long, dev.skycraft.client.render.AvatarExporter$Batch> batches;`,
 `AvatarExporter$Batch batch(int, int, int);` and `OrderedSubmitNodeCollector order(int);`.
 
-- [ ] **Step 6: Edit `tools/mclink/entities.txt` to type creative once the loading screen has closed**
+- [x] **Step 6: Edit `tools/mclink/entities.txt` to type creative once the loading screen has closed**
 
 ```text
 type /gamemode creative
@@ -2072,7 +2072,7 @@ wait 2
 type /gamemode creative
 ```
 
-- [ ] **Step 7: Build and run the tests; they must pass**
+- [x] **Step 7: Build and run the tests; they must pass**
 
 The tests parse step 0's script.
 ```bash
@@ -2083,7 +2083,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `465 test(s), 0 failure(s)`.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add minecraft/cybercraft-tweaks spikes/block-render \
@@ -2108,20 +2108,20 @@ batches in Minecraft's draw order.
 **Files:**
 - Modify: `docs/spikes/2026-10-06-minecraft-entities-results.md`
 
-- [ ] **Step 1: Check that the game isn't running**
+- [x] **Step 1: Check that the game isn't running**
 
 ```bash
 tasklist | grep -i -c "cyberpunk2077.exe"
 ```
 Expected: `0`. If it's `1`, ask the user to quit the game: it would hold the mapping.
 
-- [ ] **Step 2: Ask the user to stop Minecraft, and for their leave**
+- [x] **Step 2: Ask the user to stop Minecraft, and for their leave**
 
 Ask the user for their leave to install CyberCraft Tweaks 1.4.0 into the `CyberCraft` instance, keeping 1.3.0 disabled,
 and to run step 0's script again at x 880 in the `SkyCraft` world, which clears what it makes; and, if Minecraft is
 running, to stop it from the Modrinth App. Wait for both.
 
-- [ ] **Step 3: Install CyberCraft Tweaks 1.4.0**
+- [x] **Step 3: Install CyberCraft Tweaks 1.4.0**
 
 ```bash
 M=/c/Users/BLOXY/AppData/Roaming/ModrinthApp/profiles/CyberCraft/mods
@@ -2131,7 +2131,7 @@ mv "$M/cybercraft-tweaks-1.3.0.jar" "$M/cybercraft-tweaks-1.3.0.jar.disabled" \
 Expected: `cybercraft-tweaks-1.2.0.jar.disabled`, `cybercraft-tweaks-1.3.0.jar.disabled`, `cybercraft-tweaks-1.4.0.jar`,
 `fabric-api-0.161.0+26.3.jar` and `skycraft-fabric-0.1.2.jar`. If the rename fails, Minecraft is still running.
 
-- [ ] **Step 4: Ask the user to start Minecraft**
+- [x] **Step 4: Ask the user to start Minecraft**
 
 The user starts the `CyberCraft` instance from the Modrinth App, and says when its title screen shows. Then:
 ```bash
@@ -2141,7 +2141,7 @@ grep -m1 "cybercraft_tweaks" "$L"; grep "SkyCraft:" "$L" | tail -2; echo "mixin 
 Expected: `cybercraft_tweaks 1.4.0` in Fabric's list of mods, `SkyCraft: can't open Skyrim's shared memory yet (Windows
 error 2: …)`, and `mixin errors: 0`.
 
-- [ ] **Step 5: Run step 0's script**
+- [x] **Step 5: Run step 0's script**
 
 ```bash
 L="/c/Users/BLOXY/AppData/Roaming/ModrinthApp/profiles/CyberCraft/logs/latest.log"; before=$(wc -l < "$L"); \
@@ -2159,17 +2159,17 @@ Give it 6 minutes, as in step 0. Expected, against step 0's results:
 - **Creative typed:** a `[CHAT]` line `Set own game mode to Creative Mode`.
 - **No mixin line,** no `[CHAT]` line with an error, the last scene empty and its world line `nothing`, and `exit: 0`.
 
-- [ ] **Step 6: Ask the user to stop Minecraft**
+- [x] **Step 6: Ask the user to stop Minecraft**
 
 Its window is hidden while `mclink` drives it, so the user stops it from the Modrinth App.
 
-- [ ] **Step 7: Record step C's draw order in `docs/spikes/2026-10-06-minecraft-entities-results.md`**
+- [x] **Step 7: Record step C's draw order in `docs/spikes/2026-10-06-minecraft-entities-results.md`**
 
 A "Step C's draw order, with `mclink`" section after step 0's: the versions (CyberCraft Tweaks 1.4.0); each scene's
 batch order beside step 0's, the villager's and the spider's layers named; anything else that differs from step 0, and
 creative typed; and the verdict.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 With the plan, its steps ticked up to this one.
 ```bash

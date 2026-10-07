@@ -137,3 +137,65 @@ script missed one command:
 - **The script:** `type /gamemode creative` goes after `wait-ground`, once the loading screen has closed.
 - **The vertex flags weren't printed:** step A takes SkyCraft's constants for them (`SOLID`, `PARTICLE` and
   `PARTICLE_BLENDED`). Each batch's translucent flag matched its particles' layer.
+
+## Step C's draw order, with `mclink`
+
+Date: 2026-10-07. Step 0's script again, `entities.txt` with Task 6's fix (creative typed after `wait-ground`), against
+SkyCraft 0.1.2 with CyberCraft Tweaks 1.4.0, without the game. The versions are step 0's but for CyberCraft Tweaks
+1.4.0 (1.3.0 kept beside it, disabled) and BlockRender's link code and `mclink` at `85d643c`. The user started and
+stopped Minecraft; the agent installed the mod with the user's leave, with Minecraft stopped. Plan: Task 7.
+
+### Verdict
+
+**Pass.** Every scene's batches came in Minecraft's draw order, a villager's layers and a spider's eyes after their
+bodies, and nothing else changed from step 0. Minecraft loaded the mod, with no mixin error before or after the run.
+
+### The checks
+
+- **As step 0:** linking (`clear all` at 2.05 s, the city in the ring at 4.77 s), the same 14 textures with the same
+  ids, every scene's batches and vertices within a few of step 0's (what moves), the world table, the blast (3.97 s
+  after its command, at 898.50 6.06 2007.50), the stream (2,097 scenes), and the clear: `Killed 7 entities` and
+  `Killed 3 entities`, the last scene empty and its world line `nothing`. No resyncs, nothing rejected, `exit: 0`.
+- **The batch order,** by texture id (step 0's run gave the same ids):
+
+  | Scene | Step 0 | With CyberCraft Tweaks 1.4.0 |
+  |---|---|---|
+  | the pig and the villager | 8, 5, 4, 7, 6 | 4, 5, 6, 7, 8 |
+  | with the spider and the blaze | 9, 8, 11, 10, 12, 5, 4, 7, 6 | 4, 5, 9, 11, 12; 6, 10; 7; 8 |
+
+  Minecraft's order first, then the texture's id: at order 0 each model's base (the pig 4, the villager's body 5, the
+  spider 9, the blaze 11, the particles' atlas 12, and Minecraft's combined atlas first of all); at order 1 the
+  villager's biome 6 and the spider's eyes 10; at order 2 its profession 7; at order 3 its level 8.
+- **The banner:** step 0's one batch of 216 vertices (texture 14) is now four, in Minecraft's order: its pole, bar and
+  cloth (108 vertices) at order 0, and its pattern base and two patterns (36 each) at orders 1 to 3.
+- **Creative:** `[CHAT] Set own game mode to Creative Mode`, once the loading screen had closed.
+- **A warning in Minecraft's log,** most likely in step 0's too, whose log was kept only in part: `Failed to decode
+  value '{Name:"minecraft:sand"}' from field 'BlockState'`. 26.3 reads a falling block's `BlockState` as a block id
+  (`BlockState:"minecraft:sand"`) or a map keyed `id` (`BlockState.CODEC`: `Codec.either(BLOCK.byNameCodec(),
+  FULL_CODEC)`). The sand came out right only because sand is the falling block's default. Step 0's script and the
+  overlay now give the id.
+
+### The overlay's Spawn rows, with `mclink`
+
+With the user's leave, while Minecraft was still up: every command of the overlay's Spawn rows (with the sand fixed) and
+of Clear, typed as its buttons type them, at step 0's spot, by a scratch script (not committed), to check each against
+26.3 before run A.
+- **Every command was answered** (`Summoned new …`, `Changed the block at …`), with no warning or error in Minecraft's
+  log.
+- **The slime** came as two batches: its inner body (144 vertices) at order 0 and its outer layer (36) at order 1.
+- **The bed, the sign and the torch are block models in 26.3,** in SkyCraft's section mesh, not entities: the section's
+  mesh went from 0 vertices to 90 with the bed's foot, 180 with its head and 246 with the sign, while the chest and the
+  banner added nothing there and came as entities, with their atlases (textures 13 and 14). No bed or sign atlas was
+  sent. So the bed, the sign and the torch are drawn with the blocks, and step A draws the chest and the banner.
+- **Clear left nothing:** it set the six placed blocks back to air, killed 17 entities (the five mobs, the ten pigs
+  and the two items) and the six markers; the last scene was empty, its world line `nothing`, and the status's
+  `solids` 0 blocks, after 3 before it (the chest and the bed's halves). The falling sand had vanished where it landed.
+- **Small batches of Minecraft's combined atlas** (6 and 24 vertices) came and went with the slime's hops, most likely
+  its slime-ball particles, from the items' atlas.
+
+### What it means for Part 2
+
+- **Run A's check 7** should see the villager's clothes and the spider's eyes over their bodies in the game.
+- **Run A's check 4:** the bed, the sign and the torch come with the blocks; the chest and the banner are step A's.
+- **The Spawn rows and Clear are checked against 26.3** before the game. `tnt-ahead`'s obsidian and marker weren't
+  typed here: they're step 0's TNT block and marker in another form, which run A types.
