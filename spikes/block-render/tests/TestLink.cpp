@@ -30,12 +30,13 @@ struct FakeMinecraft
 		Header()->mcHeartbeatMs = aTickMs;
 	}
 
-	void State(uint32_t aFlags)
+	void State(uint32_t aFlags, uint32_t aGuiScale = 0)
 	{
 		proto::McState state{};
 		std::memcpy(&state, base + proto::kOffMcState, sizeof state);
 		state.seq += 2;
 		state.flags = aFlags;
+		state.guiScale = aGuiScale;
 		state.x = -119.5;
 		state.eyeX = -119.5;
 		state.eyeY = 7.76;
@@ -758,6 +759,23 @@ TEST(LinkTypesCommandsThroughTheInputRing)
 	link.Update(At(1.2), kSettings, sink);
 	CHECK(sink.Logged("typed: /gamemode creative"));
 	CHECK_EQ(link.State().commandsWaiting, size_t(0));
+}
+
+TEST(LinkKeepsMinecraftsScreenAndGuiScale)
+{
+	FakeMinecraft minecraft;
+	Link          link(minecraft.base);
+	Sink          sink;
+	minecraft.Beat(77, 1000);
+	minecraft.State(proto::kMcInWorld | proto::kMcScreenOpen, 2);
+	link.Update(At(1.0), kSettings, sink);
+	CHECK(link.State().screenOpen);
+	CHECK_EQ(link.State().guiScale, uint32_t(2));
+	minecraft.Beat(77, 1100);
+	minecraft.State(proto::kMcInWorld, 3);
+	link.Update(At(1.1), kSettings, sink);
+	CHECK(!link.State().screenOpen);
+	CHECK_EQ(link.State().guiScale, uint32_t(3));
 }
 
 TEST(LinkPassesOnExplosionsAndHudImages)

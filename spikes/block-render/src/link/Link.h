@@ -209,6 +209,7 @@ public:
 		uint64_t              hudRefused = 0;
 		// Build mode's drive (spike 5)
 		uint32_t              minecraftFlags = 0;  // McState's: on ground, sneaking, sprinting, flying and the rest
+		uint32_t              guiScale = 0;  // McState's: window pixels to a GUI pixel, each way (spike 8's step 0)
 		float                 minecraftTickMs = 0.0f;  // McState's: Minecraft's milliseconds a tick (spike 6's sums)
 		uint32_t              teleportAck = 0;     // the last teleportSeq Minecraft applied, less 1 while it holds its player
 		DriveState            drive = DriveState::Off;
