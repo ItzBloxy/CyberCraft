@@ -168,4 +168,23 @@ void AppendCrack(const proto::WorldEntity& aRecord, const Vec3d& aOrigin, std::v
 		    aOut);
 	}
 }
+
+void AppendOutline(const std::array<float, 6>& aBox, const Vec3d& aOrigin, std::vector<Vertex>& aOut)
+{
+	constexpr float g = kOutlineGrow;
+	const Point     low{ float(aBox[0] - aOrigin.x) - g, float(aBox[1] - aOrigin.y) - g, float(aBox[2] - aOrigin.z) - g };
+	const Point     high{ float(aBox[3] - aOrigin.x) + g, float(aBox[4] - aOrigin.y) + g, float(aBox[5] - aOrigin.z) + g };
+	// The corners' bits: 1 is +x, 2 is +y, 4 is +z. The edges in BuildOutline's order: four along x, four along y, four
+	// along z.
+	static constexpr int kEdges[12][2] = { { 0, 1 }, { 2, 3 }, { 4, 5 }, { 6, 7 }, { 0, 2 }, { 1, 3 },
+		                                   { 4, 6 }, { 5, 7 }, { 0, 4 }, { 1, 5 }, { 2, 6 }, { 3, 7 } };
+	for (const auto& edge : kEdges)
+	{
+		for (const int corner : edge)
+		{
+			aOut.push_back(At({ (corner & 1) ? high[0] : low[0], (corner & 2) ? high[1] : low[1], (corner & 4) ? high[2] : low[2] }, 0.0f, 0.0f,
+			                  kOutlineRgba));
+		}
+	}
+}
 }

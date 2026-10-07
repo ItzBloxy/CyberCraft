@@ -5,6 +5,7 @@
 
 #include <skycraft_protocol.h>
 
+#include <array>
 #include <cstdint>
 #include <vector>
 
@@ -34,4 +35,11 @@ void AppendShape(const proto::WorldEntity& aRecord, const Vec3d& aOrigin, std::v
 // A crack's box, its six faces with the stage's texture, relative to aOrigin, appended to aOut. Any other kind adds
 // none.
 void AppendCrack(const proto::WorldEntity& aRecord, const Vec3d& aOrigin, std::vector<Vertex>& aOut);
+
+// Step B: the outline of the block Minecraft's player targets, aBox (its low corner, then its high, Minecraft axes):
+// its 12 edges, each a pair of vertices, relative to aOrigin, appended to aOut. Inflated by kOutlineGrow, as SkyCraft's
+// BuildOutline does, and black at Minecraft 26.3's alpha. The forward pass widens each edge into a strip.
+constexpr float    kOutlineGrow = 0.002f;
+constexpr uint32_t kOutlineRgba = 0x66000000u;  // black at alpha 102, 40%
+void               AppendOutline(const std::array<float, 6>& aBox, const Vec3d& aOrigin, std::vector<Vertex>& aOut);
 }

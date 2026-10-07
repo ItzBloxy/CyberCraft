@@ -2,6 +2,7 @@
 
 #include "entities/WorldShapes.h"
 
+#include <array>
 #include <cmath>
 
 using namespace cpmc;
@@ -160,6 +161,46 @@ TEST(WorldShapesCrackCoversItsBox)
 	for (const Vertex& vertex : vertices)
 	{
 		CHECK(vertex.u == crack.uv[0][0] || vertex.u == crack.uv[0][2]);  // every face the stage's, uv[0]
+	}
+}
+
+TEST(WorldShapesOutlineIsTheBoxsTwelveEdges)
+{
+	// The targeted block's box, a slab's from its low corner to its high, Minecraft axes.
+	const std::array<float, 6> box{ 885.0f, 6.0f, 2010.0f, 886.0f, 6.5f, 2011.0f };
+	std::vector<Vertex>        vertices;
+	AppendOutline(box, kOrigin, vertices);
+	CHECK_EQ(vertices.size(), size_t(24));
+	if (vertices.size() != 24)
+	{
+		return;
+	}
+	// Inflated by 0.002 as SkyCraft's: the first edge runs east from the low corner, the last south to the high corner.
+	CheckAt(vertices[0], 4.998f, -0.002f, 2.998f);
+	CheckAt(vertices[1], 6.002f, -0.002f, 2.998f);
+	CheckAt(vertices[22], 6.002f, 0.502f, 2.998f);
+	CheckAt(vertices[23], 6.002f, 0.502f, 4.002f);
+	// Each edge's two ends: the box's corners, apart along one axis alone, four edges along each.
+	int along[3] = {};
+	for (size_t e = 0; e < 12; ++e)
+	{
+		const Vertex& a = vertices[e * 2];
+		const Vertex& b = vertices[e * 2 + 1];
+		const float   d[3] = { std::abs(b.x - a.x), std::abs(b.y - a.y), std::abs(b.z - a.z) };
+		const int     moved = (d[0] > 1e-4f) + (d[1] > 1e-4f) + (d[2] > 1e-4f);
+		CHECK_EQ(moved, 1);
+		for (int k = 0; k < 3; ++k)
+		{
+			along[k] += d[k] > 1e-4f ? 1 : 0;
+		}
+	}
+	CHECK_EQ(along[0], 4);
+	CHECK_EQ(along[1], 4);
+	CHECK_EQ(along[2], 4);
+	for (const Vertex& vertex : vertices)
+	{
+		CHECK_EQ(vertex.r + vertex.g + vertex.b, 0);  // black, at Minecraft 26.3's alpha
+		CHECK_EQ(int(vertex.a), 102);
 	}
 }
 
