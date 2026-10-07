@@ -38,8 +38,8 @@ steps"):
    works, so there's no unlit glow.
 3. **Step C, where a step shows a need: the Minecraft side.** CyberCraft Tweaks keeps Minecraft's draw order for
    layered models (villagers' clothes, spider eyes) and marks emissive render types, which SkyCraft's capture drops.
-   Step 0 showed the draw order is needed, so it comes before step A; the emissive mark waits for run B's look at the
-   spider's eyes at night, which run A didn't take.
+   Step 0 showed the draw order is needed, so it comes before step A; run B saw a spider's eyes unlit at night, so the
+   emissive mark is Part 4.
 
 ## Decisions from the brainstorm
 
@@ -301,7 +301,7 @@ spikes/block-render/
   tools/mclink/                + scenes, textures and the world-entity table reported, and entities.txt
   tools/blockrender_hud/init.lua         + the entities line, the Spawn row and Clear
   tests/                       + the new unit tests
-minecraft/cybercraft-tweaks/   (step C only) + the capture's draw order and emissive flag (1.4.0)
+minecraft/cybercraft-tweaks/   (step C only) + the capture's draw order (1.4.0) and emissive mark (1.5.0)
 ```
 
 The names are proposals; the plan settles them.
@@ -314,7 +314,8 @@ The names are proposals; the plan settles them.
 - **The versions:** step A deploys 0.20.0 and step B 0.21.0, in the log line and in `Query`. Module version 7 stays: no
   redscript changes.
 - **CyberCraft Tweaks 1.4.0,** step C only, built by its own `build.sh` with the JDK alone, as in spikes 5 and 6, and
-  copied into the CyberCraft instance's mods in place of 1.3.0, with Minecraft stopped.
+  copied into the CyberCraft instance's mods in place of 1.3.0, with Minecraft stopped; 1.5.0, with the emissive
+  mark, in place of 1.4.0 (Part 4).
 
 ## The frame
 
@@ -512,13 +513,14 @@ CyberCraft Tweaks mixes into SkyCraft's `AvatarExporter`:
   first, so a layer drawn later in Minecraft is drawn later here and wins at equal depth. The collector is a `Proxy`
   that calls the exporter itself with `n` as the order while each call runs; SkyCraft makes its batch inside each call;
   the batches are a `TreeMap`, keyed by the order above SkyCraft's own key (`order << 40`);
-- **emissive render types** (only if run A shows the need): a batch of an emissive render type (eyes, the warden's
-  glowing layers) carries a free vertex-flag bit, which the shader takes as glow;
+- **emissive render types** (1.5.0, Part 4, since run B saw a spider's eyes unlit): a layer of one of Minecraft's
+  emissive render types (`eyes`, `entity_translucent_emissive` and `energy_swirl`, whose pipelines skip the light
+  map) goes with full light, as SkyCraft sends lit TNT's white flash, so BlockRender's glow rule takes it, with no
+  new flag and no shader change;
 - **per-entity motion** isn't designed here: if `dlsshint 2` isn't enough, it gets a design of its own before any
   code.
 
-Each is checked with `mclink` (the batch order and flags) before the game. The batch key widens so the new bit can't
-collide with SkyCraft's UV mode.
+Each is checked with `mclink` (the batch order, and each batch's glowing vertices) before the game.
 
 ## The steps
 
@@ -615,10 +617,12 @@ typed into Minecraft with `mclink` (`tools/mclink/spawn.txt`), without the game.
   its own), and the spider's eyes, which decide step C's emissive mark;
 - the forward list's cost, and no crash or freeze.
 
-### Step C's emissive mark, if run B needs it
+### Step C's emissive mark (Part 4)
 
-CyberCraft Tweaks again, installed with the user's leave and Minecraft stopped; `mclink` shows the batches' flags; then
-run A's check 2 again in the game.
+CyberCraft Tweaks 1.5.0, installed with the user's leave and Minecraft stopped. `mclink` shows each emissive layer's
+batch glowing (`tools/mclink/emissive.txt`: a spider and an enderman for `eyes`, a warden for
+`entity_translucent_emissive`, a charged creeper for `energy_swirl`); then run C shows those mobs at night in the
+game.
 
 ### The results
 
@@ -1033,3 +1037,21 @@ Run B (the results' "Run B") settled what the sections above left open:
    it is seen at once.
 5. **Step C's emissive mark is Part 4,** the user's choice, before the spike closes. Cyberpunk's time of day setting
    Minecraft's, which the user asked for during run B, is a task of its own, for later.
+
+## Changes while planning Part 4
+
+Part 4 was planned from run B's results and the user's choice to build step C's emissive mark before the spike closes.
+Its code was written and built in a scratch clone first, and checked against SkyCraft 0.1.2's bytecode and Minecraft
+26.3's classes, before the plan was written from it. These changed the design; the sections above include them:
+1. **Full light, not a new flag:** an emissive layer goes with full block and sky light (`0xF000F0`), as SkyCraft sends
+   lit TNT's white flash, so BlockRender's glow rule (block light 15) takes it as it takes a blaze. The spec had planned a
+   free vertex-flag bit, which the shader would read, with SkyCraft's batch key widened for it: full light needs neither,
+   and BlockRender doesn't change.
+2. **Three render types, by name:** Minecraft 26.3's pipelines that define `EMISSIVE` are those of `eyes` (spiders',
+   endermen's and phantoms' eyes), `entity_translucent_emissive` (the warden's, the creaking's, the copper golem's and
+   the breeze's glowing parts) and `energy_swirl` (a charged creeper's and the wither's armour). Each is drawn through
+   `submitModel`, which SkyCraft's exporter takes; the beams, lightning and portals are custom geometry, which it skips.
+   The mixin matches the names SkyCraft's own `RenderTypeAccessor` reads.
+3. **Tested with a mob of each:** an `mclink` script (`tools/mclink/emissive.txt`) summons a spider, an enderman, a
+   warden and a charged creeper, AI off, and run C shows them at night.
+4. **CyberCraft Tweaks 1.5.0;** BlockRender stays 0.21.0.

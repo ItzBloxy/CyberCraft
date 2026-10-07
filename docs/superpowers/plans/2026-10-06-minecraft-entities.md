@@ -1,4 +1,4 @@
-# Minecraft's Entities Implementation Plan, Parts 1 to 3 (steps 0, A, B and C's draw order)
+# Minecraft's Entities Implementation Plan, Parts 1 to 4 (steps 0, A, B and C)
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 >
@@ -36,6 +36,9 @@ planned after step 0, from its results, and its own section below says how it's 
 DLSS's bias hint before DLSS (step B), and fixes what run A found: Shift+F6 pauses build mode, and the overlay keeps
 its block entities at their markers and its rows still. It was planned after run A, from its results, and its own
 section below says how it's built.
+**Part 4** (Tasks 32 to 36) builds step C's emissive mark: CyberCraft Tweaks 1.5.0 sends the layers Minecraft draws
+emissive, such as a spider's eyes, with full light, so they glow. It was planned after run B, at the user's choice,
+and its own section below says how it's built.
 
 ---
 
@@ -9013,7 +9016,7 @@ cd /d/Cyberpunk-Minecraft && git add docs/superpowers \
        -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
 ```
 
-- [ ] **Step 4: Plan Part 4**
+- [x] **Step 4: Plan Part 4**
 
 The user chose to build step C's emissive mark before the spike closes ("How Part 3 went"). Use superpowers:writing-plans
 to add Part 4's tasks, from Task 32 on, to this plan, verified as Parts 1 to 3 were; finishing the branch moves to Part
@@ -9071,3 +9074,500 @@ Part 3 ran on 2026-10-07, the user starting the games and playing run B.
 - **Asked for during run B:** Cyberpunk's time of day setting Minecraft's, as a task of its own.
 - **The user's choices after run B:** step C's emissive mark becomes Part 4, before the spike closes, so Task 31's last
   step plans it instead of finishing the branch; and the bias hint pass stays as it is.
+
+---
+
+## Part 4: step C's emissive mark
+
+Part 4 makes the layers Minecraft draws emissive glow in Night City too (the spec's "Step C"): run B saw a spider's red
+eyes at night lit like its body. The user chose to build it before the spike closes. The spec's "Changes while planning
+Part 4" lists what planning settled in the design, and "Found while planning Part 4", at the end, what it settled in the
+plan.
+- **Task 32** makes CyberCraft Tweaks 1.5.0: a layer of one of Minecraft's emissive render types goes with full light,
+  which BlockRender's glow rule already takes.
+- **Task 33** writes an `mclink` script of one mob for each of those render types, and **Task 34** runs it in
+  Minecraft, without the game, with 1.5.0 installed.
+- **Task 35** is run C, in the game: the eyes at night. **Task 36** closes the spike.
+
+BlockRender doesn't change: 0.21.0, installed for run B, draws Part 4's layers as it is. Test counts: 505 throughout;
+Task 33 changes one test.
+
+### What run B found
+
+From the results' "Run B", what Part 4 builds on:
+- **The spider's eyes aren't marked:** Minecraft draws them with its `eyes` render type, whose pipeline skips the light
+  map (the `EMISSIVE` define), but SkyCraft's `AvatarExporter` keeps the light Minecraft passes the layer, the
+  entity's own, so BlockRender's glow rule (block light 15) doesn't take them.
+- **BlockRender's glow works:** what SkyCraft sends with full light, a blaze or lit TNT's flash, glows at night through
+  the G-buffer's emission, steady at `glow` 0.9 (run A).
+
+### Minecraft 26.3's emissive render types
+
+Read from the user's 26.3 jar with `javap`: the pipelines that define `EMISSIVE` are those of three render types, each
+drawn through `OrderedSubmitNodeCollector.submitModel`, which SkyCraft's exporter takes:
+- **`eyes`** (`EYES_SNIPPET`: `EMISSIVE`, `NO_OVERLAY`, `NO_CARDINAL_LIGHTING`): `EyesLayer`, under `SpiderEyesLayer`,
+  `EnderEyesLayer` and `PhantomEyesLayer`;
+- **`entity_translucent_emissive`** (`ENTITY_EMISSIVE_SNIPPET`): `LivingEntityEmissiveLayer`, for the warden, the
+  creaking and the copper golem, and `RenderTypes.breezeEyes`, which is the same render type;
+- **`energy_swirl`** (`ENERGY_SWIRL_SNIPPET`): `EnergySwirlLayer`, a charged creeper's and the wither's armour.
+
+The other emissive-looking render types (`beacon_beam`, `end_crystal_beam`, `lightning`, `dragon_rays`, `end_portal`,
+`end_gateway`) are drawn as custom geometry, which SkyCraft's exporter skips.
+
+## Before you start (Part 4)
+
+- **Part 1's "Before you start" holds,** its shell, Edit steps and commits included.
+- **Already verified:** all the code in Part 4 has been built and tested once already, in a scratch clone.
+  - Tasks 32 and 33 were then replayed in a fresh clone by a script that applied every file step exactly as written,
+    and checked every build, test and CyberCraft Tweaks step's expected result. The results:
+    - CyberCraft Tweaks 1.5.0 built with no warning, and zero compiler warnings at `/W4`;
+    - 505 C++ tests passing;
+    - the replayed files identical to the scratch clone's.
+  - The changed test was broken once, by a mutation of the script it reads, and failed as it should.
+  - The mixin was checked against SkyCraft 0.1.2's bytecode: `submitModel`'s signature, the one
+    `Model.renderToBuffer(PoseStack, VertexConsumer, int, int, int)` call in it, whose third argument is the light, and
+    `RenderTypeAccessor.skycraft$name()`.
+
+  So a failure while following the plan most likely means a transcription slip: compare against the plan's code first.
+- **What only Minecraft and the game can test:** that the mixin applies and marks the layers (Task 34), and that they
+  glow (Task 35).
+- **The user:**
+  - **does everything in Minecraft, the Modrinth App and the game,** as before: never drive their mouse or keyboard;
+    ask, then wait for them to say they're done;
+  - **approves installing CyberCraft Tweaks 1.5.0** into the `CyberCraft` instance, with Minecraft stopped (Task 34).
+    1.4.0 stays in the mods folder, disabled, so it can be put back;
+  - **approves changes to their Minecraft world:** Task 34's script summons four mobs at x 880 in the `SkyCraft` world
+    and kills them; in Task 35 the agent's requests summon them ahead of Minecraft's player, and Clear removes them.
+- **The game:** nothing is deployed in Part 4. `mclink` needs the game closed, since the game would hold the mapping.
+
+## File map (Part 4)
+
+| File | Responsibility |
+|---|---|
+| `minecraft/cybercraft-tweaks/` (`MarkEmissive.java`, `cybercraft_tweaks.mixins.json`, `fabric.mod.json`, `README.md`) | CyberCraft Tweaks 1.5.0: the layers Minecraft draws emissive go with full light |
+| `tools/mclink/emissive.txt`, `tests/TestMcLinkScript.cpp` | One mob for each emissive render type, typed into Minecraft, and the test that parses it |
+
+---
+
+### Task 32: CyberCraft Tweaks 1.5.0 marks Minecraft's emissive layers
+
+- **`MarkEmissive`** mixes into SkyCraft's `AvatarExporter` by name, as `KeepDrawOrder` does:
+  - at the head of `submitModel`, it notes whether the render type's name (SkyCraft's own `RenderTypeAccessor`) is
+    `eyes`, `entity_translucent_emissive` or `energy_swirl`;
+  - on the light `submitModel` hands `Model.renderToBuffer`, it puts full block and sky light (`0xF000F0`) for such a
+    layer, as SkyCraft already sends lit TNT's white flash. Every vertex of the layer then carries block light 15, and
+    BlockRender's glow rule makes it glow.
+- **The version** goes to 1.5.0; the description and the README say what it does.
+
+**Files:**
+- Create: `minecraft/cybercraft-tweaks/src/main/java/dev/cybercraft/tweaks/mixin/MarkEmissive.java`
+- Modify: `minecraft/cybercraft-tweaks/src/main/resources/cybercraft_tweaks.mixins.json`,
+  `minecraft/cybercraft-tweaks/src/main/resources/fabric.mod.json`, `minecraft/cybercraft-tweaks/README.md`
+
+- [ ] **Step 1: Write `minecraft/cybercraft-tweaks/src/main/java/dev/cybercraft/tweaks/mixin/MarkEmissive.java`**
+
+```java
+package dev.cybercraft.tweaks.mixin;
+
+import java.util.Set;
+
+import com.mojang.blaze3d.vertex.PoseStack;
+
+import dev.skycraft.client.mixin.RenderTypeAccessor;
+
+import net.minecraft.client.model.Model;
+import net.minecraft.client.renderer.rendertype.RenderType;
+import net.minecraft.client.renderer.texture.UvMapping;
+
+import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Unique;
+import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.ModifyArg;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+
+/**
+ * What Minecraft draws emissive glows in the game too. Minecraft lights its entities with its light map, but for the
+ * layers its emissive render types draw, whose pipelines skip it (the {@code EMISSIVE} define): {@code eyes}, a spider's,
+ * an enderman's and a phantom's eyes; {@code entity_translucent_emissive}, the warden's, the creaking's, the copper
+ * golem's and the breeze's glowing parts; and {@code energy_swirl}, a charged creeper's and the wither's armour.
+ * SkyCraft's {@code AvatarExporter} keeps the light Minecraft passes those layers, the entity's own, so the game lit them
+ * as the rest: spike 7's run B saw a spider's eyes at night as dark as its body. Here such a layer is captured with full
+ * light, as SkyCraft already captures lit TNT's white flash, and BlockRender's glow rule (block light 15) makes it glow.
+ *
+ * <p>It targets SkyCraft 0.1.2's {@code dev.skycraft.client.render.AvatarExporter} by name, as {@link KeepDrawOrder}
+ * does, and reads a render type's name through SkyCraft's own accessor.
+ */
+@Mixin(targets = "dev.skycraft.client.render.AvatarExporter", remap = false)
+public abstract class MarkEmissive {
+    /** Minecraft 26.3's render types whose pipelines draw without the light map. */
+    @Unique private static final Set<String> EMISSIVE = Set.of("eyes", "entity_translucent_emissive", "energy_swirl");
+
+    /** Whether the layer being submitted is one of them. */
+    @Unique private boolean cybercraft_tweaks$emissive;
+
+    @Inject(method = "submitModel", at = @At("HEAD"))
+    private void cybercraft_tweaks$seeRenderType(Model<?> model, Object state, PoseStack poseStack, RenderType renderType, int lightCoords,
+        int overlayCoords, int tintedColor, UvMapping uvMapping, int outlineColor, CallbackInfo info) {
+        this.cybercraft_tweaks$emissive = EMISSIVE.contains(((RenderTypeAccessor) renderType).skycraft$name());
+    }
+
+    // The light the model is drawn with: full block and sky light for an emissive layer, which BlockRender makes glow.
+    @ModifyArg(method = "submitModel", at = @At(value = "INVOKE",
+        target = "Lnet/minecraft/client/model/Model;renderToBuffer(Lcom/mojang/blaze3d/vertex/PoseStack;Lcom/mojang/blaze3d/vertex/VertexConsumer;III)V"),
+        index = 2)
+    private int cybercraft_tweaks$fullLight(int lightCoords) {
+        return this.cybercraft_tweaks$emissive ? 0xF000F0 : lightCoords;
+    }
+}
+```
+
+- [ ] **Step 2: Edit `minecraft/cybercraft-tweaks/src/main/resources/cybercraft_tweaks.mixins.json` to add it, on the client**
+
+```json
+  "client": ["KeepDrawOrder"],
+```
+```json
+  "client": ["KeepDrawOrder", "MarkEmissive"],
+```
+
+- [ ] **Step 3: Edit `minecraft/cybercraft-tweaks/src/main/resources/fabric.mod.json` for 1.5.0**
+
+```json
+  "version": "1.4.0",
+  "name": "CyberCraft Tweaks",
+  "description": "SkyCraft adjusted for Cyberpunk 2077's Night City: nothing digs into the game's ground, so blasts leave no blocks floating above it; V's health share carries into Minecraft's player as build mode starts; and what SkyCraft sends of Minecraft's entities keeps their layers in Minecraft's draw order.",
+```
+```json
+  "version": "1.5.0",
+  "name": "CyberCraft Tweaks",
+  "description": "SkyCraft adjusted for Cyberpunk 2077's Night City: nothing digs into the game's ground, so blasts leave no blocks floating above it; V's health share carries into Minecraft's player as build mode starts; and what SkyCraft sends of Minecraft's entities keeps their layers in Minecraft's draw order, with the layers Minecraft draws emissive marked to glow.",
+```
+
+- [ ] **Step 4: Edit `minecraft/cybercraft-tweaks/README.md` to say what it does**
+
+```markdown
+What SkyCraft sends of Minecraft's entities keeps Minecraft's draw order:
+```
+```markdown
+What SkyCraft sends of Minecraft's entities keeps Minecraft's draw order and its glow:
+```
+```markdown
+  with n as the order, each batch is kept by its order, and the batches go out lowest order first.
+```
+```markdown
+  with n as the order, each batch is kept by its order, and the batches go out lowest order first.
+- **Emissive layers glow** (`MarkEmissive`, from 1.5.0). Minecraft draws some layers without its light map: those of
+  its `eyes` render type (a spider's, an enderman's and a phantom's eyes), `entity_translucent_emissive` (the warden's,
+  the creaking's, the copper golem's and the breeze's glowing parts) and `energy_swirl` (a charged creeper's and the
+  wither's armour). SkyCraft keeps the light Minecraft passes them, the entity's own, so the game lit them as the rest:
+  spike 7's run B saw a spider's eyes at night as dark as its body. With the mod, such a layer goes with full light, as
+  SkyCraft sends lit TNT's white flash, and BlockRender's glow rule makes it glow.
+```
+
+- [ ] **Step 5: Build CyberCraft Tweaks, and check that SkyCraft's exporter has what the mixin takes**
+
+```bash
+cd /d/Cyberpunk-Minecraft/minecraft/cybercraft-tweaks && out=$(bash build.sh 2>&1); echo "$out" | tail -2; \
+  echo "warnings: $(echo "$out" | grep -c -i warning)"; \
+  unzip -l build/cybercraft-tweaks-1.5.0.jar | grep -o "dev/cybercraft/tweaks/mixin/MarkEmissive.class"; \
+  S=/c/Users/BLOXY/AppData/Roaming/ModrinthApp/profiles/CyberCraft/mods/skycraft-fabric-0.1.2.jar; \
+  javap -p -cp $S dev.skycraft.client.mixin.RenderTypeAccessor | grep -F -o 'java.lang.String skycraft$name()'; \
+  javap -c -p -cp $S dev.skycraft.client.render.AvatarExporter | awk '/ void submitModel\(/{f=1; next} f && /^  [a-z]/{f=0} f' \
+    | grep -F -o "Method net/minecraft/client/model/Model.renderToBuffer:(Lcom/mojang/blaze3d/vertex/PoseStack;Lcom/mojang/blaze3d/vertex/VertexConsumer;III)V"
+```
+Expected: `built build/cybercraft-tweaks-1.5.0.jar against 26.3-`, then `warnings: 0`,
+`dev/cybercraft/tweaks/mixin/MarkEmissive.class`, SkyCraft's `java.lang.String skycraft$name()`, and the one
+`renderToBuffer` call in the method the mixin targets,
+`Method net/minecraft/client/model/Model.renderToBuffer:(Lcom/mojang/blaze3d/vertex/PoseStack;Lcom/mojang/blaze3d/vertex/VertexConsumer;III)V`.
+
+- [ ] **Step 6: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add minecraft/cybercraft-tweaks/src minecraft/cybercraft-tweaks/README.md \
+  && git commit -q -m "minecraft-entities: CyberCraft Tweaks 1.5.0 marks the layers Minecraft draws emissive to glow" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 33: An `mclink` script of Minecraft's emissive layers
+
+`tools/mclink/emissive.txt` summons one mob for each emissive render type at step 0's spot, 5 or 6 blocks ahead of the
+stand-in V, who looks at them: a spider and an enderman (`eyes`), a warden (`entity_translucent_emissive`) and a charged
+creeper (`energy_swirl`). Each has its AI off, so none moves, attacks or explodes, and no loot, and is tagged `sp7`; the
+end kills them. With 1.5.0, every vertex of each emissive layer's batch should glow, and the bodies' none. It's kept
+with the other scripts, and the test that parses them takes it too; the mod's README names it.
+
+**Files:**
+- Create: `tools/mclink/emissive.txt`
+- Modify: `tests/TestMcLinkScript.cpp`, `minecraft/cybercraft-tweaks/README.md`
+
+- [ ] **Step 1: Edit `tests/TestMcLinkScript.cpp` to parse it too**
+
+```cpp
+	                          "entities.txt", "spawn.txt" })
+```
+```cpp
+	                          "entities.txt", "spawn.txt", "emissive.txt" })
+```
+
+- [ ] **Step 2: Build and run the tests; the new one must fail**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | grep -v "^PASS" | tail -4
+```
+Expected: `FAIL ScriptsInTheRepoParse` and `505 test(s), 2 failure(s)`: the file isn't there yet.
+
+- [ ] **Step 3: Write `tools/mclink/emissive.txt`**
+
+```text
+# Spike 7's Part 4: the layers Minecraft draws emissive, sent with full light by CyberCraft Tweaks 1.5.0, against
+# SkyCraft's real mod, without the game. At step 0's spot, one mob of each emissive render type stands 5 or 6 blocks
+# ahead of the stand-in V, who looks at them: a spider and an enderman (eyes), a warden (entity_translucent_emissive)
+# and a charged creeper (energy_swirl). Each has its AI off, so none moves, attacks or explodes, and no loot, and is
+# tagged sp7. Every vertex of each emissive layer's batch should glow (block light 15), and the bodies' none. The end
+# kills them, leaving nothing. Start Minecraft first; this waits for its world.
+status
+wait-world 180
+ground city
+at 880.5 6.14 2007.5
+look 270 0
+dump E:\Cyberpunk2077\red4ext\plugins\PhysXProbe\dumps\2026-10-01_14-37-07\collision.obj
+link on
+wait-ground 30
+wait 2
+type /gamemode creative
+scene
+type /execute rotated ~ 0 positioned ^3 ^ ^5 run summon minecraft:spider ~ ~ ~ {Tags:["sp7"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty",NoAI:1b}
+type /execute rotated ~ 0 positioned ^1 ^ ^5 run summon minecraft:enderman ~ ~ ~ {Tags:["sp7"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty",NoAI:1b}
+type /execute rotated ~ 0 positioned ^-1.5 ^ ^6 run summon minecraft:warden ~ ~ ~ {Tags:["sp7"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty",NoAI:1b}
+type /execute rotated ~ 0 positioned ^-4 ^ ^5 run summon minecraft:creeper ~ ~ ~ {Tags:["sp7"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty",NoAI:1b,powered:1b}
+wait 3
+scene
+wait 1
+scene
+status
+# The clear: a killed mob takes a second to die, and its puffs up to 5 s more, so the last scene, 7 s on, is empty.
+type /kill @e[tag=sp7]
+wait 7
+scene
+status
+quit
+```
+
+- [ ] **Step 4: Edit `minecraft/cybercraft-tweaks/README.md` to name it**
+
+```markdown
+player's health to half, all and a twentieth of its max, and reads each back with `/data`.
+```
+```markdown
+player's health to half, all and a twentieth of its max, and reads each back with `/data`.
+`spikes/block-render/tools/mclink/emissive.txt` summons a spider, an enderman, a warden and a charged creeper: with the
+mod, every vertex of their emissive layers' batches glows (block light 15), and their bodies' don't.
+```
+
+- [ ] **Step 5: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `505 test(s), 0 failure(s)`.
+
+- [ ] **Step 6: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render minecraft/cybercraft-tweaks/README.md \
+  && git commit -q -m "minecraft-entities: an mclink script of one mob for each of Minecraft's emissive render types" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 34: In Minecraft: the emissive layers
+
+Task 33's script, with the user, against SkyCraft's unchanged mod with CyberCraft Tweaks 1.5.0, in the `CyberCraft`
+instance, without the game.
+- **Installing:** with Minecraft stopped, 1.4.0 is renamed `.jar.disabled`, as 1.3.0 was, and 1.5.0 copied in. A jar
+  can't be renamed while Minecraft runs, so the rename failing means it's still running.
+- **If Minecraft doesn't start, or crashes as it opens its world,** its log says why: a mixin that can't apply names
+  `MarkEmissive`. Then put 1.4.0 back (rename 1.5.0's jar `.jar.disabled` and 1.4.0's back to `.jar`), and stop.
+- **If a check fails,** stop and find the cause with superpowers:systematic-debugging before going on. Fixes become new
+  tasks.
+
+**Files:**
+- Modify: `docs/spikes/2026-10-06-minecraft-entities-results.md`
+
+- [ ] **Step 1: Check that the game isn't running**
+
+```bash
+tasklist | grep -i -c "cyberpunk2077.exe"
+```
+Expected: `0`. If it's `1`, ask the user to quit the game: it would hold the mapping.
+
+- [ ] **Step 2: Ask the user to stop Minecraft, and for their leave**
+
+Ask the user for their leave to install CyberCraft Tweaks 1.5.0 into the `CyberCraft` instance, keeping 1.4.0 disabled,
+and to run the script at x 880 in the `SkyCraft` world, which kills what it summons; and, if Minecraft is running, to
+stop it from the Modrinth App. Wait for both.
+
+- [ ] **Step 3: Install CyberCraft Tweaks 1.5.0**
+
+```bash
+M=/c/Users/BLOXY/AppData/Roaming/ModrinthApp/profiles/CyberCraft/mods
+mv "$M/cybercraft-tweaks-1.4.0.jar" "$M/cybercraft-tweaks-1.4.0.jar.disabled" \
+  && cp /d/Cyberpunk-Minecraft/minecraft/cybercraft-tweaks/build/cybercraft-tweaks-1.5.0.jar "$M/" && ls "$M"
+```
+Expected: `cybercraft-tweaks-1.2.0.jar.disabled`, `cybercraft-tweaks-1.3.0.jar.disabled`,
+`cybercraft-tweaks-1.4.0.jar.disabled`, `cybercraft-tweaks-1.5.0.jar`, the user's own
+`entity_model_features-3.3.11-26.3-fabric.jar.disabled` and `entity_texture_features-7.2.5-26.3-fabric.jar.disabled`,
+`fabric-api-0.161.0+26.3.jar` and `skycraft-fabric-0.1.2.jar`. If the rename fails, Minecraft is still running.
+
+- [ ] **Step 4: Ask the user to start Minecraft**
+
+The user starts the `CyberCraft` instance from the Modrinth App, and says when its title screen shows. Then:
+```bash
+L="/c/Users/BLOXY/AppData/Roaming/ModrinthApp/profiles/CyberCraft/logs/latest.log"
+grep -m1 "cybercraft_tweaks" "$L"; grep "SkyCraft:" "$L" | tail -2; echo "mixin errors: $(grep -c -i -E "mixin.*(error|fail)" "$L")"
+```
+Expected: `cybercraft_tweaks 1.5.0` in Fabric's list of mods, `SkyCraft: can't open Skyrim's shared memory yet (Windows
+error 2: …)`, and `mixin errors: 0`.
+
+- [ ] **Step 5: Run the script**
+
+```bash
+L="/c/Users/BLOXY/AppData/Roaming/ModrinthApp/profiles/CyberCraft/logs/latest.log"; before=$(wc -l < "$L"); \
+  cd /d/Cyberpunk-Minecraft/spikes/block-render && mkdir -p build/emissive \
+  && ./build/RelWithDebInfo/mclink.exe tools/mclink/emissive.txt | tee build/emissive/emissive.log; echo "exit: ${PIPESTATUS[0]}"; \
+  tail -n +$((before + 1)) "$L" | grep -E "SkyCraft: (sent texture|texture)|\[CHAT\]|WARN|ERROR|[Mm]ixin" | tee build/emissive/minecraft.log
+```
+Give it 2 minutes. Expected:
+- **Every summon answered** in Minecraft's chat (`Summoned new Spider`, `… Enderman`, `… Warden`, `… Creeper`), and no
+  `WARN`, `ERROR` or mixin line about them.
+- **The emissive layers glowing:** in the scenes after the summons, each batch whose texture Minecraft's lines name as
+  an emissive layer's (`spider_eyes`, `enderman_eyes`, the warden's `warden_bioluminescent_layer`, `warden_heart` or
+  `warden_pulsating_spots_…`, and `creeper_armor`) has as many glowing vertices as vertices; the bodies' batches
+  (`spider`, `enderman`, `warden`, `creeper`) have none.
+- **Nothing left:** the last scene has no batches, its world line `nothing`, and `exit: 0`.
+
+- [ ] **Step 6: Ask the user to stop Minecraft**
+
+Its window is hidden while `mclink` drives it, so the user stops it from the Modrinth App.
+
+- [ ] **Step 7: Record the run in `docs/spikes/2026-10-06-minecraft-entities-results.md`**
+
+A "Step C's emissive mark, with `mclink`" section after run B's: the versions (CyberCraft Tweaks 1.5.0); each emissive
+layer's batch, its texture, vertices and glowing vertices, beside the bodies'; anything else that differs from run B's
+Spawn-row scenes; and the verdict.
+
+- [ ] **Step 8: Commit**
+
+With the plan, its steps ticked up to this one.
+```bash
+cd /d/Cyberpunk-Minecraft && git add docs/spikes/2026-10-06-minecraft-entities-results.md docs/superpowers/plans/2026-10-06-minecraft-entities.md \
+  && git commit -q -m "minecraft-entities: step C's emissive mark with mclink" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 35: In the game: run C
+
+Run C, with the user: the emissive layers at night in Night City, on BlockRender 0.21.0 as run B left it (nothing is
+deployed), linked to SkyCraft's Minecraft with CyberCraft Tweaks 1.5.0 (Task 34). Minecraft's player in creative,
+combat off. The four mobs come from requests the agent sends, each typed into Minecraft's chat as Task 33's script types
+it, ahead of Minecraft's player: AI off, no loot, tagged `sp7`, so the overlay's Clear removes them. If a check fails,
+stop and find the cause with superpowers:systematic-debugging before going on. Fixes become new tasks.
+
+These commands come back, as in run B:
+- **Send a request,** atomically: the plugin runs it within a second. Replace the command, and send the next only once
+  the status's `request=` line shows the last.
+  ```bash
+  P=/e/Cyberpunk2077/red4ext/plugins/BlockRender; printf '%s\n' "mc /execute rotated ~ 0 positioned ^3 ^ ^5 run summon minecraft:spider ~ ~ ~ {Tags:[\"sp7\"],PersistenceRequired:1b,DeathLootTable:\"minecraft:empty\",NoAI:1b}" > "$P/request.tmp" && mv "$P/request.tmp" "$P/blockrender.request"
+  ```
+- **The status:**
+  ```bash
+  cat /e/Cyberpunk2077/bin/x64/plugins/cyber_engine_tweaks/mods/blockrender_hud/status.txt
+  ```
+
+**Files:**
+- Modify: `docs/spikes/2026-10-06-minecraft-entities-results.md`
+
+- [ ] **Step 1: In the game: load, at night, link, creative**
+
+Ask the user to start the `CyberCraft` instance, then the game; to load a save on an open pavement, with at least 10 m
+clear ahead of V; to use the game's Skip Time to the night; and to click Link, then Creative in the overlay's Fun row.
+Expected: in the BlockRender log, `link on: …; drawing is gbuffer`; in the status, `entities=on`.
+
+- [ ] **Step 2: In the game: the emissive layers at night**
+
+Send the four summons of Task 33's script as `mc` requests, one at a time: the spider, the enderman, the warden and the
+charged creeper. Ask the user to look at each, with a screenshot. Expected: the spider's and the enderman's eyes glow,
+as in Minecraft at night; the warden's glowing parts (its spots, its heart) glow, coming and going as they pulse; the
+charged creeper's armour glows; their bodies are lit as before. In the status, `glowing from block light 15` counts
+their vertices. Then ask the user to click Clear: the four go.
+
+- [ ] **Step 3: Ask the user to quit the game and stop Minecraft**
+
+- [ ] **Step 4: Record run C's results in `docs/spikes/2026-10-06-minecraft-entities-results.md`**
+
+A "Run C" section: the versions; each mob's emissive layer at night, with what the user saw and the screenshots; and
+the spike's answer at the top, brought up to date.
+
+- [ ] **Step 5: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add docs/spikes docs/superpowers/plans/2026-10-06-minecraft-entities.md \
+  && git commit -q -m "minecraft-entities: run C's results" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 36: Close the spike
+
+- [ ] **Step 1: Add "How Part 4 went" to this plan**
+
+At the end, after "Found while planning Part 4": what ran as written, what changed, and what Task 34's `mclink` run and
+run C found.
+
+- [ ] **Step 2: Bring the spec up to date**
+
+In its "Changes while executing Part 4": anything Part 4 changed in the design, and what's left for later, such as
+Cyberpunk's time of day setting Minecraft's.
+
+- [ ] **Step 3: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add docs/superpowers \
+  && git commit -q -m "minecraft-entities plan: how Part 4 went" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+- [ ] **Step 4: Finish the branch**
+
+Use superpowers:finishing-a-development-branch: the tests pass (505), and the user chooses whether
+`spike/minecraft-entities` merges into `main`, as spikes 1 to 6 did.
+
+## Found while planning Part 4
+
+The spec's "Changes while planning Part 4" lists what planning settled in the design. In the plan itself:
+- **The mixin's two halves:** at the head of `submitModel` it notes whether the render type is emissive; on the light
+  `submitModel` hands `Model.renderToBuffer`, its one call there, whose third argument is the light, it puts full light
+  for such a layer. Both run on the render thread, the head first, so the note is always the call's own.
+- **SkyCraft's accessor:** the render type's name comes through SkyCraft's own `RenderTypeAccessor`, the interface its
+  mixin gives Minecraft's `RenderType`, as SkyCraft's exporter reads it; the mod already asks for SkyCraft 0.1.2 exactly.
+- **The warden's layers pulse:** Minecraft fades them in and out through their colour's alpha, and BlockRender cuts out
+  what's under 0.1, so in the game they come and go rather than fade; their light is full either way.
+- **The mutation:** the script test's change, broken once by a malformed line in the script, failed as it should.
+- **The replay** passed as written: CyberCraft Tweaks built with no warning, the bytecode checks found what the mixin
+  takes, the script test failed and then passed, and each task's files were identical to the scratch clone's. Its first
+  try stopped on Task 32's Expected paragraph, which named the target method in backticks: the plan runner takes every
+  backticked word there as output to find, and the check doesn't print the method's name, so the paragraph names it
+  without them.
