@@ -1,0 +1,91 @@
+# Spike 7's Part 3: the overlay's Spawn rows and Clear, typed as its buttons type them, at step 0's spot, against
+# SkyCraft's real mod, without the game. It checks each command against Minecraft 26.3, each block entity at its marker,
+# step B's particles as translucent batches, the outline of a block Minecraft's player looks at, and that Clear leaves
+# nothing: the last status's solids line has no block, and the last scene nothing. Start Minecraft first; this waits for
+# its world.
+status
+wait-world 180
+ground city
+at 880.5 6.14 2007.5
+look 270 0
+dump E:\Cyberpunk2077\red4ext\plugins\PhysXProbe\dumps\2026-10-01_14-37-07\collision.obj
+link on
+wait-ground 30
+wait 2
+type /gamemode creative
+scene
+# Mobs, 5 m ahead
+type /execute rotated ~ 0 positioned ^ ^ ^5 run summon minecraft:pig ~ ~ ~ {Tags:["sp7"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty"}
+type /execute rotated ~ 0 positioned ^-2 ^ ^5 run summon minecraft:villager ~ ~ ~ {Tags:["sp7"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty",VillagerData:{type:"minecraft:plains",profession:"minecraft:farmer",level:2}}
+type /execute rotated ~ 0 positioned ^2 ^ ^5 run summon minecraft:spider ~ ~ ~ {Tags:["sp7"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty",NoAI:1b}
+type /execute rotated ~ 0 positioned ^4 ^ ^5 run summon minecraft:blaze ~ ~1 ~ {Tags:["sp7"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty",NoAI:1b}
+type /execute rotated ~ 0 positioned ^-4 ^ ^5 run summon minecraft:slime ~ ~ ~ {Tags:["sp7"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty",Size:0}
+wait 3
+scene
+# The falling sand, which vanishes where it lands
+type /execute rotated ~ 0 positioned ^ ^ ^3 run summon minecraft:falling_block ~ ~12 ~ {BlockState:"minecraft:sand",DropItem:0b,CancelDrop:1b,Tags:["sp7"]}
+wait 3
+# The block entities, each placed at its marker, 8 m ahead
+type /execute rotated ~ 0 positioned ^-6 ^ ^8 run summon minecraft:marker ~ ~ ~ {Tags:["sp7b","sp7chest"]}
+type /execute at @e[tag=sp7chest] run setblock ~ ~ ~ minecraft:chest
+type /execute rotated ~ 0 positioned ^-3 ^ ^8 run summon minecraft:marker ~ ~ ~ {Tags:["sp7b","sp7bed"]}
+type /execute at @e[tag=sp7bed] run setblock ~ ~ ~ minecraft:red_bed[facing=north,part=foot]
+type /execute at @e[tag=sp7bed] run summon minecraft:marker ~ ~ ~-1 {Tags:["sp7b","sp7bedhead"]}
+type /execute at @e[tag=sp7bedhead] run setblock ~ ~ ~ minecraft:red_bed[facing=north,part=head]
+type /execute rotated ~ 0 positioned ^ ^ ^8 run summon minecraft:marker ~ ~ ~ {Tags:["sp7b","sp7sign"]}
+type /execute at @e[tag=sp7sign] run setblock ~ ~ ~ minecraft:oak_sign
+type /execute rotated ~ 0 positioned ^3 ^ ^8 run summon minecraft:marker ~ ~ ~ {Tags:["sp7b","sp7banner"]}
+type /execute at @e[tag=sp7banner] run setblock ~ ~ ~ minecraft:white_banner{patterns:[{pattern:"minecraft:stripe_top",color:"red"},{pattern:"minecraft:creeper",color:"black"}]}
+type /execute rotated ~ 0 positioned ^6 ^ ^8 run summon minecraft:marker ~ ~ ~ {Tags:["sp7b","sp7torch"]}
+type /execute at @e[tag=sp7torch] run setblock ~ ~ ~ minecraft:torch
+wait 2
+scene
+# The dropped items, 3 m ahead
+type /execute rotated ~ 0 positioned ^-1 ^ ^3 run summon minecraft:item ~ ~1 ~ {Item:{id:"minecraft:diamond",count:1},PickupDelay:32767,Tags:["sp7"]}
+type /execute rotated ~ 0 positioned ^1 ^ ^3 run summon minecraft:item ~ ~1 ~ {Item:{id:"minecraft:grass_block",count:1},PickupDelay:32767,Tags:["sp7"]}
+wait 2
+scene
+# Step B's particles. The firework bursts overhead, so the stand-in V looks up at it: Minecraft extracts only the
+# particles in its view.
+look 270 -45
+type /execute rotated ~ 0 positioned ^ ^ ^6 run summon minecraft:firework_rocket ~ ~ ~ {LifeTime:20,Tags:["sp7"],FireworksItem:{id:"minecraft:firework_rocket",count:1,components:{"minecraft:fireworks":{explosions:[{shape:"large_ball",colors:[I;16711680]}]}}}}
+wait 1.5
+scene
+look 270 0
+# The splash potion breaks on the ground half a second after it's summoned.
+type /execute rotated ~ 0 positioned ^3 ^ ^3 run summon minecraft:splash_potion ~ ~2 ~ {Tags:["sp7"],Item:{id:"minecraft:splash_potion",count:1,components:{"minecraft:potion_contents":{potion:"minecraft:regeneration"}}}}
+wait 1
+scene
+# The campfire's smoke rises from 3 m ahead and 3 m to the right. Then the stand-in V looks down at the campfire,
+# 45 degrees right of ahead: Minecraft's player targets it, and the world table has its outline.
+type /execute rotated ~ 0 positioned ^-3 ^ ^3 run summon minecraft:marker ~ ~ ~ {Tags:["sp7b","sp7campfire"]}
+type /execute at @e[tag=sp7campfire] run setblock ~ ~ ~ minecraft:campfire
+wait 3
+scene
+look 315 17
+wait 1
+scene
+look 270 0
+# The herd, 11 and 13 m ahead
+type /execute rotated ~ 0 positioned ^-4 ^ ^11 run summon minecraft:pig ~ ~ ~ {Tags:["sp7"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty"}
+type /execute rotated ~ 0 positioned ^-2 ^ ^11 run summon minecraft:pig ~ ~ ~ {Tags:["sp7"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty"}
+type /execute rotated ~ 0 positioned ^ ^ ^11 run summon minecraft:pig ~ ~ ~ {Tags:["sp7"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty"}
+type /execute rotated ~ 0 positioned ^2 ^ ^11 run summon minecraft:pig ~ ~ ~ {Tags:["sp7"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty"}
+type /execute rotated ~ 0 positioned ^4 ^ ^11 run summon minecraft:pig ~ ~ ~ {Tags:["sp7"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty"}
+type /execute rotated ~ 0 positioned ^-4 ^ ^13 run summon minecraft:pig ~ ~ ~ {Tags:["sp7"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty"}
+type /execute rotated ~ 0 positioned ^-2 ^ ^13 run summon minecraft:pig ~ ~ ~ {Tags:["sp7"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty"}
+type /execute rotated ~ 0 positioned ^ ^ ^13 run summon minecraft:pig ~ ~ ~ {Tags:["sp7"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty"}
+type /execute rotated ~ 0 positioned ^2 ^ ^13 run summon minecraft:pig ~ ~ ~ {Tags:["sp7"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty"}
+type /execute rotated ~ 0 positioned ^4 ^ ^13 run summon minecraft:pig ~ ~ ~ {Tags:["sp7"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty"}
+wait 4
+scene
+status
+# Clear: the placed blocks by their markers, without block updates, then everything tagged. The puffs a killed mob
+# leaves last up to 5 s, and the campfire's smoke a little longer: the last scene, 7 s on, has nothing in it.
+type /execute at @e[tag=sp7b] run setblock ~ ~ ~ minecraft:air strict
+type /kill @e[tag=sp7]
+type /kill @e[tag=sp7b]
+wait 7
+scene
+status
+quit
