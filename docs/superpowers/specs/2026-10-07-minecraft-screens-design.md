@@ -1,7 +1,9 @@
 # Minecraft's screens in build mode: design (spike 8)
 
 Date: 2026-10-07. Status: agreed with the user section by section in the brainstorm. "Found while writing", near the
-end, lists what writing it out added to what was agreed.
+end, lists what writing it out added to what was agreed. Then revised after a deep self-review at the user's request,
+which checked each claim against its source and walked through step 0 and run E as they would run: "Changes from the
+deep review", at the end, lists what changed and what was checked. The sections above it include those changes.
 
 ## Purpose
 
@@ -57,6 +59,7 @@ The user asked for Minecraft's inventory and the F3+F4 switcher during spike 6 (
   HUD), F2 (screenshot), F5 (third person, which BlockRender doesn't draw) and F11 (full screen, on Minecraft's hidden
   window). They stay the game's, or reach Minecraft only with F3 held. The user's rebinds of the keys taken apply, since
   Minecraft gets physical keys and applies its own bindings, but a rebind onto another key isn't followed.
+- **Minecraft's Friends screen,** on O in 26.3 (`key.friends`): O is the pause menu's, as in SkyCraft.
 - **Protecting V in spectator,** by the user's choice.
 - **Minecraft's cursor shapes:** the pointing hand over buttons and the text beam over text fields. The cursor is an
   arrow.
@@ -88,7 +91,9 @@ The user asked for Minecraft's inventory and the F3+F4 switcher during spike 6 (
   cursor itself.
 - **Its Raw Input** (spike 4's "Cyberpunk's input"): one `GetRawInputData` call site, in the input system's
   `WM_INPUT` handler; mouse movement from `lLastX`/`lLastY`, buttons and the wheel from `usButtonFlags`, keys by
-  `VKey` (0xFF skipped).
+  `VKey` (0xFF skipped). It imports no other way to read keys or the mouse: no `GetKeyState`, `GetAsyncKeyState`,
+  `GetKeyboardState`, `GetRawInputBuffer` or DirectInput; XInput is for controllers. The `WM_INPUT` handler runs from
+  the pump's `DispatchMessageW`, so a key's Raw Input and its `WM_CHAR` are seen on the same thread.
 
 ### Windows
 
@@ -97,6 +102,9 @@ The user asked for Minecraft's inventory and the F3+F4 switcher during spike 6 (
   "Mouse Settings", seen through yuuza.net's translation): 1/32, 1/16, 1/8, 2/8, 3/8, 4/8, 5/8, 6/8, 7/8, 1, 1.25, 1.5,
   1.75, 2, 2.25, 2.5, 2.75, 3, 3.25, 3.5 pixels a count, the fractions carried over. So 0.75 for the user.
 - **Display scaling** 100% (`AppliedDPI` 96), so Minecraft's window coordinates are its pixels.
+- **Keyboard layouts:** Danish first (`00000406`), then US. On the Danish layout the key where US has "/" types "-", "/"
+  is Shift+7, and AltGr makes @ (AltGr+2), £, $, €, the brackets and braces; ´, ¨, ^, ` and ~ are dead keys. AltGr
+  reaches programs as Left Ctrl and Right Alt.
 
 ### SkyCraft's Minecraft side (0.1.2)
 
@@ -114,6 +122,10 @@ The user asked for Minecraft's inventory and the F3+F4 switcher during spike 6 (
 - **`kMcScreenOpen`** is set in McState while `gui.screen()` isn't null, and `guiScale` is the window's GUI scale.
 - **The look:** each frame, only while no screen is open, it sets the player's yaw and pitch to the game's (SkyState).
   While a screen is open the player keeps its look.
+- **Each frame, in order:** if SkyState says a menu is open (`kSkyMenuOpen`) or a load, `InputBridge.releaseAll`; then
+  the input ring is drained; then the look. BlockRender and mclink set `kSkyMenuOpen` whenever build mode is off
+  (`Link.cpp`; BlockRender's frame takes `Router::On()`, so not while paused). So with build mode off, nothing stays
+  held from one frame to the next.
 - **Its window** is sized to SkyState's viewport (`Window.setWindowed(w, h)`), the HUD image's size.
 - **Its Skyrim side, as a reference:** while a Minecraft screen is open, every key is Minecraft's and the mouse moves a
   cursor (raw counts as overlay pixels), started at the centre when a screen opens; its overlay shader draws an
@@ -121,12 +133,19 @@ The user asked for Minecraft's inventory and the F3+F4 switcher during spike 6 (
 
 ### Minecraft 26.3
 
-- **Default keys** (`Options`, SDL scancodes): inventory E (8), drop Q (20), chat T (23), command / (56), swap hands F
-  (9), debug overlay and debug modifier F3 (60), switch game mode F4 (61) and spectate N (17) with the modifier, debug
-  options F6 (63) with it. F4 alone toggles spectator shader effects; F1 toggles the HUD.
-- **`Gui.setScreen`** (not `Minecraft.setScreen` in 26.3), opening a screen, calls `MouseHandler.releaseMouse` and
-  `KeyMapping.releaseAll`. `releaseMouse`, if the mouse was grabbed, puts its position at the window's centre
-  (`getScreenWidth() / 2`, `getScreenHeight() / 2`). Closing it (`grabMouse`) grabs the mouse again.
+- **Default keys** (`Options`, SDL scancodes, so physical keys): inventory E (8), drop Q (20), chat T (23), command /
+  (56), swap hands F (9), friends O (18), debug overlay and debug modifier F3 (60), switch game mode F4 (61) and
+  spectate N (17) with the modifier, debug options F6 (63) with it. F4 alone toggles spectator shader effects; F1
+  toggles the HUD.
+- **The user's CyberCraft instance** (`ModrinthApp\profiles\CyberCraft\options.txt`) keeps those defaults for every key
+  this spike takes. Its own changes: sneak on Left Ctrl and sprint on Left Shift (toggled), swap hands on F5, the
+  perspective on F, hotbar 8 and 9 on mouse buttons 5 and 4; GUI scale 2.
+- **`KeyboardHandler.keyPress`:** action 0 is a release, 1 a press, and anything else a repeat, so SkyCraft's -1
+  repeats.
+- **`Gui.setScreen`** (not `Minecraft.setScreen` in 26.3), given a screen, calls `MouseHandler.releaseMouse` and
+  `KeyMapping.releaseAll`; given none, it stops text input and restores toggled keys. `releaseMouse`, if the mouse was
+  grabbed, puts its position at the window's centre (`getScreenWidth() / 2`, `getScreenHeight() / 2`). Closing it
+  (`grabMouse`) grabs the mouse again, centres the position too, and sets every key mapping from the keys held.
 - **`MouseHandler.onMove`** only keeps the position and adds up the movement. Minecraft acts on it once a frame
   (`handleAccumulatedMovement`): with a screen open, `Screen.mouseMoved` at the frame's last position, and with a button
   held `mouseDragged` there too; with the mouse grabbed and no screen, `turnPlayer`. So a drag faster than a slot a
@@ -134,6 +153,8 @@ The user asked for Minecraft's inventory and the F3+F4 switcher during spike 6 (
 - **The switcher** (`GameModeSwitcherScreen`) cycles creative, survival, adventure and spectator
   (`GameModeIcon.getNext`).
 - **The game rule `immediate_respawn`** is on in the user's world (spike 6), so there's no death screen.
+- **`setblock … strict`** places with flags 2 | 816, which include `UPDATE_SUPPRESS_DROPS` and
+  `UPDATE_SKIP_BLOCK_ENTITY_SIDEEFFECTS`: a chest removed so drops nothing, its contents included.
 
 ### BlockRender today (0.22.0)
 
@@ -165,19 +186,22 @@ As now, plus:
 - **F3** goes to Minecraft, and **while F3's press is Minecraft's, every key pressed goes to Minecraft**, so that every
   F3 combination works: F3+F4 (the switcher), F3+N (spectator), F3+F6 (debug options), F3+Esc (pause without a menu)
   and the rest. F8 and Shift+F6 stay ours even then. A plain F4 or N still reaches the game.
-- **O** sends `kInOpenMenu`, which opens Minecraft's pause menu, and is hidden from the game.
+- **O** sends `kInOpenMenu`, which opens Minecraft's pause menu, and is hidden from the game: one `kInOpenMenu` a
+  press, its repeats and release hidden and sent nowhere.
 - **Esc and the game's other menu keys** (I, M, J, P, K, H) end build mode and open the game's menu, as now.
 - **F, R, Tab, F5** and every other key stay the game's.
 
 ### A Minecraft screen open
 
 **Every key, button and wheel notch goes to Minecraft** and is hidden from the game, the menu keys and Esc included.
-So typing works, Esc and E close screens, Shift and Ctrl modify clicks, Q drops what's under the cursor, and 1 to 9
-swap with the hovered slot. Mouse movement moves the cursor ("The cursor") instead of turning V, and characters go as
-text ("Typed text"). Two inputs stay ours:
+So typing works, Esc and E close screens, Shift and Ctrl modify clicks, Q drops what's under the cursor, 1 to 9 swap
+with the hovered slot, and the user's F5 (swap hands) swaps it with the offhand. A click in a screen makes no latency
+mark (`TakePress`), since it changes no block. Mouse movement moves the cursor ("The cursor") instead of turning V,
+and characters go as text ("Typed text"). Two inputs stay ours:
 - **F8** ends build mode. With a screen open it also closes it: after Minecraft lets go of everything, Esc's press and
   release go to Minecraft. Otherwise an inventory would stay open out of sight, and the overlay's Type and Fun buttons
-  would refuse to run.
+  would refuse to run. The Esc goes even though SkyState then says a menu is open: SkyCraft lets go of everything at
+  the frame's start, then drains the ring, Esc's press and release included.
 - **Shift+F6** pauses build mode, as now. The screen stays open in Minecraft; when CET's overlay closes, the screen is
   worked again with the cursor where it was.
 
@@ -214,15 +238,18 @@ While a Minecraft screen is open (build mode on, not paused), the Raw Input patc
 At the centre of the image when Minecraft's screen flag goes from clear to set, whatever build mode's state: exactly
 what Minecraft's own `releaseMouse` does with its position. Going from one screen straight to another (the pause menu
 to Options) keeps it, as in Minecraft, and so does a pause behind CET's overlay. A changed `hudscale` or back buffer
-clamps it into the new area.
+clamps it into the new area. If one screen closes and another opens within a frame our side doesn't see (a gap of
+one Minecraft frame, when Minecraft runs faster than the game), Minecraft centres its position and ours stays: the
+arrow and Minecraft's hover disagree until the mouse moves, whose first event puts Minecraft's position at the arrow.
 
 ### Drawing it
 
 The HUD pass draws SkyCraft's arrow (white, with a black edge) over Minecraft's image, at back-buffer resolution, 18
-pixels tall at 1080 lines and scaled with the back buffer's height (24 on the user's 1440). `HudConstants` grows from 4
-values to 8: the cursor's x and y in back-buffer pixels, its height, and whether it's drawn. The pass reads the
-router's newest position as it's recorded at Present, so the arrow moves in the frame the mouse does. It's drawn while
-the screen state is on and the HUD image is drawn.
+pixels tall at 1080 lines and scaled with the back buffer's height (24 on the user's 1440), its edge scaled alike.
+`HudConstants` grows from 4 values to 8: the cursor's x and y in back-buffer pixels, its height, and whether it's
+drawn. The pass reads the router's newest position as it's recorded at Present, from atomics the router publishes, so
+Present never waits on the router's lock, and the arrow moves in the frame the mouse does. It's drawn while the
+screen state is on and the HUD image is drawn.
 
 Minecraft's hover highlight, and an item carried in an inventory, follow Minecraft's own position: they trail the arrow
 by Minecraft's frame and the HUD image's transfer, about 2 to 3 frames, as the user accepted with approach 1.
@@ -230,7 +257,10 @@ by Minecraft's frame and the HUD image's transfer, about 2 to 3 frames, as the u
 ## Typed text
 
 - **From `WM_CHAR`:** Windows' characters for each key press, with the keyboard layout, Shift, Caps Lock, AltGr and dead
-  keys applied, as Minecraft's own window (SDL) would get them.
+  keys applied, as Minecraft's own window (SDL) would get them. On the user's Danish layout that's æ, ø and å, "/" as
+  Shift+7, @ as AltGr+2, é as ´ then e. AltGr's keys reach Minecraft too, as Left Ctrl, Right Alt and the key; none
+  of the Danish AltGr characters sits on A, C, V or X, Minecraft's Ctrl shortcuts in text fields, so only the
+  character shows.
 - **Seen by patching the executable's `PeekMessageW` import,** as `GetRawInputData`'s is (`hooks/ImportPatch`): after a
   call with `PM_REMOVE` that returned a message, a `WM_CHAR` goes to the router. The other call site only peeks for sent
   messages, so it never returns one. The game gets every message unchanged; nothing of its own takes text in build
@@ -241,19 +271,24 @@ by Minecraft's frame and the HUD image's transfer, about 2 to 3 frames, as the u
 - **Control characters** (below 0x20, and 0x7F) are dropped. Minecraft gets Backspace, Enter, Tab, the arrows and
   Ctrl+A, C and V as keys, as SDL gives them; Ctrl+V reads the Windows clipboard on Minecraft's side.
 - **A held key** repeats its key and its character, as SDL gives Minecraft.
-- **The order:** the game's pump dispatches a key's `WM_INPUT` (the Raw Input patch, which pushes the key) before
-  `TranslateMessage` makes its `WM_CHAR`, so Minecraft gets the key, then its character, as SDL orders them.
+- **The order:** both come through the game's one pump, on its thread. A key's `WM_INPUT` (the Raw Input patch, which
+  pushes the key) is expected before `TranslateMessage` makes its `WM_CHAR` from the legacy `WM_KEYDOWN`, so Minecraft
+  gets the key, then its character, as SDL orders them (risk 7: unverified, and harmless the other way round).
   `Link::Push` may be called from any thread.
 - **If the patch fails,** the log says that typing in Minecraft's screens won't work; the rest does.
 
 ## Edge cases
 
-- **Build mode ending any other way with a screen open** closes it as F8 does: Esc to Minecraft, if the link is still
-  there and Minecraft said last frame that a screen was open. That's a scene or a car blocking V, or Minecraft's player
-  dying. When the link or Minecraft is gone, nothing is sent and the screen state goes off. The menu keys can't end it
-  with a screen open, since they're Minecraft's then.
+- **Build mode ending any other way with a screen open** closes it as F8 does, with Esc to Minecraft, if Minecraft
+  said last frame that it's in its world, its player alive, and a screen open. That's a scene or a car blocking V, a
+  teleport of V failing, a `build off` request, or the plugin unloading. Not when Minecraft's player dies, whose
+  respawn changes screens by itself, so an Esc could find none; nor when the link or Minecraft is gone, or Minecraft
+  has left its world (its title screen ignores Esc anyway). Then nothing is sent, and the screen state goes off. The
+  menu keys can't end build mode with a screen open, since they're Minecraft's then. All of it is in one place, the
+  router's ending, which F8's decision goes through too.
 - **Esc that finds no screen:** if the screen closed by itself in the frame build mode ended, the Esc opens Minecraft's
-  pause menu instead. It stays out of sight until build mode is back, where Esc closes it.
+  pause menu instead. It stays out of sight until build mode is back, where Esc closes it; meanwhile the overlay's Type
+  and Fun buttons are refused, as with any screen open.
 - **The overlay's Type and Fun buttons** are refused while a Minecraft screen is open ("a Minecraft screen is open"),
   as now: with the inventory open behind CET's overlay, close it first.
 - **The typer's own chat:** a command typed by an `mc` request while build mode is on and not paused (from mclink or
@@ -294,24 +329,33 @@ Each step checks against something real before the next one depends on it.
 
 ### Step 0: Minecraft's side, with mclink, before any game session
 
-The user starts Minecraft; mclink takes the game's place on the link and runs `tools/mclink/screens.txt` at a fixed
-HUD size of 1280 × 720, saving HUD images:
-- **the cursor's pixels:** E opens the inventory; the cursor goes to a slot worked out from McState's `guiScale` (the
-  inventory's 176 by 166 GUI pixels centred in the window), and the image shows the slot's hover highlight under it;
-- **moving an item:** a stick and a stone are given into known slots with `/item replace`, then moved by `cursor` and
-  `click`, and `/execute if items …` reports in chat that they landed where intended;
+The user starts Minecraft; mclink takes the game's place on the link and runs `tools/mclink/screens.txt`, saving HUD
+images. mclink always asks for a 1280 × 720 HUD. The script turns `build on`: with build mode off, SkyState says a menu
+is open and SkyCraft lets go of every key each frame, so F3 couldn't stay held for the switcher, nor a button for a
+drag. Before it runs, a `/data get entity @s Inventory` and the player's game mode, read from Minecraft's log, show
+which main-inventory slots are empty and what to set back.
+- **the cursor's pixels:** in survival, whose inventory has a fixed layout (the creative one has tabs), E opens the
+  inventory. Its 176 by 166 GUI pixels are centred in the window at the user's GUI scale 2, which the script checks
+  against McState's `guiScale`. The cursor goes to a slot's centre, and the image shows the slot's hover highlight
+  under it;
+- **moving an item:** a stick and a stone go into two of the empty slots with `/item replace`, so none of the user's
+  items is replaced. They're moved by `cursor` and `click`, then Esc closes the inventory (the typer refuses while one
+  is open), and `/execute if items …` reports in chat that they landed where intended;
 - **typing:** T opens chat, then `text /say screens` and Enter; Minecraft's log has the line;
 - **the switcher:** F3 down, F4, F3 up; the chat says the game mode changed, and a second round sets it back;
 - **the pause menu:** `pause` opens it, Esc closes it;
-- **the end:** the test items are cleared, and the user's hotbar is as they keep it (golden apples in slot 6, golden
-  carrots in 7, TNT in 8, flint and steel in 9).
+- **the end:** the two test slots are emptied with `/item replace … with air`, the game mode read before is set back,
+  `build off`, and the user's hotbar is as they keep it (golden apples in slot 6, golden carrots in 7, TNT in 8, flint
+  and steel in 9).
 
 ### Unit tests (ctest, no game)
 
 Each new test is broken once to prove it can fail.
 - **Build mode:** routing with and without a screen; F8 and Shift+F6 kept ours, F8's Esc after the release; the F3 rule;
-  O; Esc both ways; the menu keys going to Minecraft with a screen open; holders for any key across a screen opening
-  and closing; the slot readout kept while a screen is open.
+  O's one `kInOpenMenu`, its repeats and release sent nowhere; Esc both ways; the menu keys going to Minecraft with a
+  screen open; holders for any key across a screen opening and closing; the slot readout kept, and no latency mark,
+  while a screen is open.
+- **The router's ending:** Esc only with Minecraft in its world, its player alive and a screen open.
 - **The cursor:** Windows' table, 1 to 20; fractions carried; clamping; the image's pixels at scales 1, 2 and 4;
   centring when the flag sets, not between screens; sending only when the pixel changes.
 - **Text:** surrogate pairs, lone surrogates, the control filter, the screen state's gate.
@@ -321,10 +365,13 @@ Each new test is broken once to prove it can fail.
 
 After spike 7's runs A to D. BlockRender 0.23.0 deployed while the game is closed, then with the user:
 1. E opens the inventory with the cursor in the middle; moving the mouse doesn't turn V.
-2. Picking up and placing, shift-click, a drag splitting a stack, 1 to 9 over a slot, Q; E and Esc close it.
-3. The creative inventory: its tabs, the wheel scrolling, typing in its search box.
-4. Chat: T, typing with capitals and punctuation, Backspace, the arrows, Ctrl+V; / opens with the slash; a command
-   runs.
+2. In survival (the overlay's Survival button): picking up and placing, shift-click, a drag splitting the golden
+   apples (put back in slot 6 after), 1 to 9 over a slot, Q; E and Esc close it. What Q drops is picked up again, or
+   cleared with `/kill @e[type=item,distance=..8]`.
+3. In creative: the creative inventory's tabs, the wheel scrolling, typing in its search box.
+4. Chat: T, typing capitals, æ, ø and å, @ (AltGr+2), é (´ then e), "/" (Shift+7), Backspace, the arrows, Ctrl+A,
+   Ctrl+C and Ctrl+V. Minecraft's command key, the physical key where US has "/" ("-" on the user's Danish keyboard),
+   opens chat with the slash; a command runs.
 5. F3 toggles the debug screen; F3+F4 cycles the modes; F3+N into spectator briefly, then back.
 6. O opens the pause menu; an Options slider drags.
 7. A crafting table and a chest placed in the city and worked; F8 with one open closes it and ends build mode; Shift+F6
@@ -332,23 +379,29 @@ After spike 7's runs A to D. BlockRender 0.23.0 deployed while the game is close
 8. Alt-Tab with a screen open, and back.
 9. T no longer opens the phone in build mode; Esc with no screen open still opens the game's menu.
 
-The placed blocks are cleared at the end (`setblock … air strict`). The results doc gets screenshots, as earlier
-runs' did.
+Only test items go in the chest: the placed blocks are cleared at the end with `setblock … air strict`, which drops
+nothing, the chest's contents included. The results doc gets screenshots, as earlier runs' did.
 
 ## Risks
 
-1. **`WM_CHAR` for hidden keys:** expected from the pump's disassembly; run E's typing shows it.
+1. **`WM_CHAR` for hidden keys:** expected from the pump's disassembly and from Raw Input registered without
+   `RIDEV_NOLEGACY` (spike 4), which keeps the legacy key messages coming; run E's typing shows it.
 2. **The cursor's pixels:** if Minecraft's window coordinates weren't the image's pixels, clicks would land off the
    arrow. Step 0 checks them before the game; display scaling is 100%.
-3. **A stray `kInCursor` after a screen closes,** sent before our side learns of it, reaches Minecraft with the mouse
-   grabbed again and turns its player for a frame. SkyCraft sets the player's look from the game's again the next
-   frame, so it's at most a one-frame twitch of Minecraft's hand.
+3. **The 30 ms after a screen closes,** before our side learns of it: the mouse's movement is still hidden from the
+   game, so V doesn't turn, and goes to Minecraft as `kInCursor`, which, the mouse grabbed again, turns Minecraft's
+   player. SkyCraft sets the player's look from the game's again the next frame, so it's at most a one-frame twitch of
+   Minecraft's hand and a few degrees of V's turn lost.
 4. **F8's Esc and the typer:** an Esc sent while the typer's chat is open closes it before its Enter, and the command
    is lost while the typer logs it typed. Rare: the typer types while CET's overlay is open.
 5. **Spectator** takes V through walls, and V could be left inside the city's geometry when it ends. The user chose to
    keep it.
 6. **Many cursor events:** a fast mouse at 1,000 events a second sends one each time the image's pixel changes, about
    17 a frame at 60 frames a second; the input ring holds 4,096, and Minecraft drains it every frame.
+7. **A key's `WM_INPUT` before its `WM_CHAR`** is expected (the raw event comes with the key, `WM_CHAR` only from
+   `TranslateMessage` of the legacy `WM_KEYDOWN`), not verified. The other order would do no harm: a text field types
+   on characters and ignores printable keys, a screen without one ignores characters, and SkyCraft drops a character
+   when no screen is open.
 
 ## Found while writing
 
@@ -367,3 +420,72 @@ runs' did.
   last position, so a fast drag skips slots in Minecraft's own window too. The sending stays as agreed, for the newest
   position; only its reason changed.
 - **T's other bindings** are notifications and cycling objectives, not photo mode.
+
+## Changes from the deep review
+
+The user asked for a deep self-review of the spec once it was written. It traced each claim to its source (the game's
+executable and bindings, Minecraft 26.3's classes with `javap`, SkyCraft 0.1.2's source, BlockRender's and mclink's
+code, the user's Windows and Minecraft settings), and walked through step 0's script and run E's nine steps under the
+routing rules.
+
+### What changed
+
+- **The ending's Esc is narrower:** it goes only while Minecraft is in its world, its player alive, and a screen open.
+  A death changes screens by itself (respawn), so an Esc then could open the pause menu out of sight; out of its world
+  there's nothing to close. It lives in the router's one ending, which F8 goes through too ("Edge cases").
+- **O's release:** one `kInOpenMenu` a press, its repeats and release hidden and sent nowhere. The spec said only that
+  O is hidden.
+- **No latency mark from a click in a screen.** A mark times the next block change within a second, and a click in an
+  inventory changes none, so an unrelated change (a furnace lighting) would have made a false sample.
+- **Step 0 runs with `build on`.** SkyCraft lets go of every key at each frame's start while SkyState says a menu is
+  open, which mclink and BlockRender say whenever build mode is off. F3 held for the switcher, or a button held for a
+  drag, would be let go between frames.
+- **Step 0's inventory test** uses survival's inventory, whose layout is fixed, at the user's GUI scale 2 (checked
+  against McState). Its test items go only into slots found empty first, and the game mode read first is set back. The
+  first version would have used `/item replace` on slots that might hold the user's items.
+- **Run E** switches to survival for the item moves, and types the user's Danish characters (æ, ø, å, AltGr's @, the
+  dead key's é, "/" as Shift+7). It names Minecraft's command key as the user's "-" key, and clears what Q drops. Only
+  test items go in the chest, whose removal with `strict` drops nothing.
+- **The renderer reads the cursor from atomics,** so Present never waits on the router's lock; the arrow's edge scales
+  with it.
+- **Two edge cases added:** a screen replacing another within a frame our side misses (the arrow and Minecraft's hover
+  disagree until the mouse moves), and the 30 ms after a screen closes (risk 3, extended).
+- **Risk 7 added:** the order of a key's `WM_INPUT` and its `WM_CHAR` is expected, not verified, and harmless either
+  way.
+- **Non-goal added:** Minecraft's Friends screen, on O in 26.3.
+
+### What was checked
+
+- **The game:**
+  - its imports: input is read only through `GetRawInputData`, with XInput for controllers;
+  - its pump's disassembly, with the other `PeekMessageW` call (sent messages only);
+  - its bindings for E, T, Q, F3, F4 and O (`CameraIncreaseFOV` in the free camera's block);
+  - that the `WM_INPUT` handler runs from the pump's dispatch.
+- **Minecraft 26.3:**
+  - every default key this spike uses, and `key.friends` on O;
+  - `Gui.setScreen`'s two branches;
+  - `MouseHandler.releaseMouse`, `grabMouse` and `handleAccumulatedMovement`;
+  - `KeyboardHandler.keyPress`'s actions;
+  - `GameModeIcon.getNext`;
+  - `SetBlockCommand`'s strict flags against `Block`'s `UPDATE_*` constants.
+- **SkyCraft:**
+  - `InputBridge`'s handling of each input type;
+  - `SkyClient`'s frame order (release while a menu is open, drain, look only without a screen) and its viewport;
+  - `ScreenMixin` and `InputConstantsMixin`.
+- **The user's settings:**
+  - the CyberCraft instance's `options.txt`: every key this spike takes at Minecraft's default, sneak and sprint
+    swapped, swap hands on F5, the perspective on F, GUI scale 2;
+  - Windows: pointer speed 8 with "Enhance pointer precision" off, 96 DPI, Danish then US layouts;
+  - Windows' pointer speed table, from Liquipedia's figures.
+- **BlockRender and mclink:**
+  - every way build mode ends (`Router::Update`, the drive's `TurnOff`s, `build off`, unload, F8);
+  - `frame.buildMode` taking `Router::On()`;
+  - the latency marks;
+  - root parameter 1's 8 values;
+  - the typer's refusal;
+  - mclink's `build` and `hud` verbs and its 1280 × 720 viewport.
+- **Simulated:**
+  - step 0's script, step by step, which found the `build on` and empty-slot changes;
+  - run E's steps under the routing rules, among them E's character dropped by the gate, the inventory closed by E or
+    Esc, the F3+F4 switcher closing as F3 is let go, O's pause menu, F8's Esc, Shift+F6 and Alt-Tab with a screen
+    open, and Danish typing through AltGr and dead keys.
