@@ -67,6 +67,7 @@ add_library(render_core STATIC
 	src/link/Combat.cpp
 	src/link/WorldTable.cpp
 	src/entities/WorldShapes.cpp
+	src/entities/Entities.cpp
 	src/physx/GameAbi.cpp
 	src/physx/ShapeTriangles.cpp
 	src/physx/OriginWatch.cpp
@@ -218,6 +219,7 @@ add_executable(render_tests
 	tests/TestCombatInbox.cpp
 	tests/TestWorldTable.cpp
 	tests/TestWorldShapes.cpp
+	tests/TestEntities.cpp
 	tools/mclink/DumpObj.cpp
 	tools/mclink/McLinkScript.cpp
 )
