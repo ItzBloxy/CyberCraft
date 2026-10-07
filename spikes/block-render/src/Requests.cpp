@@ -173,9 +173,9 @@ std::optional<Request> ParseRequest(std::string_view aText, std::string& aError)
 	}
 	if (command == "dump")
 	{
-		if (arguments != 1 || !OneOf(words[1], { "depth", "mvec", "color", "gbuffer", "all" }))
+		if (arguments != 1 || !OneOf(words[1], { "depth", "mvec", "color", "gbuffer", "hint", "all" }))
 		{
-			return Fail(aError, "dump takes one of: depth, mvec, color, gbuffer, all");
+			return Fail(aError, "dump takes one of: depth, mvec, color, gbuffer, hint, all");
 		}
 		return Request{ Request::Kind::Dump, std::string(words[1]) };
 	}

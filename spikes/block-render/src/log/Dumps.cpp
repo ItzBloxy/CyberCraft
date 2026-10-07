@@ -40,7 +40,7 @@ bool Dumps::Arm(std::string_view aWhat, std::string& aError)
 	what_.clear();
 	if (aWhat == "all")
 	{
-		what_ = { "depth", "mvec", "color", "gbuffer" };
+		what_ = { "depth", "mvec", "color", "gbuffer", "hint" };
 	}
 	else
 	{
@@ -167,7 +167,8 @@ void Dumps::OnEvaluate(const EvaluateCall& aCall)
 	}
 	const std::pair<uint32_t, const char*> wanted[] = { { sl::kBufferTypeDepth, "depth" },
 		                                                { sl::kBufferTypeMotionVectors, "mvec" },
-		                                                { sl::kBufferTypeScalingInputColor, "color" } };
+		                                                { sl::kBufferTypeScalingInputColor, "color" },
+		                                                { sl::kBufferTypeBiasCurrentColorHint, "hint" } };
 	for (const auto& [type, what] : wanted)
 	{
 		if (!what_.contains(what))

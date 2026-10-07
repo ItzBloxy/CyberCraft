@@ -9,7 +9,7 @@ namespace cpmc
 {
 // One command from blockrender.request (see the spec's "Requests"):
 //   log
-//   dump depth|mvec|color|gbuffer|all
+//   dump depth|mvec|color|gbuffer|hint|all  (hint: spike 7's step B, DLSS's bias hint at the evaluate)
 //   mode off|present|predlss|gbuffer
 //   place cube|sampler|house
 //   place field <n>            (n: 1 to 1,000,000 blocks)

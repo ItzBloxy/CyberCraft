@@ -50,6 +50,13 @@ TEST(RequestsParseEachCommand)
 	CHECK_EQ(set->number, 0.25);
 }
 
+TEST(RequestsDumpTheBiasHint)
+{
+	const auto hint = Parse("dump hint");  // step B: DLSS's bias hint, as DLSS gets it
+	CHECK(hint.has_value() && hint->kind == Request::Kind::Dump && hint->what == "hint");
+	CHECK_STR(ErrorOf("dump hints"), "dump takes one of: depth, mvec, color, gbuffer, hint, all");
+}
+
 TEST(RequestsIgnoreSurroundingWhitespace)
 {
 	const auto mode = Parse("  mode\toff \r\n");

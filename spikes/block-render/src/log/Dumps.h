@@ -15,9 +15,10 @@
 namespace cpmc
 {
 // Dumps (the spec's "FrameLog and dumps"). `dump <what>` arms one frame: from the next frame token, the tagged
-// buffers are copied at the DLSS evaluate (depth, mvec, color), and the G-buffer candidates as their passes end
-// (gbuffer). The game records its G-buffer pass over many lists, so each set of candidate targets keeps one copy,
-// which every pass with those targets records again: the last in submission order wins, which is the whole G-buffer.
+// buffers are copied at the DLSS evaluate (depth, mvec, color, and spike 7's hint, DLSS's bias hint), and the G-buffer
+// candidates as their passes end (gbuffer). The game records its G-buffer pass over many lists, so each set of
+// candidate targets keeps one copy, which every pass with those targets records again: the last in submission order
+// wins, which is the whole G-buffer.
 // The copies go into readback buffers inside the game's own lists. Once a fence says the GPU has run them, the main
 // thread writes each as a .dds file, with dump.json saying what each one is.
 class Dumps : public HookEvents
