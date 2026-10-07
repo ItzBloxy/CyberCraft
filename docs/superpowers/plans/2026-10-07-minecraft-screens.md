@@ -4194,15 +4194,15 @@ cd /d/Cyberpunk-Minecraft && git add docs/spikes docs/superpowers/plans/2026-10-
 
 ### Task 15: Close the spike
 
-- [ ] **Step 1: Record how Part 2 went, in this plan**
+- [x] **Step 1: Record how Part 2 went, in this plan**
 
 At the end, after "Found while planning Part 2": what ran as written, what changed, and what run E found.
 
-- [ ] **Step 2: Record the spec's changes while executing Part 2**
+- [x] **Step 2: Record the spec's changes while executing Part 2**
 
 In its "Changes while executing Part 2": anything Part 2 changed in the design, and what's left for later.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add docs/superpowers \
@@ -4241,3 +4241,21 @@ The spec's "Changes while planning Part 2" lists what planning changed in the de
   Spike 4 found that the game reads keys only through Raw Input, and the game imports no `GetKeyState` or
   `GetAsyncKeyState`, but Esc was never hidden before: run E checks that closing a Minecraft screen with Esc opens no
   game menu.
+
+## How Part 2 went
+
+Part 2 ran on 2026-10-07, as the user said to start.
+- **Tasks 6 to 13** ran in the real repo through the plan runner, task range 6 to 13: every step's expected result held
+  (each build's failure and the shader check's, then 531, 534, 537, 543, 550, 550, 550 and 551 tests, with no warnings).
+  - **Commits:** `f13d76e` to `fd97e0e`, each tree identical to the scratch clone's `p2-t6` to `p2-t13`.
+  - **The tags:** comparing them fetched the clone's tags into the repo again; they were deleted.
+- **Task 14, run E,** passed every check (`1a6f432`, results in
+  [2026-10-07-minecraft-screens-results.md](../../spikes/2026-10-07-minecraft-screens-results.md)). Risk 8 is settled:
+  Esc closing a Minecraft screen opened no game menu. The user found the cursor smooth.
+- **What didn't go as planned:**
+  - **The slot check** needed a second try: the first 5 was pressed after the inventory closed, as the status's last
+    input (`the key 5 up`, not `Esc up`) showed.
+  - **The é** first arrived as `'e`: the apostrophe key pressed for the dead key. The ´ dead key, tried after, gave é.
+- **Seen, and left as they are:**
+  - the Windows key goes to Minecraft while a screen is open, as every key does, harmlessly;
+  - the typer's own chat makes a screen build mode's for a moment, the spec's edge case.

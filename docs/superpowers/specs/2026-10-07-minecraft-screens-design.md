@@ -5,7 +5,7 @@ end, lists what writing it out added to what was agreed. Then revised after a de
 which checked each claim against its source and walked through step 0 and run E as they would run: "Changes from the
 deep review", at the end, lists what changed and what was checked. Planning Part 1 (step 0) settled more: "Changes
 while planning Part 1", and planning Part 2 more again: "Changes while planning Part 2". The sections above them
-include those changes.
+include those changes. Executing Part 2 changed nothing in the design ("Changes while executing Part 2").
 
 ## Purpose
 
@@ -530,3 +530,16 @@ written. Planning it settled these:
   cleared at them with `strict`, which drops nothing. A `/kill` of items within 10 blocks of V clears what Q drops.
 - **Risk 8 added:** a key hidden from the game's Raw Input still reaches its window as `WM_KEYDOWN`, and Esc was never
   hidden before. Run E checks that Esc closing a Minecraft screen opens no game menu.
+
+## Changes while executing Part 2
+
+Nothing in the design changed: Tasks 6 to 13 ran as planned, and run E passed every check (the results' "Run E").
+- **Risk 8 is settled:** Esc, hidden from the game's Raw Input, closes a Minecraft screen without opening the game's
+  menu. Hiding a key from Raw Input is enough, whatever its `WM_KEYDOWN` does.
+- **Risk 7 showed nothing:** typing worked in every check, Danish letters, AltGr's characters and a dead key's é
+  included, so the order of a key's `WM_INPUT` and its `WM_CHAR` made no difference.
+- **Left for later, if wanted:**
+  - Minecraft's cursor shapes (the hand over buttons, the text beam);
+  - the Friends screen on O;
+  - Minecraft's other keys with no screen open (F, L, Tab, F1, F2, F5);
+  - IME composition.
