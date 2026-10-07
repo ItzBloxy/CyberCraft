@@ -5848,7 +5848,7 @@ cd /d/Cyberpunk-Minecraft && git add docs/spikes/2026-10-06-minecraft-entities-r
 
 ### Task 17: Close Part 2, and plan Part 3
 
-- [ ] **Step 1: Add "How Part 2 went" to this plan**
+- [x] **Step 1: Add "How Part 2 went" to this plan**
 
 At the end, after "Found while executing Part 2": what ran as written, what changed, and what step C's `mclink` run and
 run A found.
@@ -5916,3 +5916,29 @@ The spec's "Changes while planning Part 2" lists what planning settled in the de
   rows, with `mclink`").
 - **Beds, signs and torches are block models in 26.3,** in SkyCraft's section mesh, so they're drawn with the blocks;
   only the chest and the banner of Task 15's block entities are step A's. Task 16's check 4 says so.
+
+## How Part 2 went
+
+Part 2 ran on 2026-10-07, the user starting the games and playing run A.
+- **Ran as written:** Tasks 6 and 8 to 15, through the plan runner, each task's code identical to the verified clone's;
+  493 tests, no warnings, BlockRender importing nothing from PhysX. The deploy, Task 16's step 1, installed at once.
+- **Task 7** passed: the batches came in Minecraft's draw order, and nothing else changed from step 0. Typing the
+  overlay's Spawn rows into Minecraft after it, with the user's leave, found two things ("Found while executing Part
+  2"): the falling sand's block form, which Task 15 then fixed with step 0's script, and beds, signs and torches being
+  block models.
+- **Run A (Task 16)** passed all ten checks with no change to the code:
+  - the glow is emission, steady at the default 0.9, though the game reads it non-linearly (0.5 and 0.75 flicker, 1.0
+    is far too bright);
+  - the game's ambient occlusion darkens the ground under mobs;
+  - nothing smeared;
+  - the entities cost 0.02 ms of GPU a frame, 0.31 ms at the peak of `tnt-cube`'s blast, whose largest scene was 1 MB,
+    with nothing skipped or cut.
+- **Run A found** (the results' "Problems"):
+  - the overlay's block entities losing their markers when V moved, so Clear missed blocks: four the user broke, six
+    the agent removed by their coordinates;
+  - the overlay's buttons moving as its lines come and go;
+  - Shift+F6 leaving build mode;
+  - Minecraft's entities staying drawn after Unlink, as its blocks do, where the user expected them to go.
+- **Changed while running:** Task 16's commit added the screenshots' folder,
+  `docs/spikes/2026-10-06-minecraft-entities-results/run-a/`, beside the results; Clear and its commands were also sent
+  as requests by the agent at times, as the overlay's button sends them.
