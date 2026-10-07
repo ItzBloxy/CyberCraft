@@ -4210,7 +4210,7 @@ cd /d/Cyberpunk-Minecraft && git add docs/superpowers \
        -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
 ```
 
-- [ ] **Step 4: Record the branch's finish**
+- [x] **Step 4: Record the branch's finish**
 
 Use superpowers:finishing-a-development-branch: the tests pass (551), and the user chooses whether
 `spike/minecraft-screens` merges into `main`, as spikes 1 to 7 did.
