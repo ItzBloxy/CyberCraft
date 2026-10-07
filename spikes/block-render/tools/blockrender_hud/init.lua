@@ -3,12 +3,13 @@
 -- frame time as CET sees it, which works without BlockRender too and goes into frames.txt here as well. It asks
 -- BlockRender for things through blockrender.request in this folder.
 -- Kept small: one row of buttons (link, Minecraft's blocks as bodies, step 4's test box, the turn, NPCs in Minecraft,
--- combat, Minecraft's entities), and a line each for the last request's reply and the requests waiting to be sent, build
--- mode (F8) with its drive and whether V is hidden, the bodies, the NPCs, combat, Minecraft's blasts, its entities, and
--- V. Three folded sections hold the rest: "More controls" (the drawing mode, Minecraft's HUD, commands typed into
+-- combat, Minecraft's entities), and a line each for the last request's reply and the requests waiting to be sent,
+-- build mode (F8) with its drive and whether V is hidden, the bodies, the NPCs, combat, Minecraft's blasts, its
+-- entities, and V. It tells BlockRender when CET's overlay opens and closes, which pauses build mode while it's open.
+-- Three folded sections hold the rest: "More controls" (the drawing mode, Minecraft's HUD, commands typed into
 -- Minecraft, the drive log, the ground and its shapes, the NPCs' list, V's punch, V hidden or seen in build mode, and a
--- blast ahead of V), "Fun" (Minecraft's game mode, items for the hotbar and the hand, armor, a heal, and things to spawn
--- ahead and clear again, typed into Minecraft's chat) and "Full status" (every status line, and the frame time).
+-- blast ahead of V), "Fun" (Minecraft's game mode, items for the hotbar and the hand, armor, a heal, and things to
+-- spawn ahead and clear again, typed into Minecraft's chat) and "Full status" (every status line, and the frame time).
 -- Delete this folder to remove it.
 local status = nil       -- status.txt's lines, except the structures
 local structures = {}    -- { name, min = { x, y, z }, max = { x, y, z } }, in world coordinates
@@ -91,15 +92,22 @@ for _, row in ipairs({ "^11", "^13" }) do
     end
 end
 
--- Side by side, 3 blocks apart, each block with its marker, and a torch for its flame. A bed is two blocks: its head goes
--- north of its foot, which the gap keeps off its neighbours.
+-- Side by side, 3 blocks apart, and a torch for its flame. Each block's marker goes first, tagged with its kind, then the
+-- block goes where its markers are: the overlay sends a command a second, each from where Minecraft's player is then, so
+-- a block placed from the player would part from its marker if V moved in between, and Clear would miss it (spike 7's
+-- run A). A bed is two blocks: its head's marker goes north of its foot's, which the gap keeps off its neighbours.
 local blockEntities = {}
-for _, placed in ipairs({ { "^-6", "~ ~ ~", "chest" }, { "^-3", "~ ~ ~", "red_bed[facing=north,part=foot]" },
-    { "^-3", "~ ~ ~-1", "red_bed[facing=north,part=head]" }, { "^", "~ ~ ~", "oak_sign" },
-    { "^3", "~ ~ ~", 'white_banner{patterns:[{pattern:"minecraft:stripe_top",color:"red"},{pattern:"minecraft:creeper",color:"black"}]}' },
-    { "^6", "~ ~ ~", "torch" } }) do
-    table.insert(blockEntities, ahead(placed[1] .. " ^ ^8") .. "setblock " .. placed[2] .. " minecraft:" .. placed[3])
-    table.insert(blockEntities, ahead(placed[1] .. " ^ ^8") .. "summon minecraft:marker " .. placed[2] .. ' {Tags:["sp7b"]}')
+for _, placed in ipairs({ { "^-6", "chest", "chest" }, { "^-3", "bed", "red_bed[facing=north,part=foot]" },
+    { "^", "sign", "oak_sign" },
+    { "^3", "banner", 'white_banner{patterns:[{pattern:"minecraft:stripe_top",color:"red"},{pattern:"minecraft:creeper",color:"black"}]}' },
+    { "^6", "torch", "torch" } }) do
+    local tag = "sp7" .. placed[2]
+    table.insert(blockEntities, ahead(placed[1] .. " ^ ^8") .. 'summon minecraft:marker ~ ~ ~ {Tags:["sp7b","' .. tag .. '"]}')
+    table.insert(blockEntities, "/execute at @e[tag=" .. tag .. "] run setblock ~ ~ ~ minecraft:" .. placed[3])
+    if placed[2] == "bed" then
+        table.insert(blockEntities, '/execute at @e[tag=sp7bed] run summon minecraft:marker ~ ~ ~-1 {Tags:["sp7b","sp7bedhead"]}')
+        table.insert(blockEntities, "/execute at @e[tag=sp7bedhead] run setblock ~ ~ ~ minecraft:red_bed[facing=north,part=head]")
+    end
 end
 
 local fun = {
@@ -348,6 +356,26 @@ local function distanceToBox(p, box)
     return math.sqrt(dx * dx + dy * dy + dz * dz)
 end
 
+-- CET's overlay opening and closing, told to BlockRender, which pauses build mode while it's open. Shift+F6 pauses it at
+-- once; this keeps it right if the overlay was opened or closed some other way. First in the queue, so it doesn't wait
+-- behind the Fun rows' commands, and in place of any still waiting, since only the latest is true.
+local function tellOverlay(state)
+    for i = #queued, 1, -1 do
+        if queued[i]:match("^overlay ") then
+            table.remove(queued, i)
+        end
+    end
+    table.insert(queued, 1, "overlay " .. state)
+end
+
+registerForEvent("onOverlayOpen", function()
+    tellOverlay("open")
+end)
+
+registerForEvent("onOverlayClose", function()
+    tellOverlay("closed")
+end)
+
 registerForEvent("onUpdate", function(delta)
     sendQueued()
     frames.sum = frames.sum + delta
@@ -442,12 +470,10 @@ registerForEvent("onDraw", function()
         if status == nil then
             ImGui.Text("no status.txt yet: is BlockRender loaded?")
         end
-        if reply ~= nil then
-            ImGui.Text("Last request: " .. reply)
-        end
-        if #queued > 0 then
-            ImGui.Text(string.format("Requests waiting to be sent: %d, about one a second", #queued))
-        end
+        -- Both always there, so the rows below don't move as requests come and go, and a click lands where it was aimed.
+        ImGui.Text("Last request: " .. (reply or "none yet"))
+        ImGui.Text(#queued > 0 and string.format("Requests waiting to be sent: %d, about one a second", #queued)
+            or "Requests waiting to be sent: none")
         if build ~= nil then
             ImGui.Text("Build mode (F8): " .. build .. (driveState and ("; drive " .. driveState) or "")
                 .. (vLook and ("; V " .. vLook) or ""))
