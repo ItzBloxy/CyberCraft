@@ -90,6 +90,8 @@ public:
 	void    SetHud(bool aWanted);
 	bool    SetHudImage(uint32_t aWidth, uint32_t aHeight, bool aBottomUp, const uint8_t* aRgba);
 	HudSize BackBufferSize() const { return { backWidth_.load(), backHeight_.load() }; }  // as the last Present saw it
+	// Spike 8: where the HUD pass finds the cursor, which it draws over the image while it's shown; null for none.
+	void SetHudCursor(const HudCursor* aCursor) { hudCursor_.store(aCursor); }
 
 	// Spike 7: Minecraft's entities (the spec's "The renderer"), from the main thread. AddEntityTexture copies a texture
 	// and places it in the one buffer at once, for the next Update to upload: past the 64 MB cap it's left out, logged
@@ -522,6 +524,7 @@ private:
 		bool     bottomUp = false;
 	};
 	std::atomic<bool>                                          hudWanted_{ false };
+	std::atomic<const HudCursor*>                              hudCursor_{ nullptr };
 	bool                                                       hudShadersFailed_ = false;  // main thread: not again until a reload
 	std::atomic<uint32_t>                                      backWidth_{ 0 };
 	std::atomic<uint32_t>                                      backHeight_{ 0 };

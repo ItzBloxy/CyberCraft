@@ -68,10 +68,14 @@ static_assert(sizeof(PatchAreaGpu) == 32);
 // The HUD pass's root constants, in b1 where the blocks have SectionConstants.
 struct HudConstants
 {
-	uint32_t width = 0;     // the image's
+	uint32_t width = 0;         // the image's
 	uint32_t height = 0;
-	uint32_t scale = 1;     // back-buffer pixels per image texel, each way
-	uint32_t bottomUp = 0;  // 1 if its rows are stored bottom-up
+	uint32_t scale = 1;         // back-buffer pixels per image texel, each way
+	uint32_t bottomUp = 0;      // 1 if its rows are stored bottom-up
+	uint32_t cursorX = 0;       // spike 8: the cursor's tip, in back-buffer pixels
+	uint32_t cursorY = 0;
+	uint32_t cursorHeight = 0;  // its arrow's height in back-buffer pixels; 0: no cursor
+	uint32_t unused = 0;
 };
-static_assert(sizeof(HudConstants) == 16);
+static_assert(sizeof(HudConstants) == 32);  // root parameter 1 has 8 values
 }

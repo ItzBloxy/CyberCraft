@@ -2964,8 +2964,12 @@ void Renderer::PresentHud(IDXGISwapChain* aSwapChain)
 	list->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 	list->SetGraphicsRootConstantBufferView(0, constants_->GetGPUVirtualAddress());  // b0: the HUD's shaders don't read it
 	const uint32_t     scale = HudScaleFor(uint32_t(target.Width), target.Height, hudShown_.width, hudShown_.height);
-	const HudConstants hud{ hudShown_.width, hudShown_.height, scale, hudShown_.bottomUp ? 1u : 0u };
-	list->SetGraphicsRoot32BitConstants(1, 4, &hud, 0);
+	// Spike 8: the cursor's newest spot, as the input thread left it, so the arrow moves in the frame the mouse does.
+	const HudCursor*      cursor = hudCursor_.load();
+	const HudCursor::Spot spot = cursor ? cursor->Get() : HudCursor::Spot{};
+	const HudConstants    hud{ hudShown_.width, hudShown_.height, scale, hudShown_.bottomUp ? 1u : 0u, spot.x, spot.y,
+                            spot.shown ? CursorHeight(uint32_t(target.Height)) : 0u, 0u };
+	list->SetGraphicsRoot32BitConstants(1, 8, &hud, 0);
 	for (UINT parameter = 2; parameter < 6; ++parameter)  // t0 to t3: the image, which HudPS reads as t1
 	{
 		list->SetGraphicsRootShaderResourceView(parameter, hudImage_->GetGPUVirtualAddress());

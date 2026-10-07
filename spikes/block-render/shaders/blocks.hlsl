@@ -450,7 +450,8 @@ float4 OutlinePS(OutlineOut i) : SV_Target0
 // the top left, and nothing shows outside the image. src/render/Hud.cpp's HudTexel does the same arithmetic.
 cbuffer Hud : register(b1)
 {
-    uint4 hudInfo;  // the image's width and height; back-buffer pixels per texel; 1 if its rows are stored bottom-up
+    uint4 hudInfo;    // the image's width and height; back-buffer pixels per texel; 1 if its rows are stored bottom-up
+    uint4 hudCursor;  // spike 8: the cursor's tip in back-buffer pixels; its arrow's height, 0 for none; unused
 };
 
 StructuredBuffer<uint> hudImage : register(t1);
@@ -462,8 +463,31 @@ float4 HudVS(uint id : SV_VertexID) : SV_Position
     return float4(corner * float2(2.0, -2.0) + float2(-1.0, 1.0), 0.0, 1.0);
 }
 
+// Spike 8: the part of the cursor's arrow at a pixel's centre, SkyCraft's arrow: 0 none, 1 its black edge, 2 its white
+// fill. src/render/Hud.cpp's CursorAt does the same arithmetic.
+uint CursorPart(float2 position)
+{
+    if (hudCursor.z == 0)
+    {
+        return 0;
+    }
+    const float  height = (float)hudCursor.z;
+    const float  edge = 1.5 * height / 18.0;
+    const float2 p = position - (float2)hudCursor.xy;
+    if (p.x < 0.0 || p.y < 0.0 || p.y >= height || p.x > p.y * 0.6)
+    {
+        return 0;
+    }
+    return p.x < edge || p.x > p.y * 0.6 - edge || p.y > height - edge ? 1 : 2;
+}
+
 float4 HudPS(float4 position : SV_Position) : SV_Target0
 {
+    const uint part = CursorPart(position.xy);
+    if (part != 0)
+    {
+        return part == 1 ? float4(0.0, 0.0, 0.0, 1.0) : float4(1.0, 1.0, 1.0, 1.0);  // opaque, over the image
+    }
     const uint2 texel = (uint2)position.xy / max(hudInfo.z, 1u);
     if (texel.x >= hudInfo.x || texel.y >= hudInfo.y)
     {
