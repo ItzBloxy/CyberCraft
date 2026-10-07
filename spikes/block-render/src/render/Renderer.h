@@ -2,9 +2,11 @@
 
 #include "Coords.h"
 #include "LogQueue.h"
+#include "entities/Entities.h"
 #include "hooks/HookEvents.h"
 #include "render/Atlas.h"
 #include "render/Camera.h"
+#include "render/EntityTextures.h"
 #include "render/FrameConstants.h"
 #include "render/Gbuffer.h"
 #include "render/Gpu.h"
@@ -12,6 +14,7 @@
 #include "render/PendingSections.h"
 #include "render/Retired.h"
 #include "render/Shaders.h"
+#include "render/Snapshots.h"
 #include "world/BlockWorld.h"
 #include "world/Vertex.h"
 
@@ -21,6 +24,7 @@
 #include <map>
 #include <mutex>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -40,7 +44,8 @@ namespace cpmc
 //   It draws into the G-buffer's base colour, normals, material values and motion vectors, testing and writing its
 //   depth and stencil, then into the tagged depth, the copy of that depth which the game has made by then. The game
 //   then lights, shadows and fogs the blocks as its own. Every list is tracked: the G-buffer's lists are known by their
-//   targets, its end by its transitions, and the states our barriers start from by both.
+//   targets, its end by its transitions, and the states our barriers start from by both. Spike 7 draws Minecraft's
+//   entities in the same list, after the blocks: the newest snapshot's models, then their cracks, then their depth.
 class Renderer : public HookEvents
 {
 public:
@@ -55,7 +60,7 @@ public:
 	const Atlas* AtlasData() const;
 	bool         ReloadShaders(std::string& aError);
 	// brightness, tolerance, cull, origin.x/y/z; for predlss, exposure, jittersign and mvsign; for gbuffer, stencil,
-	// metalness, roughness, materialb, gbmotion and gbdepth
+	// metalness, roughness, materialb, gbmotion and gbdepth; spike 7's entities, glow and glowlight
 	bool         Set(std::string_view aName, double aValue, std::string& aError);
 	void         UploadSection(const SectionPos& aSection, std::vector<Vertex> aVertices);  // no vertices: remove it
 	void         ClearSections();  // every section, and every upload waiting
@@ -80,6 +85,16 @@ public:
 	void    SetHud(bool aWanted);
 	bool    SetHudImage(uint32_t aWidth, uint32_t aHeight, bool aBottomUp, const uint8_t* aRgba);
 	HudSize BackBufferSize() const { return { backWidth_.load(), backHeight_.load() }; }  // as the last Present saw it
+
+	// Spike 7: Minecraft's entities (the spec's "The renderer"), from the main thread. AddEntityTexture copies a texture
+	// and places it in the one buffer at once, for the next Update to upload: past the 64 MB cap it's left out, logged
+	// once. ClearEntityTextures drops them all, at Minecraft's clear: Unlink, the Clear request and drawing switched off
+	// keep them, since SkyCraft sends each once. SetEntities takes this frame's geometry, which the next Update copies
+	// into a free snapshot for the next G-buffer list to draw.
+	void     AddEntityTexture(uint32_t aId, uint32_t aWidth, uint32_t aHeight, std::span<const uint8_t> aRgba);
+	void     ClearEntityTextures();
+	void     SetEntities(entities::EntityFrame aFrame);
+	uint32_t GlowLight() const;  // set glowlight
 
 	struct Stats
 	{
@@ -112,6 +127,16 @@ public:
 		uint32_t    hudWidth = 0;  // the image drawn; 0 before one
 		uint32_t    hudHeight = 0;
 		bool        hudBottomUp = false;
+		// Spike 7's entities
+		bool        entitiesOn = true;          // set entities
+		uint64_t    entityFrames = 0;           // G-buffer lists that drew them, in the last second
+		uint64_t    entityDrawsSkipped = 0;     // their texture not on the GPU yet, or left out at the cap; in the last second
+		uint64_t    snapshotWaits = 0;          // frames whose geometry waited for a free snapshot, in the last second
+		uint64_t    snapshotCut = 0;            // draws past a snapshot's 8 MB, in the last second
+		size_t      entityTextures = 0;         // placed: uploaded, or waiting to be
+		double      entityTextureMb = 0.0;
+		uint64_t    entityTexturesLeftOut = 0;  // at the cap, since the start
+		double      entityGpuMsAverage = -1.0;  // the entities' draws in the G-buffer, on the GPU; below 0: none drawn
 	};
 	Stats TakeStats();  // since the last call
 	void  Shutdown();   // waits for the GPU, then releases everything
@@ -196,6 +221,7 @@ private:
 	bool               EnsureGbufferPipeline(bool aReversed);
 	bool               EnsureDepthPipeline(bool aReversed);
 	bool               EnsureDepthTarget(uint32_t aWidth, uint32_t aHeight);
+	bool               EnsureEntityPipelines(bool aReversed);  // spike 7's; false, logged once, if they can't be made
 	ID3D12CommandList* RecordPredlss(ID3D12CommandQueue* aQueue, ID3D12GraphicsCommandList* aDlssList);  // null: skipped
 	void               SeeGbufferSubmission(UINT aCount, ID3D12CommandList* const* aLists);
 	void               WatchGbuffer();  // the G-buffer's targets and the tagged buffers, if they changed
@@ -204,6 +230,13 @@ private:
 	// BaseConstants, plus the image's size, the jitter and the motion: predlss and gbuffer draw at the render size
 	FrameConstants     JitteredConstants(const CameraFrame& aCamera, const SlConstants& aGame, const sl::Extent& aExtent) const;
 	void               DrawSections(ID3D12GraphicsCommandList* aList, const CameraFrame& aCamera, uint64_t aCompleted);
+	// Spike 7: a snapshot's draws of aKind; those whose texture isn't on the GPU are skipped, and counted if aCount.
+	struct SnapshotGpu;
+	void DrawEntities(ID3D12GraphicsCommandList* aList, const CameraFrame& aCamera, uint64_t aCompleted, const SnapshotGpu& aSnapshot,
+	                  entities::EntityDraw::Kind aKind, bool aCount);
+	// Spike 7: the textures waiting, into the one buffer, grown first if they don't fit, recorded into Upload's list.
+	void UploadEntityTextures(uint64_t aReady, std::vector<gpu::ComPtr<ID3D12Resource>>& aStaging, bool& aFailed);
+	void CopyEntities();  // spike 7: Update's, the frame's geometry into a free snapshot
 	void               Skip(const std::string& aWhy, bool aCounts = true);  // aCounts: toward the skips in a row
 	void               Fail(const std::string& aWhy);  // logs, and switches drawing off
 	void               ReleaseTracking();               // if predlss or gbuffer asked for it
@@ -317,6 +350,52 @@ private:
 	KnownStates                   knownStates_;
 	GbufferFrame                  gbufferFrame_;
 	std::atomic<const void*>      gbufferEnd_{ nullptr };  // gbufferFrame_.end, read without the lock
+
+	// Spike 7's entities. The snapshots: upload buffers, written by Update into one no list may still read (Snapshots),
+	// each with the draws that fit in it.
+	struct SnapshotGpu
+	{
+		gpu::ComPtr<ID3D12Resource>       buffer;  // upload heap, mapped while it lives
+		uint8_t*                          mapped = nullptr;
+		uint64_t                          bytes = 0;
+		Vec3d                             origin;  // the frame's, Minecraft axes
+		std::vector<entities::EntityDraw> draws;
+	};
+	static constexpr uint32_t kSnapshots = 8;
+	static constexpr uint64_t kSnapshotMaxBytes = 8ull << 20;  // 262,144 vertices: a big blast's scene is about 1 MB
+	struct PendingTexture
+	{
+		uint32_t              id = 0;
+		EntityTextures::Place place;
+		std::vector<uint8_t>  rgba;
+	};
+	bool                                        entitiesOn_ = true;  // set entities
+	float                                       glow_ = 0.9f;        // set glow: near the 0.93 spike 3 found on the game's signs
+	uint32_t                                    glowLight_ = 15;     // set glowlight
+	EntityTextures                              textures_;
+	std::vector<PendingTexture>                 pendingTextures_;
+	std::map<uint32_t, uint64_t>                textureReady_;     // each uploaded texture's fence
+	gpu::ComPtr<ID3D12Resource>                 entityTextures_;   // default heap, entityTexels_ texels
+	uint64_t                                    entityTexels_ = 0;
+	bool                                        capLogged_ = false;
+	uint64_t                                    texturesLeftOut_ = 0;
+	std::optional<entities::EntityFrame>        pendingEntities_;  // SetEntities's, until Update copies it
+	std::array<SnapshotGpu, kSnapshots>         snapshots_;
+	Snapshots                                   snapshotRing_{ kSnapshots };
+	std::array<std::optional<uint32_t>, kSlots> slotSnapshot_{};  // the snapshot each slot's list took
+	gpu::ComPtr<ID3D12PipelineState>            entityPipeline_;
+	gpu::ComPtr<ID3D12PipelineState>            entityDepthPipeline_;
+	gpu::ComPtr<ID3D12PipelineState>            crackPipeline_;
+	bool                                        entityReversed_ = false;
+	bool                                        entityMotionWrites_ = false;
+	bool                                        entityPipelinesFailed_ = false;  // until the shaders are reloaded
+	bool                                        snapshotLogged_ = false;  // a snapshot buffer couldn't be made: logged once
+	gpu::ComPtr<ID3D12QueryHeap>                entityQueries_;  // kSlots x 2 timestamps, around the entities' draws
+	gpu::ComPtr<ID3D12Resource>                 entityTimings_;  // readback
+	uint64_t*                                   entityTimingsMapped_ = nullptr;
+	std::array<bool, kSlots>                    slotEntityTimed_{};
+	double                                      entityGpuMsSum_ = 0.0;
+	uint64_t                                    entityGpuSamples_ = 0;
 
 	Stats    stats_;
 	double   gpuMsSum_ = 0.0;

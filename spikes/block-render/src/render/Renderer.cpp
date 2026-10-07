@@ -10,12 +10,14 @@
 #include <dxgi1_4.h>
 
 #include <algorithm>
+#include <bit>
 #include <chrono>
 #include <cmath>
 #include <cstring>
 #include <format>
 #include <fstream>
 #include <iterator>
+#include <utility>
 
 namespace cpmc
 {
@@ -238,6 +240,10 @@ bool Renderer::ReloadShaders(std::string& aError)
 	gbufferPipeline_.Reset();
 	depthPipeline_.Reset();
 	hudPipeline_.Reset();
+	entityPipeline_.Reset();
+	entityDepthPipeline_.Reset();
+	crackPipeline_.Reset();
+	entityPipelinesFailed_ = false;
 	hudShadersFailed_ = false;
 	return true;
 }
@@ -383,6 +389,36 @@ bool Renderer::Set(std::string_view aName, double aValue, std::string& aError)
 		(aName == "gbmotion" ? gbufferMotion_ : gbufferDepth_) = aValue == 1.0;
 		return true;
 	}
+	if (aName == "entities")
+	{
+		if (aValue != 0.0 && aValue != 1.0)
+		{
+			aError = "entities is 1 to draw Minecraft's entities, or 0 to hide them";
+			return false;
+		}
+		entitiesOn_ = aValue == 1.0;
+		return true;
+	}
+	if (aName == "glow")
+	{
+		if (aValue < 0.0 || aValue > 1.0)
+		{
+			aError = "glow is from 0 to 1: what a glowing triangle writes into the G-buffer as emission";
+			return false;
+		}
+		glow_ = float(aValue);
+		return true;
+	}
+	if (aName == "glowlight")
+	{
+		if (aValue < 1.0 || aValue > 15.0 || aValue != std::floor(aValue))
+		{
+			aError = "glowlight is a whole number from 1 to 15: the block light from which a triangle glows";
+			return false;
+		}
+		glowLight_ = uint32_t(aValue);
+		return true;
+	}
 	aError = std::format("there's no setting called \"{}\"", aName);
 	return false;
 }
@@ -402,6 +438,53 @@ void Renderer::ClearSections()
 	}
 	sections_.clear();
 	pending_.Clear();
+}
+
+void Renderer::AddEntityTexture(uint32_t aId, uint32_t aWidth, uint32_t aHeight, std::span<const uint8_t> aRgba)
+{
+	std::lock_guard                            lock(mutex_);
+	const std::optional<EntityTextures::Place> place = textures_.Add(aId, aWidth, aHeight);
+	if (!place)
+	{
+		++texturesLeftOut_;
+		if (!capLogged_)
+		{
+			capLogged_ = true;
+			log_.Push(std::format("renderer: Minecraft's texture {} ({} x {}) is left out, past the entity textures' 64 MB: what uses it isn't drawn",
+			                      aId, aWidth, aHeight));
+		}
+		return;
+	}
+	textureReady_.erase(aId);  // placed again: drawn once this upload is done
+	pendingTextures_.push_back({ aId, *place, std::vector<uint8_t>(aRgba.begin(), aRgba.end()) });
+}
+
+void Renderer::ClearEntityTextures()
+{
+	std::lock_guard lock(mutex_);
+	textures_.Clear();
+	pendingTextures_.clear();
+	textureReady_.clear();
+	capLogged_ = false;
+	if (entityTextures_)
+	{
+		// Lists on their way may still read it, so the next texture starts a fresh buffer, and this one waits for them.
+		Retire(entityTextures_);
+		entityTextures_.Reset();
+		entityTexels_ = 0;
+	}
+}
+
+void Renderer::SetEntities(entities::EntityFrame aFrame)
+{
+	std::lock_guard lock(mutex_);
+	pendingEntities_ = std::move(aFrame);
+}
+
+uint32_t Renderer::GlowLight() const
+{
+	std::lock_guard lock(mutex_);
+	return glowLight_;
 }
 
 void Renderer::TimeUpload(const SectionPos& aSection)
@@ -441,16 +524,16 @@ bool Renderer::EnsureObjects()
 	{
 		return false;  // not ready yet
 	}
-	D3D12_ROOT_PARAMETER parameters[5]{};
+	D3D12_ROOT_PARAMETER parameters[6]{};
 	parameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;  // b0: the frame
 	parameters[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
-	parameters[1].Constants = { 1, 0, 4 };  // b1: the section
-	for (UINT i = 2; i < 5; ++i)            // t0 vertices, t1 atlas, t2 depth copy
+	parameters[1].Constants = { 1, 0, 8 };  // b1: a section's, the HUD's, or an entity draw's (spike 7)
+	for (UINT i = 2; i < 6; ++i)            // t0 vertices, t1 atlas, t2 depth copy, t3 entity textures (spike 7)
 	{
 		parameters[i].ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV;
 		parameters[i].Descriptor = { i - 2, 0 };
 	}
-	const D3D12_ROOT_SIGNATURE_DESC rootDesc{ 5, parameters, 0, nullptr, D3D12_ROOT_SIGNATURE_FLAG_NONE };
+	const D3D12_ROOT_SIGNATURE_DESC rootDesc{ 6, parameters, 0, nullptr, D3D12_ROOT_SIGNATURE_FLAG_NONE };
 	gpu::ComPtr<ID3DBlob>           blob;
 	gpu::ComPtr<ID3DBlob>           error;
 	if (FAILED(D3D12SerializeRootSignature(&rootDesc, D3D_ROOT_SIGNATURE_VERSION_1, &blob, &error)) ||
@@ -464,11 +547,14 @@ bool Renderer::EnsureObjects()
 	const D3D12_QUERY_HEAP_DESC      queryDesc{ D3D12_QUERY_HEAP_TYPE_TIMESTAMP, kSlots * 2, 0 };
 	constants_ = gpu::MakeBuffer(device_, kSlots * kConstantsStride, D3D12_HEAP_TYPE_UPLOAD, D3D12_RESOURCE_STATE_GENERIC_READ);
 	timings_ = gpu::MakeBuffer(device_, kSlots * 2 * sizeof(uint64_t), D3D12_HEAP_TYPE_READBACK, D3D12_RESOURCE_STATE_COPY_DEST);
+	entityTimings_ = gpu::MakeBuffer(device_, kSlots * 2 * sizeof(uint64_t), D3D12_HEAP_TYPE_READBACK, D3D12_RESOURCE_STATE_COPY_DEST);
 	if (FAILED(device_->CreateDescriptorHeap(&rtvHeapDesc, IID_PPV_ARGS(&rtvHeap_))) ||
 	    FAILED(device_->CreateDescriptorHeap(&dsvHeapDesc, IID_PPV_ARGS(&dsvHeap_))) ||
-	    FAILED(device_->CreateQueryHeap(&queryDesc, IID_PPV_ARGS(&queries_))) || !constants_ || !timings_ ||
+	    FAILED(device_->CreateQueryHeap(&queryDesc, IID_PPV_ARGS(&queries_))) ||
+	    FAILED(device_->CreateQueryHeap(&queryDesc, IID_PPV_ARGS(&entityQueries_))) || !constants_ || !timings_ || !entityTimings_ ||
 	    FAILED(constants_->Map(0, nullptr, reinterpret_cast<void**>(&constantsMapped_))) ||
 	    FAILED(timings_->Map(0, nullptr, reinterpret_cast<void**>(&timingsMapped_))) ||
+	    FAILED(entityTimings_->Map(0, nullptr, reinterpret_cast<void**>(&entityTimingsMapped_))) ||
 	    FAILED(queue_->GetTimestampFrequency(&timestampFrequency_)))
 	{
 		Fail("couldn't create its heaps and buffers");
@@ -501,6 +587,7 @@ bool Renderer::EnsureObjects()
 	rootSignature_->SetName(L"BlockRender root signature");
 	constants_->SetName(L"BlockRender constants");
 	timings_->SetName(L"BlockRender timings");
+	entityTimings_->SetName(L"BlockRender entity timings");
 	fence->SetName(L"BlockRender fence");
 	fence_ = fence;  // last: a fence means everything is ready
 	log_.Push("renderer: ready");
@@ -680,6 +767,112 @@ bool Renderer::EnsureDepthPipeline(bool aReversed)
 	return true;
 }
 
+bool Renderer::EnsureEntityPipelines(bool aReversed)
+{
+	if (entityPipeline_ && entityReversed_ == aReversed && entityMotionWrites_ == gbufferMotion_)
+	{
+		return true;
+	}
+	if (entityPipelinesFailed_ || !shaders_)
+	{
+		return false;
+	}
+	// Minecraft draws its entities two-sided (entity_cutout culls nothing) and with a greater-or-equal depth test, so a
+	// later triangle on the same surface wins: a banner's patterns over its cloth, a villager's clothes over its body.
+	const D3D12_COMPARISON_FUNC depthFunc = aReversed ? D3D12_COMPARISON_FUNC_GREATER_EQUAL : D3D12_COMPARISON_FUNC_LESS_EQUAL;
+	// The models: into the G-buffer as the blocks are, their stencil class too.
+	D3D12_GRAPHICS_PIPELINE_STATE_DESC models{};
+	models.pRootSignature = rootSignature_.Get();
+	models.VS = { shaders_->entityVertex.data(), shaders_->entityVertex.size() };
+	models.PS = { shaders_->entity.data(), shaders_->entity.size() };
+	models.BlendState.IndependentBlendEnable = TRUE;  // so the motion vectors alone can be left alone
+	for (UINT i = 0; i < 4; ++i)
+	{
+		models.BlendState.RenderTarget[i].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
+		models.RTVFormats[i] = kGbufferFormats[i];
+	}
+	if (!gbufferMotion_)
+	{
+		models.BlendState.RenderTarget[3].RenderTargetWriteMask = 0;
+	}
+	models.SampleMask = UINT_MAX;
+	models.RasterizerState = BlockRasterizer(0);
+	models.DepthStencilState.DepthEnable = TRUE;
+	models.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL;
+	models.DepthStencilState.DepthFunc = depthFunc;
+	models.DepthStencilState.StencilEnable = TRUE;
+	models.DepthStencilState.StencilReadMask = D3D12_DEFAULT_STENCIL_READ_MASK;
+	models.DepthStencilState.StencilWriteMask = D3D12_DEFAULT_STENCIL_WRITE_MASK;
+	const D3D12_DEPTH_STENCILOP_DESC replace{ D3D12_STENCIL_OP_KEEP, D3D12_STENCIL_OP_KEEP, D3D12_STENCIL_OP_REPLACE,
+		                                      D3D12_COMPARISON_FUNC_ALWAYS };
+	models.DepthStencilState.FrontFace = replace;
+	models.DepthStencilState.BackFace = replace;
+	models.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+	models.NumRenderTargets = 4;
+	models.DSVFormat = DXGI_FORMAT_D32_FLOAT_S8X24_UINT;
+	models.SampleDesc.Count = 1;
+	// Their depth, into the tagged depth: the same tests, depth only.
+	D3D12_GRAPHICS_PIPELINE_STATE_DESC depth{};
+	depth.pRootSignature = rootSignature_.Get();
+	depth.VS = models.VS;
+	depth.PS = { shaders_->entityDepth.data(), shaders_->entityDepth.size() };
+	depth.SampleMask = UINT_MAX;
+	depth.RasterizerState = BlockRasterizer(0);
+	depth.DepthStencilState.DepthEnable = TRUE;
+	depth.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL;
+	depth.DepthStencilState.DepthFunc = depthFunc;
+	depth.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+	depth.NumRenderTargets = 0;
+	depth.DSVFormat = DXGI_FORMAT_D32_FLOAT;
+	depth.SampleDesc.Count = 1;
+	// The cracks: the base colour's RGB alone, blended DEST_COLOR, SRC_COLOR as Minecraft's crumbling, twice the crack's
+	// colour times what's there; depth tested, not written; the stencil left alone.
+	D3D12_GRAPHICS_PIPELINE_STATE_DESC cracks{};
+	cracks.pRootSignature = rootSignature_.Get();
+	cracks.VS = models.VS;
+	cracks.PS = { shaders_->crack.data(), shaders_->crack.size() };
+	D3D12_RENDER_TARGET_BLEND_DESC& blend = cracks.BlendState.RenderTarget[0];
+	blend.BlendEnable = TRUE;
+	blend.SrcBlend = D3D12_BLEND_DEST_COLOR;
+	blend.DestBlend = D3D12_BLEND_SRC_COLOR;
+	blend.BlendOp = D3D12_BLEND_OP_ADD;
+	blend.SrcBlendAlpha = D3D12_BLEND_ONE;
+	blend.DestBlendAlpha = D3D12_BLEND_ZERO;
+	blend.BlendOpAlpha = D3D12_BLEND_OP_ADD;
+	blend.LogicOp = D3D12_LOGIC_OP_NOOP;
+	blend.RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_RED | D3D12_COLOR_WRITE_ENABLE_GREEN | D3D12_COLOR_WRITE_ENABLE_BLUE;
+	cracks.SampleMask = UINT_MAX;
+	cracks.RasterizerState = BlockRasterizer(0);
+	cracks.DepthStencilState.DepthEnable = TRUE;
+	cracks.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ZERO;
+	cracks.DepthStencilState.DepthFunc = depthFunc;
+	cracks.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+	cracks.NumRenderTargets = 1;
+	cracks.RTVFormats[0] = kGbufferFormats[0];
+	cracks.DSVFormat = DXGI_FORMAT_D32_FLOAT_S8X24_UINT;
+	cracks.SampleDesc.Count = 1;
+	gpu::ComPtr<ID3D12PipelineState> modelPipeline;
+	gpu::ComPtr<ID3D12PipelineState> depthPipeline;
+	gpu::ComPtr<ID3D12PipelineState> crackPipeline;
+	if (FAILED(device_->CreateGraphicsPipelineState(&models, IID_PPV_ARGS(&modelPipeline))) ||
+	    FAILED(device_->CreateGraphicsPipelineState(&depth, IID_PPV_ARGS(&depthPipeline))) ||
+	    FAILED(device_->CreateGraphicsPipelineState(&cracks, IID_PPV_ARGS(&crackPipeline))))
+	{
+		entityPipelinesFailed_ = true;
+		log_.Push("renderer: couldn't create the pipelines for Minecraft's entities, so they aren't drawn; the blocks still are");
+		return false;
+	}
+	modelPipeline->SetName(L"BlockRender entities pipeline");
+	depthPipeline->SetName(L"BlockRender entities' depth pipeline");
+	crackPipeline->SetName(L"BlockRender cracks pipeline");
+	entityPipeline_ = modelPipeline;
+	entityDepthPipeline_ = depthPipeline;
+	crackPipeline_ = crackPipeline;
+	entityReversed_ = aReversed;
+	entityMotionWrites_ = gbufferMotion_;
+	return true;
+}
+
 bool Renderer::EnsureDepthTarget(uint32_t aWidth, uint32_t aHeight)
 {
 	if (depthTarget_ && depthWidth_ == aWidth && depthHeight_ == aHeight)
@@ -772,6 +965,16 @@ void Renderer::ReadTimings(uint32_t aSlot)
 		++gpuSamples_;
 		stats_.gpuMsWorst = std::max(stats_.gpuMsWorst, ms);
 	}
+	if (std::exchange(slotEntityTimed_[aSlot], false))
+	{
+		const uint64_t entityBegin = entityTimingsMapped_[aSlot * 2];
+		const uint64_t entityEnd = entityTimingsMapped_[aSlot * 2 + 1];
+		if (entityEnd > entityBegin && timestampFrequency_ > 0)
+		{
+			entityGpuMsSum_ += double(entityEnd - entityBegin) * 1000.0 / double(timestampFrequency_);
+			++entityGpuSamples_;
+		}
+	}
 }
 
 void Renderer::Update()
@@ -779,6 +982,7 @@ void Renderer::Update()
 	const auto      start = std::chrono::steady_clock::now();
 	std::lock_guard lock(mutex_);
 	Upload();
+	CopyEntities();
 	const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
 	updateMsSum_ += ms;
 	++updateSamples_;
@@ -798,7 +1002,7 @@ void Renderer::Upload()
 	}
 	retired_.Free(completed);
 	const bool atlasDue = atlas_ && !atlasUploaded_;
-	if ((pending_.Size() == 0 && !atlasDue) || completed < uploadFence_)
+	if ((pending_.Size() == 0 && !atlasDue && pendingTextures_.empty()) || completed < uploadFence_)
 	{
 		return;
 	}
@@ -867,6 +1071,7 @@ void Renderer::Upload()
 			sections_[section] = std::move(gpuSection);
 		}
 	}
+	UploadEntityTextures(ready, staging, failed);
 	original.close(uploadList_.Get());
 	ID3D12CommandList* lists[] = { uploadList_.Get() };
 	original.executeCommandLists(queue_, 1, lists);
@@ -881,8 +1086,134 @@ void Renderer::Upload()
 	}
 	if (failed)
 	{
-		log_.Push("renderer: couldn't create some upload buffers; those sections aren't drawn");
+		log_.Push("renderer: couldn't create some upload buffers; the sections or entity textures they held aren't drawn");
 	}
+}
+
+void Renderer::UploadEntityTextures(uint64_t aReady, std::vector<gpu::ComPtr<ID3D12Resource>>& aStaging, bool& aFailed)
+{
+	if (pendingTextures_.empty())
+	{
+		return;
+	}
+	// The one buffer, grown first if the textures don't fit: the old texels copied over on the GPU, and every texture in
+	// it drawn again once the copy is done.
+	const uint64_t capacity = textures_.Capacity(entityTexels_);
+	if (capacity > entityTexels_)
+	{
+		gpu::ComPtr<ID3D12Resource> grown = gpu::MakeBuffer(device_, capacity * 4, D3D12_HEAP_TYPE_DEFAULT, D3D12_RESOURCE_STATE_COMMON);
+		if (!grown)
+		{
+			aFailed = true;
+			return;  // they wait for the next upload
+		}
+		grown->SetName(L"BlockRender entity textures");
+		if (entityTextures_)
+		{
+			// Only the texels uploaded before, which the waiting textures' places follow: copies in one list aren't
+			// ordered, so a copy over their places could land after theirs.
+			const uint64_t uploaded = std::min<uint64_t>(pendingTextures_.front().place.start, entityTexels_);
+			if (uploaded > 0)
+			{
+				uploadList_->CopyBufferRegion(grown.Get(), 0, entityTextures_.Get(), 0, uploaded * 4);
+			}
+			// This upload reads the old buffer, so it's kept until the upload is done, not only the lists before it, or
+			// until the list of ours on its way to the GPU is, which comes later.
+			retired_.Retire(std::move(entityTextures_), aReady);
+			for (auto& [id, ready] : textureReady_)
+			{
+				ready = aReady;
+			}
+		}
+		entityTextures_ = grown;
+		entityTexels_ = capacity;
+	}
+	for (const PendingTexture& texture : pendingTextures_)
+	{
+		const uint64_t bytes = texture.rgba.size();
+		auto           source = gpu::MakeBuffer(device_, bytes, D3D12_HEAP_TYPE_UPLOAD, D3D12_RESOURCE_STATE_GENERIC_READ);
+		void*          mapped = nullptr;
+		if (!source || FAILED(source->Map(0, nullptr, &mapped)))
+		{
+			aFailed = true;
+			continue;  // never ready, so what uses it is skipped
+		}
+		std::memcpy(mapped, texture.rgba.data(), bytes);
+		source->Unmap(0, nullptr);
+		uploadList_->CopyBufferRegion(entityTextures_.Get(), uint64_t(texture.place.start) * 4, source.Get(), 0, bytes);
+		aStaging.push_back(source);
+		textureReady_[texture.id] = aReady;
+	}
+	pendingTextures_.clear();
+}
+
+void Renderer::CopyEntities()
+{
+	if (!pendingEntities_)
+	{
+		return;
+	}
+	if (!fence_ || mode_.load() != Mode::Gbuffer || !entitiesOn_)
+	{
+		pendingEntities_.reset();  // drawn only into the G-buffer
+		return;
+	}
+	const std::optional<uint32_t> index = snapshotRing_.Writable(fence_->GetCompletedValue());
+	if (!index)
+	{
+		++stats_.snapshotWaits;  // every snapshot is held: the next frame's geometry replaces this one's
+		return;
+	}
+	const entities::EntityFrame& frame = *pendingEntities_;
+	SnapshotGpu&                 snapshot = snapshots_[*index];
+	const uint64_t               bytes = std::min<uint64_t>(frame.vertices.size() * sizeof(Vertex), kSnapshotMaxBytes);
+	if (!snapshot.buffer || snapshot.bytes < bytes)
+	{
+		// No list of ours reads this one (Writable), so it can go at once.
+		if (snapshot.mapped)
+		{
+			snapshot.buffer->Unmap(0, nullptr);
+		}
+		snapshot = {};
+		const uint64_t size = std::max<uint64_t>(std::bit_ceil(bytes), 64ull << 10);
+		snapshot.buffer = gpu::MakeBuffer(device_, size, D3D12_HEAP_TYPE_UPLOAD, D3D12_RESOURCE_STATE_GENERIC_READ);
+		void* mapped = nullptr;
+		if (!snapshot.buffer || FAILED(snapshot.buffer->Map(0, nullptr, &mapped)))
+		{
+			snapshot = {};
+			pendingEntities_.reset();
+			if (!snapshotLogged_)
+			{
+				snapshotLogged_ = true;
+				log_.Push("renderer: couldn't create a snapshot buffer for Minecraft's entities, so they're skipped until one can be");
+			}
+			return;
+		}
+		snapshot.buffer->SetName(L"BlockRender entity snapshot");
+		snapshot.mapped = static_cast<uint8_t*>(mapped);
+		snapshot.bytes = size;
+	}
+	if (bytes > 0)
+	{
+		std::memcpy(snapshot.mapped, frame.vertices.data(), size_t(bytes));
+	}
+	// A frame over 8 MB keeps its draws in order while they fit; the rest are counted.
+	const uint64_t fit = bytes / sizeof(Vertex);
+	snapshot.origin = frame.origin;
+	snapshot.draws.clear();
+	for (const entities::EntityDraw& draw : frame.draws)
+	{
+		if (uint64_t(draw.first) + draw.count <= fit)
+		{
+			snapshot.draws.push_back(draw);
+		}
+		else
+		{
+			++stats_.snapshotCut;
+		}
+	}
+	snapshotRing_.Written(*index);
+	pendingEntities_.reset();
 }
 
 Renderer::Stats Renderer::TakeStats()
@@ -909,9 +1240,14 @@ Renderer::Stats Renderer::TakeStats()
 	{
 		stats.vertices += gpuSection.vertices;
 	}
+	stats.entitiesOn = entitiesOn_;
+	stats.entityTextures = textures_.Count();
+	stats.entityTextureMb = double(textures_.Used()) * 4.0 / 1048576.0;
+	stats.entityTexturesLeftOut = texturesLeftOut_;
+	stats.entityGpuMsAverage = entityGpuSamples_ ? entityGpuMsSum_ / double(entityGpuSamples_) : -1.0;
 	stats_ = {};
-	gpuMsSum_ = frameMsSum_ = updateMsSum_ = hudCopyMsSum_ = hudGpuMsSum_ = 0.0;
-	gpuSamples_ = frameSamples_ = updateSamples_ = hudCopySamples_ = hudGpuSamples_ = 0;
+	gpuMsSum_ = frameMsSum_ = updateMsSum_ = hudCopyMsSum_ = hudGpuMsSum_ = entityGpuMsSum_ = 0.0;
+	gpuSamples_ = frameSamples_ = updateSamples_ = hudCopySamples_ = hudGpuSamples_ = entityGpuSamples_ = 0;
 	return stats;
 }
 
@@ -936,6 +1272,8 @@ FrameConstants Renderer::BaseConstants(const CameraFrame& aCamera) const
 	constants.material[0] = metalness_;
 	constants.material[1] = roughness_;
 	constants.material[2] = materialB_;
+	constants.entity[0] = glow_;
+	constants.entity[1] = float(glowLight_);
 	return constants;
 }
 
@@ -980,6 +1318,45 @@ void Renderer::DrawSections(ID3D12GraphicsCommandList* aList, const CameraFrame&
 		aList->SetGraphicsRoot32BitConstants(1, 4, sectionConstants, 0);
 		aList->SetGraphicsRootShaderResourceView(2, gpuSection.buffer->GetGPUVirtualAddress());
 		d3d::Original().drawInstanced(aList, gpuSection.vertices, 1, 0, 0);
+	}
+}
+
+void Renderer::DrawEntities(ID3D12GraphicsCommandList* aList, const CameraFrame& aCamera, uint64_t aCompleted, const SnapshotGpu& aSnapshot,
+                            entities::EntityDraw::Kind aKind, bool aCount)
+{
+	// The snapshot's positions are relative to its origin, a whole block: camera-relative, as a section's corner is.
+	const Vec3d     corner = WorldFromMc(aSnapshot.origin);
+	EntityConstants constants{};
+	constants.offset[0] = float(corner.x - aCamera.origin.x);
+	constants.offset[1] = float(corner.y - aCamera.origin.y);
+	constants.offset[2] = float(corner.z - aCamera.origin.z);
+	aList->SetGraphicsRootShaderResourceView(2, aSnapshot.buffer->GetGPUVirtualAddress());
+	aList->SetGraphicsRootShaderResourceView(5, (entityTextures_ ? entityTextures_ : atlasBuffer_)->GetGPUVirtualAddress());
+	for (const entities::EntityDraw& draw : aSnapshot.draws)
+	{
+		if (draw.kind != aKind)
+		{
+			continue;
+		}
+		constants.first = draw.first;
+		constants.textureStart = 0;  // Minecraft's combined atlas
+		constants.textureWidth = 0;
+		constants.textureHeight = 0;
+		if (draw.texture != 0)
+		{
+			const EntityTextures::Place* place = textures_.Find(draw.texture);
+			const auto                   ready = textureReady_.find(draw.texture);
+			if (!place || !entityTextures_ || ready == textureReady_.end() || ready->second > aCompleted)
+			{
+				stats_.entityDrawsSkipped += aCount ? 1 : 0;  // not on the GPU yet, or left out at the cap
+				continue;
+			}
+			constants.textureStart = place->start;
+			constants.textureWidth = place->width;
+			constants.textureHeight = place->height;
+		}
+		aList->SetGraphicsRoot32BitConstants(1, 8, &constants, 0);
+		d3d::Original().drawInstanced(aList, draw.count, 1, 0, 0);
 	}
 }
 
@@ -1350,6 +1727,7 @@ ID3D12CommandList* Renderer::RecordPredlss(ID3D12CommandQueue* aQueue, ID3D12Gra
 	list->SetGraphicsRootConstantBufferView(0, constants_->GetGPUVirtualAddress() + slot * kConstantsStride);
 	list->SetGraphicsRootShaderResourceView(3, atlasBuffer_->GetGPUVirtualAddress());
 	list->SetGraphicsRootShaderResourceView(4, atlasBuffer_->GetGPUVirtualAddress());  // t2: only step 2's shader reads it
+	list->SetGraphicsRootShaderResourceView(5, atlasBuffer_->GetGPUVirtualAddress());  // t3: only the entities' read it
 	DrawSections(list, *camera, completed);
 	const std::vector<D3D12_RESOURCE_BARRIER> back = Barriers(MovesBack(into));
 	if (!back.empty())
@@ -1513,7 +1891,26 @@ ID3D12CommandList* Renderer::RecordGbuffer(ID3D12CommandQueue* aQueue)
 	list->SetGraphicsRootConstantBufferView(0, constants_->GetGPUVirtualAddress() + slot * kConstantsStride);
 	list->SetGraphicsRootShaderResourceView(3, atlasBuffer_->GetGPUVirtualAddress());
 	list->SetGraphicsRootShaderResourceView(4, atlasBuffer_->GetGPUVirtualAddress());  // t2: only step 2's shader reads it
+	list->SetGraphicsRootShaderResourceView(5, atlasBuffer_->GetGPUVirtualAddress());  // t3: until the entities' own
 	DrawSections(list, *camera, completed);
+	// Spike 7: Minecraft's entities after the blocks, from the newest snapshot, if it has any: its models, then their
+	// cracks over the base colour alone. The snapshot is held until the fence after this list.
+	const std::optional<uint32_t> newest = snapshotRing_.Newest();
+	const std::optional<uint32_t> snapshot = entitiesOn_ && newest && !snapshots_[*newest].draws.empty() && EnsureEntityPipelines(camera->reversedDepth)
+	                                             ? snapshotRing_.TakeNewest()
+	                                             : std::nullopt;
+	if (snapshot)
+	{
+		const SnapshotGpu& shot = snapshots_[*snapshot];
+		list->EndQuery(entityQueries_.Get(), D3D12_QUERY_TYPE_TIMESTAMP, slot * 2);
+		list->SetPipelineState(entityPipeline_.Get());
+		DrawEntities(list, *camera, completed, shot, entities::EntityDraw::Kind::Model, true);
+		original.omSetRenderTargets(list, 1, rtvs, FALSE, &gbufferDsv);
+		list->SetPipelineState(crackPipeline_.Get());
+		DrawEntities(list, *camera, completed, shot, entities::EntityDraw::Kind::Crack, true);
+		list->EndQuery(entityQueries_.Get(), D3D12_QUERY_TYPE_TIMESTAMP, slot * 2 + 1);
+		list->ResolveQueryData(entityQueries_.Get(), D3D12_QUERY_TYPE_TIMESTAMP, slot * 2, 2, entityTimings_.Get(), slot * 2 * sizeof(uint64_t));
+	}
 	if (intoTaggedDepth)
 	{
 		// The game copied the G-buffer's depth into the tagged depth before our list, so the blocks go in there too.
@@ -1525,6 +1922,11 @@ ID3D12CommandList* Renderer::RecordGbuffer(ID3D12CommandQueue* aQueue)
 		list->SetPipelineState(depthPipeline_.Get());
 		original.omSetRenderTargets(list, 0, nullptr, FALSE, &taggedDsv);
 		DrawSections(list, *camera, completed);
+		if (snapshot)
+		{
+			list->SetPipelineState(entityDepthPipeline_.Get());
+			DrawEntities(list, *camera, completed, snapshots_[*snapshot], entities::EntityDraw::Kind::Model, false);
+		}
 	}
 	const std::vector<D3D12_RESOURCE_BARRIER> back = Barriers(MovesBack(into));
 	if (!back.empty())
@@ -1535,6 +1937,10 @@ ID3D12CommandList* Renderer::RecordGbuffer(ID3D12CommandQueue* aQueue)
 	list->ResolveQueryData(queries_.Get(), D3D12_QUERY_TYPE_TIMESTAMP, slot * 2, 2, timings_.Get(), slot * 2 * sizeof(uint64_t));
 	if (FAILED(original.close(list)))
 	{
+		if (snapshot)
+		{
+			snapshotRing_.Abandon(*snapshot);
+		}
 		Fail("couldn't close a command list");
 		return nullptr;
 	}
@@ -1543,6 +1949,9 @@ ID3D12CommandList* Renderer::RecordGbuffer(ID3D12CommandQueue* aQueue)
 	{
 		++stats_.partial;
 	}
+	slotSnapshot_[slot] = snapshot;
+	slotEntityTimed_[slot] = snapshot.has_value();
+	stats_.entityFrames += snapshot ? 1 : 0;
 	t_insertedSlot = slot;
 	retired_.ListRecorded();  // until OnSubmitted signals after it, what it draws isn't freed
 	return list;
@@ -1559,6 +1968,10 @@ void Renderer::OnSubmitted(ID3D12CommandQueue*, UINT, ID3D12CommandList* const*)
 	std::lock_guard lock(mutex_);
 	slotFence_[slot] = Signal();  // signalled whatever the mode is now: our list went to the GPU
 	retired_.ListSubmitted(slotFence_[slot]);
+	if (const std::optional<uint32_t> snapshot = std::exchange(slotSnapshot_[slot], std::nullopt))
+	{
+		snapshotRing_.Submitted(*snapshot, slotFence_[slot]);
+	}
 	++stats_.drawn;
 	consecutiveSkips_ = 0;
 }
@@ -1697,6 +2110,7 @@ void Renderer::PresentBlocks(IDXGISwapChain* aSwapChain)
 	list->SetGraphicsRootShaderResourceView(3, atlasBuffer_->GetGPUVirtualAddress());
 	// Without a depth copy the shader never reads t2, but the root argument still needs a valid buffer.
 	list->SetGraphicsRootShaderResourceView(4, (submitted_.depth ? depthCopy_ : atlasBuffer_)->GetGPUVirtualAddress());
+	list->SetGraphicsRootShaderResourceView(5, atlasBuffer_->GetGPUVirtualAddress());  // t3: only the entities' read it
 	DrawSections(list, *camera, completed);
 	const D3D12_RESOURCE_BARRIER toPresent = Transition(backBuffer.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT);
 	original.resourceBarrier(list, 1, &toPresent);
@@ -1923,7 +2337,7 @@ void Renderer::PresentHud(IDXGISwapChain* aSwapChain)
 	const uint32_t     scale = HudScaleFor(uint32_t(target.Width), target.Height, hudShown_.width, hudShown_.height);
 	const HudConstants hud{ hudShown_.width, hudShown_.height, scale, hudShown_.bottomUp ? 1u : 0u };
 	list->SetGraphicsRoot32BitConstants(1, 4, &hud, 0);
-	for (UINT parameter = 2; parameter < 5; ++parameter)  // t0 to t2: the image, which HudPS reads as t1
+	for (UINT parameter = 2; parameter < 6; ++parameter)  // t0 to t3: the image, which HudPS reads as t1
 	{
 		list->SetGraphicsRootShaderResourceView(parameter, hudImage_->GetGPUVirtualAddress());
 	}
@@ -2006,6 +2420,32 @@ void Renderer::Shutdown()
 	sections_.clear();
 	pending_.Clear();
 	watch_.reset();
+	for (SnapshotGpu& snapshot : snapshots_)
+	{
+		if (snapshot.mapped)
+		{
+			snapshot.buffer->Unmap(0, nullptr);
+		}
+		snapshot = {};
+	}
+	snapshotRing_ = Snapshots(kSnapshots);
+	slotSnapshot_ = {};
+	pendingEntities_.reset();
+	pendingTextures_.clear();
+	textureReady_.clear();
+	textures_.Clear();
+	entityTextures_.Reset();
+	entityTexels_ = 0;
+	entityPipeline_.Reset();
+	entityDepthPipeline_.Reset();
+	crackPipeline_.Reset();
+	if (entityTimingsMapped_)
+	{
+		entityTimings_->Unmap(0, nullptr);
+		entityTimingsMapped_ = nullptr;
+	}
+	entityTimings_.Reset();
+	entityQueries_.Reset();
 	retired_.Clear();
 	oldDepthCopies_.clear();
 	lists_ = {};
