@@ -305,3 +305,30 @@ keeps running, connected to the mapping, and keeps sending its scenes. The user 
 - **Step C's emissive mark:** run A didn't look closely at the spider's eyes at night, which Minecraft makes glow by
   their render type: worth a look in run B before deciding.
 - **Unlink:** whether Minecraft's entities should stay drawn after it, as its blocks do, is the user's call.
+
+## The Spawn rows with `mclink` (Part 3)
+
+Date: 2026-10-07, 14:51 to 14:52. `tools/mclink/spawn.txt` (Task 28) typed the overlay's Spawn rows and Clear as its
+buttons type them, Part 3's block entities and Particles row included, at step 0's spot (x 880). It ran against SkyCraft
+0.1.2 with CyberCraft Tweaks 1.4.0 in the `CyberCraft` instance (Minecraft 26.3, 51 mods), without the game. Plan: Task
+29.
+
+- **Every command was answered** (`Summoned new …`, `Changed the block at …`), with no warning or error about one, the
+  firework's 254 characters included; `exit: 0`.
+- **Each block entity stood at its own marker** (Task 19): the chest at 888, 6, 2013, the bed's foot and head at 2010
+  and 2009, the sign at 2007, the banner at 2004 and the torch at 2001. The chest's and the banner's batches came as in
+  Part 2.
+- **Step B's particles came as translucent batches** of the particles' atlas (texture 12, 512 × 256), beside its opaque
+  batch:
+  - the firework's sparks: 2,436 vertices, every one with block light 15, so the forward list draws them unlit;
+  - the splash potion's swirl, with the sparks still fading: 2,292 vertices, 1,944 of them glowing (the sparks);
+  - the campfire's smoke: 162 to 288 vertices, none glowing.
+- **The outline:** with the stand-in V looking at the campfire, the world line ended `; an outline`, from 883.000 6.000
+  2010.000 to 884.000 6.438 2011.000: the campfire's box, 7/16 of a block high, as the plan expected.
+- **Clear left nothing of the script's:** it set the seven placed blocks back to air, and killed 17 entities (the five
+  mobs, the ten pigs and the two items) and the seven markers. The last scene was empty, its world line `nothing`, and
+  the `solids` around the stand-in V went from 4 (the chest, the bed's halves and the campfire) to 0.
+- **Two older blocks:** the `solids` line counted 2 more, in a section SkyCraft sent before the stand-in moved, while
+  Minecraft's player still stood where run A had left it: at x −128, y 6, z 1989 and 1990, oak-plank brown, near spike
+  3's corner. Neither this run nor run A placed them (every block both placed was set back to air), so they're older;
+  they're left for the user to say.

@@ -6062,7 +6062,7 @@ game's menus; the user chose to pause build mode instead (the spec's "Changes wh
   `src/input/BuildMode.h`, `src/input/BuildMode.cpp`, `src/input/Router.h`, `src/input/Router.cpp`, `src/Requests.h`,
   `src/Requests.cpp`, `src/Status.h`, `src/Status.cpp`, `src/Plugin.cpp`
 
-- [ ] **Step 1: Edit `tests/TestBuildMode.cpp` to add the failing tests of the pause**
+- [x] **Step 1: Edit `tests/TestBuildMode.cpp` to add the failing tests of the pause**
 
 ```cpp
 	CHECK(mode.On());
@@ -6158,7 +6158,7 @@ TEST(BuildModeTakesTheOverlaysOwnWord)
 }
 ```
 
-- [ ] **Step 2: Edit `tests/TestRouter.cpp` to add the failing test of the router's pause**
+- [x] **Step 2: Edit `tests/TestRouter.cpp` to add the failing test of the router's pause**
 
 ```cpp
 TEST(RouterPushesNothingOnceTheLinkIsGone)
@@ -6200,7 +6200,7 @@ TEST(RouterPausesBuildModeForCetsOverlay)
 TEST(RouterPushesNothingOnceTheLinkIsGone)
 ```
 
-- [ ] **Step 3: Edit `tests/TestRequests.cpp` to add the failing test of the request**
+- [x] **Step 3: Edit `tests/TestRequests.cpp` to add the failing test of the request**
 
 ```cpp
 TEST(RequestsForTheEntities)
@@ -6220,7 +6220,7 @@ TEST(RequestsForCetsOverlay)
 TEST(RequestsForTheEntities)
 ```
 
-- [ ] **Step 4: Edit `tests/TestStatus.cpp` to add the failing check of the build line**
+- [x] **Step 4: Edit `tests/TestStatus.cpp` to add the failing check of the build line**
 
 ```cpp
 	                                      "keyboard and mouse events read"));
@@ -6233,7 +6233,7 @@ TEST(RequestsForTheEntities)
 	link.buildPaused = false;
 ```
 
-- [ ] **Step 5: Build; it must fail**
+- [x] **Step 5: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -6242,7 +6242,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `'Paused': is not a member of 'cpmc::input::BuildMode'`.
 
-- [ ] **Step 6: Edit `src/input/BuildMode.h` to declare the pause**
+- [x] **Step 6: Edit `src/input/BuildMode.h` to declare the pause**
 
 ```cpp
 // A press's repeats and its release go where the press went, so neither side is left holding an input that only the
@@ -6286,7 +6286,7 @@ Expected: `'Paused': is not a member of 'cpmc::input::BuildMode'`.
 	bool                        f6Down_ = false;
 ```
 
-- [ ] **Step 7: Edit `src/input/BuildMode.cpp` for Shift+F6, the overlay's word and the pause**
+- [x] **Step 7: Edit `src/input/BuildMode.cpp` for Shift+F6, the overlay's word and the pause**
 
 ```cpp
 // The keys that open the game's menus (Esc, I, M, J, P, K, H and T), and Shift with F6, which opens CET's overlay: its
@@ -6384,7 +6384,7 @@ bool BuildMode::LostFront()
 		holder = on_ && !overlay_ ? Holder::Minecraft : Holder::Game;  // a press goes where build mode says
 ```
 
-- [ ] **Step 8: Edit `src/input/Router.h` to declare the overlay's word and the pause's log**
+- [x] **Step 8: Edit `src/input/Router.h` to declare the overlay's word and the pause's log**
 
 ```cpp
 	std::string        last;           // the last input forwarded
@@ -6418,7 +6418,7 @@ private:
 	void LogPause(bool aWasPaused);  // build mode paused, or going on again, since aWasPaused
 ```
 
-- [ ] **Step 9: Edit `src/input/Router.cpp` to pass them on and log them**
+- [x] **Step 9: Edit `src/input/Router.cpp` to pass them on and log them**
 
 ```cpp
 		situation.inFront = inFront;
@@ -6522,7 +6522,7 @@ void Router::LogPause(bool aWasPaused)
 }
 ```
 
-- [ ] **Step 10: Edit `src/Requests.h` to add the request**
+- [x] **Step 10: Edit `src/Requests.h` to add the request**
 
 ```cpp
 //                               log)
@@ -6542,7 +6542,7 @@ struct Request
 		Overlay,
 ```
 
-- [ ] **Step 11: Edit `src/Requests.cpp` to parse it**
+- [x] **Step 11: Edit `src/Requests.cpp` to parse it**
 
 ```cpp
 	}
@@ -6561,7 +6561,7 @@ struct Request
 	if (command == "mc")
 ```
 
-- [ ] **Step 12: Edit `src/Status.h` to add the pause**
+- [x] **Step 12: Edit `src/Status.h` to add the pause**
 
 ```cpp
 	std::string        buildWhy;             // why it's off
@@ -6571,7 +6571,7 @@ struct Request
 	bool               buildPaused = false;  // on, behind CET's overlay (spike 7's Part 3)
 ```
 
-- [ ] **Step 13: Edit `src/Status.cpp` to write it**
+- [x] **Step 13: Edit `src/Status.cpp` to write it**
 
 ```cpp
 	                   aLink.buildMode ? std::string("on") : "off: " + OneLine(aLink.buildWhy),
@@ -6581,7 +6581,7 @@ struct Request
 	                                   : "off: " + OneLine(aLink.buildWhy),
 ```
 
-- [ ] **Step 14: Edit `src/Plugin.cpp` for the request and the status**
+- [x] **Step 14: Edit `src/Plugin.cpp` for the request and the status**
 
 ```cpp
 	case cpmc::Request::Kind::Entities: EntitiesRequest(); break;
@@ -6602,7 +6602,7 @@ struct Request
 	report.buildPaused = input.paused;
 ```
 
-- [ ] **Step 15: Build and run the tests; they must pass**
+- [x] **Step 15: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -6612,7 +6612,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `497 test(s), 0 failure(s)`.
 
-- [ ] **Step 16: Commit**
+- [x] **Step 16: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -6639,7 +6639,7 @@ Run A's other two problems, and the overlay's side of Task 18:
 **Files:**
 - Modify: `tools/blockrender_hud/init.lua`
 
-- [ ] **Step 1: Edit `tools/blockrender_hud/init.lua`**
+- [x] **Step 1: Edit `tools/blockrender_hud/init.lua`**
 
 ```lua
 -- combat, Minecraft's entities), and a line each for the last request's reply and the requests waiting to be sent, build
@@ -6728,14 +6728,14 @@ registerForEvent("onUpdate", function(delta)
             or "Requests waiting to be sent: none")
 ```
 
-- [ ] **Step 2: Check the overlay's syntax**
+- [x] **Step 2: Check the overlay's syntax**
 
 ```bash
 luac -p /d/Cyberpunk-Minecraft/spikes/block-render/tools/blockrender_hud/init.lua && echo "syntax ok"
 ```
 Expected: `syntax ok`.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -6754,7 +6754,7 @@ its order. Black at Minecraft 26.3's alpha, 102 (40%). The forward list widens e
 **Files:**
 - Modify: `tests/TestWorldShapes.cpp`, `src/entities/WorldShapes.h`, `src/entities/WorldShapes.cpp`
 
-- [ ] **Step 1: Edit `tests/TestWorldShapes.cpp` to add the failing test**
+- [x] **Step 1: Edit `tests/TestWorldShapes.cpp` to add the failing test**
 
 ```cpp
 #include <cmath>
@@ -6810,7 +6810,7 @@ TEST(WorldShapesOutlineIsTheBoxsTwelveEdges)
 TEST(WorldShapesShadowsAndOthersAddNothing)
 ```
 
-- [ ] **Step 2: Build; it must fail**
+- [x] **Step 2: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -6819,7 +6819,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `'AppendOutline': identifier not found`.
 
-- [ ] **Step 3: Edit `src/entities/WorldShapes.h` to declare it**
+- [x] **Step 3: Edit `src/entities/WorldShapes.h` to declare it**
 
 ```cpp
 #include <cstdint>
@@ -6842,7 +6842,7 @@ constexpr uint32_t kOutlineRgba = 0x66000000u;  // black at alpha 102, 40%
 void               AppendOutline(const std::array<float, 6>& aBox, const Vec3d& aOrigin, std::vector<Vertex>& aOut);
 ```
 
-- [ ] **Step 4: Edit `src/entities/WorldShapes.cpp` to add it**
+- [x] **Step 4: Edit `src/entities/WorldShapes.cpp` to add it**
 
 ```cpp
 		Box(Relative(aRecord, aOrigin), { aRecord.ext[0], aRecord.ext[1], aRecord.ext[2] }, 0.0f, aRecord.uv[0], aRecord.uv[0], aRecord.uv[0], 0,
@@ -6878,7 +6878,7 @@ void AppendOutline(const std::array<float, 6>& aBox, const Vec3d& aOrigin, std::
 }
 ```
 
-- [ ] **Step 5: Build and run the tests; they must pass**
+- [x] **Step 5: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -6888,7 +6888,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `498 test(s), 0 failure(s)`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -6910,7 +6910,7 @@ paused, it shows what build mode will aim at when the overlay closes.
 **Files:**
 - Modify: `tests/TestEntities.cpp`, `src/entities/Entities.h`, `src/entities/Entities.cpp`, `src/Plugin.cpp`
 
-- [ ] **Step 1: Edit `tests/TestEntities.cpp` to add the failing test**
+- [x] **Step 1: Edit `tests/TestEntities.cpp` to add the failing test**
 
 ```cpp
 TEST(EntitiesWithoutASceneUseMinecraftsEye)
@@ -6945,7 +6945,7 @@ TEST(EntitiesAddTheOutlineInBuildMode)
 TEST(EntitiesWithoutASceneUseMinecraftsEye)
 ```
 
-- [ ] **Step 2: Build; it must fail**
+- [x] **Step 2: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -6954,7 +6954,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `'cpmc::entities::Entities::Frame': function does not take 2 arguments`.
 
-- [ ] **Step 3: Edit `src/entities/Entities.h` for the outline's draw**
+- [x] **Step 3: Edit `src/entities/Entities.h` for the outline's draw**
 
 ```cpp
 		Crack,        // multiplied into the G-buffer's base colour
@@ -6982,7 +6982,7 @@ Expected: `'cpmc::entities::Entities::Frame': function does not take 2 arguments
 	EntityFrame Frame(const Vec3d& aEye, bool aOutline = false) const;
 ```
 
-- [ ] **Step 4: Edit `src/entities/Entities.cpp` to add it in build mode**
+- [x] **Step 4: Edit `src/entities/Entities.cpp` to add it in build mode**
 
 ```cpp
 EntityFrame Entities::Frame(const Vec3d& aEye) const
@@ -7003,7 +7003,7 @@ EntityFrame Entities::Frame(const Vec3d& aEye, bool aOutline) const
 		frame.draws.push_back({ outline, uint32_t(frame.vertices.size()) - outline, 0, EntityDraw::Kind::Outline });
 ```
 
-- [ ] **Step 5: Edit `src/Plugin.cpp` to pass build mode's state**
+- [x] **Step 5: Edit `src/Plugin.cpp` to pass build mode's state**
 
 ```cpp
 		// Spike 7: this frame's entities, which the renderer's Update copies into a snapshot, drawn only into the G-buffer.
@@ -7021,7 +7021,7 @@ EntityFrame Entities::Frame(const Vec3d& aEye, bool aOutline) const
 			g_renderer->SetEntities(g_entities.Frame(g_link->State().minecraftEye, g_router->On()));
 ```
 
-- [ ] **Step 6: Build and run the tests; they must pass**
+- [x] **Step 6: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -7031,7 +7031,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `499 test(s), 0 failure(s)`.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -7060,7 +7060,7 @@ What the renderer's forward list (Task 24) works out without the GPU:
   `src/render/Snapshots.cpp`, `src/render/Predlss.h`, `src/render/Predlss.cpp`, `src/entities/Entities.h`,
   `src/entities/Entities.cpp`
 
-- [ ] **Step 1: Edit `tests/TestSnapshots.cpp` to add the failing test of the hold**
+- [x] **Step 1: Edit `tests/TestSnapshots.cpp` to add the failing test of the hold**
 
 ```cpp
 TEST(SnapshotsAbandonedListHoldsNothing)
@@ -7092,7 +7092,7 @@ TEST(SnapshotsHeldForTheFramesForwardList)
 TEST(SnapshotsAbandonedListHoldsNothing)
 ```
 
-- [ ] **Step 2: Edit `tests/TestPredlss.cpp` to add the failing tests of the hint and the width**
+- [x] **Step 2: Edit `tests/TestPredlss.cpp` to add the failing tests of the hint and the width**
 
 ```cpp
 TEST(PredlssViewsTheDepthAsD32)
@@ -7130,7 +7130,7 @@ TEST(PredlssOutlineIsMinecraftsWidth)
 TEST(PredlssViewsTheDepthAsD32)
 ```
 
-- [ ] **Step 3: Edit `tests/TestEntities.cpp` to add the failing test of the forward pass's work**
+- [x] **Step 3: Edit `tests/TestEntities.cpp` to add the failing test of the forward pass's work**
 
 ```cpp
 TEST(EntitiesWithoutASceneUseMinecraftsEye)
@@ -7148,7 +7148,7 @@ TEST(EntitiesSayWhenTheForwardPassHasWork)
 TEST(EntitiesWithoutASceneUseMinecraftsEye)
 ```
 
-- [ ] **Step 4: Build; it must fail**
+- [x] **Step 4: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -7157,7 +7157,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `'Take': is not a member of 'cpmc::Snapshots'`.
 
-- [ ] **Step 5: Edit `src/render/Snapshots.h` to declare the second take**
+- [x] **Step 5: Edit `src/render/Snapshots.h` to declare the second take**
 
 ```cpp
 // list: after it, not before it, as Retired learnt from Task 52. The newest is never written over, so a list can always
@@ -7179,7 +7179,7 @@ Expected: `'Take': is not a member of 'cpmc::Snapshots'`.
 	bool                    Take(uint32_t aIndex);
 ```
 
-- [ ] **Step 6: Edit `src/render/Snapshots.cpp` to add it**
+- [x] **Step 6: Edit `src/render/Snapshots.cpp` to add it**
 
 ```cpp
 void Snapshots::Submitted(uint32_t aIndex, uint64_t aFence)
@@ -7198,7 +7198,7 @@ bool Snapshots::Take(uint32_t aIndex)
 void Snapshots::Submitted(uint32_t aIndex, uint64_t aFence)
 ```
 
-- [ ] **Step 7: Edit `src/render/Predlss.h` to declare the hint's checks and the outline's width**
+- [x] **Step 7: Edit `src/render/Predlss.h` to declare the hint's checks and the outline's width**
 
 ```cpp
 // into the tagged scaling input colour, motion vectors and depth.
@@ -7221,7 +7221,7 @@ bool CheckHintTarget(const D3D12_RESOURCE_DESC& aHint, const D3D12_RESOURCE_DESC
 float OutlinePixels(uint32_t aOutputWidth, uint32_t aRenderWidth);
 ```
 
-- [ ] **Step 8: Edit `src/render/Predlss.cpp` to add them**
+- [x] **Step 8: Edit `src/render/Predlss.cpp` to add them**
 
 ```cpp
 #include <format>
@@ -7256,7 +7256,7 @@ float OutlinePixels(uint32_t aOutputWidth, uint32_t aRenderWidth)
 	return std::max(2.5f, float(aOutputWidth) / 1920.0f * 2.5f) * float(aRenderWidth) / float(aOutputWidth);
 ```
 
-- [ ] **Step 9: Edit `src/entities/Entities.h` to declare the forward pass's work**
+- [x] **Step 9: Edit `src/entities/Entities.h` to declare the forward pass's work**
 
 ```cpp
 	Kind     kind = Kind::Model;
@@ -7270,7 +7270,7 @@ float OutlinePixels(uint32_t aOutputWidth, uint32_t aRenderWidth)
 bool ForwardDraws(const std::vector<EntityDraw>& aDraws, bool aOutline);
 ```
 
-- [ ] **Step 10: Edit `src/entities/Entities.cpp` to add it**
+- [x] **Step 10: Edit `src/entities/Entities.cpp` to add it**
 
 ```cpp
 {
@@ -7288,7 +7288,7 @@ bool ForwardDraws(const std::vector<EntityDraw>& aDraws, bool aOutline)
 void Entities::Scene(const link::SceneMessage& aScene)
 ```
 
-- [ ] **Step 11: Build and run the tests; they must pass**
+- [x] **Step 11: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -7298,7 +7298,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `503 test(s), 0 failure(s)`.
 
-- [ ] **Step 12: Commit**
+- [x] **Step 12: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -7329,7 +7329,7 @@ the frame's `entityTuning.z` carries the outline's width (`OutlinePixels`):
 - Modify: `tests/TestShaders.cpp`, `shaders/blocks.hlsl`, `src/render/FrameConstants.h`, `src/render/Shaders.h`,
   `src/render/Shaders.cpp`
 
-- [ ] **Step 1: Edit `tests/TestShaders.cpp` to add the failing test**
+- [x] **Step 1: Edit `tests/TestShaders.cpp` to add the failing test**
 
 ```cpp
 TEST(ShadersReportCompileErrors)
@@ -7356,7 +7356,7 @@ TEST(ShadersDrawStepBsForwardPass)
 TEST(ShadersReportCompileErrors)
 ```
 
-- [ ] **Step 2: Build; it must fail**
+- [x] **Step 2: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -7365,7 +7365,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `'translucent': is not a member of 'cpmc::BlockShaders'`.
 
-- [ ] **Step 3: Edit `shaders/blocks.hlsl` to add the shaders**
+- [x] **Step 3: Edit `shaders/blocks.hlsl` to add the shaders**
 
 ```hlsl
     float4 entityTuning;              // spike 7: a glowing triangle's emission; the block light it glows from; 0; 0
@@ -7472,7 +7472,7 @@ float4 OutlinePS(OutlineOut i) : SV_Target0
 // Spike 4: Minecraft's HUD image (its hotbar, crosshair, chat, hand and held item), drawn over the finished frame at
 ```
 
-- [ ] **Step 4: Edit `src/render/FrameConstants.h` to name the outline's width**
+- [x] **Step 4: Edit `src/render/FrameConstants.h` to name the outline's width**
 
 ```cpp
 	                              // glowlight); 0; 0
@@ -7481,7 +7481,7 @@ float4 OutlinePS(OutlineOut i) : SV_Target0
 	                              // glowlight); the outline's width in render pixels (step B, OutlinePixels); 0
 ```
 
-- [ ] **Step 5: Edit `src/render/Shaders.h` to add them**
+- [x] **Step 5: Edit `src/render/Shaders.h` to add them**
 
 ```cpp
 	std::vector<uint8_t> entityDepth;   // EntityDepthPS
@@ -7494,7 +7494,7 @@ float4 OutlinePS(OutlineOut i) : SV_Target0
 	std::vector<uint8_t> outline;        // OutlinePS
 ```
 
-- [ ] **Step 6: Edit `src/render/Shaders.cpp` to compile them**
+- [x] **Step 6: Edit `src/render/Shaders.cpp` to compile them**
 
 ```cpp
 	}
@@ -7530,7 +7530,7 @@ float4 OutlinePS(OutlineOut i) : SV_Target0
 		                 std::move(*hint), std::move(*outlineVertex), std::move(*outline) };
 ```
 
-- [ ] **Step 7: Build and run the tests; they must pass**
+- [x] **Step 7: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -7540,7 +7540,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `504 test(s), 0 failure(s)`.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -7573,7 +7573,7 @@ A second list of ours, just before the frame's DLSS list, in `gbuffer` mode (the
 **Files:**
 - Modify: `src/render/Renderer.h`, `src/render/Renderer.cpp`
 
-- [ ] **Step 1: Edit `src/render/Renderer.h` for the forward list**
+- [x] **Step 1: Edit `src/render/Renderer.h` for the forward list**
 
 ```cpp
 //   entities in the same list, after the blocks: the newest snapshot's models, then their cracks, then their depth.
@@ -7674,7 +7674,7 @@ A second list of ours, just before the frame's DLSS list, in `gbuffer` mode (the
 	Stats    stats_;
 ```
 
-- [ ] **Step 2: Edit `src/render/Renderer.cpp` to record it**
+- [x] **Step 2: Edit `src/render/Renderer.cpp` to record it**
 
 ```cpp
 constexpr uint32_t kRtvs = 7;
@@ -8220,7 +8220,7 @@ ID3D12CommandList* Renderer::RecordForward(ID3D12CommandQueue* aQueue, ID3D12Gra
 	hintPipeline_.Reset();
 ```
 
-- [ ] **Step 3: Build and run the tests; they must pass**
+- [x] **Step 3: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -8230,7 +8230,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `504 test(s), 0 failure(s)`.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -8250,7 +8250,7 @@ list's frames from Task 27.
 **Files:**
 - Modify: `tests/TestStatus.cpp`, `src/Status.h`, `src/Status.cpp`, `src/Plugin.cpp`
 
-- [ ] **Step 1: Edit `tests/TestStatus.cpp` to change the test of the line**
+- [x] **Step 1: Edit `tests/TestStatus.cpp` to change the test of the line**
 
 ```cpp
 	                  "translucent; 0 textures (0.00 MB), 0 left out; drawn in 0 frames, 0 draws skipped, GPU not measured; world: nothing"));
@@ -8285,7 +8285,7 @@ list's frames from Task 27.
 	          "waited for a snapshot; 3 draws past a snapshot's 8 MB"));
 ```
 
-- [ ] **Step 2: Build; it must fail**
+- [x] **Step 2: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -8294,7 +8294,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `'forwardFrames': is not a member of 'cpmc::LinkReport'`.
 
-- [ ] **Step 3: Edit `src/Status.h` to add the forward list's figures**
+- [x] **Step 3: Edit `src/Status.h` to add the forward list's figures**
 
 ```cpp
 	double                entityGpuMsAverage = -1.0;  // their draws, on the GPU; below 0: not measured
@@ -8310,7 +8310,7 @@ Expected: `'forwardFrames': is not a member of 'cpmc::LinkReport'`.
 	int                   dlssHint = 1;             // set dlsshint
 ```
 
-- [ ] **Step 4: Edit `src/Status.cpp` to write them**
+- [x] **Step 4: Edit `src/Status.cpp` to write them**
 
 ```cpp
 // Minecraft's entities (spike 7): the scenes coming, the newest, the textures, what's drawn, and the world entities.
@@ -8347,7 +8347,7 @@ Expected: `'forwardFrames': is not a member of 'cpmc::LinkReport'`.
 		out += std::format("; {} forward lists skipped ({})", aLink.forwardSkipped, OneLine(aLink.forwardLastSkip));
 ```
 
-- [ ] **Step 5: Edit `src/Plugin.cpp` to pass them on**
+- [x] **Step 5: Edit `src/Plugin.cpp` to pass them on**
 
 ```cpp
 	report.entityGpuMsAverage = aStats.entityGpuMsAverage;
@@ -8363,7 +8363,7 @@ Expected: `'forwardFrames': is not a member of 'cpmc::LinkReport'`.
 	report.dlssHint = aStats.dlssHint;
 ```
 
-- [ ] **Step 6: Build and run the tests; they must pass**
+- [x] **Step 6: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -8373,7 +8373,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `504 test(s), 0 failure(s)`.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -8394,7 +8394,7 @@ cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
 - Modify: `tests/TestRequests.cpp`, `src/Requests.h`, `src/Requests.cpp`, `src/log/Dumps.h`, `src/log/Dumps.cpp`,
   `src/Plugin.cpp`, `CMakeLists.txt`
 
-- [ ] **Step 1: Edit `tests/TestRequests.cpp` to add the failing test**
+- [x] **Step 1: Edit `tests/TestRequests.cpp` to add the failing test**
 
 ```cpp
 	CHECK_EQ(set->number, 0.25);
@@ -8410,7 +8410,7 @@ TEST(RequestsDumpTheBiasHint)
 	CHECK_STR(ErrorOf("dump hints"), "dump takes one of: depth, mvec, color, gbuffer, hint, all");
 ```
 
-- [ ] **Step 2: Build and run the tests; the new one must fail**
+- [x] **Step 2: Build and run the tests; the new one must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -8420,7 +8420,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `FAIL RequestsDumpTheBiasHint` and `505 test(s), 2 failure(s)`, its two checks.
 
-- [ ] **Step 3: Edit `src/Requests.h` to name it**
+- [x] **Step 3: Edit `src/Requests.h` to name it**
 
 ```cpp
 //   dump depth|mvec|color|gbuffer|all
@@ -8429,7 +8429,7 @@ Expected: `FAIL RequestsDumpTheBiasHint` and `505 test(s), 2 failure(s)`, its tw
 //   dump depth|mvec|color|gbuffer|hint|all  (hint: spike 7's step B, DLSS's bias hint at the evaluate)
 ```
 
-- [ ] **Step 4: Edit `src/Requests.cpp` to parse it**
+- [x] **Step 4: Edit `src/Requests.cpp` to parse it**
 
 ```cpp
 		if (arguments != 1 || !OneOf(words[1], { "depth", "mvec", "color", "gbuffer", "all" }))
@@ -8442,7 +8442,7 @@ Expected: `FAIL RequestsDumpTheBiasHint` and `505 test(s), 2 failure(s)`, its tw
 			return Fail(aError, "dump takes one of: depth, mvec, color, gbuffer, hint, all");
 ```
 
-- [ ] **Step 5: Edit `src/log/Dumps.h` to say so**
+- [x] **Step 5: Edit `src/log/Dumps.h` to say so**
 
 ```cpp
 // buffers are copied at the DLSS evaluate (depth, mvec, color), and the G-buffer candidates as their passes end
@@ -8456,7 +8456,7 @@ Expected: `FAIL RequestsDumpTheBiasHint` and `505 test(s), 2 failure(s)`, its tw
 // wins, which is the whole G-buffer.
 ```
 
-- [ ] **Step 6: Edit `src/log/Dumps.cpp` to copy the hint**
+- [x] **Step 6: Edit `src/log/Dumps.cpp` to copy the hint**
 
 ```cpp
 		what_ = { "depth", "mvec", "color", "gbuffer" };
@@ -8472,7 +8472,7 @@ Expected: `FAIL RequestsDumpTheBiasHint` and `505 test(s), 2 failure(s)`, its tw
 		                                                { sl::kBufferTypeBiasCurrentColorHint, "hint" } };
 ```
 
-- [ ] **Step 7: Edit `src/Plugin.cpp` for 0.21.0**
+- [x] **Step 7: Edit `src/Plugin.cpp` for 0.21.0**
 
 ```cpp
 constexpr const char* kVersion = "0.20.0";
@@ -8481,7 +8481,7 @@ constexpr const char* kVersion = "0.20.0";
 constexpr const char* kVersion = "0.21.0";
 ```
 
-- [ ] **Step 8: Edit `CMakeLists.txt` for 0.21.0**
+- [x] **Step 8: Edit `CMakeLists.txt` for 0.21.0**
 
 ```cmake
 project(BlockRender VERSION 0.20.0 LANGUAGES C CXX)
@@ -8490,7 +8490,7 @@ project(BlockRender VERSION 0.20.0 LANGUAGES C CXX)
 project(BlockRender VERSION 0.21.0 LANGUAGES C CXX)
 ```
 
-- [ ] **Step 9: Build and run the tests; they must pass**
+- [x] **Step 9: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -8500,7 +8500,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `505 test(s), 0 failure(s)`.
 
-- [ ] **Step 10: Check that BlockRender imports nothing from PhysX**
+- [x] **Step 10: Check that BlockRender imports nothing from PhysX**
 
 ```bash
 DUMPBIN=$(ls "/c/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/"*/bin/Hostx64/x64/dumpbin.exe | head -1)
@@ -8508,7 +8508,7 @@ DUMPBIN=$(ls "/c/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/M
 ```
 Expected: `KERNEL32.dll` and the other DLLs it imports, none of them PhysX's.
 
-- [ ] **Step 11: Commit**
+- [x] **Step 11: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -8533,7 +8533,7 @@ frames.
 **Files:**
 - Modify: `tools/blockrender_hud/init.lua`
 
-- [ ] **Step 1: Edit `tools/blockrender_hud/init.lua`**
+- [x] **Step 1: Edit `tools/blockrender_hud/init.lua`**
 
 ```lua
 local entities = nil     -- the entities line (spike 7): on or off, scenes a second, frames drawn, textures, the nearest mob
@@ -8591,14 +8591,14 @@ local entities = nil     -- the entities line (spike 7): on or off, scenes a sec
                 .. (forward and (", the forward list in " .. forward) or "")
 ```
 
-- [ ] **Step 2: Check the overlay's syntax**
+- [x] **Step 2: Check the overlay's syntax**
 
 ```bash
 luac -p /d/Cyberpunk-Minecraft/spikes/block-render/tools/blockrender_hud/init.lua && echo "syntax ok"
 ```
 Expected: `syntax ok`.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -8620,7 +8620,7 @@ world table carries its outline. It's kept with the other scripts, and the test 
 - Create: `tools/mclink/spawn.txt`
 - Modify: `tests/TestMcLinkScript.cpp`
 
-- [ ] **Step 1: Edit `tests/TestMcLinkScript.cpp` to parse it too**
+- [x] **Step 1: Edit `tests/TestMcLinkScript.cpp` to parse it too**
 
 ```cpp
 	                          "entities.txt" })
@@ -8629,7 +8629,7 @@ world table carries its outline. It's kept with the other scripts, and the test 
 	                          "entities.txt", "spawn.txt" })
 ```
 
-- [ ] **Step 2: Build and run the tests; the new one must fail**
+- [x] **Step 2: Build and run the tests; the new one must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -8639,7 +8639,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `FAIL ScriptsInTheRepoParse` and `505 test(s), 2 failure(s)`: the file isn't there yet.
 
-- [ ] **Step 3: Write `tools/mclink/spawn.txt`**
+- [x] **Step 3: Write `tools/mclink/spawn.txt`**
 
 ```text
 # Spike 7's Part 3: the overlay's Spawn rows and Clear, typed as its buttons type them, at step 0's spot, against
@@ -8735,7 +8735,7 @@ status
 quit
 ```
 
-- [ ] **Step 4: Build and run the tests; they must pass**
+- [x] **Step 4: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -8745,7 +8745,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `505 test(s), 0 failure(s)`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -8765,14 +8765,14 @@ without the game. It checks each command against Minecraft 26.3 before run B, as
 **Files:**
 - Modify: `docs/spikes/2026-10-06-minecraft-entities-results.md`
 
-- [ ] **Step 1: Check that the game isn't running**
+- [x] **Step 1: Check that the game isn't running**
 
 ```bash
 tasklist | grep -i -c "cyberpunk2077.exe"
 ```
 Expected: `0`. If it's `1`, ask the user to quit the game: it would hold the mapping.
 
-- [ ] **Step 2: Ask the user for their leave, and to start Minecraft**
+- [x] **Step 2: Ask the user for their leave, and to start Minecraft**
 
 Ask the user for their leave to run the script at x 880 in the `SkyCraft` world, which clears what it makes; then to
 start the `CyberCraft` instance from the Modrinth App, and say when its title screen shows. Then:
@@ -8783,7 +8783,7 @@ grep -m1 "cybercraft_tweaks" "$L"; grep "SkyCraft:" "$L" | tail -2; echo "mixin 
 Expected: `cybercraft_tweaks 1.4.0` in Fabric's list of mods, `SkyCraft: can't open Skyrim's shared memory yet (Windows
 error 2: …)`, and `mixin errors: 0`.
 
-- [ ] **Step 3: Run the script**
+- [x] **Step 3: Run the script**
 
 ```bash
 L="/c/Users/BLOXY/AppData/Roaming/ModrinthApp/profiles/CyberCraft/logs/latest.log"; before=$(wc -l < "$L"); \
@@ -8804,16 +8804,16 @@ Give it 4 minutes. Expected:
 - **Clear left nothing:** the last scene has no batches and its world line says `nothing`; the last status's `solids`
   line has 0 blocks around the stand-in V; and `exit: 0`.
 
-- [ ] **Step 4: Ask the user to stop Minecraft**
+- [x] **Step 4: Ask the user to stop Minecraft**
 
 Its window is hidden while `mclink` drives it, so the user stops it from the Modrinth App.
 
-- [ ] **Step 5: Record the run in `docs/spikes/2026-10-06-minecraft-entities-results.md`**
+- [x] **Step 5: Record the run in `docs/spikes/2026-10-06-minecraft-entities-results.md`**
 
 A "The Spawn rows with `mclink` (Part 3)" section after run A's: the versions; each group's answer; the particles'
 batches and their vertex counts; the outline's box; what Clear left; and anything that surprised.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 With the plan, its steps ticked up to this one.
 ```bash
