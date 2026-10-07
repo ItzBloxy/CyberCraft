@@ -8,7 +8,7 @@ struct Vertex
     float2 uv;        // atlas coordinates
     uint   colour;    // RGBA8, red in the low byte: tint and ambient occlusion
     uint   light;     // block light in bits 0-7, sky light in bits 8-15
-    uint   flags;     // bit 0 alpha-tested, bit 1 translucent, bits 4-7 the face's direction + 1
+    uint   flags;     // bit 0 alpha-tested, bit 1 translucent, bit 3 no mipmaps, bits 4-7 the face's direction + 1
 };
 
 cbuffer Frame : register(b0)
@@ -23,6 +23,7 @@ cbuffer Frame : register(b0)
     row_major float4x4 clipToPrevClip;  // Streamline's: a clip position to where it was a frame before
     float4 jitter;                    // the jitter as an offset per unit of clip w: x, y
     float4 material;                  // the G-buffer's material values: metalness, roughness, B; 0
+    float4 entityTuning;              // spike 7: a glowing triangle's emission; the block light it glows from; 0; 0
 };
 
 cbuffer Section : register(b1)
@@ -110,11 +111,16 @@ float3 Linear(float3 aColour)
 }
 
 // As Camera.cpp's MotionVector: a fraction of the screen, from where the point is to where it was.
+float2 MotionBetween(float4 aClip, float4 aPrevClip)
+{
+    const float2 now = aClip.xy / aClip.w;
+    const float2 before = aPrevClip.xy / aPrevClip.w;
+    return (before - now) * float2(0.5, -0.5) * tuning.w;
+}
+
 float2 MotionVector(VSOut i)
 {
-    const float2 now = i.clip.xy / i.clip.w;
-    const float2 before = i.prevClip.xy / i.prevClip.w;
-    return (before - now) * float2(0.5, -0.5) * tuning.w;
+    return MotionBetween(i.clip, i.prevClip);
 }
 
 struct PredlssOut
@@ -173,6 +179,134 @@ GbufferOut GbufferPS(VSOut i)
 void DepthPS(VSOut i)
 {
     if (SampleAtlas(i.uv).a < 0.5)
+    {
+        discard;
+    }
+}
+
+// Spike 7: Minecraft's entities, block entities, particles and world entities (the spec's "Step A: into the G-buffer"),
+// from a snapshot of the frame's vertices, each draw with its texture: Minecraft's combined atlas, or an entity texture
+// in entityTextures. A draw's constants, in b1 where the blocks have Section.
+cbuffer Entity : register(b1)
+{
+    float3 entityOffset;   // the frame's origin: camera-relative, world axes
+    uint   entityFirst;    // the draw's first vertex in the snapshot
+    uint   textureStart;   // its texture's first texel in entityTextures
+    uint   textureWidth;   // its size; 0 for Minecraft's combined atlas
+    uint   textureHeight;
+    uint   entityUnused;
+};
+
+StructuredBuffer<uint> entityTextures : register(t3);  // RGBA8, one texel per uint, red in the low byte
+
+struct EntityOut
+{
+    float4 position : SV_Position;
+    float2 uv       : TEXCOORD0;
+    float4 colour   : COLOR0;
+    nointerpolation uint flags : TEXCOORD1;  // the triangle's first vertex's, as its light
+    float4 clip     : TEXCOORD2;  // without jitter
+    float4 prevClip : TEXCOORD3;  // where it was a frame before
+    nointerpolation uint light : TEXCOORD4;
+    float3 world    : TEXCOORD5;  // camera-relative, world axes: for the triangle's own normal
+};
+
+EntityOut EntityVS(uint id : SV_VertexID)
+{
+    const Vertex v = vertices[entityFirst + id];
+    EntityOut o;
+    // Minecraft (x, y, z) is world (x, -z, y).
+    const float3 world = entityOffset + float3(v.position.x, -v.position.z, v.position.y);
+    const float4 clip = mul(float4(world, 1.0), cameraToClip);
+    o.position = float4(clip.xy + jitter.xy * clip.w, clip.zw);
+    o.clip = clip;
+    o.prevClip = mul(clip, clipToPrevClip);
+    o.uv = v.uv;
+    o.colour = float4(v.colour & 0xFF, (v.colour >> 8) & 0xFF, (v.colour >> 16) & 0xFF, v.colour >> 24) / 255.0;
+    o.flags = v.flags;
+    o.light = v.light;
+    o.world = world;
+    return o;
+}
+
+// The draw's texel nearest uv: Minecraft's combined atlas at its top level, as SkyCraft marks every entity vertex for no
+// mipmaps, or the draw's entity texture. Root descriptors carry no bounds, so the UV is clamped to the texture first: a
+// bad one reads an edge texel. [branch] keeps the other buffer unread.
+float4 EntityTexel(float2 uv)
+{
+    uint packed;
+    [branch] if (textureWidth == 0)
+    {
+        const uint2 size = uint2(atlasInfo.x, atlasInfo.y);
+        const uint2 texel = min((uint2)(saturate(uv) * float2(size)), size - 1);
+        packed = atlas[atlasLevels[0].x + texel.y * size.x + texel.x];
+    }
+    else
+    {
+        const uint2 size = uint2(textureWidth, textureHeight);
+        const uint2 texel = min((uint2)(saturate(uv) * float2(size)), size - 1);
+        packed = entityTextures[textureStart + texel.y * size.x + texel.x];
+    }
+    return float4(packed & 0xFF, (packed >> 8) & 0xFF, (packed >> 16) & 0xFF, packed >> 24) / 255.0;
+}
+
+// The triangle's own normal, from how its camera-relative position changes across the screen; straight up for none.
+float3 OwnNormal(float3 aWorld)
+{
+    const float3 across = cross(ddy(aWorld), ddx(aWorld));
+    const float  size = length(across);
+    return size > 1e-12 ? across / size : float3(0.0, 0.0, 1.0);
+}
+
+// The normal a vertex's flags give, bits 4 to 6 its direction + 1: 7 the triangle's own (aOwn), turned toward the camera,
+// as SkyCraft marks models, items and blocks drawn as entities; 0 (particles) straight up, as the blocks' plants are lit;
+// 1 to 6 the face's.
+float3 EntityNormal(uint aFlags, float3 aOwn, float3 aWorld)
+{
+    const uint face = (aFlags >> 4) & 7;
+    if (face == 7)
+    {
+        return dot(aOwn, aWorld) > 0.0 ? -aOwn : aOwn;  // aWorld runs from the camera to the point
+    }
+    return kFaceNormal[min(face, 6)];
+}
+
+// Step A: an entity into the G-buffer, as GbufferPS draws a block, cut out where texel times vertex alpha is under 0.1,
+// Minecraft's cut-out for entities, particles and items. A triangle whose first vertex has block light of at least
+// entityTuning.y glows: it writes entityTuning.x into the material target's A, which spike 3 found above 0 only on the
+// game's windows and signs, likely as emission.
+GbufferOut EntityPS(EntityOut i)
+{
+    const float3 own = OwnNormal(i.world);  // before the discard, which ends the pixel's part in the derivatives
+    const float4 texel = EntityTexel(i.uv);
+    if (texel.a * i.colour.a < 0.1)
+    {
+        discard;
+    }
+    GbufferOut o;
+    o.base = float4(saturate(texel.rgb * i.colour.rgb * tuning.x), 0.0);
+    o.normal = float4(EntityNormal(i.flags, own, i.world) * 0.5 + 0.5, 0.0);
+    o.material = float4(material.xyz, (i.light & 0xFF) >= (uint)entityTuning.y ? entityTuning.x : 0.0);
+    o.motion = MotionBetween(i.clip, i.prevClip);
+    return o;
+}
+
+// Step A's cracks over a block being mined, into the base colour alone, which their pipeline blends as Minecraft's
+// crumbling does: DEST_COLOR and SRC_COLOR, the crack's colour times what's there, twice.
+float4 CrackPS(EntityOut i) : SV_Target0
+{
+    const float4 texel = EntityTexel(i.uv);
+    if (texel.a * i.colour.a < 0.1)
+    {
+        discard;
+    }
+    return float4(texel.rgb * i.colour.rgb, 1.0);
+}
+
+// Step A's second pass: the entities' depth into the tagged depth, cut out as EntityPS cuts them.
+void EntityDepthPS(EntityOut i)
+{
+    if (EntityTexel(i.uv).a * i.colour.a < 0.1)
     {
         discard;
     }

@@ -18,8 +18,10 @@ struct FrameConstants
 	float    clipToPrevClip[16];  // Streamline's, for row vectors: a clip position to where it was a frame before
 	float    jitter[4];           // the jitter as an offset per unit of clip w (ClipJitter): x, y; 0; 0
 	float    material[4];         // the G-buffer's material values: metalness, roughness, B; 0
+	float    entity[4];           // spike 7: a glowing triangle's emission (set glow); the block light it glows from (set
+	                              // glowlight); 0; 0
 };
-static_assert(sizeof(FrameConstants) == 272);
+static_assert(sizeof(FrameConstants) == 288);
 
 struct SectionConstants
 {
@@ -27,6 +29,18 @@ struct SectionConstants
 	float unused;
 };
 static_assert(sizeof(SectionConstants) == 16);
+
+// Spike 7: one entity draw's root constants, in b1 where the blocks have SectionConstants.
+struct EntityConstants
+{
+	float    offset[3];      // the frame's origin: camera-relative, world axes
+	uint32_t first;          // the draw's first vertex in the snapshot
+	uint32_t textureStart;   // its texture's first texel in the entity textures' buffer
+	uint32_t textureWidth;   // 0 for Minecraft's combined atlas
+	uint32_t textureHeight;
+	uint32_t unused;
+};
+static_assert(sizeof(EntityConstants) == 32);
 
 // The HUD pass's root constants, in b1 where the blocks have SectionConstants.
 struct HudConstants

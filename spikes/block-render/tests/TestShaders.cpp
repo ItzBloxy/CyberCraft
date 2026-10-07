@@ -112,6 +112,24 @@ TEST(ShadersDrawTheHud)
 	}
 }
 
+TEST(ShadersDrawMinecraftsEntities)
+{
+	std::string error;
+	const auto  shaders = cpmc::CompileBlockShaders(ShaderSource(), error);
+	CHECK(shaders.has_value());
+	if (shaders)
+	{
+		CHECK(!shaders->entityVertex.empty());
+		CHECK_EQ(ConstantBufferSize(shaders->entityVertex, "Frame"), UINT(sizeof(cpmc::FrameConstants)));
+		CHECK_EQ(ConstantBufferSize(shaders->entityVertex, "Entity"), UINT(sizeof(cpmc::EntityConstants)));
+		CHECK_EQ(ConstantBufferSize(shaders->entity, "Frame"), UINT(sizeof(cpmc::FrameConstants)));
+		CHECK_EQ(ConstantBufferSize(shaders->entity, "Entity"), UINT(sizeof(cpmc::EntityConstants)));
+		CHECK_EQ(Outputs(shaders->entity), 4u);       // the G-buffer's four targets, as GbufferPS
+		CHECK_EQ(Outputs(shaders->crack), 1u);        // the base colour alone
+		CHECK_EQ(Outputs(shaders->entityDepth), 0u);  // depth only
+	}
+}
+
 TEST(ShadersReportCompileErrors)
 {
 	std::string error;

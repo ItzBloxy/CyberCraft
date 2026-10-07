@@ -24,6 +24,10 @@ struct BlockShaders
 	std::vector<uint8_t> depth;      // DepthPS
 	std::vector<uint8_t> hudVertex;  // HudVS
 	std::vector<uint8_t> hud;        // HudPS
+	std::vector<uint8_t> entityVertex;  // EntityVS (spike 7)
+	std::vector<uint8_t> entity;        // EntityPS
+	std::vector<uint8_t> crack;         // CrackPS
+	std::vector<uint8_t> entityDepth;   // EntityDepthPS
 };
 
 // Every entry point of shaders/blocks.hlsl, from its text. Nothing, with the messages in aError, if any fails.

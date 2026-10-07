@@ -64,7 +64,28 @@ std::optional<BlockShaders> CompileBlockShaders(std::string_view aSource, std::s
 	{
 		return std::nullopt;
 	}
+	auto entityVertex = CompileShader(aSource, "blocks.hlsl", "EntityVS", "vs_5_1", aError);
+	if (!entityVertex)
+	{
+		return std::nullopt;
+	}
+	auto entity = CompileShader(aSource, "blocks.hlsl", "EntityPS", "ps_5_1", aError);
+	if (!entity)
+	{
+		return std::nullopt;
+	}
+	auto crack = CompileShader(aSource, "blocks.hlsl", "CrackPS", "ps_5_1", aError);
+	if (!crack)
+	{
+		return std::nullopt;
+	}
+	auto entityDepth = CompileShader(aSource, "blocks.hlsl", "EntityDepthPS", "ps_5_1", aError);
+	if (!entityDepth)
+	{
+		return std::nullopt;
+	}
 	return BlockShaders{ std::move(*vertex), std::move(*present), std::move(*predlss), std::move(*gbuffer),
-		                 std::move(*depth), std::move(*hudVertex), std::move(*hud) };
+		                 std::move(*depth), std::move(*hudVertex), std::move(*hud), std::move(*entityVertex),
+		                 std::move(*entity), std::move(*crack), std::move(*entityDepth) };
 }
 }
