@@ -5,19 +5,21 @@ Spike 7 draws Minecraft's entities, block entities, particles and world entities
 them, with `mclink`, without the game; later steps add their sections as they run, and the spike's answer goes at the
 top once step A is in.
 
-**The answer, from steps A, B and C (runs A, B and C): yes, but for blended emissive layers.** Minecraft's mobs,
-block entities, particles and world entities (items, arrows, tridents, cracks) are drawn in Night City where Minecraft
-has them, posed and animated as Minecraft poses them, in Minecraft's draw order (CyberCraft Tweaks 1.4.0). The game
-lights the opaque ones as its own geometry, ambient occlusion and reflections included, and what Minecraft makes
-full-bright glows at night through the G-buffer's emission. The translucent particles (fireworks' sparks, potions'
-swirls, campfire smoke) are blended in before DLSS, looking as Minecraft's by day and at night, and the targeted block's
-outline shows in build mode. Nothing smeared, the particles neither, without DLSS's bias hint, and it all costs about
-0.03 ms of GPU a frame, 0.3 ms at the peak of a 125-TNT blast. The layers Minecraft makes glow by their render type glow
-too, with CyberCraft Tweaks 1.5.0: a spider's and an enderman's eyes look as in Minecraft ("Run C"). One thing isn't
-right yet: the emissive layers Minecraft blends, the warden's glowing parts and a charged creeper's armour, are drawn
-solid, and far too bright, so they need a blended look of their own. Run A's three problems, the overlay's block
-entities losing their markers, Shift+F6 leaving build mode and the overlay's buttons moving, are fixed (Part 3, "Run
-B").
+**The answer, from steps A, B and C (runs A to D): yes.** Minecraft's mobs, block entities, particles and world
+entities (items, arrows, tridents, cracks) are drawn in Night City where Minecraft has them, posed and animated as
+Minecraft poses them, in Minecraft's draw order (CyberCraft Tweaks 1.4.0). The game lights the opaque ones as its own
+geometry, ambient occlusion and reflections included, and what Minecraft makes full-bright glows at night through the
+G-buffer's emission. The translucent particles (fireworks' sparks, potions' swirls, campfire smoke) are blended in
+before DLSS, looking as Minecraft's by day and at night, and the targeted block's outline shows in build mode. Nothing
+smeared, the particles neither, without DLSS's bias hint. The layers Minecraft makes glow by their render type glow too,
+with CyberCraft Tweaks 1.5.0: a spider's and an enderman's eyes look as in Minecraft ("Run C"). The layers Minecraft
+blends are blended before DLSS as Minecraft blends them, and a charged creeper's armour is added, with CyberCraft Tweaks
+1.6.0 and BlockRender 0.22.0: a slime's outer layer, allays, vexes, a breeze's wind and the warden's faint glowing
+layers look as in Minecraft, by day and at night, and Minecraft's animated textures play on its blocks ("Run D"). It
+all costs about 0.03 ms of GPU a frame, 0.3 ms at the peak of a 125-TNT blast, and the animated textures 0.04 ms of GPU
+20 times a second. What's still left out: the swirl's and the breeze's wind's scrolling, and signs' and name tags'
+text. Run A's three problems, the overlay's block entities losing their markers, Shift+F6 leaving build mode and the
+overlay's buttons moving, are fixed (Part 3, "Run B").
 
 ## Step 0: what Minecraft sends of its entities, with `mclink`, without the game
 
@@ -606,3 +608,72 @@ patched sprites.
   the breeze's body as before.
 - **The patch pass should run about 20 times a second,** one for each Minecraft tick's patches, each writing about 40
   cells at each of their levels.
+
+## Run D: step C's blended mark and animated textures in the game
+
+Date: 2026-10-07, 19:46 to 19:56. BlockRender 0.22.0 (`3fbd8b9`, Part 5's Tasks 45 to 49), deployed with the game
+closed, in Cyberpunk 2077 2.31 on an RTX 3070, DRED on, linked to SkyCraft 0.1.2 with CyberCraft Tweaks 1.6.0 in the
+`CyberCraft` instance (Minecraft 26.3, 51 mods, the user's Entity Model Features and Entity Texture Features
+disabled). Drawing in `gbuffer` mode, Minecraft's player in creative, combat off; by day, then at night in the game
+(Skip Time), while Minecraft's world kept its own fixed time. V stood on a pavement by Minecraft's (-117, 7, 2005). The
+user played, compared with Minecraft's window and took the screenshots (`2026-10-06-minecraft-entities-results/run-d/`);
+the agent sent the requests (the six blocks at their markers, the seven mobs as `blended.txt` types them, and the
+settings) and read the logs and the status. Plan: Task 50.
+
+### Verdict
+
+**Pass.** The animated blocks animate as Minecraft's, and the seven mobs look like Minecraft's, side by side with
+Minecraft's window ("They all look like Minecraft's"); "Blended looks more like Minecraft" than the cut-outs `set
+blend 0` brings back. At night the warden's layers and the breeze's eyes glow
+and the rest "look fine": the blended layers lit by Minecraft's day weren't too bright. No crash, freeze, error or
+warning, and the costs are small.
+
+### The checks
+
+1. **The animated blocks by day:** lava in a cauldron, a lit campfire, magma, a sea lantern, prismarine and a lantern, 9
+   m ahead at their markers. "They all animate like Minecraft's." The status's atlas line: 835 patches applied a second
+   (7.73 MB), none refused or dropped, 20 passes, 0.011 ms of CPU a patch and 0.037 ms of GPU a pass, 0 areas waiting.
+   `set animate 0`: they stopped, the status counting 825 patches dropped a second, 0 passes, `animate off`; `set
+   animate 1`: playing again, 829 applied; `set animate 2`: refused, `animate is 1 to play Minecraft's animated
+   textures, or 0 to leave the atlas as it is`.
+2. **The seven mobs by day,** 6 or 7 m ahead, side by side with Minecraft's: "They all look like Minecraft's". The
+   charged creeper's armour shows as a see-through glow around it, the piglin as before
+   (`piglin-and-charged-creeper-day.webp`); the warden's patches lie over its body (`warden-day.webp`). The status: the
+   newest 20 batches, 8 of them blended and 1 additive, 4,902 vertices; the forward list in 63 frames a second, 0.010 ms
+   of GPU. `set blend 0`: "They're solid again", the G-buffer's entities at 0.019 ms where they were 0.014, the forward
+   list's 0.006; `set blend 1`: blended again, and "Blended looks more like Minecraft"; `set blend 2`: refused, `blend
+   is 1 to blend the entity layers Minecraft blends before DLSS, or 0 to draw them as cut-outs`.
+3. **At night:** "The warden and breeze eyes glow, the rest look fine": the slime's outer layer, the allay and the vex,
+   lit by Minecraft's day, didn't stand out against what the game lights (the spec's risk 15), and the blocks, lit by
+   the game's light alone, still animated.
+4. **The costs,** three readings a few seconds apart, with the mobs and the blocks in view:
+
+   | Measure | Value |
+   |---|---|
+   | Frame time | 15.4 to 16.8 ms average (60 to 65 a second) |
+   | The entities in the G-buffer, on the GPU | 0.016 to 0.022 ms a frame |
+   | The forward list (the blended and additive layers, the particles, the bias hint), on the GPU | 0.012 to 0.013 ms a frame |
+   | The renderer's update on the main thread (the layers' sort included) | 0.086 to 0.124 ms average, 1.3 ms worst |
+   | The patches | 829 to 831 a second (7.7 MB), 20 passes a second; 0.010 to 0.012 ms of CPU a patch, 0.033 to 0.041 ms of GPU a pass |
+
+5. **Clear, and no crash or freeze:** the six blocks back to air (`Changed the block at …` six times), then `Killed 9
+   entities` and `Killed 6 entities` (the markers); the newest scene had 0 batches (0 blended, 0 additive). Unlink
+   and Link again; the game ran without a crash or a freeze throughout, and BlockRender's log has no error or warning.
+
+### Surprises
+
+- **Two earlier test mobs were waiting:** a spider and an enderman, tagged `sp7`, were in the first scene as soon as
+  the link was on, about 6 m from Minecraft's player, so Clear killed 9 entities, not 7. They're from an earlier run at
+  this spot, most likely left in a chunk that wasn't loaded when its Clear ran, since `/kill` reaches only loaded
+  entities. Nothing tagged is left now.
+- **`/gamemode creative` printed nothing:** Minecraft's player was still in creative from Task 44's script.
+- **8 blended batches, not about 9:** one of the warden's pulsing layers was at no alpha just then, so Minecraft didn't
+  submit it, as Task 44 saw.
+
+### What it means
+
+- **Part 5 does what it set out to:** the layers Minecraft blends look as Minecraft's in Night City, by day and at
+  night, the charged creeper's armour is added, and Minecraft's animated textures play, all for a few hundredths of a
+  millisecond of GPU.
+- **Left out, as the spec has it:** the swirl's and the breeze's wind's scrolling, and the game's light on the blended
+  layers, which run D found didn't show at night.

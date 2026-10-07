@@ -11630,7 +11630,7 @@ New entry points beside step B's (the spec's "Step B: before DLSS" and "Animated
 - Modify: `tests/TestShaders.cpp`, `shaders/blocks.hlsl`, `src/render/FrameConstants.h`, `src/render/Shaders.h`,
   `src/render/Shaders.cpp`
 
-- [ ] **Step 1: Edit `tests/TestShaders.cpp` to add the failing test**
+- [x] **Step 1: Edit `tests/TestShaders.cpp` to add the failing test**
 
 ```cpp
 	return desc.OutputParameters;
@@ -11676,7 +11676,7 @@ TEST(ShadersDrawPart5sLayersAndPatches)
 TEST(ShadersReportCompileErrors)
 ```
 
-- [ ] **Step 2: Build; it must fail**
+- [x] **Step 2: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -11685,7 +11685,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `'blended': is not a member of 'cpmc::BlockShaders'`.
 
-- [ ] **Step 3: Edit `shaders/blocks.hlsl` to add the shaders**
+- [x] **Step 3: Edit `shaders/blocks.hlsl` to add the shaders**
 
 ```hlsl
 // their colour from this frame rather than from its history: the motion vectors there are the surface's behind them.
@@ -11795,7 +11795,7 @@ void PatchCS(uint3 group : SV_GroupID, uint thread : SV_GroupIndex)
 }
 ```
 
-- [ ] **Step 4: Edit `src/render/FrameConstants.h` for the patch pass's constants and table**
+- [x] **Step 4: Edit `src/render/FrameConstants.h` for the patch pass's constants and table**
 
 ```cpp
 // The HUD pass's root constants, in b1 where the blocks have SectionConstants.
@@ -11827,7 +11827,7 @@ static_assert(sizeof(PatchAreaGpu) == 32);
 // The HUD pass's root constants, in b1 where the blocks have SectionConstants.
 ```
 
-- [ ] **Step 5: Edit `src/render/Shaders.h` to add them**
+- [x] **Step 5: Edit `src/render/Shaders.h` to add them**
 
 ```cpp
 	std::vector<uint8_t> outline;        // OutlinePS
@@ -11839,7 +11839,7 @@ static_assert(sizeof(PatchAreaGpu) == 32);
 	std::vector<uint8_t> patch;          // PatchCS, a compute shader
 ```
 
-- [ ] **Step 6: Edit `src/render/Shaders.cpp` to compile them**
+- [x] **Step 6: Edit `src/render/Shaders.cpp` to compile them**
 
 ```cpp
 	}
@@ -11872,7 +11872,7 @@ static_assert(sizeof(PatchAreaGpu) == 32);
 		                 std::move(*additive), std::move(*patch) };
 ```
 
-- [ ] **Step 7: Build and run the tests; they must pass**
+- [x] **Step 7: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -11882,7 +11882,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `517 test(s), 0 failure(s)`.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -11908,7 +11908,7 @@ cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
 - Modify: `tests/TestEntities.cpp`, `src/entities/Entities.h`, `src/entities/Entities.cpp`, `src/render/Renderer.h`,
   `src/render/Renderer.cpp`
 
-- [ ] **Step 1: Edit `tests/TestEntities.cpp` to add the failing test**
+- [x] **Step 1: Edit `tests/TestEntities.cpp` to add the failing test**
 
 ```cpp
 	CHECK(ForwardDraws({ { 0, 3, 0, Kind::Model }, { 3, 6, 4, Kind::Additive } }, false));
@@ -11931,7 +11931,7 @@ TEST(EntitiesUnblendWithBlendOff)
 	CHECK(!ForwardDraws({ draws[0], draws[1] }, false));  // nothing left for the forward pass
 ```
 
-- [ ] **Step 2: Build; it must fail**
+- [x] **Step 2: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -11940,7 +11940,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `'UnblendDraws': identifier not found`.
 
-- [ ] **Step 3: Edit `src/entities/Entities.h` to declare it**
+- [x] **Step 3: Edit `src/entities/Entities.h` to declare it**
 
 ```cpp
 bool ForwardDraws(const std::vector<EntityDraw>& aDraws, bool aOutline);
@@ -11953,7 +11953,7 @@ bool ForwardDraws(const std::vector<EntityDraw>& aDraws, bool aOutline);
 void UnblendDraws(std::vector<EntityDraw>& aDraws);
 ```
 
-- [ ] **Step 4: Edit `src/entities/Entities.cpp` to add it**
+- [x] **Step 4: Edit `src/entities/Entities.cpp` to add it**
 
 ```cpp
 		       (aOutline && aDraw.kind == EntityDraw::Kind::Outline);
@@ -11977,7 +11977,7 @@ void UnblendDraws(std::vector<EntityDraw>& aDraws)
 }
 ```
 
-- [ ] **Step 5: Edit `src/render/Renderer.h` for the pipelines, the setting and the draws by kind**
+- [x] **Step 5: Edit `src/render/Renderer.h` for the pipelines, the setting and the draws by kind**
 
 ```cpp
 //   snapshot, camera and jitter: the translucent particles and the outline, blended into the tagged colour, then DLSS's
@@ -12034,7 +12034,7 @@ void UnblendDraws(std::vector<EntityDraw>& aDraws)
 	gpu::ComPtr<ID3D12PipelineState>                           additivePipeline_;
 ```
 
-- [ ] **Step 6: Edit `src/render/Renderer.cpp` to draw them**
+- [x] **Step 6: Edit `src/render/Renderer.cpp` to draw them**
 
 ```cpp
 	hintPipeline_.Reset();
@@ -12207,7 +12207,7 @@ void Renderer::DrawEntities(ID3D12GraphicsCommandList* aList, const CameraFrame&
 		DrawEntities(list, forward.camera, completed, shot, hinted, false);
 ```
 
-- [ ] **Step 7: Build and run the tests; they must pass**
+- [x] **Step 7: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -12217,7 +12217,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `518 test(s), 0 failure(s)`.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -12241,7 +12241,7 @@ the GPU"):
 **Files:**
 - Modify: `tests/TestAtlas.cpp`, `src/render/Atlas.h`, `src/render/Atlas.cpp`
 
-- [ ] **Step 1: Edit `tests/TestAtlas.cpp` to add the failing test**
+- [x] **Step 1: Edit `tests/TestAtlas.cpp` to add the failing test**
 
 ```cpp
 	CHECK(cpmc::PatchAtlas(*atlas, 0, 0, 1, 1, Pixels(1, 1, 7)).empty());
@@ -12298,7 +12298,7 @@ TEST(AtlasDirtyAreasPackedForThePatchPass)
 }
 ```
 
-- [ ] **Step 2: Build; it must fail**
+- [x] **Step 2: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -12307,7 +12307,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `'AtlasDirty': is not a member of 'cpmc'`.
 
-- [ ] **Step 3: Edit `src/render/Atlas.h` to declare it**
+- [x] **Step 3: Edit `src/render/Atlas.h` to declare it**
 
 ```cpp
 #pragma once
@@ -12363,7 +12363,7 @@ private:
 };
 ```
 
-- [ ] **Step 4: Edit `src/render/Atlas.cpp` to add it**
+- [x] **Step 4: Edit `src/render/Atlas.cpp` to add it**
 
 ```cpp
 	return areas;
@@ -12425,7 +12425,7 @@ AtlasDirty::Packed AtlasDirty::Take(const Atlas& aAtlas, size_t aMostAreas)
 }
 ```
 
-- [ ] **Step 5: Build and run the tests; they must pass**
+- [x] **Step 5: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -12435,7 +12435,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `519 test(s), 0 failure(s)`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -12469,7 +12469,7 @@ The renderer needs the game, so its own tests are the build and the existing one
 **Files:**
 - Modify: `src/render/Gpu.h`, `src/render/Gpu.cpp`, `src/render/Renderer.h`, `src/render/Renderer.cpp`
 
-- [ ] **Step 1: Edit `src/render/Gpu.h` for a buffer's flags**
+- [x] **Step 1: Edit `src/render/Gpu.h` for a buffer's flags**
 
 ```cpp
 // A buffer in aHeap (default or readback), in aState.
@@ -12481,7 +12481,7 @@ ComPtr<ID3D12Resource> MakeBuffer(ID3D12Device* aDevice, uint64_t aBytes, D3D12_
                                   D3D12_RESOURCE_FLAGS aFlags = D3D12_RESOURCE_FLAG_NONE);
 ```
 
-- [ ] **Step 2: Edit `src/render/Gpu.cpp` to make it with them**
+- [x] **Step 2: Edit `src/render/Gpu.cpp` to make it with them**
 
 ```cpp
 ComPtr<ID3D12Resource> MakeBuffer(ID3D12Device* aDevice, uint64_t aBytes, D3D12_HEAP_TYPE aHeap, D3D12_RESOURCE_STATES aState)
@@ -12498,7 +12498,7 @@ ComPtr<ID3D12Resource> MakeBuffer(ID3D12Device* aDevice, uint64_t aBytes, D3D12_
 	desc.Flags = aFlags;
 ```
 
-- [ ] **Step 3: Edit `src/render/Renderer.h` for the patches, the pass and the setting**
+- [x] **Step 3: Edit `src/render/Renderer.h` for the patches, the pass and the setting**
 
 ```cpp
 	// and outline, and Part 5's blend
@@ -12573,7 +12573,7 @@ ComPtr<ID3D12Resource> MakeBuffer(ID3D12Device* aDevice, uint64_t aBytes, D3D12_
 	uint64_t                                                       patchGpuSamples_ = 0;
 ```
 
-- [ ] **Step 4: Edit `src/render/Renderer.cpp` to patch the atlas and write the GPU's**
+- [x] **Step 4: Edit `src/render/Renderer.cpp` to patch the atlas and write the GPU's**
 
 ```cpp
 	atlasUploaded_ = false;
@@ -12871,7 +12871,7 @@ bool Renderer::EnsurePatchObjects()
 	patchCpuSamples_ = patchGpuSamples_ = 0;
 ```
 
-- [ ] **Step 5: Build and run the tests; they must pass**
+- [x] **Step 5: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -12881,7 +12881,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `519 test(s), 0 failure(s)`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -12907,7 +12907,7 @@ cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
 **Files:**
 - Modify: `tests/TestStatus.cpp`, `src/Status.h`, `src/Status.cpp`, `src/Plugin.cpp`, `CMakeLists.txt`
 
-- [ ] **Step 1: Edit `tests/TestStatus.cpp` to change the tests of the lines, and add the patches'**
+- [x] **Step 1: Edit `tests/TestStatus.cpp` to change the tests of the lines, and add the patches'**
 
 ```cpp
 	link.updateMsWorst = 1.2;
@@ -12993,7 +12993,7 @@ TEST(StatusWritesTheAtlasPatches)
 	          "with an earlier frame); 1 frames waited for a snapshot; 3 draws past a snapshot's 8 MB"));
 ```
 
-- [ ] **Step 2: Build; it must fail**
+- [x] **Step 2: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -13002,7 +13002,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `'blendOn': is not a member of 'cpmc::LinkReport'`.
 
-- [ ] **Step 3: Edit `src/Status.h` to add the figures**
+- [x] **Step 3: Edit `src/Status.h` to add the figures**
 
 ```cpp
 	uint32_t              sceneTranslucent = 0;     // in translucent batches
@@ -13037,7 +13037,7 @@ Expected: `'blendOn': is not a member of 'cpmc::LinkReport'`.
 	uint64_t    patchesBeforeAtlas = 0;    // the link's, since the start: for an atlas it hadn't seen, skipped
 ```
 
-- [ ] **Step 4: Edit `src/Status.cpp` to write them**
+- [x] **Step 4: Edit `src/Status.cpp` to write them**
 
 ```cpp
 // Minecraft's entities (spike 7): the scenes coming, the newest, the textures, what's drawn, step B's forward list and
@@ -13085,7 +13085,7 @@ std::string FormatEntities(const LinkReport& aLink)
 	                   aLink.patchesBeforeAtlas > 0 ? std::format("; {} from before the atlas, skipped", aLink.patchesBeforeAtlas) : "");
 ```
 
-- [ ] **Step 5: Edit `src/Plugin.cpp` for the sink, the frame, the status and 0.22.0**
+- [x] **Step 5: Edit `src/Plugin.cpp` for the sink, the frame, the status and 0.22.0**
 
 ```cpp
 constexpr const char* kVersion = "0.21.0";
@@ -13165,7 +13165,7 @@ constexpr const char* kVersion = "0.22.0";
 			g_renderer->SetEntities(g_entities.Frame(g_link->State().minecraftEye, g_router->On(), g_renderer->GlowLight()));
 ```
 
-- [ ] **Step 6: Edit `CMakeLists.txt` for 0.22.0**
+- [x] **Step 6: Edit `CMakeLists.txt` for 0.22.0**
 
 ```cmake
 project(BlockRender VERSION 0.21.0 LANGUAGES C CXX)
@@ -13174,7 +13174,7 @@ project(BlockRender VERSION 0.21.0 LANGUAGES C CXX)
 project(BlockRender VERSION 0.22.0 LANGUAGES C CXX)
 ```
 
-- [ ] **Step 7: Build and run the tests; they must pass**
+- [x] **Step 7: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -13184,7 +13184,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `520 test(s), 0 failure(s)`.
 
-- [ ] **Step 8: Check that BlockRender imports nothing from PhysX**
+- [x] **Step 8: Check that BlockRender imports nothing from PhysX**
 
 ```bash
 DUMPBIN=$(ls "/c/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/"*/bin/Hostx64/x64/dumpbin.exe | head -1)
@@ -13192,7 +13192,7 @@ DUMPBIN=$(ls "/c/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/M
 ```
 Expected: `KERNEL32.dll` and the other DLLs it imports, none of them PhysX's.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -13270,7 +13270,7 @@ These commands come back, as in run C:
 **Files:**
 - Modify: `docs/spikes/2026-10-06-minecraft-entities-results.md`
 
-- [ ] **Step 1: Deploy (the game must not be running)**
+- [x] **Step 1: Deploy (the game must not be running)**
 
 ```bash
 tasklist | grep -i -c "cyberpunk2077.exe"
@@ -13288,7 +13288,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default -DCP2
 ```
 Expected: `installed`. The second configure clears `CP2077_DIR` again.
 
-- [ ] **Step 2: In the game: BlockRender 0.22.0 loads**
+- [x] **Step 2: In the game: BlockRender 0.22.0 loads**
 
 Ask the user to start the `CyberCraft` instance, then the game, and to wait at the game's main menu. Then:
 ```bash
@@ -13296,7 +13296,7 @@ L=$(ls -t /e/Cyberpunk2077/red4ext/logs | grep -i blockrender | head -1); grep -
 ```
 Expected: `BlockRender 0.22.0 loaded (game 2.31…), …; dred on, debug layer off; …`, and no error lines.
 
-- [ ] **Step 3: In the game: load by day, link, creative**
+- [x] **Step 3: In the game: load by day, link, creative**
 
 Ask the user to load a save on an open pavement by day, with at least 12 m clear ahead of V, and to click Link, then
 Creative in the overlay's Fun row. Expected: in the log, `link on: …; drawing is gbuffer` (if not, ask the user to
@@ -13305,7 +13305,7 @@ click the overlay's `G-buffer` button); in Minecraft's log, `[CHAT] Set own game
 dropped in the last second`, N in the hundreds, then `animate on`. Then name what isn't drawn as Minecraft draws it
 ("Before the user looks", above).
 
-- [ ] **Step 4: In the game: the animated blocks by day (check 1)**
+- [x] **Step 4: In the game: the animated blocks by day (check 1)**
 
 Send the six blocks' twelve requests, one at a time. Ask the user to look at them, Minecraft's window beside, and say
 whether each animates as Minecraft's: the lava in the cauldron, the campfire's flames and lit logs, the magma, the sea
@@ -13315,7 +13315,7 @@ few hundredths of a millisecond at most. Then send `set animate 0`: the blocks s
 patch dropped, `animate off`; then `set animate 1`: they play again. Send `set animate 2`: refused, `animate is 1 to
 play Minecraft's animated textures, or 0 to leave the atlas as it is`.
 
-- [ ] **Step 5: In the game: the seven mobs by day (check 2)**
+- [x] **Step 5: In the game: the seven mobs by day (check 2)**
 
 Send the seven mobs' requests, one at a time. Ask the user to look at them, side by side with Minecraft's, with a
 screenshot of each. Expected:
@@ -13331,27 +13331,27 @@ Then send `set blend 0`: the layers go back to cut-outs in the G-buffer, as 0.21
 the user which looks more like Minecraft. Send `set blend 2`: refused, `blend is 1 to blend the entity layers Minecraft
 blends before DLSS, or 0 to draw them as cut-outs`.
 
-- [ ] **Step 6: In the game: at night (check 3)**
+- [x] **Step 6: In the game: at night (check 3)**
 
 Ask the user to use the game's Skip Time to the night, and look at the mobs and the blocks. Expected: the warden's
 layers and the breeze's eyes glow, faint; note how bright the slime's outer layer, the allay and the vex look beside
 what the game lights, against Minecraft's day (risk 15); the blocks lit by the game's light alone, as BlockRender's
 blocks always are, still animating.
 
-- [ ] **Step 7: In the game: cost (check 4)**
+- [x] **Step 7: In the game: cost (check 4)**
 
 With the mobs and the blocks in view, read the status three times, a few seconds apart. Note the forward list's GPU
 time, the patches' CPU and GPU times and passes, the update time (the frame's sort of the layers is in it), the frame
 time (`frame=`), and the entities' GPU time.
 
-- [ ] **Step 8: In the game: Clear, and no crash or freeze (check 5)**
+- [x] **Step 8: In the game: Clear, and no crash or freeze (check 5)**
 
 Ask the user to click Clear. Expected: in Minecraft's log, `Changed the block at …` for each of the six blocks,
 `Killed …` for the mobs and the markers; within about 7 s, the status's `the newest 0 batches (0 blended, 0
 additive)` and `world: nothing`; on screen, nothing left. Then ask the user to click Unlink and Link again. Expected:
 the game ran without a crash or a freeze throughout.
 
-- [ ] **Step 9: Ask the user to quit the game and stop Minecraft**
+- [x] **Step 9: Ask the user to quit the game and stop Minecraft**
 
 If the user disabled Entity Model Features and Entity Texture Features in Task 44, ask whether to put them back now.
 If so, with Minecraft stopped:
@@ -13361,20 +13361,20 @@ for j in entity_model_features-3.3.11-26.3-fabric entity_texture_features-7.2.5-
 ```
 Expected: both `.jar` again, beside `cybercraft-tweaks-1.6.0.jar`.
 
-- [ ] **Step 10: Read the log once more**
+- [x] **Step 10: Read the log once more**
 
 ```bash
 L=$(ls -t /e/Cyberpunk2077/red4ext/logs | grep -i blockrender | head -1); grep -E "renderer:|set |link" "/e/Cyberpunk2077/red4ext/logs/$L" | head -200
 ```
 Everything the steps above logged, for the results.
 
-- [ ] **Step 11: Record run D's results in `docs/spikes/2026-10-06-minecraft-entities-results.md`**
+- [x] **Step 11: Record run D's results in `docs/spikes/2026-10-06-minecraft-entities-results.md`**
 
 A "Run D" section: the versions; each check above with its outcome and numbers: the animated blocks by day, `set
 animate`; the seven mobs side by side with Minecraft's, with the screenshots, and `set blend`; the night; the costs;
 and anything that surprised. Then the spike's answer at the top, brought up to date.
 
-- [ ] **Step 12: Commit**
+- [x] **Step 12: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add docs/spikes docs/superpowers/plans/2026-10-06-minecraft-entities.md \
