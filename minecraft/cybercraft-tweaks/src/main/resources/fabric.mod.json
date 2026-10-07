@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
   "id": "cybercraft_tweaks",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "name": "CyberCraft Tweaks",
-  "description": "SkyCraft adjusted for Cyberpunk 2077's Night City: nothing digs into the game's ground, so blasts leave no blocks floating above it; V's health share carries into Minecraft's player as build mode starts; and what SkyCraft sends of Minecraft's entities keeps their layers in Minecraft's draw order, with the layers Minecraft draws emissive marked to glow.",
+  "description": "SkyCraft adjusted for Cyberpunk 2077's Night City: nothing digs into the game's ground, so blasts leave no blocks floating above it; V's health share carries into Minecraft's player as build mode starts; and what SkyCraft sends of Minecraft's entities keeps their layers in Minecraft's draw order, with the layers Minecraft draws emissive marked to glow, and those it blends marked blended.",
   "environment": "client",
   "entrypoints": { "main": ["dev.cybercraft.tweaks.CyberCraftTweaks"] },
   "mixins": ["cybercraft_tweaks.mixins.json"],

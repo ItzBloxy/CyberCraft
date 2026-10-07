@@ -4,6 +4,6 @@
   "package": "dev.cybercraft.tweaks.mixin",
   "compatibilityLevel": "JAVA_21",
   "mixins": ["NoBlastBlocks", "NoDigging", "SetHealth"],
-  "client": ["KeepDrawOrder", "MarkEmissive"],
+  "client": ["KeepDrawOrder", "MarkEmissive", "MarkBlended"],
   "injectors": { "defaultRequire": 1 }
 }

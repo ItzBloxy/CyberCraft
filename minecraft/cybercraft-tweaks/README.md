@@ -21,7 +21,7 @@ would disagree about where the ground is.
   damage alone, so without this mod nothing happens; with it, Minecraft's player's health becomes the same share of its
   max health, and Minecraft's log says so.
 
-What SkyCraft sends of Minecraft's entities keeps Minecraft's draw order and its glow:
+What SkyCraft sends of Minecraft's entities keeps Minecraft's draw order, its glow and its blending:
 - **An entity's layers come in order** (`KeepDrawOrder`, from 1.4.0). Minecraft draws an entity's layers each over the
   one before at the same depth: a villager's body, then its biome's clothes, its profession's and its level's badge
   (`order` 0 to 3), a spider's eyes over its body, a banner's patterns over its cloth. SkyCraft's `AvatarExporter`
@@ -29,11 +29,19 @@ What SkyCraft sends of Minecraft's entities keeps Minecraft's draw order and its
   spike 7's step 0 had a villager's badge before its body. With the mod, `order(n)` hands back a stand-in that submits
   with n as the order, each batch is kept by its order, and the batches go out lowest order first.
 - **Emissive layers glow** (`MarkEmissive`, from 1.5.0). Minecraft draws some layers without its light map: those of
-  its `eyes` render type (a spider's, an enderman's and a phantom's eyes), `entity_translucent_emissive` (the warden's,
-  the creaking's, the copper golem's and the breeze's glowing parts) and `energy_swirl` (a charged creeper's and the
-  wither's armour). SkyCraft keeps the light Minecraft passes them, the entity's own, so the game lit them as the rest:
-  spike 7's run B saw a spider's eyes at night as dark as its body. With the mod, such a layer goes with full light, as
-  SkyCraft sends lit TNT's white flash, and BlockRender's glow rule makes it glow.
+  its `eyes` render type (a spider's, an enderman's, a phantom's, a creaking's and a copper golem's eyes),
+  `entity_translucent_emissive` (the warden's glowing layers and a breeze's eyes) and `energy_swirl` (a charged
+  creeper's and the wither's armour). SkyCraft keeps the light Minecraft passes them, the entity's own, so the game lit
+  them as the rest: spike 7's run B saw a spider's eyes at night as dark as its body. With the mod, such a layer goes
+  with full light, as SkyCraft sends lit TNT's white flash, and BlockRender's glow rule makes it glow.
+- **Blended layers go blended** (`MarkBlended`, from 1.6.0). SkyCraft sends every layer of an entity model solid, so
+  the game drew the warden's faint glowing layers and a charged creeper's armour solid (spike 7's run C), and a slime's
+  outer layer, allays and vexes as cut-outs. With the mod, a layer of a render type Minecraft blends by alpha
+  (`entity_translucent`, `entity_translucent_emissive`, `breeze_wind` and `wolf_armor_cracks`) goes with SkyCraft's
+  translucent flag and its own normal, so its batch goes translucent; `energy_swirl`, which Minecraft adds, goes with
+  bit 7 as well, for additive. BlockRender 0.22.0 draws those that are really see-through blended, before DLSS, and
+  the rest as before. `eyes` and `banner_pattern` stay solid: every eyes texture is opaque or clear, and banner
+  patterns lie on cloth the game lights.
 
 It targets SkyCraft 0.1.2's classes by name, so `fabric.mod.json` asks for exactly that version: Fabric won't start with
 another SkyCraft until this mod is checked against it.

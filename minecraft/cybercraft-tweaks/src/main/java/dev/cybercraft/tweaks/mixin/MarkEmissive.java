@@ -20,8 +20,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 /**
  * What Minecraft draws emissive glows in the game too. Minecraft lights its entities with its light map, but for the
  * layers its emissive render types draw, whose pipelines skip it (the {@code EMISSIVE} define): {@code eyes}, a spider's,
- * an enderman's and a phantom's eyes; {@code entity_translucent_emissive}, the warden's, the creaking's, the copper
- * golem's and the breeze's glowing parts; and {@code energy_swirl}, a charged creeper's and the wither's armour.
+ * an enderman's, a phantom's, a creaking's and a copper golem's eyes; {@code entity_translucent_emissive}, the warden's
+ * glowing layers and a breeze's eyes; and {@code energy_swirl}, a charged creeper's and the wither's armour.
  * SkyCraft's {@code AvatarExporter} keeps the light Minecraft passes those layers, the entity's own, so the game lit them
  * as the rest: spike 7's run B saw a spider's eyes at night as dark as its body. Here such a layer is captured with full
  * light, as SkyCraft already captures lit TNT's white flash, and BlockRender's glow rule (block light 15) makes it glow.
