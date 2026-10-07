@@ -37,6 +37,7 @@ struct LinkReport
 	bool               inputHooked = false;
 	bool               buildMode = false;
 	std::string        buildWhy;             // why it's off
+	bool               buildPaused = false;  // on, behind CET's overlay (spike 7's Part 3)
 	std::optional<int> slot;                 // Minecraft's hotbar slot, once a number key has set it
 	uint64_t           inputsRead = 0;       // keyboard and mouse events
 	uint64_t           inputsForwarded = 0;  // to Minecraft

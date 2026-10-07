@@ -306,6 +306,39 @@ TEST(RouterLetsGoWhenTheGameLosesTheFront)
 	g_inFront = true;
 }
 
+TEST(RouterPausesBuildModeForCetsOverlay)
+{
+	Building building;
+	auto     shift = Key(0x2A, VK_SHIFT);
+	Inspect(building.router, shift);
+	building.mapping.Inputs();
+	auto f6 = Key(0x40, VK_F6);
+	Inspect(building.router, f6);
+	CHECK_EQ(KeyOf(f6).VKey, USHORT(VK_F6));  // CET's overlay opens
+	auto inputs = building.mapping.Inputs();
+	CHECK(inputs.size() == 1 && inputs[0].type == proto::kInReleaseAll);  // and Minecraft lets go of everything
+	CHECK(building.router.On());
+	CHECK(building.router.Report().paused);
+	CHECK(Logged(building.log, "build mode paused: CET's overlay is open"));
+	auto click = Mouse(RI_MOUSE_LEFT_BUTTON_DOWN);
+	Inspect(building.router, click);
+	CHECK_EQ(MouseOf(click).usButtonFlags, USHORT(RI_MOUSE_LEFT_BUTTON_DOWN));  // the overlay's click
+	CHECK(building.mapping.Inputs().empty());
+	CHECK(!Logged(building.log, "build mode goes on: CET's overlay closed"));  // not while it's open
+	auto move = Mouse(0, 0, 9, 0);
+	Inspect(building.router, move);
+	CHECK_EQ(building.router.TakeMouseX(), 0ll);  // the overlay's cursor turns nothing
+	building.router.SetOverlay(false);  // the overlay says it closed
+	CHECK(!building.router.Report().paused);
+	CHECK(Logged(building.log, "build mode goes on: CET's overlay closed"));
+	Inspect(building.router, move);
+	CHECK_EQ(building.router.TakeMouseX(), 9ll);
+	building.router.SetOverlay(true);  // and opened
+	inputs = building.mapping.Inputs();
+	CHECK(inputs.size() == 1 && inputs[0].type == proto::kInReleaseAll);
+	CHECK(building.router.Report().paused);
+}
+
 TEST(RouterPushesNothingOnceTheLinkIsGone)
 {
 	Building building;

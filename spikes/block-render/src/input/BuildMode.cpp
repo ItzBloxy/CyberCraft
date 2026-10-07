@@ -19,9 +19,8 @@ constexpr uint16_t kF8 = 0x42;
 constexpr uint16_t kLeftShift = 0x2A;
 constexpr uint16_t kRightShift = 0x36;
 
-// The keys that open the game's menus (Esc, I, M, J, P, K, H and T), and Shift with F6, which opens CET's overlay: its
-// name, or null.
-const char* MenuKey(const RawKey& aKey, bool aShift)
+// The keys that open the game's menus (Esc, I, M, J, P, K, H and T): its name, or null.
+const char* MenuKey(const RawKey& aKey)
 {
 	if (aKey.extended)
 	{
@@ -37,7 +36,6 @@ const char* MenuKey(const RawKey& aKey, bool aShift)
 	case 0x25: return "K";
 	case 0x23: return "H";
 	case 0x14: return "T";
-	case kF6: return aShift ? "Shift+F6" : nullptr;
 	default: return nullptr;
 	}
 }
@@ -122,9 +120,21 @@ Decision BuildMode::Key(const RawKey& aKey, const Situation& aSituation)
 		}
 		return decision;
 	}
-	if (on_ && !aKey.up)
+	if (!aKey.extended && aKey.scanCode == kF6)
 	{
-		if (const char* menu = MenuKey(aKey, leftShift_ || rightShift_))
+		// Shift+F6 opens and closes CET's overlay, which pauses build mode while it's open, so its clicks don't reach
+		// Minecraft. The overlay sees the key, and an F6 alone or a repeat changes nothing.
+		const bool press = !aKey.up && !f6Down_;
+		f6Down_ = !aKey.up;
+		if (press && (leftShift_ || rightShift_))
+		{
+			decision.releaseAll = SetOverlay(!overlay_);
+		}
+		return decision;
+	}
+	if (on_ && !overlay_ && !aKey.up)
+	{
+		if (const char* menu = MenuKey(aKey))
 		{
 			decision.releaseAll = TurnOff(std::format("{} left it", menu));
 			return decision;  // and the game opens its menu
@@ -209,7 +219,7 @@ Decision BuildMode::Mouse(const RawMouse& aMouse, const Situation& aSituation)
 			}
 		}
 	}
-	if ((aMouse.buttons & RI_MOUSE_WHEEL) && on_)
+	if ((aMouse.buttons & RI_MOUSE_WHEEL) && on_ && !overlay_)
 	{
 		decision.hideButtons |= RI_MOUSE_WHEEL;
 		++hidden_;
@@ -257,13 +267,7 @@ bool BuildMode::TurnOff(std::string aWhy)
 	}
 	on_ = false;
 	why_ = std::move(aWhy);
-	for (Holder& holder : held_)
-	{
-		if (holder == Holder::Minecraft)
-		{
-			holder = Holder::Neither;  // Minecraft lets go of it now: its repeats and release go nowhere
-		}
-	}
+	LetGo();
 	return true;
 }
 
@@ -271,9 +275,32 @@ bool BuildMode::LostFront()
 {
 	held_.fill(Holder::None);
 	f8Down_ = false;
+	f6Down_ = false;
 	leftShift_ = false;
 	rightShift_ = false;
 	return on_;
+}
+
+bool BuildMode::SetOverlay(bool aOpen)
+{
+	const bool pauses = aOpen && !overlay_ && on_;
+	overlay_ = aOpen;
+	if (pauses)
+	{
+		LetGo();
+	}
+	return pauses;
+}
+
+void BuildMode::LetGo()
+{
+	for (Holder& holder : held_)
+	{
+		if (holder == Holder::Minecraft)
+		{
+			holder = Holder::Neither;  // Minecraft lets go of it now: its repeats and release go nowhere
+		}
+	}
 }
 
 BuildMode::Holder BuildMode::Route(size_t aInput, bool aDown)
@@ -282,7 +309,7 @@ BuildMode::Holder BuildMode::Route(size_t aInput, bool aDown)
 	Holder& holder = held_[aInput];
 	if (aDown && holder == Holder::None)
 	{
-		holder = on_ ? Holder::Minecraft : Holder::Game;  // a press goes where build mode says
+		holder = on_ && !overlay_ ? Holder::Minecraft : Holder::Game;  // a press goes where build mode says
 	}
 	const Holder to = holder;  // a repeat or a release goes where its press went
 	if (!aDown)

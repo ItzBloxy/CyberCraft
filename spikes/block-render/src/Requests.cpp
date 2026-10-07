@@ -148,6 +148,14 @@ std::optional<Request> ParseRequest(std::string_view aText, std::string& aError)
 		request.radius = *radius;
 		return request;
 	}
+	if (command == "overlay")
+	{
+		if (arguments != 1 || !OneOf(words[1], { "open", "closed" }))
+		{
+			return Fail(aError, "overlay takes open or closed");
+		}
+		return Request{ Request::Kind::Overlay, std::string(words[1]) };
+	}
 	if (command == "mc")
 	{
 		// The rest of the line, verbatim: a Minecraft command keeps its own spacing.

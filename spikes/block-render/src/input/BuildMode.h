@@ -12,8 +12,10 @@
 // mode the mouse buttons, side buttons included, the wheel and the keys 1 to 9 go to Minecraft and are hidden from the
 // game; F8 toggles it; and the keys that open the game's menus leave it, and reach the game. Since spike 5 (its spec's
 // "Keys"), Minecraft's movement keys go to Minecraft too, and the game's crouch keys are hidden without going anywhere.
-// A press's repeats and its release go where the press went, so neither side is left holding an input that only the
-// other saw let go. Pure, and not thread-safe: the router (input/Router.h) holds its lock around every call.
+// Since spike 7's Part 3, Shift+F6, which opens and closes CET's overlay, pauses it instead: while the overlay is open
+// every input is the overlay's and the game's, and build mode goes on when it closes. A press's repeats and its release
+// go where the press went, so neither side is left holding an input that only the other saw let go. Pure, and not
+// thread-safe: the router (input/Router.h) holds its lock around every call.
 namespace cpmc::input
 {
 namespace proto = skycraft::proto;
@@ -72,8 +74,12 @@ public:
 	// The game stopped being in front, so what's held is let go of in another window, where neither side sees it. True
 	// if build mode is on, so Minecraft must let go of everything. Build mode stays on for when the user comes back.
 	bool LostFront();
+	// CET's overlay opened or closed, as the overlay itself says (CET's events), in case it was toggled some other way
+	// than Shift+F6. True if this pauses build mode, so Minecraft must let go of everything.
+	bool SetOverlay(bool aOpen);
 
 	bool               On() const { return on_; }
+	bool               Paused() const { return on_ && overlay_; }  // on, behind CET's overlay
 	const std::string& Why() const { return why_; }          // why it's off
 	std::optional<int> Slot() const { return slot_; }        // Minecraft's hotbar slot, 1 to 9, as far as it's known
 	uint64_t           Forwarded() const { return forwarded_; }  // events for Minecraft's input ring
@@ -95,11 +101,14 @@ private:
 	Holder Route(size_t aInput, bool aDown);
 	void   Forward(Decision& aDecision, const proto::InputEvent& aEvent, std::string aWhat);
 	void   Scroll(int16_t aWheel);
+	void   LetGo();  // Minecraft lets go of what it holds: those inputs' repeats and releases go nowhere
 
 	bool                        on_ = false;
 	std::string                 why_ = "F8 turns it on";
 	std::array<Holder, kInputs> held_{};
+	bool                        overlay_ = false;  // CET's overlay is open, as Shift+F6 and the overlay say
 	bool                        f8Down_ = false;
+	bool                        f6Down_ = false;
 	bool                        leftShift_ = false;
 	bool                        rightShift_ = false;
 	std::optional<int>          slot_;

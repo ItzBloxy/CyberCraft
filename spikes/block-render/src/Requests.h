@@ -33,6 +33,8 @@ namespace cpmc
 //                               with its radius, over 0 and up to 16)
 //   entities                   (spike 7: the newest scene batch by batch, the textures and the world entities, into the
 //                               log)
+//   overlay open|closed        (spike 7's Part 3: CET's overlay opened or closed, as the overlay says, which pauses build
+//                               mode while it's open)
 struct Request
 {
 	enum class Kind
@@ -57,6 +59,7 @@ struct Request
 		Punch,
 		Explode,
 		Entities,
+		Overlay,
 	};
 
 	Kind        kind = Kind::Log;

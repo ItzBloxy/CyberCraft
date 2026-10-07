@@ -1722,6 +1722,11 @@ void RunRequest(const std::filesystem::path& aFolder, bool aWholeLine)
 		break;
 	case cpmc::Request::Kind::Explode: ExplodeRequest(*request); break;
 	case cpmc::Request::Kind::Entities: EntitiesRequest(); break;
+	case cpmc::Request::Kind::Overlay:
+		g_router->SetOverlay(request->what == "open");
+		Report(std::format("overlay {}: build mode {}", request->what,
+		                   g_router->Report().paused ? "paused while it's open" : g_router->On() ? "on" : "off"));
+		break;
 	}
 }
 
@@ -1840,6 +1845,7 @@ cpmc::LinkReport LinkLines(const cpmc::Renderer::Stats& aStats, double aNow)
 	report.inputHooked = g_inputHooked;
 	report.buildMode = input.on;
 	report.buildWhy = input.why;
+	report.buildPaused = input.paused;
 	report.slot = input.slot;
 	report.inputsRead = input.read;
 	report.inputsForwarded = input.forwarded;

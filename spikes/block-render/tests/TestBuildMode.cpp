@@ -228,14 +228,15 @@ TEST(BuildModeLeavesOnTheMenuKeys)
 	CHECK(Passes(mode.Key(Release(0x17), Ready())));
 	mode = On();
 	CHECK(Passes(mode.Key(Press(0x40), Ready())));  // F6 alone
-	CHECK(mode.On());
+	mode.Key(Release(0x40), Ready());
+	CHECK(mode.On() && !mode.Paused());
 	mode.Key(Press(0x36), Ready());                    // the right Shift
-	CHECK(mode.Key(Press(0x40), Ready()).releaseAll);  // Shift+F6: CET's overlay
-	CHECK_STR(mode.Why(), "Shift+F6 left it");
+	CHECK(mode.Key(Press(0x40), Ready()).releaseAll);  // Shift+F6: CET's overlay, which pauses build mode, not ends it
+	CHECK(mode.On() && mode.Paused());
 	mode = On();
 	mode.Key(Press(0x2A, true), Ready());  // the fake Shift Windows sends around some extended keys isn't Shift
 	CHECK(Passes(mode.Key(Press(0x40), Ready())));
-	CHECK(mode.On());
+	CHECK(mode.On() && !mode.Paused());
 	mode.Key(Press(0x01, true), Ready());  // an extended 0x01 isn't Esc
 	CHECK(mode.On());
 }
@@ -361,15 +362,65 @@ TEST(BuildModeLeavesAMovementKeyHeldBeforeItWithTheGame)
 	CHECK(again.hideKey && again.forwarded == 1);
 }
 
-TEST(BuildModeLeavesOnShiftF6WithLeftShiftForwarded)
+TEST(BuildModePausesWhileCetsOverlayIsOpen)
 {
 	BuildMode      mode = On();
 	const Decision shift = mode.Key(Press(0x2A), Ready());
 	CHECK(shift.hideKey && shift.forwarded == 1);  // Minecraft's: in the user's instance it toggles sprint
 	const Decision f6 = mode.Key(Press(0x40), Ready());
-	CHECK(!mode.On());
-	CHECK(f6.releaseAll && !f6.hideKey);  // and CET's overlay opens
-	CHECK_STR(mode.Why(), "Shift+F6 left it");
+	CHECK(mode.On() && mode.Paused());
+	CHECK(f6.releaseAll && !f6.hideKey && f6.forwarded == 0);  // Minecraft lets go of everything, and CET's overlay opens
+	CHECK(Passes(mode.Key(Press(0x40), Ready())));               // F6's repeat changes nothing
+	mode.Key(Release(0x40), Ready());
+	CHECK(mode.Paused());
 	const Decision release = mode.Key(Release(0x2A), Ready());  // its press went to Minecraft, which let go of everything
 	CHECK(release.hideKey && release.forwarded == 0);
+	// Paused, every input is the overlay's and the game's, and the menu keys end nothing.
+	CHECK(Passes(mode.Mouse({ RI_MOUSE_LEFT_BUTTON_DOWN, 0 }, Ready())));
+	CHECK(Passes(mode.Mouse({ RI_MOUSE_LEFT_BUTTON_UP, 0 }, Ready())));
+	CHECK(Passes(mode.Mouse({ RI_MOUSE_WHEEL, 120 }, Ready())));
+	CHECK(Passes(mode.Key(Press(0x04), Ready())));  // 3
+	CHECK(Passes(mode.Key(Press(0x11), Ready())));  // W
+	CHECK(Passes(mode.Key(Press(0x01), Ready())));  // Esc
+	CHECK(mode.On() && mode.Paused());
+	// Shift+F6 again closes the overlay, and build mode goes on where it was. W's release goes where its press went.
+	mode.Key(Press(0x2A), Ready());
+	const Decision close = mode.Key(Press(0x40), Ready());
+	CHECK(!close.releaseAll && !close.hideKey);
+	CHECK(mode.On() && !mode.Paused());
+	CHECK(Passes(mode.Key(Release(0x11), Ready())));
+	const Decision click = mode.Mouse({ RI_MOUSE_LEFT_BUTTON_DOWN, 0 }, Ready());
+	CHECK(click.hideButtons == RI_MOUSE_LEFT_BUTTON_DOWN && click.forwarded == 1);
+}
+
+TEST(BuildModeKnowsTheOverlayWhileOff)
+{
+	BuildMode mode;
+	mode.Key(Press(0x2A), Ready());
+	CHECK(Passes(mode.Key(Press(0x40), Ready())));  // CET's overlay opens with build mode off
+	mode.Key(Release(0x40), Ready());
+	mode.Key(Release(0x2A), Ready());
+	mode.Key(Press(kF8), Ready());  // build mode goes on behind the overlay: paused at once
+	CHECK(mode.On() && mode.Paused());
+	CHECK(Passes(mode.Mouse({ RI_MOUSE_RIGHT_BUTTON_DOWN, 0 }, Ready())));
+	mode.Key(Press(0x2A), Ready());
+	mode.Key(Press(0x40), Ready());  // and the overlay closes
+	CHECK(mode.On() && !mode.Paused());
+}
+
+TEST(BuildModeTakesTheOverlaysOwnWord)
+{
+	// The overlay says when it opens and closes (CET's events), which keeps build mode right if it was toggled another way.
+	BuildMode mode = On();
+	mode.Key(Press(0x11), Ready());  // W, to Minecraft
+	CHECK(mode.SetOverlay(true));    // paused: Minecraft must let go of everything
+	CHECK(mode.Paused());
+	const Decision release = mode.Key(Release(0x11), Ready());
+	CHECK(release.hideKey && release.forwarded == 0);
+	CHECK(!mode.SetOverlay(true));  // already open
+	CHECK(!mode.SetOverlay(false));
+	CHECK(!mode.Paused());
+	BuildMode off;
+	CHECK(!off.SetOverlay(true));  // off: nothing to let go of
+	CHECK(!off.Paused());
 }

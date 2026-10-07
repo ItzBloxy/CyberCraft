@@ -29,6 +29,7 @@ struct InputReport
 	uint64_t           forwarded = 0;  // events for Minecraft's input ring
 	uint64_t           hidden = 0;     // inputs hidden from the game
 	std::string        last;           // the last input forwarded
+	bool               paused = false;  // on, behind CET's overlay
 };
 
 class Router
@@ -47,7 +48,8 @@ public:
 	// it can't (spike 5), even when the link finds no V. Build mode ends if Minecraft or V is gone, or the link, or V
 	// can't be placed, or Minecraft's player dies; why V can't be placed is said before "V isn't found".
 	void Update(bool aLinked, const link::Link::Status& aState, const std::string& aVBlocked = {});
-	// The mouse's movement along x since the last call, in raw counts: for the turn a teleport adds back (spike 5).
+	// The mouse's movement along x since the last call, in raw counts: for the turn a teleport adds back (spike 5). None
+	// while build mode is paused: the mouse is CET's overlay's then.
 	int64_t TakeMouseX();
 	// Build mode on: nothing, or why it stays off.
 	std::optional<std::string> TurnOn();
@@ -60,10 +62,13 @@ public:
 
 	// From the focus watch: the game has just stopped being in front.
 	void FrontLost();
+	// From the main thread: CET's overlay opened or closed, as the overlay itself says (spike 7's `overlay` request).
+	void SetOverlay(bool aOpen);
 
 private:
 	// With the lock held.
-	void Apply(const Decision& aDecision, bool aWasOn, const std::string& aWhyBefore);
+	void Apply(const Decision& aDecision, bool aWasOn, bool aWasPaused, const std::string& aWhyBefore);
+	void LogPause(bool aWasPaused);  // build mode paused, or going on again, since aWasPaused
 	bool Off(std::string aWhy);
 	void Push(const proto::InputEvent& aEvent);
 

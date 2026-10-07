@@ -155,6 +155,10 @@ TEST(StatusWritesBuildMode)
 	CHECK(Has(cpmc::FormatStatus(report), "build=on; slot 3; 14 inputs forwarded to Minecraft and 15 hidden from the game, the last: "
 	                                      "the right button up; 0 dropped with the input ring full; GetRawInputData hooked, 5120 "
 	                                      "keyboard and mouse events read"));
+	link.buildPaused = true;
+	report.link = link;
+	CHECK(cpmc::FormatStatus(report).find("\nbuild=on, paused while CET's overlay is open; slot 3;") != std::string::npos);
+	link.buildPaused = false;
 	link.inputHooked = false;
 	link.buildMode = false;
 	link.buildWhy = "Esc left it";

@@ -56,6 +56,7 @@ void Router::Inspect(void* aData, uint32_t aBytes)
 		Situation       situation = situation_;
 		situation.inFront = inFront;
 		const bool        wasOn = mode_.On();
+		const bool        wasPaused = mode_.Paused();
 		const std::string whyBefore = mode_.Why();
 		const Decision    decision = mode_.Mouse({ mouse.usButtonFlags, int16_t(mouse.usButtonData) }, situation);
 		if (decision.hideButtons != 0)
@@ -64,7 +65,7 @@ void Router::Inspect(void* aData, uint32_t aBytes)
 			mouse.usButtonFlags = USHORT(mouse.usButtonFlags & ~decision.hideButtons);
 			std::memcpy(body, &mouse, sizeof mouse);
 		}
-		Apply(decision, wasOn, whyBefore);
+		Apply(decision, wasOn, wasPaused, whyBefore);
 	}
 	else if (header.dwType == RIM_TYPEKEYBOARD && aBytes >= sizeof header + sizeof(RAWKEYBOARD))
 	{
@@ -76,6 +77,7 @@ void Router::Inspect(void* aData, uint32_t aBytes)
 		Situation       situation = situation_;
 		situation.inFront = inFront;
 		const bool        wasOn = mode_.On();
+		const bool        wasPaused = mode_.Paused();
 		const std::string whyBefore = mode_.Why();
 		const Decision    decision = mode_.Key({ key.MakeCode, (key.Flags & RI_KEY_E0) != 0, (key.Flags & RI_KEY_BREAK) != 0 }, situation);
 		if (decision.hideKey)
@@ -85,7 +87,7 @@ void Router::Inspect(void* aData, uint32_t aBytes)
 			key.VKey = 0xFF;
 			std::memcpy(body, &key, sizeof key);
 		}
-		Apply(decision, wasOn, whyBefore);
+		Apply(decision, wasOn, wasPaused, whyBefore);
 	}
 }
 
@@ -120,7 +122,9 @@ void Router::Update(bool aLinked, const link::Link::Status& aState, const std::s
 
 int64_t Router::TakeMouseX()
 {
-	return mouseX_.exchange(0);
+	const int64_t   counts = mouseX_.exchange(0);
+	std::lock_guard lock(mutex_);
+	return mode_.Paused() ? 0 : counts;  // CET's overlay's cursor, which turns nothing
 }
 
 std::optional<std::string> Router::TurnOn()
@@ -136,6 +140,7 @@ std::optional<std::string> Router::TurnOn()
 		return mode_.Why();
 	}
 	log_.Push("build mode on");
+	LogPause(false);
 	return std::nullopt;
 }
 
@@ -166,7 +171,7 @@ std::optional<double> Router::TakePress()
 InputReport Router::Report() const
 {
 	std::lock_guard lock(mutex_);
-	return { mode_.On(), mode_.Why(), mode_.Slot(), read_.load(), mode_.Forwarded(), mode_.Hidden(), mode_.Last() };
+	return { mode_.On(), mode_.Why(), mode_.Slot(), read_.load(), mode_.Forwarded(), mode_.Hidden(), mode_.Last(), mode_.Paused() };
 }
 
 void Router::FrontLost()
@@ -179,7 +184,18 @@ void Router::FrontLost()
 	}
 }
 
-void Router::Apply(const Decision& aDecision, bool aWasOn, const std::string& aWhyBefore)
+void Router::SetOverlay(bool aOpen)
+{
+	std::lock_guard lock(mutex_);
+	const bool      wasPaused = mode_.Paused();
+	if (mode_.SetOverlay(aOpen))
+	{
+		Push({ proto::kInReleaseAll, 0, 0, 0, 0 });
+	}
+	LogPause(wasPaused);
+}
+
+void Router::Apply(const Decision& aDecision, bool aWasOn, bool aWasPaused, const std::string& aWhyBefore)
 {
 	if (aDecision.releaseAll)
 	{
@@ -205,6 +221,19 @@ void Router::Apply(const Decision& aDecision, bool aWasOn, const std::string& aW
 	else if (!mode_.On() && mode_.Why() != aWhyBefore)
 	{
 		log_.Push("build mode stays off: " + mode_.Why());
+	}
+	LogPause(aWasPaused);
+}
+
+void Router::LogPause(bool aWasPaused)
+{
+	if (mode_.Paused() && !aWasPaused)
+	{
+		log_.Push("build mode paused: CET's overlay is open");
+	}
+	else if (!mode_.Paused() && aWasPaused && mode_.On())
+	{
+		log_.Push("build mode goes on: CET's overlay closed");
 	}
 }
 

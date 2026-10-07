@@ -221,6 +221,17 @@ TEST(RequestsForTheNpcs)
 	CHECK(off && off->kind == cpmc::Request::Kind::Set && off->what == "npcs" && off->number == 0.0);
 }
 
+TEST(RequestsForCetsOverlay)
+{
+	std::string error;
+	const auto  open = cpmc::ParseRequest("overlay open", error);
+	CHECK(open && open->kind == cpmc::Request::Kind::Overlay && open->what == "open");
+	const auto closed = cpmc::ParseRequest("overlay closed", error);
+	CHECK(closed && closed->kind == cpmc::Request::Kind::Overlay && closed->what == "closed");
+	CHECK(!cpmc::ParseRequest("overlay shut", error));
+	CHECK_STR(error, "overlay takes open or closed");
+}
+
 TEST(RequestsForTheEntities)
 {
 	std::string error;

@@ -293,7 +293,8 @@ std::string FormatLink(const LinkReport& aLink)
 	                   aLink.inGame ? "in game" : "not in game");
 	out += std::format("build={}; {}; {} inputs forwarded to Minecraft and {} hidden from the game, the last: {}; {} dropped with the "
 	                   "input ring full; {}\n",
-	                   aLink.buildMode ? std::string("on") : "off: " + OneLine(aLink.buildWhy),
+	                   aLink.buildMode ? std::string(aLink.buildPaused ? "on, paused while CET's overlay is open" : "on")
+	                                   : "off: " + OneLine(aLink.buildWhy),
 	                   aLink.slot ? std::format("slot {}", *aLink.slot) : std::string("slot unknown until a number key"),
 	                   aLink.inputsForwarded, aLink.inputsHidden, OneLine(aLink.lastInput), aLink.inputsDropped,
 	                   aLink.inputHooked ? std::format("GetRawInputData hooked, {} keyboard and mouse events read", aLink.inputsRead)
