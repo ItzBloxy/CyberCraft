@@ -1100,12 +1100,12 @@ cd /d/Cyberpunk-Minecraft && git add docs/spikes/2026-10-07-minecraft-screens-re
 
 ### Task 5: Close Part 1, and plan Part 2
 
-- [ ] **Step 1: Record how Part 1 went, in this plan**
+- [x] **Step 1: Record how Part 1 went, in this plan**
 
 A section "How Part 1 went" at the plan's end: what ran as planned, what didn't and why, and what step 0's results
 change for Part 2.
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add docs/superpowers/plans/2026-10-07-minecraft-screens.md \
@@ -1183,3 +1183,31 @@ classes, SkyCraft's source, `mclink`'s and the link's code, the user's settings 
 - **The scenarios where a step fails:** a chest that doesn't open leaves the left clicks to the world; in creative
   one could break the chest, whose stick and stone would drop, and the end's `/kill` clears them. An Esc with no
   screen opens the pause menu, which stops the typer's last commands; Task 4 says what to do then.
+
+## How Part 1 went
+
+Part 1 ran on 2026-10-07, after the plan's deep review, as the user said to start.
+- **Tasks 1 to 3** ran in the real repo through the plan runner, task range 1 to 3: every step's expected result held
+  (each build's failure, 525, 526 and 526 tests with no warnings, `mclink`'s self-check and its new verbs' dry run).
+  - **Commits:** `793d8c4`, `53f5c0d` and `1d946dc`, each tree identical to the scratch clone's `p1-t1` to `p1-t3`.
+  - **The tags:** comparing the trees fetched the clone's tags into the repo; they were deleted again.
+- **Task 4, step 0,** passed every check (`f60210b`, results in
+  [2026-10-07-minecraft-screens-results.md](../../spikes/2026-10-07-minecraft-screens-results.md)):
+  - the right-click hit the chest at height 7.51, where the review worked out the look would, and its screen opened
+    in 0.10 s;
+  - the hover check gave exactly 192.0 on the hovered slot and 139.0 beside it;
+  - the moves, the typed line (`æøå é @ ~` whole), the switcher's two rounds (Survival, then Creative again), the pause
+    menu and the inventory all went as planned;
+  - the end left nothing.
+- **What didn't go as planned:**
+  - **One expectation was wrong:** the instance's player is `ItzBloxy`, not `SirBloxy`, from older logs.
+  - **Steps 5 and 6** (the images as PNG, the results) ran while the user stopped Minecraft, before step 4 was ticked;
+    they don't need Minecraft.
+- **For Part 2,** step 0 settles:
+  - the cursor's pixels are the HUD image's, at the user's GUI scale 2;
+  - screens open 0.00 to 0.10 s after their input, as McState reports them;
+  - a container screen darkens the whole window, the pause menu blurs it and lays the menu background over it, and
+    the switcher draws nothing behind itself;
+  - `kInText` delivers any code point whole.
+
+  Nothing in the spec's design for Part 2 changes.
