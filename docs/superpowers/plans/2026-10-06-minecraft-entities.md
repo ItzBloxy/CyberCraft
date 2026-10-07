@@ -13386,17 +13386,17 @@ cd /d/Cyberpunk-Minecraft && git add docs/spikes docs/superpowers/plans/2026-10-
 
 ### Task 51: Close the spike
 
-- [ ] **Step 1: Add "How Part 5 went" to this plan**
+- [x] **Step 1: Add "How Part 5 went" to this plan**
 
 At the end, after "Found while planning Part 5": what ran as written, what changed, and what Task 44's `mclink` run and
 run D found.
 
-- [ ] **Step 2: Bring the spec up to date**
+- [x] **Step 2: Bring the spec up to date**
 
 In its "Changes while executing Part 5": anything Part 5 changed in the design, and what's left for later, such as
 Cyberpunk's time of day setting Minecraft's.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add docs/superpowers \
@@ -13447,3 +13447,28 @@ The spec's "Changes while planning Part 5" lists what planning changed in the de
   `batchFor`'s three `batch` calls, each with `SOLID`; each "must fail" build failed with its error, and the script test
   failed and then passed; zero compiler warnings, 520 tests; `mclink`'s self-check found the mapping free and Minecraft
   absent; BlockRender imports none of PhysX's DLLs; and each task's files were identical to the scratch clone's.
+
+## How Part 5 went
+
+Part 5 ran on 2026-10-07, the user starting the games and playing run D.
+- **Ran as written:** Tasks 37 to 43 and 45 to 49, through the plan runner, each task's code identical to the verified
+  clone's. CyberCraft Tweaks 1.6.0 built with no warning and its bytecode check passed, each "must fail" build failed
+  with its error, `mclink`'s self-check was clean, BlockRender imports none of PhysX's DLLs, and 520 tests passed.
+- **Task 44** passed: Minecraft loaded 1.6.0 with no mixin error, and every batch came as the spec has it: the slime's
+  outer layer, the allay, the vex, the breeze's wind and eyes and the warden's layers blended, the charged creeper's
+  armour additive, the piglin and the breeze's body models. SkyCraft's patches, about 830 a second (7.7 MB), all landed
+  inside `mclink`'s copy of the atlas, and the placed blocks' faces lay on them.
+- **Run D (Task 50)** passed: the animated blocks animate as Minecraft's, and the seven mobs look like Minecraft's,
+  blended rather than cut out (the user: "Blended looks more like Minecraft"). At night the warden's layers and the
+  breeze's eyes glow, and nothing looks too bright. `set animate` and `set blend` work both ways and refuse other
+  values. The forward list costs about 0.013 ms of GPU a frame, the patch pass about 0.04 ms 20 times a second.
+- **Where the plan's guesses were off, harmlessly:**
+  - Task 44 expected up to 54 patched rectangles, Minecraft's animated block textures: there were 56, the 2 more most
+    likely block textures that the items' part of SkyCraft's atlas holds too;
+  - run D expected about 9 blended batches: 8 came, a pulsing warden layer being at no alpha just then;
+  - Task 44 was to disable the user's Entity Model Features and Entity Texture Features: they were disabled already,
+    and stay so, at the user's word.
+- **Found:** two test mobs from an earlier run, a spider and an enderman tagged `sp7`, were at run D's spot, most likely
+  left in a chunk that wasn't loaded when that run's Clear ran. Run D's Clear removed them with the rest (`Killed 9
+  entities`).
+- **Nothing in the code or the steps changed** while executing.

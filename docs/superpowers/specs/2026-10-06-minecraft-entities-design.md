@@ -1375,3 +1375,18 @@ sections above include them:
 3. **The `atlas` line's patches** are applied, refused (no atlas they fit) and dropped; a bad patch counts with the
    ring's rejected messages, as a bad section does; the passes and the areas waiting join the times ("Measurements and
    the status").
+
+## Changes while executing Part 5
+
+`mclink` and run D (the results' "Step C's blended mark and animated textures, with `mclink`" and "Run D") settled what
+Part 5 left open, and changed nothing in the design:
+1. **The blended mark and the forward list's blending work:** every marked layer came translucent, each the kind
+   "Entities" has, and in the game the layers look as Minecraft's, by day and at night. The user prefers them to the
+   cut-outs `set blend 0` brings back.
+2. **Risk 15 didn't show:** the blended layers, lit by Minecraft's day, looked fine at night beside what the game
+   lights. Nothing the user saw looked amiss where the warden's layers lie on its body (risk 16).
+3. **Animated textures play:** SkyCraft sends about 830 patches a second (7.7 MB), about 40 each Minecraft tick, on 56
+   rectangles (Minecraft's 54 animated block textures, and most likely two of them again in the items' part of its
+   atlas). The patch pass runs 20 times a second at about 0.04 ms of GPU, the CPU's patching about 0.01 ms a patch.
+4. **Left for later:** the swirl's and the breeze's wind's scrolling; and Cyberpunk's time of day setting Minecraft's,
+   the user's request, which will meet the `SkyCraft` world's `advance_time` and `advance_weather`, both off.
