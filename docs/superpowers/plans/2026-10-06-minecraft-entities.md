@@ -2204,7 +2204,7 @@ SkyCraft's are, so none of them glows.
 - Create: `src/entities/WorldShapes.h`, `src/entities/WorldShapes.cpp`, `tests/TestWorldShapes.cpp`
 - Modify: `CMakeLists.txt`
 
-- [ ] **Step 1: Write the failing test, `tests/TestWorldShapes.cpp`**
+- [x] **Step 1: Write the failing test, `tests/TestWorldShapes.cpp`**
 
 ```cpp
 #include "Harness.h"
@@ -2382,7 +2382,7 @@ TEST(WorldShapesShadowsAndOthersAddNothing)
 }
 ```
 
-- [ ] **Step 2: Edit `CMakeLists.txt` to add the test**
+- [x] **Step 2: Edit `CMakeLists.txt` to add the test**
 
 ```cmake
 	tests/TestWorldTable.cpp
@@ -2394,7 +2394,7 @@ TEST(WorldShapesShadowsAndOthersAddNothing)
 	tools/mclink/DumpObj.cpp
 ```
 
-- [ ] **Step 3: Build; it must fail**
+- [x] **Step 3: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -2403,7 +2403,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `error C1083: Cannot open include file: 'entities/WorldShapes.h'`.
 
-- [ ] **Step 4: Write `src/entities/WorldShapes.h`**
+- [x] **Step 4: Write `src/entities/WorldShapes.h`**
 
 ```cpp
 #pragma once
@@ -2445,7 +2445,7 @@ void AppendCrack(const proto::WorldEntity& aRecord, const Vec3d& aOrigin, std::v
 }
 ```
 
-- [ ] **Step 5: Write `src/entities/WorldShapes.cpp`**
+- [x] **Step 5: Write `src/entities/WorldShapes.cpp`**
 
 ```cpp
 #include "entities/WorldShapes.h"
@@ -2621,7 +2621,7 @@ void AppendCrack(const proto::WorldEntity& aRecord, const Vec3d& aOrigin, std::v
 }
 ```
 
-- [ ] **Step 6: Edit `CMakeLists.txt` to add the source**
+- [x] **Step 6: Edit `CMakeLists.txt` to add the source**
 
 ```cmake
 	src/link/WorldTable.cpp
@@ -2633,7 +2633,7 @@ void AppendCrack(const proto::WorldEntity& aRecord, const Vec3d& aOrigin, std::v
 	src/physx/GameAbi.cpp
 ```
 
-- [ ] **Step 7: Build and run the tests; they must pass**
+- [x] **Step 7: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -2643,7 +2643,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `471 test(s), 0 failure(s)`.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -2674,7 +2674,7 @@ cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
 - Create: `src/entities/Entities.h`, `src/entities/Entities.cpp`, `tests/TestEntities.cpp`
 - Modify: `CMakeLists.txt`
 
-- [ ] **Step 1: Write the failing test, `tests/TestEntities.cpp`**
+- [x] **Step 1: Write the failing test, `tests/TestEntities.cpp`**
 
 ```cpp
 #include "Harness.h"
@@ -2854,7 +2854,7 @@ TEST(EntitiesFindTheNearestMob)
 }
 ```
 
-- [ ] **Step 2: Edit `CMakeLists.txt` to add the test**
+- [x] **Step 2: Edit `CMakeLists.txt` to add the test**
 
 ```cmake
 	tests/TestWorldShapes.cpp
@@ -2866,7 +2866,7 @@ TEST(EntitiesFindTheNearestMob)
 	tools/mclink/DumpObj.cpp
 ```
 
-- [ ] **Step 3: Build; it must fail**
+- [x] **Step 3: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -2875,7 +2875,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `error C1083: Cannot open include file: 'entities/Entities.h'`.
 
-- [ ] **Step 4: Write `src/entities/Entities.h`**
+- [x] **Step 4: Write `src/entities/Entities.h`**
 
 ```cpp
 #pragma once
@@ -2956,7 +2956,7 @@ private:
 }
 ```
 
-- [ ] **Step 5: Write `src/entities/Entities.cpp`**
+- [x] **Step 5: Write `src/entities/Entities.cpp`**
 
 ```cpp
 #include "entities/Entities.h"
@@ -3069,7 +3069,7 @@ std::optional<double> Entities::NearestMob(const Vec3d& aFeet) const
 }
 ```
 
-- [ ] **Step 6: Edit `CMakeLists.txt` to add the source**
+- [x] **Step 6: Edit `CMakeLists.txt` to add the source**
 
 ```cmake
 	src/entities/WorldShapes.cpp
@@ -3081,7 +3081,7 @@ std::optional<double> Entities::NearestMob(const Vec3d& aFeet) const
 	src/physx/GameAbi.cpp
 ```
 
-- [ ] **Step 7: Build and run the tests; they must pass**
+- [x] **Step 7: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -3091,7 +3091,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `478 test(s), 0 failure(s)`.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -3115,7 +3115,7 @@ The renderer keeps Minecraft's entity textures in one buffer, one `uint` per tex
 - Create: `src/render/EntityTextures.h`, `src/render/EntityTextures.cpp`, `tests/TestEntityTextures.cpp`
 - Modify: `CMakeLists.txt`
 
-- [ ] **Step 1: Write the failing test, `tests/TestEntityTextures.cpp`**
+- [x] **Step 1: Write the failing test, `tests/TestEntityTextures.cpp`**
 
 ```cpp
 #include "Harness.h"
@@ -3192,7 +3192,7 @@ TEST(EntityTexturesPlaceAnIdAgainAfterTheLast)
 }
 ```
 
-- [ ] **Step 2: Edit `CMakeLists.txt` to add the test**
+- [x] **Step 2: Edit `CMakeLists.txt` to add the test**
 
 ```cmake
 	tests/TestEntities.cpp
@@ -3204,7 +3204,7 @@ TEST(EntityTexturesPlaceAnIdAgainAfterTheLast)
 	tools/mclink/DumpObj.cpp
 ```
 
-- [ ] **Step 3: Build; it must fail**
+- [x] **Step 3: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -3213,7 +3213,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `error C1083: Cannot open include file: 'render/EntityTextures.h'`.
 
-- [ ] **Step 4: Write `src/render/EntityTextures.h`**
+- [x] **Step 4: Write `src/render/EntityTextures.h`**
 
 ```cpp
 #pragma once
@@ -3259,7 +3259,7 @@ private:
 }
 ```
 
-- [ ] **Step 5: Write `src/render/EntityTextures.cpp`**
+- [x] **Step 5: Write `src/render/EntityTextures.cpp`**
 
 ```cpp
 #include "render/EntityTextures.h"
@@ -3309,7 +3309,7 @@ uint64_t EntityTextures::Capacity(uint64_t aCurrent) const
 }
 ```
 
-- [ ] **Step 6: Edit `CMakeLists.txt` to add the source**
+- [x] **Step 6: Edit `CMakeLists.txt` to add the source**
 
 ```cmake
 	src/render/Hud.cpp
@@ -3321,7 +3321,7 @@ uint64_t EntityTextures::Capacity(uint64_t aCurrent) const
 	src/Measurements.cpp
 ```
 
-- [ ] **Step 7: Build and run the tests; they must pass**
+- [x] **Step 7: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -3331,7 +3331,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `483 test(s), 0 failure(s)`.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -3358,7 +3358,7 @@ fence after it.
 - Create: `src/render/Snapshots.h`, `src/render/Snapshots.cpp`, `tests/TestSnapshots.cpp`
 - Modify: `CMakeLists.txt`
 
-- [ ] **Step 1: Write the failing test, `tests/TestSnapshots.cpp`**
+- [x] **Step 1: Write the failing test, `tests/TestSnapshots.cpp`**
 
 ```cpp
 #include "Harness.h"
@@ -3422,7 +3422,7 @@ TEST(SnapshotsAbandonedListHoldsNothing)
 }
 ```
 
-- [ ] **Step 2: Edit `CMakeLists.txt` to add the test**
+- [x] **Step 2: Edit `CMakeLists.txt` to add the test**
 
 ```cmake
 	tests/TestEntityTextures.cpp
@@ -3434,7 +3434,7 @@ TEST(SnapshotsAbandonedListHoldsNothing)
 	tools/mclink/DumpObj.cpp
 ```
 
-- [ ] **Step 3: Build; it must fail**
+- [x] **Step 3: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -3443,7 +3443,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `error C1083: Cannot open include file: 'render/Snapshots.h'`.
 
-- [ ] **Step 4: Write `src/render/Snapshots.h`**
+- [x] **Step 4: Write `src/render/Snapshots.h`**
 
 ```cpp
 #pragma once
@@ -3489,7 +3489,7 @@ private:
 }
 ```
 
-- [ ] **Step 5: Write `src/render/Snapshots.cpp`**
+- [x] **Step 5: Write `src/render/Snapshots.cpp`**
 
 ```cpp
 #include "render/Snapshots.h"
@@ -3552,7 +3552,7 @@ void Snapshots::Abandon(uint32_t aIndex)
 }
 ```
 
-- [ ] **Step 6: Edit `CMakeLists.txt` to add the source**
+- [x] **Step 6: Edit `CMakeLists.txt` to add the source**
 
 ```cmake
 	src/render/EntityTextures.cpp
@@ -3564,7 +3564,7 @@ void Snapshots::Abandon(uint32_t aIndex)
 	src/Measurements.cpp
 ```
 
-- [ ] **Step 7: Build and run the tests; they must pass**
+- [x] **Step 7: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -3574,7 +3574,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `488 test(s), 0 failure(s)`.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -3612,7 +3612,7 @@ grown in Task 13:
 - Modify: `tests/TestShaders.cpp`, `src/render/FrameConstants.h`, `shaders/blocks.hlsl`, `src/render/Shaders.h`,
   `src/render/Shaders.cpp`
 
-- [ ] **Step 1: Edit `tests/TestShaders.cpp` to add the failing test**
+- [x] **Step 1: Edit `tests/TestShaders.cpp` to add the failing test**
 
 ```cpp
 TEST(ShadersReportCompileErrors)
@@ -3639,7 +3639,7 @@ TEST(ShadersDrawMinecraftsEntities)
 TEST(ShadersReportCompileErrors)
 ```
 
-- [ ] **Step 2: Build; it must fail**
+- [x] **Step 2: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -3648,7 +3648,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `'entityVertex': is not a member of 'cpmc::BlockShaders'`.
 
-- [ ] **Step 3: Edit `src/render/FrameConstants.h` to add the entities' constants**
+- [x] **Step 3: Edit `src/render/FrameConstants.h` to add the entities' constants**
 
 ```cpp
 	float    material[4];         // the G-buffer's material values: metalness, roughness, B; 0
@@ -3681,7 +3681,7 @@ struct EntityConstants
 static_assert(sizeof(EntityConstants) == 32);
 ```
 
-- [ ] **Step 4: Edit `shaders/blocks.hlsl` to add the entities' entry points**
+- [x] **Step 4: Edit `shaders/blocks.hlsl` to add the entities' entry points**
 
 ```hlsl
     uint   flags;     // bit 0 alpha-tested, bit 1 translucent, bits 4-7 the face's direction + 1
@@ -3852,7 +3852,7 @@ void EntityDepthPS(EntityOut i)
 // Spike 4: Minecraft's HUD image (its hotbar, crosshair, chat, hand and held item), drawn over the finished frame at
 ```
 
-- [ ] **Step 5: Edit `src/render/Shaders.h` to hold them**
+- [x] **Step 5: Edit `src/render/Shaders.h` to hold them**
 
 ```cpp
 	std::vector<uint8_t> hud;        // HudPS
@@ -3865,7 +3865,7 @@ void EntityDepthPS(EntityOut i)
 	std::vector<uint8_t> entityDepth;   // EntityDepthPS
 ```
 
-- [ ] **Step 6: Edit `src/render/Shaders.cpp` to compile them**
+- [x] **Step 6: Edit `src/render/Shaders.cpp` to compile them**
 
 ```cpp
 	}
@@ -3899,7 +3899,7 @@ void EntityDepthPS(EntityOut i)
 		                 std::move(*entity), std::move(*crack), std::move(*entityDepth) };
 ```
 
-- [ ] **Step 7: Build and run the tests; they must pass**
+- [x] **Step 7: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -3909,7 +3909,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `489 test(s), 0 failure(s)`.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -3958,7 +3958,7 @@ build here and by run A (Task 16).
 **Files:**
 - Modify: `src/render/Renderer.h`, `src/render/Renderer.cpp`
 
-- [ ] **Step 1: Edit `src/render/Renderer.h` to add the entities**
+- [x] **Step 1: Edit `src/render/Renderer.h` to add the entities**
 
 ```cpp
 #include "LogQueue.h"
@@ -4106,7 +4106,7 @@ build here and by run A (Task 16).
 	Stats    stats_;
 ```
 
-- [ ] **Step 2: Edit `src/render/Renderer.cpp` to upload, copy and draw them**
+- [x] **Step 2: Edit `src/render/Renderer.cpp` to upload, copy and draw them**
 
 ```cpp
 #include <algorithm>
@@ -4781,7 +4781,7 @@ void Renderer::DrawEntities(ID3D12GraphicsCommandList* aList, const CameraFrame&
 	retired_.Clear();
 ```
 
-- [ ] **Step 3: Build and run the tests; they must pass**
+- [x] **Step 3: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -4791,7 +4791,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `489 test(s), 0 failure(s)`.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -4825,7 +4825,7 @@ The plugin's side (the spec's "The frame", "Requests and settings" and "Measurem
   `src/entities/Entities.cpp`, `src/Requests.h`, `src/Requests.cpp`, `src/Status.h`, `src/Status.cpp`, `src/Plugin.cpp`,
   `CMakeLists.txt`
 
-- [ ] **Step 1: Edit `tests/TestEntities.cpp` to add the failing test of the request's lines**
+- [x] **Step 1: Edit `tests/TestEntities.cpp` to add the failing test of the request's lines**
 
 ```cpp
 TEST(EntitiesFindTheNearestMob)
@@ -4855,7 +4855,7 @@ TEST(EntitiesDescribeTheNewestScene)
 TEST(EntitiesFindTheNearestMob)
 ```
 
-- [ ] **Step 2: Edit `tests/TestRequests.cpp` to add the failing test of the request**
+- [x] **Step 2: Edit `tests/TestRequests.cpp` to add the failing test of the request**
 
 ```cpp
 TEST(RequestsForBlasts)
@@ -4878,7 +4878,7 @@ TEST(RequestsForTheEntities)
 TEST(RequestsForBlasts)
 ```
 
-- [ ] **Step 3: Edit `tests/TestStatus.cpp` to add the failing test of the line**
+- [x] **Step 3: Edit `tests/TestStatus.cpp` to add the failing test of the line**
 
 ```cpp
 	CHECK(Has(status, "0 unreadable; the bush rule leaves out sight-only shapes: 12 so far"));
@@ -4924,7 +4924,7 @@ TEST(StatusWritesTheEntities)
 }
 ```
 
-- [ ] **Step 4: Edit `tests/TestWorldTable.cpp` to add the failing test of the table in words**
+- [x] **Step 4: Edit `tests/TestWorldTable.cpp` to add the failing test of the table in words**
 
 ```cpp
 TEST(WorldTableNamesTheKinds)
@@ -4945,7 +4945,7 @@ TEST(WorldTableInWords)
 TEST(WorldTableNamesTheKinds)
 ```
 
-- [ ] **Step 5: Build; it must fail**
+- [x] **Step 5: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -4954,7 +4954,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `'WorldWords': identifier not found`.
 
-- [ ] **Step 6: Edit `src/link/WorldTable.h` to declare `WorldWords`**
+- [x] **Step 6: Edit `src/link/WorldTable.h` to declare `WorldWords`**
 
 ```cpp
 #include <optional>
@@ -4974,7 +4974,7 @@ const char* WorldKindName(uint32_t aKind);
 std::string WorldWords(const WorldTable& aTable);
 ```
 
-- [ ] **Step 7: Edit `src/link/WorldTable.cpp` to add it**
+- [x] **Step 7: Edit `src/link/WorldTable.cpp` to add it**
 
 ```cpp
 #include <cmath>
@@ -5016,7 +5016,7 @@ std::string WorldWords(const WorldTable& aTable)
 }
 ```
 
-- [ ] **Step 8: Edit `tools/mclink/Main.cpp` to drop its own**
+- [x] **Step 8: Edit `tools/mclink/Main.cpp` to drop its own**
 
 ```cpp
 }
@@ -5043,7 +5043,7 @@ std::string WorldWords(const WorldTable& aTable)
 ```cpp
 ```
 
-- [ ] **Step 9: Edit `src/entities/Entities.h` to declare the request's lines**
+- [x] **Step 9: Edit `src/entities/Entities.h` to declare the request's lines**
 
 ```cpp
 #include <cstdint>
@@ -5066,7 +5066,7 @@ std::string WorldWords(const WorldTable& aTable)
 	std::vector<std::string> Lines(uint32_t aGlowLight, const std::map<uint32_t, std::pair<uint32_t, uint32_t>>& aSizes) const;
 ```
 
-- [ ] **Step 10: Edit `src/entities/Entities.cpp` to add them**
+- [x] **Step 10: Edit `src/entities/Entities.cpp` to add them**
 
 ```cpp
 #include <cmath>
@@ -5113,7 +5113,7 @@ std::vector<std::string> Entities::Lines(uint32_t aGlowLight, const std::map<uin
 }
 ```
 
-- [ ] **Step 11: Edit `src/Requests.h` to add the request**
+- [x] **Step 11: Edit `src/Requests.h` to add the request**
 
 ```cpp
 //                               with its radius, over 0 and up to 16)
@@ -5131,7 +5131,7 @@ std::vector<std::string> Entities::Lines(uint32_t aGlowLight, const std::map<uin
 		Entities,
 ```
 
-- [ ] **Step 12: Edit `src/Requests.cpp` to parse it**
+- [x] **Step 12: Edit `src/Requests.cpp` to parse it**
 
 ```cpp
 	    command == "punch")
@@ -5159,7 +5159,7 @@ std::vector<std::string> Entities::Lines(uint32_t aGlowLight, const std::map<uin
 		                                                   : Request::Kind::Reload;
 ```
 
-- [ ] **Step 13: Edit `src/Status.h` to add the line's figures**
+- [x] **Step 13: Edit `src/Status.h` to add the line's figures**
 
 ```cpp
 	std::string lastBlast;           // its centre, reach, NPCs within it and its own hits; after its push, knocked down and dead
@@ -5195,7 +5195,7 @@ std::vector<std::string> Entities::Lines(uint32_t aGlowLight, const std::map<uin
 // processes); then one structure line per structure:
 ```
 
-- [ ] **Step 14: Edit `src/Status.cpp` to write the line**
+- [x] **Step 14: Edit `src/Status.cpp` to write the line**
 
 ```cpp
 std::string FormatLink(const LinkReport& aLink)
@@ -5236,7 +5236,7 @@ std::string FormatLink(const LinkReport& aLink)
 	out += FormatEntities(aLink);
 ```
 
-- [ ] **Step 15: Edit `src/Plugin.cpp` for the sink, each frame's entities, the request and the line**
+- [x] **Step 15: Edit `src/Plugin.cpp` for the sink, each frame's entities, the request and the line**
 
 ```cpp
 constexpr const char* kVersion = "0.19.1";
@@ -5366,7 +5366,7 @@ void EntitiesRequest()
 	}
 ```
 
-- [ ] **Step 16: Edit `CMakeLists.txt` for 0.20.0**
+- [x] **Step 16: Edit `CMakeLists.txt` for 0.20.0**
 
 ```cmake
 project(BlockRender VERSION 0.19.1 LANGUAGES C CXX)
@@ -5375,7 +5375,7 @@ project(BlockRender VERSION 0.19.1 LANGUAGES C CXX)
 project(BlockRender VERSION 0.20.0 LANGUAGES C CXX)
 ```
 
-- [ ] **Step 17: Build and run the tests; they must pass**
+- [x] **Step 17: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -5385,7 +5385,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `493 test(s), 0 failure(s)`.
 
-- [ ] **Step 18: Check that BlockRender imports nothing from PhysX**
+- [x] **Step 18: Check that BlockRender imports nothing from PhysX**
 
 ```bash
 DUMPBIN=$(ls "/c/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/"*/bin/Hostx64/x64/dumpbin.exe | head -1)
@@ -5393,7 +5393,7 @@ DUMPBIN=$(ls "/c/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/M
 ```
 Expected: `KERNEL32.dll` and the other DLLs it imports, none of them PhysX's.
 
-- [ ] **Step 19: Commit**
+- [x] **Step 19: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -5434,7 +5434,7 @@ block's default.
 - Modify: `tests/TestCommands.cpp`, `src/link/Commands.cpp`, `tools/mclink/entities.txt`,
   `tools/blockrender_hud/init.lua`
 
-- [ ] **Step 1: Edit `tests/TestCommands.cpp` to check `tnt-ahead`'s obsidian and marker**
+- [x] **Step 1: Edit `tests/TestCommands.cpp` to check `tnt-ahead`'s obsidian and marker**
 
 ```cpp
 	CHECK_STR(NamedCommands("tnt-ahead")->at(1), "/execute rotated ~ 0 positioned ^ ^ ^4 run setblock ~ ~-1 ~ stone");  // TNT needs a block under it
@@ -5446,7 +5446,7 @@ block's default.
 	CHECK_STR(NamedCommands("tnt-ahead")->at(2), "/execute rotated ~ 0 positioned ^ ^ ^4 run summon marker ~ ~-1 ~ {Tags:[\"sp7b\"]}");
 ```
 
-- [ ] **Step 2: Build and run the tests; the new one must fail**
+- [x] **Step 2: Build and run the tests; the new one must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -5457,7 +5457,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 Expected: `FAIL CommandsNamedSetsAreValidCommands` and `493 test(s), 3 failure(s)`, its three new checks: the
 harness counts failed checks, not tests.
 
-- [ ] **Step 3: Edit `src/link/Commands.cpp` to stand the TNT on obsidian, with a marker**
+- [x] **Step 3: Edit `src/link/Commands.cpp` to stand the TNT on obsidian, with a marker**
 
 ```cpp
 		// On a stone block: only the player collides with the floor's triangles, so a TNT in the air falls into the void.
@@ -5471,7 +5471,7 @@ harness counts failed checks, not tests.
 			                             "/execute rotated ~ 0 positioned ^ ^ ^4 run summon marker ~ ~-1 ~ {Tags:[\"sp7b\"]}",
 ```
 
-- [ ] **Step 4: Edit `tools/mclink/entities.txt` to give the falling sand's block as 26.3 reads it**
+- [x] **Step 4: Edit `tools/mclink/entities.txt` to give the falling sand's block as 26.3 reads it**
 
 ```text
 type /execute rotated ~ 0 positioned ^-4 ^ ^5 run summon minecraft:falling_block ~ ~12 ~ {BlockState:{Name:"minecraft:sand"},DropItem:0b,Tags:["sp7"]}
@@ -5480,7 +5480,7 @@ type /execute rotated ~ 0 positioned ^-4 ^ ^5 run summon minecraft:falling_block
 type /execute rotated ~ 0 positioned ^-4 ^ ^5 run summon minecraft:falling_block ~ ~12 ~ {BlockState:"minecraft:sand",DropItem:0b,Tags:["sp7"]}
 ```
 
-- [ ] **Step 5: Build and run the tests; they must pass**
+- [x] **Step 5: Build and run the tests; they must pass**
 
 The tests parse step 0's script too.
 
@@ -5492,7 +5492,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `493 test(s), 0 failure(s)`.
 
-- [ ] **Step 6: Edit `tools/blockrender_hud/init.lua` to add the Spawn rows, Clear, and the Entities button and line**
+- [x] **Step 6: Edit `tools/blockrender_hud/init.lua` to add the Spawn rows, Clear, and the Entities button and line**
 
 ```lua
 -- combat), and a line each for the last request's reply and the requests waiting to be sent, build mode (F8) with its
@@ -5637,14 +5637,14 @@ local fun = {
             ImGui.Text("Entities: " .. entities)
 ```
 
-- [ ] **Step 7: Check the overlay's syntax**
+- [x] **Step 7: Check the overlay's syntax**
 
 ```bash
 luac -p /d/Cyberpunk-Minecraft/spikes/block-render/tools/blockrender_hud/init.lua && echo "syntax ok"
 ```
 Expected: `syntax ok`.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -5697,7 +5697,7 @@ These commands come back, as in spike 6:
 **Files:**
 - Modify: `docs/spikes/2026-10-06-minecraft-entities-results.md`
 
-- [ ] **Step 1: Deploy (the game must not be running)**
+- [x] **Step 1: Deploy (the game must not be running)**
 
 ```bash
 tasklist | grep -i -c "cyberpunk2077.exe"
@@ -5715,7 +5715,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default -DCP2
 ```
 Expected: `installed`. The second configure clears `CP2077_DIR` again.
 
-- [ ] **Step 2: In the game: BlockRender 0.20.0 loads**
+- [x] **Step 2: In the game: BlockRender 0.20.0 loads**
 
 Ask the user to start the `CyberCraft` instance, then the game, and to wait at the game's main menu. Then:
 ```bash
@@ -5723,7 +5723,7 @@ L=$(ls -t /e/Cyberpunk2077/red4ext/logs | grep -i blockrender | head -1); grep -
 ```
 Expected: `BlockRender 0.20.0 loaded (game 2.31…), …; dred on, debug layer off; …`, and no error lines.
 
-- [ ] **Step 3: In the game: load, link, creative**
+- [x] **Step 3: In the game: load, link, creative**
 
 Ask the user to load a save on an open pavement by day, with at least 15 m clear ahead of V, and to click Link. Then
 ask them to click Creative in the overlay's Fun row. Expected:
@@ -5736,7 +5736,7 @@ ask them to click Creative in the overlay's Fun row. Expected:
 
 Then name what isn't drawn yet ("Before the user looks", above).
 
-- [ ] **Step 4: In the game: things in place (check 1)**
+- [x] **Step 4: In the game: things in place (check 1)**
 
 Ask the user to click the Mobs row's Pig, Villager, Spider, Blaze and Slime, one at a time, then to look at them, walk
 around them and turn. Expected:
@@ -5752,7 +5752,7 @@ villager's in Minecraft's draw order (body, biome, profession, level, by their s
 `entities: world: 5 shadows` or so, and `entities: N textures: …`. Then ask the user to look up a little, 3 m ahead, and
 click More's Falling sand: a sand block falls from 12 m up and vanishes where it lands.
 
-- [ ] **Step 5: In the game: layers and smearing (checks 7 and 8)**
+- [x] **Step 5: In the game: layers and smearing (checks 7 and 8)**
 
 Ask the user to look closely at the villager and the spider. Expected: the villager's farmer clothes over its body, its
 iron level badge on its belt over those; the spider's red eyes over its head. Then send `set entities 0`: every one of
@@ -5761,7 +5761,7 @@ Minecraft's entities goes, and the blocks stay; then `set entities 1`.
 Ask the user to watch the slime hop and the blaze's rods turn, standing still, then turning V slowly and quickly. Note
 any trail, ghost or doubled image behind them; trails decide step B's `dlsshint 2`.
 
-- [ ] **Step 6: In the game: block entities (check 4)**
+- [x] **Step 6: In the game: block entities (check 4)**
 
 Ask the user to click More's Block entities, which places them 8 m ahead (12 requests, about 12 s). Expected: a chest; a
 whole red bed; an oak sign, its face blank; a white banner with a red stripe across its top and a black creeper face,
@@ -5769,7 +5769,7 @@ each pattern over the cloth; a torch, with its flame if it's drawn. In Minecraft
 none an error. The chest and the banner are step A's; the bed, the sign and the torch are block models in 26.3, drawn
 with the blocks (Task 7's check).
 
-- [ ] **Step 7: In the game: world entities and cracks (check 5)**
+- [x] **Step 7: In the game: world entities and cracks (check 5)**
 
 Ask the user to click More's Dropped items: a diamond icon and a grass block, 3 m ahead, each turning and bobbing, the
 grass block's top green. The status's world: `1 block, 1 item, …`.
@@ -5783,12 +5783,12 @@ Then ask the user to click the Mode row's Survival, then Blocks in hand's Stone 
 block with the left button held. Expected: cracks grow over it for about 7 s, then it breaks, dropping nothing, since
 stone bricks need a pickaxe to drop. Then ask the user to click Creative, and press F8 to leave build mode.
 
-- [ ] **Step 8: In the game: contact darkening (check 6)**
+- [x] **Step 8: In the game: contact darkening (check 6)**
 
 Ask the user to look at the ground under the pig, by day, with a screenshot. Note whether the game's ambient occlusion
 darkens it: if not, SkyCraft's contact shadows wait for a later step.
 
-- [ ] **Step 9: In the game: glow, at night (check 2)**
+- [x] **Step 9: In the game: glow, at night (check 2)**
 
 Ask the user to use the game's Skip Time to the night, and look at the mobs. Expected: the blaze glows; the pig, the
 villager, the spider and the slime don't. Send `set glow 0.5`, then `set glow 1`, asking the user what changes each
@@ -5801,13 +5801,13 @@ the six placed blocks, `Killed N entities` for the mobs and any dropped item sti
 minutes), and `Killed 6 entities` for the markers; within about 7 s, once the death puffs and the blaze's smoke are
 gone, the status's `the newest 0 batches` and `world: nothing`, but for arrows not yet gone; on screen, nothing left.
 
-- [ ] **Step 10: In the game: the explosion (check 3)**
+- [x] **Step 10: In the game: the explosion (check 3)**
 
 Still at night, ask the user to click `tnt-ahead` (More controls' Type row). Expected: a TNT on an obsidian block 4 m
 ahead flashes white, glowing, for 4 s, then explodes: puffs, glowing, and smoke, coming and going as in Minecraft. V
 takes nothing (combat off). Then ask the user to click Clear: the obsidian goes.
 
-- [ ] **Step 11: In the game: cost, then the big blast (check 9)**
+- [x] **Step 11: In the game: cost, then the big blast (check 9)**
 
 Ask the user to click the Mobs row's five again and More's 10 pigs, wait 15 s, and read the status three times, a few
 seconds apart. Note the entities' GPU time, the frame time (`frame=`), the scene's batches, vertices and MB a second,
@@ -5815,28 +5815,28 @@ and any snapshot waits. Then, last, ask the user to click `tnt-cube` and watch i
 the status twice during it. Note the same, the draws skipped, any draws past a snapshot's 8 MB, and the frame time's
 dip. Then ask the user to click Clear.
 
-- [ ] **Step 12: In the game: no crash or freeze (check 10), and unlinking**
+- [x] **Step 12: In the game: no crash or freeze (check 10), and unlinking**
 
 Ask the user to click Unlink. Expected: Minecraft's entities go with its blocks, and the game ran without a crash or a
 freeze throughout.
 
-- [ ] **Step 13: Ask the user to quit the game and stop Minecraft**
+- [x] **Step 13: Ask the user to quit the game and stop Minecraft**
 
-- [ ] **Step 14: Read the log once more**
+- [x] **Step 14: Read the log once more**
 
 ```bash
 L=$(ls -t /e/Cyberpunk2077/red4ext/logs | grep -i blockrender | head -1); grep -E "entities:|renderer:|Minecraft cleared|link on|set " "/e/Cyberpunk2077/red4ext/logs/$L" | head -200
 ```
 Everything the steps above logged, for the results.
 
-- [ ] **Step 15: Record run A's results in `docs/spikes/2026-10-06-minecraft-entities-results.md`**
+- [x] **Step 15: Record run A's results in `docs/spikes/2026-10-06-minecraft-entities-results.md`**
 
 A "Run A" section: the versions; each check above with its outcome and numbers: where things stand and how they look;
 the layers; smearing, still and turning; the block entities; the world entities and cracks; contact darkening; the glow
 at each setting; the explosion; the costs, with the herd and during `tnt-cube`; and anything that surprised, and what it
 means for Part 3. Put the spike's answer so far at the top, for step A.
 
-- [ ] **Step 16: Commit**
+- [x] **Step 16: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add docs/spikes/2026-10-06-minecraft-entities-results.md docs/superpowers/plans/2026-10-06-minecraft-entities.md \

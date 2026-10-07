@@ -5,6 +5,15 @@ Spike 7 draws Minecraft's entities, block entities, particles and world entities
 them, with `mclink`, without the game; later steps add their sections as they run, and the spike's answer goes at the
 top once step A is in.
 
+**The answer so far, from step A (run A): yes.** Minecraft's mobs, block entities, opaque particles and world entities
+(items, arrows, tridents, cracks) are drawn in Night City where Minecraft has them, posed and animated as Minecraft
+poses them, in Minecraft's draw order (CyberCraft Tweaks 1.4.0). The game lights them as its own geometry, ambient
+occlusion and reflections included, and what Minecraft makes full-bright glows at night through the G-buffer's
+emission. Nothing smeared, and they cost 0.02 ms of GPU a frame, 0.3 ms at the peak of a 125-TNT blast. Step B (Part 3)
+adds what isn't drawn yet: translucent particles and the block outline. Run A also found three things for Part 3 to
+fix: the overlay's block entities lose their markers when V moves, Shift+F6 drops out of build mode, and the overlay's
+buttons move as its lines come and go ("Run A").
+
 ## Step 0: what Minecraft sends of its entities, with `mclink`, without the game
 
 Date: 2026-10-07. No Cyberpunk: `mclink`, BlockRender's link code in a console program, ran against the user's
@@ -199,3 +208,100 @@ of Clear, typed as its buttons type them, at step 0's spot, by a scratch script 
 - **Run A's check 4:** the bed, the sign and the torch come with the blocks; the chest and the banner are step A's.
 - **The Spawn rows and Clear are checked against 26.3** before the game. `tnt-ahead`'s obsidian and marker weren't
   typed here: they're step 0's TNT block and marker in another form, which run A types.
+
+## Run A: step A in the game
+
+Date: 2026-10-07, 12:18 to 12:57. BlockRender 0.20.0 (`b30782e`, Part 2's Tasks 8 to 15) in Cyberpunk 2077 2.31 on an
+RTX 3070, DRED on, linked to SkyCraft 0.1.2 with CyberCraft Tweaks 1.4.0 in the `CyberCraft` instance (Minecraft 26.3).
+Drawing in `gbuffer` mode (Link turned it on), Minecraft's player in creative, combat off. The user played, clicked the
+overlay and took the screenshots (`2026-10-06-minecraft-entities-results/run-a/`); the agent deployed, sent requests
+and read the logs and the status. Plan: Task 16.
+
+### Verdict
+
+**Pass.** All ten checks passed, and none of the code needed a fix. Run A settled the spec's open questions:
+- **The material target's A is emission:** step A's glow lights up at night and reflects in wet streets, so step B's
+  glow fallback isn't needed. The game reads it non-linearly, though: 0.9 glows steadily, lower values flicker.
+- **The game's ambient occlusion darkens the ground under mobs,** so SkyCraft's contact shadows aren't needed.
+- **Nothing smeared,** so DLSS's bias hint over the models (`dlsshint 2`) isn't needed.
+
+The overlay's Spawn rows have a flaw to fix ("Problems").
+
+### The checks
+
+1. **Things in place** (`mobs-by-day.webp`): a pig, a villager, a spider, a blaze and a slime, 5 m ahead, stood with
+   their feet on the street, animated (heads turning, the blaze's rods, the slime hopping), were lit like the street, and
+   stayed put while V walked and turned. The status: about 65 scenes a second, every one drawn, the nearest mob 5.0 m
+   away. The spider, its AI off, floated 14 cm: such a mob keeps the height it's summoned at, here V's feet on the raised
+   pavement (Minecraft said `OnGround: 0b`, y 6.14, against the pig's 6.0 on the street). The user pushed mobs about, onto
+   a curb too: Minecraft's collision against the city's voxels. The falling sand fell 12 m and vanished where it landed.
+   `set entities 0` hid them all, the blocks staying, and `1` brought them back.
+2. **Glow, at night:**
+   - **at `glow` 0.9** (`night-glow-0.9.webp`), the default: the blaze glowed, reflected in the wet street; the pig,
+     the villager, the spider and the slime didn't;
+   - **at 1.0** (`night-glow-1.0.webp`): far too bright, a blaze lighting the whole street;
+   - **at 0.75** (`night-glow-0.75.webp`): it flickered, at times lit but not glowing;
+   - **at 0.5:** it flickered more.
+
+   The game reads the material target's A non-linearly, with something like a threshold below about 0.85, so 0.9 stays
+   the default. At `glowlight` 14 (`night-glowlight-14.webp`) the torch's flame glowed strongly, and so did the smoke
+   beside it, which is why 15 stays the default. `set glow 2` and `set glowlight 16` were refused with their ranges.
+3. **The explosion,** at night (`tnt-ahead`): the TNT, on its obsidian, flashed white and glowing for 4 s, then went off,
+   its puffs glowing and its smoke dark, as in Minecraft; BlockRender logged it, `not applied: combat is off`.
+4. **Block entities** (`block-entities.jpg`): the chest, and the banner with its red stripe and creeper face over the
+   cloth, drawn by step A; the whole bed, the blank sign and the torch with its flame, block models, drawn with the
+   blocks.
+5. **World entities** (`dropped-items.webp`, `arrows-and-trident.jpg`, `cracks.webp`): the dropped diamond's icon and the
+   grass block, its top green, turning and bobbing; arrows from the bow and a thrown trident, stuck where they hit the
+   street; and in survival the cracks growing over a stone-brick block as it was mined, its break particles flying.
+6. **Contact darkening** (`pig-feet.webp`): a slight shadow under the pig's feet, as the blocks get: the game's ambient
+   occlusion, working on the depth step A writes.
+7. **Layers:** the villager's clothes and hat over its body and its badge over those, the spider's eyes over its head.
+   The `entities` request listed the scene in Minecraft's order: the bodies (pig, villager, spider, blaze, slime), then
+   the villager's biome, the spider's eyes and the slime's outer layer, then its profession, then its level.
+8. **Smearing:** none, watching the slime hop and the blaze's rods turn, V standing still, then turning slowly and
+   quickly.
+9. **Cost:**
+
+   | | Entities' GPU time | Frame time | The newest scene | Scenes |
+   |---|---|---|---|---|
+   | linked, nothing spawned | none | 15.4 ms average, 16.2 worst | none | none |
+   | 15 mobs (the five, and the herd of ten), a chest and a banner | 0.021 to 0.023 ms | 15.7 to 16.5 ms average, at most 19.3 | about 6,450 vertices, 16 batches | 64 a second, 12.5 MB/s |
+   | `tnt-cube`'s blast, its peak second | 0.31 ms (the blocks' 0.34) | 15.4 ms average, 19.8 worst | 32,628 vertices (1.0 MB), 7,404 glowing | 65 a second, 68 MB/s |
+
+   Throughout, no draw was skipped, none was cut at a snapshot's 8 MB, and no frame waited for a snapshot. The 125
+   explosions came in about 2 s; the renderer's update was 0.95 ms at worst in the blast, 2.0 ms in `tnt-ahead`'s. The
+   blast killed the mobs, with their empty loot tables, and broke no block that dropped: Minecraft found no item within
+   64 blocks after it.
+10. **No crash or freeze:** none in 39 minutes, DRED on, and the game quit normally, with no new crash report.
+
+**Unlink:** Minecraft's entities stay drawn after Unlink, as its blocks do (`link off: … the blocks stay`): Minecraft
+keeps running, connected to the mapping, and keeps sending its scenes. The user expected them to go.
+
+### Problems
+
+1. **The overlay's block entities lose their markers when V moves.** The overlay sends a request a second, and each
+   command is placed from Minecraft's player's position at its moment: a block and its marker are two commands, a second
+   apart. The user moved while the 12 commands typed, twice. The first time, four blocks (a sign, two banners and a
+   torch) stood apart from their markers, so Clear set air where the markers were and missed them; the user broke them
+   in creative, which drops nothing. The second time the agent removed all six by the coordinates in Minecraft's log, each
+   only if it was still the block placed. Every block needs to be placed at its marker, whatever V does in between.
+2. **The overlay's buttons move** as its status lines come and go, so a click can land on the wrong button: the user
+   clicked Block entities by mistake.
+3. **Shift+F6, CET's overlay, leaves build mode,** by spike 4's design (`BuildMode.cpp`'s menu keys), so the overlay's
+   clicks don't reach Minecraft. Build mode could pause while the overlay is open instead, and go on when it closes.
+
+### Surprises
+
+- **The game was started twice at once;** the second copy found the mapping taken by the first and closed itself.
+- **The status's `solids` count covers only the sections near V,** so it can't show whether a blast broke a block;
+  asking Minecraft for items nearby can.
+
+### What it means for Part 3
+
+- **Step B:** the translucent particles (a potion's swirls, a firework's sparks, campfire smoke), the outline in build
+  mode, and DLSS's bias hint under the translucent particles. Neither the glow fallback nor `dlsshint 2` is needed.
+- **The three problems above,** for the user to choose among.
+- **Step C's emissive mark:** run A didn't look closely at the spider's eyes at night, which Minecraft makes glow by
+  their render type: worth a look in run B before deciding.
+- **Unlink:** whether Minecraft's entities should stay drawn after it, as its blocks do, is the user's call.
