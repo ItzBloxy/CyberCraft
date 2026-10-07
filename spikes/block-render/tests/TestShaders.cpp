@@ -130,6 +130,24 @@ TEST(ShadersDrawMinecraftsEntities)
 	}
 }
 
+TEST(ShadersDrawStepBsForwardPass)
+{
+	std::string error;
+	const auto  shaders = cpmc::CompileBlockShaders(ShaderSource(), error);
+	CHECK(shaders.has_value());
+	if (shaders)
+	{
+		CHECK(!shaders->outlineVertex.empty());
+		CHECK_EQ(ConstantBufferSize(shaders->outlineVertex, "Frame"), UINT(sizeof(cpmc::FrameConstants)));
+		CHECK_EQ(ConstantBufferSize(shaders->outlineVertex, "Entity"), UINT(sizeof(cpmc::EntityConstants)));
+		CHECK_EQ(ConstantBufferSize(shaders->translucent, "Frame"), UINT(sizeof(cpmc::FrameConstants)));
+		CHECK_EQ(ConstantBufferSize(shaders->translucent, "Entity"), UINT(sizeof(cpmc::EntityConstants)));
+		CHECK_EQ(Outputs(shaders->translucent), 1u);  // the scene's colour
+		CHECK_EQ(Outputs(shaders->hint), 1u);         // the bias hint
+		CHECK_EQ(Outputs(shaders->outline), 1u);      // the scene's colour
+	}
+}
+
 TEST(ShadersReportCompileErrors)
 {
 	std::string error;

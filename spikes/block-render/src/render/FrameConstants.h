@@ -19,7 +19,7 @@ struct FrameConstants
 	float    jitter[4];           // the jitter as an offset per unit of clip w (ClipJitter): x, y; 0; 0
 	float    material[4];         // the G-buffer's material values: metalness, roughness, B; 0
 	float    entity[4];           // spike 7: a glowing triangle's emission (set glow); the block light it glows from (set
-	                              // glowlight); 0; 0
+	                              // glowlight); the outline's width in render pixels (step B, OutlinePixels); 0
 };
 static_assert(sizeof(FrameConstants) == 288);
 

@@ -84,8 +84,29 @@ std::optional<BlockShaders> CompileBlockShaders(std::string_view aSource, std::s
 	{
 		return std::nullopt;
 	}
+	auto translucent = CompileShader(aSource, "blocks.hlsl", "TranslucentPS", "ps_5_1", aError);
+	if (!translucent)
+	{
+		return std::nullopt;
+	}
+	auto hint = CompileShader(aSource, "blocks.hlsl", "HintPS", "ps_5_1", aError);
+	if (!hint)
+	{
+		return std::nullopt;
+	}
+	auto outlineVertex = CompileShader(aSource, "blocks.hlsl", "OutlineVS", "vs_5_1", aError);
+	if (!outlineVertex)
+	{
+		return std::nullopt;
+	}
+	auto outline = CompileShader(aSource, "blocks.hlsl", "OutlinePS", "ps_5_1", aError);
+	if (!outline)
+	{
+		return std::nullopt;
+	}
 	return BlockShaders{ std::move(*vertex), std::move(*present), std::move(*predlss), std::move(*gbuffer),
 		                 std::move(*depth), std::move(*hudVertex), std::move(*hud), std::move(*entityVertex),
-		                 std::move(*entity), std::move(*crack), std::move(*entityDepth) };
+		                 std::move(*entity), std::move(*crack), std::move(*entityDepth), std::move(*translucent),
+		                 std::move(*hint), std::move(*outlineVertex), std::move(*outline) };
 }
 }

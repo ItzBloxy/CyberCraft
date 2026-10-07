@@ -28,6 +28,10 @@ struct BlockShaders
 	std::vector<uint8_t> entity;        // EntityPS
 	std::vector<uint8_t> crack;         // CrackPS
 	std::vector<uint8_t> entityDepth;   // EntityDepthPS
+	std::vector<uint8_t> translucent;    // TranslucentPS (step B)
+	std::vector<uint8_t> hint;           // HintPS
+	std::vector<uint8_t> outlineVertex;  // OutlineVS
+	std::vector<uint8_t> outline;        // OutlinePS
 };
 
 // Every entry point of shaders/blocks.hlsl, from its text. Nothing, with the messages in aError, if any fails.

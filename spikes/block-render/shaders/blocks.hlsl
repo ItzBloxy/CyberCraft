@@ -23,7 +23,8 @@ cbuffer Frame : register(b0)
     row_major float4x4 clipToPrevClip;  // Streamline's: a clip position to where it was a frame before
     float4 jitter;                    // the jitter as an offset per unit of clip w: x, y
     float4 material;                  // the G-buffer's material values: metalness, roughness, B; 0
-    float4 entityTuning;              // spike 7: a glowing triangle's emission; the block light it glows from; 0; 0
+    float4 entityTuning;              // spike 7: a glowing triangle's emission; the block light it glows from; the outline's
+                                      // width in render pixels (step B); 0
 };
 
 cbuffer Section : register(b1)
@@ -310,6 +311,97 @@ void EntityDepthPS(EntityOut i)
     {
         discard;
     }
+}
+
+// Step B (the spec's "Step B: before DLSS"): a translucent particle, blended into the scene's colour just before DLSS, as
+// Minecraft blends it, over what the game has drawn and hidden behind what's nearer in the tagged depth. Lit by
+// Minecraft's light curve, l / (4 - 3l) of the brighter of its block and sky light (l from 0 to 1), or unlit from
+// entityTuning.y's block light, as a triangle glows in the G-buffer; times exposure, as predlss's blocks. Under 0.1 of
+// alpha is left out, as Minecraft's particle shader leaves it.
+float4 TranslucentPS(EntityOut i) : SV_Target0
+{
+    const float4 texel = EntityTexel(i.uv);
+    const float  alpha = texel.a * i.colour.a;
+    if (alpha < 0.1)
+    {
+        discard;
+    }
+    const uint  block = i.light & 0xFF;
+    const float level = (float)min(max(block, (i.light >> 8) & 0xFF), 15u) / 15.0;
+    const float light = block >= (uint)entityTuning.y ? 1.0 : level / (4.0 - 3.0 * level);
+    return float4(Linear(texel.rgb * i.colour.rgb) * light * tuning.z, alpha);
+}
+
+// Step B: DLSS's bias hint under the translucent particles (set dlsshint 1), 1 where TranslucentPS draws, so DLSS takes
+// their colour from this frame rather than from its history: the motion vectors there are the surface's behind them.
+float HintPS(EntityOut i) : SV_Target0
+{
+    if (EntityTexel(i.uv).a * i.colour.a < 0.1)
+    {
+        discard;
+    }
+    return 1.0;
+}
+
+struct OutlineOut
+{
+    float4 position : SV_Position;
+    float4 colour   : COLOR0;
+};
+
+// A snapshot vertex's clip position, with the frame's jitter, as EntityVS places it.
+float4 JitteredClip(float3 aPosition)
+{
+    // Minecraft (x, y, z) is world (x, -z, y).
+    const float4 clip = mul(float4(entityOffset + float3(aPosition.x, -aPosition.z, aPosition.y), 1.0), cameraToClip);
+    return float4(clip.xy + jitter.xy * clip.w, clip.zw);
+}
+
+// The strip's six corners, two triangles: which end of the edge each is at, and which side of it.
+static const uint  kStripEnd[6] = { 0, 0, 1, 1, 0, 1 };
+static const float kStripSide[6] = { 1.0, -1.0, 1.0, 1.0, -1.0, -1.0 };
+
+// Step B: the targeted block's outline (set outline 1, in build mode), as Minecraft's lines shader draws its own: each
+// edge, a pair of the snapshot's vertices, widened into a strip facing the camera, entityTuning.z render pixels across,
+// six vertices an edge. An end behind the camera is first brought along the edge to just in front of it, so the strip's
+// direction stays right; an edge wholly behind it draws nothing.
+OutlineOut OutlineVS(uint id : SV_VertexID)
+{
+    const uint   first = entityFirst + id / 6 * 2;
+    const Vertex a = vertices[first];
+    float4       from = JitteredClip(a.position);
+    float4       to = JitteredClip(vertices[first + 1].position);
+    OutlineOut   o;
+    o.colour = float4(a.colour & 0xFF, (a.colour >> 8) & 0xFF, (a.colour >> 16) & 0xFF, a.colour >> 24) / 255.0;
+    const float ahead = 1e-3;  // clip w: metres in front of the camera
+    if (from.w < ahead && to.w < ahead)
+    {
+        o.position = float4(2.0, 2.0, 2.0, 1.0);  // outside the view, so clipped
+        return o;
+    }
+    if (from.w < ahead)
+    {
+        from = lerp(from, to, (ahead - from.w) / (to.w - from.w));
+    }
+    else if (to.w < ahead)
+    {
+        to = lerp(to, from, (ahead - to.w) / (from.w - to.w));
+    }
+    const float2 half = target.xy * 0.5;  // from clip units to pixels
+    const float2 along = (to.xy / to.w - from.xy / from.w) * half;
+    const float2 direction = dot(along, along) > 1e-8 ? normalize(along) : float2(1.0, 0.0);
+    const float2 side = float2(-direction.y, direction.x) * entityTuning.z * 0.5 / half;
+    const uint   corner = id % 6;
+    const float4 at = kStripEnd[corner] == 0 ? from : to;
+    o.position = float4(at.xy + side * kStripSide[corner] * at.w, at.zw);
+    return o;
+}
+
+// Step B's outline, blended: black darkens the scene's linear colour to Linear(0.6), about a third, as Minecraft's 40%
+// darkens the sRGB colours of its framebuffer to 0.6 of what they were.
+float4 OutlinePS(OutlineOut i) : SV_Target0
+{
+    return float4(Linear(i.colour.rgb), 1.0 - Linear((1.0 - i.colour.a).xxx).x);
 }
 
 // Spike 4: Minecraft's HUD image (its hotbar, crosshair, chat, hand and held item), drawn over the finished frame at
