@@ -10,11 +10,98 @@
 
 namespace cpmc::entities
 {
+const char* KindName(EntityDraw::Kind aKind)
+{
+	switch (aKind)
+	{
+	case EntityDraw::Kind::Model:
+		return "model";
+	case EntityDraw::Kind::Translucent:
+		return "translucent";
+	case EntityDraw::Kind::Crack:
+		return "crack";
+	case EntityDraw::Kind::Outline:
+		return "outline";
+	case EntityDraw::Kind::Blended:
+		return "blended";
+	case EntityDraw::Kind::Additive:
+		return "additive";
+	}
+	return "?";
+}
+
 bool ForwardDraws(const std::vector<EntityDraw>& aDraws, bool aOutline)
 {
 	return std::any_of(aDraws.begin(), aDraws.end(), [aOutline](const EntityDraw& aDraw) {
-		return aDraw.kind == EntityDraw::Kind::Translucent || (aOutline && aDraw.kind == EntityDraw::Kind::Outline);
+		return aDraw.kind == EntityDraw::Kind::Translucent || aDraw.kind == EntityDraw::Kind::Blended || aDraw.kind == EntityDraw::Kind::Additive ||
+		       (aOutline && aDraw.kind == EntityDraw::Kind::Outline);
 	});
+}
+
+bool SeeThrough(std::span<const uint8_t> aRgba)
+{
+	uint64_t kept = 0;    // texels that aren't clear
+	uint64_t partly = 0;  // of those, the ones not opaque either
+	for (size_t i = 3; i < aRgba.size(); i += 4)
+	{
+		kept += aRgba[i] != 0 ? 1 : 0;
+		partly += aRgba[i] != 0 && aRgba[i] != 255 ? 1 : 0;
+	}
+	return partly > 0 && partly * 50 >= kept;
+}
+
+EntityDraw::Kind KindOf(const link::SceneBatch& aBatch, std::span<const Vertex> aVertices, bool aSeeThrough, uint32_t aGlowLight)
+{
+	if ((aBatch.flags & 1) == 0)
+	{
+		return EntityDraw::Kind::Model;
+	}
+	if (aVertices.empty() || ((aVertices.front().flags >> 4) & 7) != 7)
+	{
+		return EntityDraw::Kind::Translucent;  // a particle: no normal of its own
+	}
+	if (aVertices.front().flags & kFlagAdditive)
+	{
+		return EntityDraw::Kind::Additive;
+	}
+	const bool emissive = (aVertices.front().light & 0xFF) >= aGlowLight;
+	const bool faded = std::any_of(aVertices.begin(), aVertices.end(), [](const Vertex& aVertex) { return aVertex.a < 255; });
+	return emissive || faded || aSeeThrough ? EntityDraw::Kind::Blended : EntityDraw::Kind::Model;
+}
+
+void SortBackToFront(std::vector<Vertex>& aVertices, uint32_t aFirst, uint32_t aCount, const Vec3d& aEye)
+{
+	if (uint64_t(aFirst) + aCount > aVertices.size())
+	{
+		return;
+	}
+	const uint32_t                            group = aCount % 6 == 0 ? 6 : 3;
+	const uint32_t                            groups = aCount / group;
+	std::vector<std::pair<double, uint32_t>> order(groups);  // each quad's or triangle's distance squared, and which it is
+	for (uint32_t g = 0; g < groups; ++g)
+	{
+		Vec3d centre;
+		for (uint32_t i = 0; i < group; ++i)
+		{
+			const Vertex& vertex = aVertices[size_t(aFirst) + size_t(g) * group + i];
+			centre.x += vertex.x / double(group);
+			centre.y += vertex.y / double(group);
+			centre.z += vertex.z / double(group);
+		}
+		const double dx = centre.x - aEye.x;
+		const double dy = centre.y - aEye.y;
+		const double dz = centre.z - aEye.z;
+		order[g] = { dx * dx + dy * dy + dz * dz, g };
+	}
+	std::stable_sort(order.begin(), order.end(), [](const auto& aA, const auto& aB) { return aA.first > aB.first; });
+	std::vector<Vertex> sorted;
+	sorted.reserve(size_t(groups) * group);
+	for (const auto& [distance, g] : order)
+	{
+		const auto start = aVertices.begin() + aFirst + ptrdiff_t(g) * group;
+		sorted.insert(sorted.end(), start, start + group);
+	}
+	std::copy(sorted.begin(), sorted.end(), aVertices.begin() + aFirst);
 }
 
 void Entities::Scene(const link::SceneMessage& aScene)
@@ -43,6 +130,24 @@ void Entities::Clear()
 	batches_.clear();
 }
 
+void Entities::ClearAll()
+{
+	Clear();
+	seeThrough_.clear();
+}
+
+void Entities::Texture(uint32_t aId, std::span<const uint8_t> aRgba)
+{
+	seeThrough_[aId] = SeeThrough(aRgba);
+}
+
+EntityDraw::Kind Entities::BatchKind(const link::SceneBatch& aBatch, uint32_t aGlowLight) const
+{
+	const auto note = seeThrough_.find(aBatch.texture);
+	return KindOf(aBatch, std::span<const Vertex>(vertices_).subspan(aBatch.first, aBatch.count), note != seeThrough_.end() && note->second,
+	              aGlowLight);
+}
+
 void Entities::InWorld(bool aInWorld)
 {
 	if (!aInWorld)
@@ -51,16 +156,22 @@ void Entities::InWorld(bool aInWorld)
 	}
 }
 
-EntityFrame Entities::Frame(const Vec3d& aEye, bool aOutline) const
+EntityFrame Entities::Frame(const Vec3d& aEye, bool aOutline, uint32_t aGlowLight) const
 {
 	EntityFrame frame;
 	frame.origin = origin_ ? *origin_ : Vec3d{ std::floor(aEye.x), std::floor(aEye.y), std::floor(aEye.z) };
 	frame.vertices = vertices_;
+	const Vec3d eye{ aEye.x - frame.origin.x, aEye.y - frame.origin.y, aEye.z - frame.origin.z };
 	for (const link::SceneBatch& batch : batches_)
 	{
 		if (batch.count > 0)
 		{
-			frame.draws.push_back({ batch.first, batch.count, batch.texture, (batch.flags & 1) ? EntityDraw::Kind::Translucent : EntityDraw::Kind::Model });
+			const EntityDraw::Kind kind = BatchKind(batch, aGlowLight);
+			if (kind == EntityDraw::Kind::Blended || kind == EntityDraw::Kind::Additive)
+			{
+				SortBackToFront(frame.vertices, batch.first, batch.count, eye);
+			}
+			frame.draws.push_back({ batch.first, batch.count, batch.texture, kind });
 		}
 	}
 	// The world entities: their shapes in one draw and their cracks in another, all in Minecraft's combined atlas.
@@ -102,6 +213,9 @@ Entities::SceneCounts Entities::Counts(uint32_t aGlowLight) const
 	for (const link::SceneBatch& batch : batches_)
 	{
 		counts.translucent += (batch.flags & 1) ? batch.count : 0;
+		const EntityDraw::Kind kind = BatchKind(batch, aGlowLight);
+		counts.blended += kind == EntityDraw::Kind::Blended ? 1 : 0;
+		counts.additive += kind == EntityDraw::Kind::Additive ? 1 : 0;
 	}
 	return counts;
 }
@@ -140,8 +254,12 @@ std::vector<std::string> Entities::Lines(uint32_t aGlowLight, const std::map<uin
 		{
 			glowing += (vertices_[i].light & 0xFF) >= aGlowLight ? 1 : 0;
 		}
-		lines.push_back(std::format("  batch {}: {}, {} vertices from {}{}, {} glowing", b, texture, batch.count, batch.first,
-		                            (batch.flags & 1) ? ", translucent" : "", glowing));
+		// A translucent batch's kind: a particle's, a blended or an additive layer's, or a marked layer that's opaque.
+		const EntityDraw::Kind kind = BatchKind(batch, aGlowLight);
+		const std::string      drawn = (batch.flags & 1) == 0            ? std::string()
+		                               : kind == EntityDraw::Kind::Model ? std::string(", translucent, drawn as a model")
+		                                                                 : std::format(", {}", KindName(kind));
+		lines.push_back(std::format("  batch {}: {}, {} vertices from {}{}, {} glowing", b, texture, batch.count, batch.first, drawn, glowing));
 	}
 	lines.push_back("world: " + link::WorldWords(world_));
 	return lines;

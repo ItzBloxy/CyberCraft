@@ -47,6 +47,33 @@ proto::WorldEntity Record(uint32_t aKind, float aX, float aY, float aZ)
 
 const Vec3d kOrigin{ 880.0, 7.0, 2007.0 };
 const Vec3d kEye{ 880.5, 7.76, 2007.5 };
+
+// Part 5: an entity layer as CyberCraft Tweaks 1.6.0 marks it, aCount vertices with aFlags (translucent, no mipmaps and
+// the triangle's own normal by default), block light aLight and alpha aAlpha, the i-th at x = aX + i / 6, so each quad
+// (six vertices) lies one block on.
+std::vector<Vertex> Layer(uint32_t aCount, uint32_t aFlags = 2 | 8 | (7 << 4), uint32_t aLight = 0, uint8_t aAlpha = 255, float aX = 0.0f)
+{
+	std::vector<Vertex> vertices(aCount);
+	for (uint32_t i = 0; i < aCount; ++i)
+	{
+		vertices[i].x = aX + float(i / 6);
+		vertices[i].flags = aFlags;
+		vertices[i].light = aLight | (15u << 8);
+		vertices[i].a = aAlpha;
+	}
+	return vertices;
+}
+
+// aTexels RGBA8 texels: aClear clear ones, aPartly half see-through, and the rest opaque.
+std::vector<uint8_t> Texels(uint32_t aTexels, uint32_t aClear, uint32_t aPartly)
+{
+	std::vector<uint8_t> rgba(size_t(aTexels) * 4, 200);
+	for (uint32_t i = 0; i < aTexels; ++i)
+	{
+		rgba[size_t(i) * 4 + 3] = i < aClear ? 0 : i < aClear + aPartly ? 128 : 255;
+	}
+	return rgba;
+}
 }
 
 TEST(EntitiesDrawTheSceneInItsOrder)
@@ -135,6 +162,107 @@ TEST(EntitiesSayWhenTheForwardPassHasWork)
 	CHECK(ForwardDraws({ { 0, 3, 0, Kind::Model }, { 3, 6, 4, Kind::Translucent } }, false));
 	CHECK(ForwardDraws({ { 0, 24, 0, Kind::Outline } }, true));
 	CHECK(!ForwardDraws({ { 0, 24, 0, Kind::Outline } }, false));  // set outline 0
+	CHECK(ForwardDraws({ { 0, 3, 0, Kind::Model }, { 3, 6, 4, Kind::Blended } }, false));  // Part 5's layers
+	CHECK(ForwardDraws({ { 0, 3, 0, Kind::Model }, { 3, 6, 4, Kind::Additive } }, false));
+}
+
+TEST(EntitiesTellASeeThroughTexture)
+{
+	CHECK(SeeThrough(Texels(343, 0, 46)));     // a vex's share: 46 of 343
+	CHECK(!SeeThrough(Texels(1886, 0, 6)));    // a piglin's: 6 stray of 1,886, opaque all the same
+	CHECK(SeeThrough(Texels(150, 50, 2)));     // 1 in 50 of the 100 not clear: the clear ones don't count
+	CHECK(!SeeThrough(Texels(151, 50, 2)));    // just under
+	CHECK(!SeeThrough(Texels(64, 64, 0)));     // all clear
+	CHECK(!SeeThrough(Texels(64, 0, 0)));      // all opaque
+	CHECK(!SeeThrough({}));
+}
+
+TEST(EntitiesKnowEachKindOfLayer)
+{
+	using Kind = EntityDraw::Kind;
+	const link::SceneBatch translucent{ 4, 0, 6, 1 };
+	CHECK(KindOf({ 4, 0, 6, 0 }, Layer(6), true, 15) == Kind::Model);                     // not translucent
+	CHECK(KindOf(translucent, Layer(6, 2 | 8), false, 15) == Kind::Translucent);          // a particle: direction 0
+	CHECK(KindOf(translucent, Layer(6, 2 | 8 | (7 << 4) | kFlagAdditive), false, 15) == Kind::Additive);  // energy_swirl
+	CHECK(KindOf(translucent, Layer(6), false, 15) == Kind::Model);                       // marked, but opaque: a piglin
+	CHECK(KindOf(translucent, Layer(6), true, 15) == Kind::Blended);                      // its texture see-through: a slime
+	CHECK(KindOf(translucent, Layer(6, 2 | 8 | (7 << 4), 15), false, 15) == Kind::Blended);  // emissive: the warden's
+	CHECK(KindOf(translucent, Layer(6, 2 | 8 | (7 << 4), 14), false, 15) == Kind::Model);
+	CHECK(KindOf(translucent, Layer(6, 2 | 8 | (7 << 4), 14), false, 14) == Kind::Blended);  // set glowlight 14
+	std::vector<Vertex> fading = Layer(6);
+	fading[5].a = 64;  // a vertex faded: the warden's spots
+	CHECK(KindOf(translucent, fading, false, 15) == Kind::Blended);
+	CHECK_STR(KindName(Kind::Blended), "blended");
+	CHECK_STR(KindName(Kind::Additive), "additive");
+}
+
+TEST(EntitiesSortLayersBackToFront)
+{
+	// Three quads at x 0, 1 and 2, seen from x 5: the farthest, at 0, first. Then two triangles by their own centres.
+	std::vector<Vertex> vertices = Layer(18);
+	SortBackToFront(vertices, 0, 18, { 5.0, 0.0, 0.0 });
+	CHECK_EQ(vertices[0].x, 0.0f);
+	CHECK_EQ(vertices[6].x, 1.0f);
+	CHECK_EQ(vertices[12].x, 2.0f);
+	SortBackToFront(vertices, 0, 18, { -5.0, 0.0, 0.0 });
+	CHECK_EQ(vertices[0].x, 2.0f);
+	CHECK_EQ(vertices[5].x, 2.0f);
+	CHECK_EQ(vertices[17].x, 0.0f);
+	std::vector<Vertex> triangles = Layer(9);  // 9: not whole quads, so by triangle, at x 3, 0 and 1
+	triangles[0].x = triangles[1].x = triangles[2].x = 3.0f;
+	SortBackToFront(triangles, 0, 9, { -5.0, 0.0, 0.0 });
+	CHECK_EQ(triangles[0].x, 3.0f);
+	CHECK_EQ(triangles[3].x, 1.0f);
+	CHECK_EQ(triangles[6].x, 0.0f);
+	SortBackToFront(triangles, 6, 6, { 0.0, 0.0, 0.0 });  // past the end: left alone
+	CHECK_EQ(triangles[6].x, 0.0f);
+}
+
+TEST(EntitiesDrawEachLayerByItsKind)
+{
+	// A particle, a slime's outer layer (its texture see-through), the creeper's armour, and a piglin: each six
+	// vertices, the slime's quads at x 0 and 1 seen from Minecraft's eye east of them.
+	std::vector<Vertex> vertices = Layer(6, 2 | 8);
+	for (const auto& layer : { Layer(12), Layer(6, 2 | 8 | (7 << 4) | kFlagAdditive), Layer(6) })
+	{
+		vertices.insert(vertices.end(), layer.begin(), layer.end());
+	}
+	Entities entities;
+	entities.Texture(7, Texels(655, 0, 385));  // slime.png's share
+	entities.Texture(8, Texels(1886, 0, 6));   // piglin.png's
+	entities.Scene(Scene(vertices, { { 12, 0, 6, 1 }, { 7, 6, 12, 1 }, { 9, 18, 6, 1 }, { 8, 24, 6, 1 } }, kOrigin));
+	using Kind = EntityDraw::Kind;
+	EntityFrame frame = entities.Frame({ 885.0, 7.0, 2007.0 });
+	CHECK_EQ(frame.draws.size(), size_t(4));
+	if (frame.draws.size() == 4)
+	{
+		CHECK(frame.draws[0].kind == Kind::Translucent);
+		CHECK(frame.draws[1].kind == Kind::Blended);
+		CHECK(frame.draws[2].kind == Kind::Additive);
+		CHECK(frame.draws[3].kind == Kind::Model);
+		CHECK_EQ(frame.vertices[6].x, 0.0f);  // the slime's far quad first, from the east
+		CHECK_EQ(frame.vertices[12].x, 1.0f);
+	}
+	frame = entities.Frame({ 875.0, 7.0, 2007.0 });  // from the west: the other way round
+	CHECK_EQ(frame.vertices[6].x, 1.0f);
+	const Entities::SceneCounts counts = entities.Counts(15);
+	CHECK_EQ(counts.blended, 1u);
+	CHECK_EQ(counts.additive, 1u);
+	const std::vector<std::string> lines = entities.Lines(15, {});
+	CHECK_EQ(lines.size(), size_t(6));
+	if (lines.size() == 6)
+	{
+		CHECK_STR(lines[1], "  batch 0: texture 12, 6 vertices from 0, translucent, 0 glowing");
+		CHECK_STR(lines[2], "  batch 1: texture 7, 12 vertices from 6, blended, 0 glowing");
+		CHECK_STR(lines[3], "  batch 2: texture 9, 6 vertices from 18, additive, 0 glowing");
+		CHECK_STR(lines[4], "  batch 3: texture 8, 6 vertices from 24, translucent, drawn as a model, 0 glowing");
+	}
+	entities.Clear();  // the scene goes, the notes stay: SkyCraft won't send its textures again
+	entities.Scene(Scene(vertices, { { 7, 6, 12, 1 } }, kOrigin));
+	CHECK(entities.Frame(kEye).draws[0].kind == Kind::Blended);
+	entities.ClearAll();  // Minecraft's clear: they go too
+	entities.Scene(Scene(vertices, { { 7, 6, 12, 1 } }, kOrigin));
+	CHECK(entities.Frame(kEye).draws[0].kind == Kind::Model);
 }
 
 TEST(EntitiesWithoutASceneUseMinecraftsEye)
