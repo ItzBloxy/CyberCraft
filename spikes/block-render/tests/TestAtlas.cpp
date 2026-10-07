@@ -2,6 +2,38 @@
 
 #include "AtlasFixture.h"
 
+#include <algorithm>
+
+namespace
+{
+// A aWidth x aHeight image whose every channel differs from texel to texel, from aSeed on.
+std::vector<uint8_t> Pixels(uint32_t aWidth, uint32_t aHeight, uint32_t aSeed)
+{
+	std::vector<uint8_t> rgba(size_t(aWidth) * aHeight * 4);
+	for (size_t i = 0; i < rgba.size(); ++i)
+	{
+		rgba[i] = uint8_t((i * 37 + aSeed * 101) % 251);
+	}
+	return rgba;
+}
+
+// aImage, aWidth wide, with the aPatchWidth x aPatchHeight aPatch written at aX aY.
+std::vector<uint8_t> Pasted(std::vector<uint8_t> aImage, uint32_t aWidth, uint32_t aX, uint32_t aY, uint32_t aPatchWidth, uint32_t aPatchHeight,
+                            const std::vector<uint8_t>& aPatch)
+{
+	for (uint32_t row = 0; row < aPatchHeight; ++row)
+	{
+		std::copy_n(aPatch.begin() + size_t(row) * aPatchWidth * 4, size_t(aPatchWidth) * 4, aImage.begin() + (size_t(aY + row) * aWidth + aX) * 4);
+	}
+	return aImage;
+}
+
+bool SameArea(const cpmc::AtlasArea& aArea, uint32_t aLevel, uint32_t aX, uint32_t aY, uint32_t aWidth, uint32_t aHeight)
+{
+	return aArea.level == aLevel && aArea.x == aX && aArea.y == aY && aArea.width == aWidth && aArea.height == aHeight;
+}
+}
+
 TEST(AtlasReadsWhatBuildAtlasWrites)
 {
 	std::string error;
@@ -104,4 +136,67 @@ TEST(AtlasFromMinecraftsPixelsAtStepOnesSize)
 	CHECK(!cpmc::AtlasFromRgba(2048, 2576, std::span(rgba).first(100), error));
 	CHECK(error.find("needs 21102592 bytes") != std::string::npos);
 	CHECK(!cpmc::AtlasFromRgba(0, 4, rgba, error));
+}
+
+TEST(AtlasPatchedAsBuiltFromThePatchedImage)
+{
+	// 9 x 7, odd sides: levels of 9 x 7, 4 x 3, 2 x 1, 1 x 1 and 1 x 1. A 3 x 2 patch at the top left reaches every level.
+	const std::vector<uint8_t> image = Pixels(9, 7, 1);
+	const std::vector<uint8_t> patch = Pixels(3, 2, 2);
+	std::string                error;
+	std::optional<cpmc::Atlas> atlas = cpmc::AtlasFromRgba(9, 7, image, error);
+	const auto                 areas = cpmc::PatchAtlas(*atlas, 1, 0, 3, 2, patch);
+	const auto                 built = cpmc::AtlasFromRgba(9, 7, Pasted(image, 9, 1, 0, 3, 2, patch), error);
+	CHECK(atlas->texels == built->texels);
+	CHECK_EQ(areas.size(), size_t(5));
+	if (areas.size() == 5)
+	{
+		CHECK(SameArea(areas[0], 0, 1, 0, 3, 2));
+		CHECK(SameArea(areas[1], 1, 0, 0, 2, 1));
+		CHECK(SameArea(areas[2], 2, 0, 0, 1, 1));
+		CHECK(SameArea(areas[3], 3, 0, 0, 1, 1));
+		CHECK(SameArea(areas[4], 4, 0, 0, 1, 1));
+	}
+}
+
+TEST(AtlasPatchStopsWhereALevelLeavesItOut)
+{
+	// At 9 x 7's bottom rows: level 1 (4 x 3) takes row 5 into its row 2, but level 2 (2 x 1) leaves level 1's odd last
+	// row out, so it and those below are as they were. Then the far corner: a column level 1 leaves out at once.
+	const std::vector<uint8_t> image = Pixels(9, 7, 3);
+	const std::vector<uint8_t> patch = Pixels(3, 2, 4);
+	std::string                error;
+	std::optional<cpmc::Atlas> atlas = cpmc::AtlasFromRgba(9, 7, image, error);
+	const auto                 areas = cpmc::PatchAtlas(*atlas, 5, 4, 3, 2, patch);
+	const auto                 built = cpmc::AtlasFromRgba(9, 7, Pasted(image, 9, 5, 4, 3, 2, patch), error);
+	CHECK(atlas->texels == built->texels);
+	CHECK_EQ(areas.size(), size_t(2));
+	if (areas.size() == 2)
+	{
+		CHECK(SameArea(areas[0], 0, 5, 4, 3, 2));
+		CHECK(SameArea(areas[1], 1, 2, 2, 2, 1));
+	}
+	const std::vector<uint8_t> corner = Pixels(1, 1, 5);
+	const auto                 cornerAreas = cpmc::PatchAtlas(*atlas, 8, 6, 1, 1, corner);
+	const auto                 cornerBuilt = cpmc::AtlasFromRgba(9, 7, Pasted(Pasted(image, 9, 5, 4, 3, 2, patch), 9, 8, 6, 1, 1, corner), error);
+	CHECK(atlas->texels == cornerBuilt->texels);
+	CHECK_EQ(cornerAreas.size(), size_t(1));
+}
+
+TEST(AtlasPatchRefusesWhatDoesntFit)
+{
+	std::string                error;
+	std::optional<cpmc::Atlas> atlas = cpmc::AtlasFromRgba(9, 7, Pixels(9, 7, 6), error);
+	const std::vector<uint32_t> before = atlas->texels;
+	CHECK(cpmc::PatchAtlas(*atlas, 7, 0, 3, 1, Pixels(3, 1, 7)).empty());           // past the right edge
+	CHECK(cpmc::PatchAtlas(*atlas, 0, 6, 1, 2, Pixels(1, 2, 7)).empty());           // past the bottom
+	CHECK(cpmc::PatchAtlas(*atlas, 0xFFFFFFFF, 0, 2, 1, Pixels(2, 1, 7)).empty());  // x + width wraps in 32 bits
+	CHECK(cpmc::PatchAtlas(*atlas, 0, 0, 0, 1, {}).empty());
+	CHECK(cpmc::PatchAtlas(*atlas, 0, 0, 2, 2, Pixels(2, 1, 7)).empty());           // short pixels
+	CHECK(atlas->texels == before);
+	atlas->texels.pop_back();  // levels no longer where AtlasFromRgba puts them
+	CHECK(cpmc::PatchAtlas(*atlas, 0, 0, 1, 1, Pixels(1, 1, 7)).empty());
+	atlas->levelOffsets[1] += 1;
+	atlas->texels.push_back(0);
+	CHECK(cpmc::PatchAtlas(*atlas, 0, 0, 1, 1, Pixels(1, 1, 7)).empty());
 }

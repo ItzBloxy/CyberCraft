@@ -44,6 +44,34 @@ uint32_t Average(uint32_t aA, uint32_t aB, uint32_t aC, uint32_t aD)
 	}
 	return out;
 }
+
+// A side at aLevel, as AtlasFromRgba lays the levels out: half the level above's, rounded down, at least 1.
+uint32_t LevelSide(uint32_t aSide, uint32_t aLevel)
+{
+	return std::max(1u, aSide >> aLevel);
+}
+
+// aLevel's texels from aX0 to aX1 and aY0 to aY1, each the rounded average of the 2 x 2 above it: an odd side's last row
+// or column is left out, and a side of 1 is used twice.
+void Downsample(Atlas& aAtlas, uint32_t aLevel, uint32_t aX0, uint32_t aY0, uint32_t aX1, uint32_t aY1)
+{
+	const uint32_t  aboveWidth = LevelSide(aAtlas.width, aLevel - 1);
+	const uint32_t  aboveHeight = LevelSide(aAtlas.height, aLevel - 1);
+	const uint32_t  width = LevelSide(aAtlas.width, aLevel);
+	const uint32_t* above = aAtlas.texels.data() + aAtlas.levelOffsets[aLevel - 1];
+	uint32_t*       out = aAtlas.texels.data() + aAtlas.levelOffsets[aLevel];
+	for (uint32_t y = aY0; y <= aY1; ++y)
+	{
+		const size_t row0 = size_t(y * 2) * aboveWidth;
+		const size_t row1 = size_t(std::min(y * 2 + 1, aboveHeight - 1)) * aboveWidth;
+		for (uint32_t x = aX0; x <= aX1; ++x)
+		{
+			const uint32_t x0 = x * 2;
+			const uint32_t x1 = std::min(x0 + 1, aboveWidth - 1);
+			out[size_t(y) * width + x] = Average(above[row0 + x0], above[row0 + x1], above[row1 + x0], above[row1 + x1]);
+		}
+	}
+}
 }
 
 std::optional<uint16_t> Atlas::BlockId(std::string_view aName) const
@@ -139,30 +167,56 @@ std::optional<Atlas> AtlasFromRgba(uint32_t aWidth, uint32_t aHeight, std::span<
 	for (uint32_t level = 0; level < kMinecraftAtlasLevels; ++level)
 	{
 		atlas.levelOffsets.push_back(uint32_t(texelCount));
-		texelCount += size_t(std::max(1u, aWidth >> level)) * std::max(1u, aHeight >> level);
+		texelCount += size_t(LevelSide(aWidth, level)) * LevelSide(aHeight, level);
 	}
 	atlas.texels.resize(texelCount);
 	std::memcpy(atlas.texels.data(), aRgba.data(), size_t(bytes));
 	for (uint32_t level = 1; level < kMinecraftAtlasLevels; ++level)
 	{
-		const uint32_t  aboveWidth = std::max(1u, aWidth >> (level - 1));
-		const uint32_t  aboveHeight = std::max(1u, aHeight >> (level - 1));
-		const uint32_t  width = std::max(1u, aWidth >> level);
-		const uint32_t  height = std::max(1u, aHeight >> level);
-		const uint32_t* above = atlas.texels.data() + atlas.levelOffsets[level - 1];
-		uint32_t*       out = atlas.texels.data() + atlas.levelOffsets[level];
-		for (uint32_t y = 0; y < height; ++y)
-		{
-			const size_t row0 = size_t(y * 2) * aboveWidth;
-			const size_t row1 = size_t(std::min(y * 2 + 1, aboveHeight - 1)) * aboveWidth;
-			for (uint32_t x = 0; x < width; ++x)
-			{
-				const uint32_t x0 = x * 2;
-				const uint32_t x1 = std::min(x0 + 1, aboveWidth - 1);
-				out[size_t(y) * width + x] = Average(above[row0 + x0], above[row0 + x1], above[row1 + x0], above[row1 + x1]);
-			}
-		}
+		Downsample(atlas, level, 0, 0, LevelSide(aWidth, level) - 1, LevelSide(aHeight, level) - 1);
 	}
 	return atlas;
+}
+
+std::vector<AtlasArea> PatchAtlas(Atlas& aAtlas, uint32_t aX, uint32_t aY, uint32_t aWidth, uint32_t aHeight, std::span<const uint8_t> aRgba)
+{
+	size_t texelCount = 0;  // every level where AtlasFromRgba puts it, and nothing past the last
+	for (uint32_t level = 0; level < aAtlas.Levels(); ++level)
+	{
+		if (aAtlas.levelOffsets[level] != texelCount)
+		{
+			return {};
+		}
+		texelCount += size_t(LevelSide(aAtlas.width, level)) * LevelSide(aAtlas.height, level);
+	}
+	if (aAtlas.Levels() == 0 || aAtlas.texels.size() != texelCount || aWidth == 0 || aHeight == 0 ||
+	    uint64_t(aX) + aWidth > aAtlas.width || uint64_t(aY) + aHeight > aAtlas.height || aRgba.size() < uint64_t(aWidth) * aHeight * 4)
+	{
+		return {};
+	}
+	for (uint32_t row = 0; row < aHeight; ++row)
+	{
+		std::memcpy(aAtlas.texels.data() + aAtlas.levelOffsets[0] + size_t(aY + row) * aAtlas.width + aX, aRgba.data() + size_t(row) * aWidth * 4,
+		            size_t(aWidth) * 4);
+	}
+	std::vector<AtlasArea> areas{ { 0, aX, aY, aWidth, aHeight } };
+	const uint32_t         right = aX + aWidth - 1;
+	const uint32_t         bottom = aY + aHeight - 1;
+	for (uint32_t level = 1; level < aAtlas.Levels(); ++level)
+	{
+		const uint32_t width = LevelSide(aAtlas.width, level);
+		const uint32_t height = LevelSide(aAtlas.height, level);
+		const uint32_t x0 = aX >> level;
+		const uint32_t y0 = aY >> level;
+		if (x0 >= width || y0 >= height)
+		{
+			break;  // the patch lies in the row or column the level leaves out: it, and those below, are as they were
+		}
+		const uint32_t x1 = std::min(right >> level, width - 1);
+		const uint32_t y1 = std::min(bottom >> level, height - 1);
+		Downsample(aAtlas, level, x0, y0, x1, y1);
+		areas.push_back({ level, x0, y0, x1 - x0 + 1, y1 - y0 + 1 });
+	}
+	return areas;
 }
 }
