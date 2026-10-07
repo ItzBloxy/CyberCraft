@@ -7,8 +7,8 @@ source and walked through step 0 and run A as the user would play them: "Changes
 lists what changed and what was checked. Planning Part 1 settled more, which "Changes while planning Part 1" lists,
 and a read before executing it corrected step 0's script ("Changes before executing Part 1"). Step 0's results, and
 planning Part 2 from them, settled more: "Changes while planning Part 2", and "Changes while executing Part 2". Parts 3
-and 4 each have theirs. Run C, and the user's choices after it, brought Part 5: "Changes while designing Part 5". The
-sections below already include all of those changes.
+and 4 each have theirs. Run C, and the user's choices after it, brought Part 5: "Changes while designing Part 5", with
+its deep review. The sections below already include all of those changes.
 
 ## Purpose
 
@@ -299,11 +299,13 @@ Read from the jar:
     `wolf_armor_cracks`' `armor_translucent` and `energy_swirl`'s snippet set `withCull(false)`), as the forward list
     doesn't; `entity_translucent_cull` keeps the default culling. `entity_translucent`, `entity_translucent_emissive`,
     `breeze_wind` and `energy_swirl` sort their quads on upload (`sortOnUpload`);
-  - `entity_translucent` is the render type of allays, vexes, breezes, wind charges, players' skins and skulls, a
+  - `entity_translucent` is the render type of allays, vexes, breezes, wind charges, sulfur cubes' outer layers, a
     slime's outer layer and horse markings (`AllayModel`, `VexModel`, `SlimeOuterLayer`, `HorseMarkingLayer` and the
-    rest); `entity_translucent_emissive` that of the warden's glowing layers (`WardenRenderer`) and the breeze's eyes
-    (`BreezeEyesLayer`, `RenderTypes.breezeEyes`). The creaking's and the copper golem's glowing eyes are `eyes`, as the
-    spider's are (`CreakingRenderer` and `CopperGolemRenderer` pass `RenderTypes::eyes`).
+    rest), and also of opaque things: piglins' whole bodies (`AbstractPiglinModel`), players' skins (`PlayerModel`),
+    every skull (`SkullModelBase`) and some armour stands (`ArmorStandRenderer`). `entity_translucent_emissive` is that
+    of the warden's glowing layers (`WardenRenderer`) and the breeze's eyes (`BreezeEyesLayer`,
+    `RenderTypes.breezeEyes`). The creaking's and the copper golem's glowing eyes are `eyes`, as the spider's are
+    (`CreakingRenderer` and `CopperGolemRenderer` pass `RenderTypes::eyes`).
 - **Entity shading** (`entity.vsh`, `entity.fsh`, `light.glsl`):
   - **per face** (`PER_FACE_LIGHTING`: `entity_translucent` and `entity_translucent_emissive`): a face's colour times
     `min(1, (max(0, L0·n) + max(0, L1·n)) × 0.6 + 0.4)`, a back face's with −n, where L0 and L1 are, in the overworld,
@@ -312,12 +314,15 @@ Read from the jar:
   - **emissive** (`EMISSIVE`: `eyes`, `entity_translucent_emissive`, `energy_swirl`): no light map;
   - **the cut-out** (`ALPHA_CUTOUT`, 0.1 for these) tests the texel's own alpha, before the vertex colour multiplies
     it, unlike the particles' shader.
-- **See-through textures** (Part 5): `slime.png` has 385 texels with alpha between 0 and 1, `allay.png` 45, `vex.png`
-  46, `breeze_wind.png` all 1,590 it keeps, the horse markings some, and `warden_bioluminescent_layer.png` 494 (0.19 to
-  0.43). `breeze.png`, the warden's spots and heart, `creeper_armor.png` and every eyes texture (the spider's,
-  enderman's, phantom's, creaking's, copper golem's, breeze's and ender dragon's) have none: Minecraft fades the
-  warden's spots and heart through their vertex alpha (the spots at most 0.25), and `creeper_armor.png` is opaque
-  stripes on clear ones. 41 of the 44 banner pattern textures have soft edges.
+- **See-through textures** (Part 5): `slime.png` has 385 texels with alpha between 0 and 1 (58.8% of those not
+  clear), `allay.png` 45 (15.2%), `vex.png` 46 (13.4%), `breeze_wind.png`, `wind_charge.png` and
+  `warden_bioluminescent_layer.png` all theirs (the last at 0.19 to 0.43), the horse markings 13.5% and up, and the
+  sulfur cube's outer layers nearly all. Four opaque ones have a few stray: `piglin.png` 6 (0.32%), `piglin_brute.png`
+  6, `zombified_piglin.png` 3 and `creeper.png` 1, of which skulls use the last. `breeze.png`, the warden's spots and
+  heart, `creeper_armor.png` and every eyes texture (the spider's, enderman's, phantom's, creaking's, copper golem's,
+  breeze's and ender dragon's) have none: Minecraft fades the warden's spots and heart through their vertex alpha (the
+  spots at most 0.25), and `creeper_armor.png` is opaque stripes on clear ones. 41 of the 44 banner pattern textures
+  have soft edges.
 - **Animated textures** (Part 5): 54 of the block textures have an animation (`.png.mcmeta`), and no item texture:
   water, lava, fire and soul fire, magma, sea lanterns, prismarine, lanterns, campfires' flames and lit logs, sculk,
   command blocks, the stonecutter's saw, nether portals, kelp and seagrass, crimson and warped stems, the respawn
@@ -430,10 +435,11 @@ update.
 ### Animated textures (Part 5)
 
 `ParseAtlasRegion` takes a `kRenAtlasRegion` payload: each side at least 1, the rectangle inside the atlas the link
-last took (`x + width` and `y + height` within its sides, worked out in 64 bits), and the payload at least 16 bytes
-plus 4 a pixel. A good patch goes to the sink as `AtlasRegion(x, y, width, height, pixels)`, its pixels valid only
-during the call; a bad one is rejected and counted, and one before the atlas is stepped over and counted, as sections
-are. Patches count toward the ring's budget, as the messages the link takes do.
+last took (`x + width` and `y + height` within its sides, worked out in 64 bits; the link now keeps the last atlas's
+size, where it kept only that one came), and the payload at least 16 bytes plus 4 a pixel. A good patch goes to the
+sink as `AtlasRegion(x, y, width, height, pixels)`, its pixels valid only during the call; a bad one is rejected and
+counted, and one before the atlas is stepped over and counted, as sections are. Patches count toward the ring's
+budget, as the messages the link takes do.
 
 ### Coming and going
 
@@ -467,9 +473,11 @@ are. Patches count toward the ring's budget, as the messages the link takes do.
   own normal, is an entity layer the mod marked, not a particle (whose direction is 0). It's:
   - `additive` when its first vertex has bit 7 (`energy_swirl`);
   - `blended` when it's really see-through: its first vertex has block light of at least `glowlight` (emissive), or a
-    vertex's alpha is under 255, or its texture has a texel whose alpha is between 0 and 255 (noted when the texture
-    comes; the combined atlas isn't noted, so only its vertices' alpha counts);
-  - `model` otherwise, a cut-out the game lights, as before: a player's skin, a skull, a breeze's body.
+    vertex's alpha is under 255, or its texture is see-through: at least 1 in 50 of its texels that aren't clear have
+    an alpha between 0 and 255 (noted when the texture comes; the combined atlas isn't noted, so only its vertices'
+    alpha counts). The share keeps out vanilla's stray texels: a piglin's texture has 6 such of 1,886 (0.32%), a
+    creeper head's 1 of 865, while a vex's has 13.4%, an allay's 15.2% and a slime's 58.8%;
+  - `model` otherwise, a cut-out the game lights, as before: a piglin, a player's skin, a skull, a breeze's body.
 
   An `additive` or `blended` batch's quads (SkyCraft's two triangles in a row) are copied into the frame back to front,
   by the distance of their centres from Minecraft's eye, as Minecraft sorts these render types; a batch whose count
@@ -769,21 +777,29 @@ game.
 
 Testable steps first:
 1. **CyberCraft Tweaks 1.6.0 with `mclink`, without the game.** A script, at step 0's spot, summons a slime, an allay,
-   a vex, a breeze, a warden and a charged creeper (AI off, no loot, tagged `sp7`), and places animated blocks that
-   stay put with nothing under them, each at a tagged marker: a lava cauldron, a lit campfire, magma, a sea lantern,
-   prismarine and a lantern. Nothing flows or spreads: no lava or fire of its own. Its end kills the mobs and sets the
-   blocks to air without updates (`strict`). `mclink` shows:
+   a vex, a breeze, a warden, a charged creeper and a piglin (AI off, no loot, tagged `sp7`; the piglin immune to
+   zombification), and places animated blocks that stay put with nothing under them, each at a tagged marker: a lava
+   cauldron, a lit campfire, magma, a sea lantern, prismarine and a lantern. Nothing flows or spreads: no lava or fire
+   of its own. Its end kills the mobs and sets the blocks to air without updates (`strict`). `mclink`, which now prints
+   each batch's kind as BlockRender's `Entities` decides it, shows:
    - each marked layer's batch `translucent`, the armour's `additive`, the glowing vertices as in Part 4, and the
      breeze's body and the eyes as before;
+   - the kinds: `blended` for the slime's outer layer, the allay, the vex, the breeze's wind and eyes and the warden's
+     layers, `additive` for the armour, and `model` for the piglin, marked but opaque;
    - the patches applied to `mclink`'s own copy of the atlas with BlockRender's code: how many a second, how many
-     rectangles, and each placed block's faces on patched rectangles.
+     rectangles, and faces of each placed block on patched rectangles.
 2. **BlockRender 0.22.0's pure parts, unit-tested,** each new test broken once: the patch's parser; patching an atlas
    against building it from the patched image; the frame's kinds, see-through rule and sorting; the settings; the
    shader's constants.
-3. **Run D, in the game at night,** with Minecraft's window beside it:
-   - the six mobs: the slime's outer layer, the allay and the vex see-through; the warden's layers faint and pulsing;
-     the armour a soft glow added over the creeper; the breeze's wind see-through and still; `set blend 0` against 1;
-   - the animated blocks against Minecraft's: the lava, the flames and the sea lantern moving in step;
+3. **Run D, in the game,** with Minecraft's window beside it, by day first, as Minecraft's world is:
+   - **the animated blocks:** the lava, the flames, the sea lantern and the rest animating as Minecraft's do, at its
+     pace though not always in its phase, since SkyCraft plays them by the world's game time and Minecraft by its own
+     count. By day, since BlockRender's blocks don't glow: at night they're lit by the game's light alone, as always;
+   - **the seven mobs, side by side with Minecraft's:** the slime's outer layer, the allay and the vex see-through; the
+     warden's layers faint and pulsing; the armour a soft glow added over the creeper; the breeze's wind see-through
+     and still; the piglin lit by the game as before; `set blend 0` against 1;
+   - **at night** (Skip Time): the glowing layers, and how bright the lit blended layers look against what the game
+     lights (risk 15);
    - the costs; and no crash or freeze.
 
 ### The results
@@ -904,8 +920,8 @@ before the upload, or with `animate` 0), MB a second, the patching's CPU time an
 - **Part 5:** `ParseAtlasRegion` (a good patch; a side of 0, a rectangle past the atlas's edge, one whose sum wraps in
   32 bits, a short payload, each rejected); patching an atlas, every level, against `AtlasFromRgba` of the patched
   image, odd sides and a patch at the atlas's edge included; `Entities`' kinds (a blended, an additive and an opaque
-  entity layer, and a particle), the see-through rule (vertex alpha, the texture's note, emissive), and the sort's
-  order; the shader's constants, if they grow.
+  entity layer, and a particle), the see-through rule (vertex alpha, emissive, and the texture's share: one under 1 in
+  50 stays opaque), and the sort's order; the shader's constants, if they grow.
 
 Each new test is broken once to prove it can fail.
 
@@ -954,6 +970,8 @@ Runs A to D, as "The steps" has them.
     levels), so every third frame or so uploads most of them; the status's times show the cost.
 18. **Sorting on the main thread:** each blended or additive batch is sorted every frame; a scene of many translucent
     mobs costs more, which the update timing shows.
+19. **The game's glass:** its see-through surfaces mostly don't write the tagged depth (spike 3), so a blended layer
+    behind a window is drawn over it, as the particles are.
 
 ## Found while writing
 
@@ -1307,3 +1325,35 @@ A self-review after writing, tracing each new claim to its source, corrected two
 - **Minecraft's two lights are the world's:** `Lighting.updateLevel` hands them on untransformed, so the per-face
   shading takes the triangle's normal in world axes.
 - **Every eyes texture is opaque or clear,** so the eyes stay cut-outs as they are.
+
+### Changes from the deep review of Part 5
+
+The user then asked for a deep self-review of the spec. It traced each claim of Part 5 to its source, and played the
+`mclink` script and run D through as they would go. It found one design fault, and these changes:
+1. **The see-through rule counts a texture's share of partly see-through texels,** at least 1 in 50, not any one.
+   `entity_translucent` draws piglins' whole bodies, players' skins and every skull too, and a piglin's texture has 6
+   stray partly see-through texels, a creeper head's 1: with any one counting, piglins and creeper heads would have
+   left the G-buffer for Minecraft's light. Real see-through layers have 13.4% and up ("Entities").
+2. **`entity_translucent`'s users are listed in full,** the opaque ones included ("Minecraft 26.3").
+3. **The link keeps the last atlas's size,** which the patches' check needs; it kept only that an atlas came.
+4. **Run D looks at the animated blocks by day:** BlockRender's blocks have never glowed (`GbufferPS` writes no
+   emission), so at night lava and sea lanterns are lit by the game alone. They animate at Minecraft's pace, not
+   always in its phase: SkyCraft plays them by the world's game time, Minecraft by its own count.
+5. **A piglin joins the test mobs, and `mclink` prints each batch's kind** as `Entities` decides it, so the rule is
+   checked before the game.
+6. **Risk 19:** blended layers over the game's glass, as the particles are.
+
+What it checked:
+- **SkyCraft 0.1.2's jar:** `SkyAtlas.animate`'s patch size (`w + 2 × pad`), as in the source read; `writeQuad`'s
+  colour bytes; `KeepDrawOrder`'s hook, the key inside `batch`, which composes with the new one, the flags passed to
+  it.
+- **Minecraft 26.3's jar:** `EnergySwirlLayer` passes no `UvMapping`, so nothing scrolls the swirl in SkyCraft's
+  capture; `BreezeWindLayer`'s shorter `submitModel` goes through the full one, so the mod sees the wind; every
+  marked pipeline's `ALPHA_CUTOUT` is 0.1; the users of `entityTranslucent` (`AbstractPiglinModel`, `SkullModelBase`,
+  `PlayerModel`, `ArmorStandRenderer` and the rest); the piglin's `IsImmuneToZombification`; and every entity
+  texture's share of partly see-through texels.
+- **BlockRender:** the link's atlas handling; the ring's budget, 16 MB a frame of the messages it takes, against about
+  0.5 MB of patches at a tick; `GbufferPS`' emission; every list of ours on the game's main queue, the upload list
+  included.
+- **Played through:** the `mclink` script's commands and what each leaves (lava only in a cauldron, no fire of its
+  own, air set `strict` at the end); run D by day, then at night.
