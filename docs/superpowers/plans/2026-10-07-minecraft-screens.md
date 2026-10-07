@@ -117,7 +117,7 @@ Five verbs for step 0 (the spec's "Step 0", and "Changes while planning Part 1")
 - Create: `tools/mclink/HudBox.h`, `tools/mclink/HudBox.cpp`, `tests/TestHudBox.cpp`
 - Modify: `tools/mclink/McLinkScript.h`, `tools/mclink/McLinkScript.cpp`, `tests/TestMcLinkScript.cpp`, `CMakeLists.txt`
 
-- [ ] **Step 1: Edit `tests/TestMcLinkScript.cpp` to add the failing tests**
+- [x] **Step 1: Edit `tests/TestMcLinkScript.cpp` to add the failing tests**
 
 ```cpp
 TEST(ScriptParsesTheGround)
@@ -210,7 +210,7 @@ TEST(CodePointsDecodeUtf8)
 TEST(ScriptParsesTheGround)
 ```
 
-- [ ] **Step 2: Write the failing test, `tests/TestHudBox.cpp`**
+- [x] **Step 2: Write the failing test, `tests/TestHudBox.cpp`**
 
 ```cpp
 #include "Harness.h"
@@ -277,7 +277,7 @@ TEST(MeanOfBoxRefusesWhatIsOutside)
 }
 ```
 
-- [ ] **Step 3: Edit `CMakeLists.txt` to add the test**
+- [x] **Step 3: Edit `CMakeLists.txt` to add the test**
 
 ```cmake
 	tests/TestSnapshots.cpp
@@ -289,7 +289,7 @@ TEST(MeanOfBoxRefusesWhatIsOutside)
 	tools/mclink/DumpObj.cpp
 ```
 
-- [ ] **Step 4: Build; it must fail**
+- [x] **Step 4: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -298,7 +298,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `error C1083: Cannot open include file: 'HudBox.h'`, and `error C2065: 'Cursor': undeclared identifier`.
 
-- [ ] **Step 5: Write `tools/mclink/HudBox.h`**
+- [x] **Step 5: Write `tools/mclink/HudBox.h`**
 
 ```cpp
 #pragma once
@@ -328,7 +328,7 @@ std::optional<BoxMean> MeanOfBox(const std::vector<uint8_t>& aRgba, uint32_t aWi
 }
 ```
 
-- [ ] **Step 6: Write `tools/mclink/HudBox.cpp`**
+- [x] **Step 6: Write `tools/mclink/HudBox.cpp`**
 
 ```cpp
 #include "HudBox.h"
@@ -367,7 +367,7 @@ std::optional<BoxMean> MeanOfBox(const std::vector<uint8_t>& aRgba, uint32_t aWi
 }
 ```
 
-- [ ] **Step 7: Edit `tools/mclink/McLinkScript.h` to add the verbs and `CodePoints`**
+- [x] **Step 7: Edit `tools/mclink/McLinkScript.h` to add the verbs and `CodePoints`**
 
 ```cpp
 #include <optional>
@@ -422,7 +422,7 @@ std::optional<std::vector<Action>> ParseScript(std::string_view aText, std::stri
 std::optional<std::vector<uint32_t>> CodePoints(std::string_view aUtf8);
 ```
 
-- [ ] **Step 8: Edit `tools/mclink/McLinkScript.cpp` to parse them, and decode UTF-8**
+- [x] **Step 8: Edit `tools/mclink/McLinkScript.cpp` to parse them, and decode UTF-8**
 
 ```cpp
 #include "McLinkScript.h"
@@ -541,7 +541,7 @@ std::optional<std::vector<uint32_t>> CodePoints(std::string_view aUtf8)
 			              : verb == "pause"  ? Action::Kind::Pause
 ```
 
-- [ ] **Step 9: Edit `CMakeLists.txt` to add the source**
+- [x] **Step 9: Edit `CMakeLists.txt` to add the source**
 
 `mclink` builds it too, for Task 3.
 ```cmake
@@ -567,7 +567,7 @@ std::optional<std::vector<uint32_t>> CodePoints(std::string_view aUtf8)
 	tools/mclink/McLinkScript.cpp
 ```
 
-- [ ] **Step 10: Build and run the tests; they must pass**
+- [x] **Step 10: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -577,7 +577,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `525 test(s), 0 failure(s)`.
 
-- [ ] **Step 11: Commit**
+- [x] **Step 11: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -597,7 +597,7 @@ is; `mclink`'s status prints it (Task 3).
 **Files:**
 - Modify: `src/link/Link.h`, `src/link/Link.cpp`, `tests/TestLink.cpp`
 
-- [ ] **Step 1: Edit `tests/TestLink.cpp` to add the failing test**
+- [x] **Step 1: Edit `tests/TestLink.cpp` to add the failing test**
 
 The fake Minecraft's `State` gains the GUI scale, 0 unless given, as SkyCraft's McState starts.
 
@@ -638,7 +638,7 @@ TEST(LinkKeepsMinecraftsScreenAndGuiScale)
 TEST(LinkPassesOnExplosionsAndHudImages)
 ```
 
-- [ ] **Step 2: Build; it must fail**
+- [x] **Step 2: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -647,7 +647,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `error C2039: 'guiScale': is not a member of 'cpmc::link::Link::Status'`.
 
-- [ ] **Step 3: Edit `src/link/Link.h` to add the field**
+- [x] **Step 3: Edit `src/link/Link.h` to add the field**
 
 ```cpp
 		uint32_t              minecraftFlags = 0;  // McState's: on ground, sneaking, sprinting, flying and the rest
@@ -657,7 +657,7 @@ Expected: `error C2039: 'guiScale': is not a member of 'cpmc::link::Link::Status
 		uint32_t              guiScale = 0;  // McState's: window pixels to a GUI pixel, each way (spike 8's step 0)
 ```
 
-- [ ] **Step 4: Edit `src/link/Link.cpp` to read it**
+- [x] **Step 4: Edit `src/link/Link.cpp` to read it**
 
 ```cpp
 		status_.minecraftFlags = mc->flags;
@@ -667,7 +667,7 @@ Expected: `error C2039: 'guiScale': is not a member of 'cpmc::link::Link::Status
 		status_.guiScale = mc->guiScale;
 ```
 
-- [ ] **Step 5: Build and run the tests; they must pass**
+- [x] **Step 5: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -677,7 +677,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `526 test(s), 0 failure(s)`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -724,7 +724,7 @@ Step 0's script, `tools/mclink/screens.txt` (the spec's "Step 0", with "Changes 
 - Create: `tools/mclink/screens.txt`
 - Modify: `tools/mclink/Main.cpp`, `tests/TestMcLinkScript.cpp`
 
-- [ ] **Step 1: Edit `tests/TestMcLinkScript.cpp` to check the new script**
+- [x] **Step 1: Edit `tests/TestMcLinkScript.cpp` to check the new script**
 
 ```cpp
 	                          "entities.txt", "spawn.txt", "emissive.txt", "blended.txt" })
@@ -733,7 +733,7 @@ Step 0's script, `tools/mclink/screens.txt` (the spec's "Step 0", with "Changes 
 	                          "entities.txt", "spawn.txt", "emissive.txt", "blended.txt", "screens.txt" })
 ```
 
-- [ ] **Step 2: Build and run the tests; the script check must fail**
+- [x] **Step 2: Build and run the tests; the script check must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -743,7 +743,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `FAIL ScriptsInTheRepoParse` and `526 test(s), 2 failure(s)`: the new script can't be read yet.
 
-- [ ] **Step 3: Edit `tools/mclink/Main.cpp` to run the verbs, and print the GUI scale**
+- [x] **Step 3: Edit `tools/mclink/Main.cpp` to run the verbs, and print the GUI scale**
 
 ```cpp
 #include "DumpObj.h"
@@ -840,7 +840,7 @@ Expected: `FAIL ScriptsInTheRepoParse` and `526 test(s), 2 failure(s)`: the new 
 		case Action::Kind::HoldCheck:
 ```
 
-- [ ] **Step 4: Write step 0's script, `tools/mclink/screens.txt`**
+- [x] **Step 4: Write step 0's script, `tools/mclink/screens.txt`**
 
 ```text
 # Spike 8's step 0: Minecraft's side of its screens worked from the game, against SkyCraft's real mod, without the
@@ -945,7 +945,7 @@ scene
 status
 ```
 
-- [ ] **Step 5: Build and run the tests; they must pass**
+- [x] **Step 5: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -955,7 +955,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `526 test(s), 0 failure(s)`.
 
-- [ ] **Step 6: Run mclink without Minecraft**
+- [x] **Step 6: Run mclink without Minecraft**
 
 Minecraft and the game must not be running.
 ```bash
@@ -965,7 +965,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && printf 'status\nquit\n' > build
 Expected: `the mapping: created (process …); waiting for Minecraft`, then the status, with `Minecraft: absent, GUI
 scale 0`. Then `exit: 0`.
 
-- [ ] **Step 7: Run the new verbs without Minecraft**
+- [x] **Step 7: Run the new verbs without Minecraft**
 
 With nothing to answer them, each verb must still run to its end: the text is pushed, the waits and the box give up.
 ```bash
@@ -976,7 +976,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render \
 Expected: `text: 5 characters typed`, `line 4: no screen opened within 0.5 s`, `no screen is open after 0.00 s`,
 `line 6: no HUD image within 5 s`, then `exit: 1`.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -1009,14 +1009,14 @@ against SkyCraft's unchanged mod in the `CyberCraft` instance, without the game.
 - Create: `docs/spikes/2026-10-07-minecraft-screens-results.md`, `docs/spikes/2026-10-07-minecraft-screens-results/`
   (the HUD images, as PNG)
 
-- [ ] **Step 1: Check that the game isn't running**
+- [x] **Step 1: Check that the game isn't running**
 
 ```bash
 tasklist | grep -i -c "cyberpunk2077.exe"
 ```
 Expected: `0`. If it's `1`, ask the user to quit the game: it would hold the mapping.
 
-- [ ] **Step 2: Ask the user to start Minecraft**
+- [x] **Step 2: Ask the user to start Minecraft**
 
 With their leave to place a test chest at 882 7 2007 in the `SkyCraft` world, removed with what's in it at the
 script's end, and to switch the game mode twice with F3+F4, which leaves it as it was, the user starts the `CyberCraft`
@@ -1026,7 +1026,7 @@ grep -E "SkyCraft:" "/c/Users/BLOXY/AppData/Roaming/ModrinthApp/profiles/CyberCr
 ```
 Expected: `SkyCraft: can't open Skyrim's shared memory yet (Windows error 2: …)`: waiting for a game side.
 
-- [ ] **Step 3: Run step 0's script**
+- [x] **Step 3: Run step 0's script**
 
 ```bash
 L="/c/Users/BLOXY/AppData/Roaming/ModrinthApp/profiles/CyberCraft/logs/latest.log"; before=$(wc -l < "$L"); \
@@ -1062,11 +1062,11 @@ minutes. Expected, against the spec's "Step 0":
   `world: nothing`.
 - **No other `[CHAT]` line with an error, no `WARN` line from a command,** and `exit: 0`.
 
-- [ ] **Step 4: Ask the user to stop Minecraft**
+- [x] **Step 4: Ask the user to stop Minecraft**
 
 Its window is hidden while `mclink` drives it, so the user stops it from the Modrinth App.
 
-- [ ] **Step 5: Save the HUD images as PNG, and look at them**
+- [x] **Step 5: Save the HUD images as PNG, and look at them**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && mkdir -p docs/spikes/2026-10-07-minecraft-screens-results \
@@ -1080,14 +1080,14 @@ Expected: `chest saved` and the four others. Look at each: the chest's screen wi
 in slot 1; after the moves, the stick in slot 4 and the stone in slot 5; the switcher's four icons; the pause menu;
 the inventory (the creative one, in creative).
 
-- [ ] **Step 6: Write step 0's results, `docs/spikes/2026-10-07-minecraft-screens-results.md`**
+- [x] **Step 6: Write step 0's results, `docs/spikes/2026-10-07-minecraft-screens-results.md`**
 
 From `build/step0/screens.log`, `build/step0/minecraft.log` and the PNG images, as spike 7's results doc does: the
 versions; each check above with its outcome and numbers (the boxes' means, how long each screen took to open and
 close, the chat's lines); anything that surprised, and what it means for Part 2. The spike's answer goes at the top
 once run E is in.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 With the plan, its steps ticked up to this one: running Tasks 1 to 3 ticked theirs.
 ```bash
