@@ -219,4 +219,53 @@ std::vector<AtlasArea> PatchAtlas(Atlas& aAtlas, uint32_t aX, uint32_t aY, uint3
 	}
 	return areas;
 }
+
+void AtlasDirty::Add(std::span<const AtlasArea> aAreas)
+{
+	for (const AtlasArea& area : aAreas)
+	{
+		areas_.insert({ area.level, area.x, area.y, area.width, area.height });
+	}
+}
+
+bool AtlasDirty::Waiting(const AtlasArea& aArea) const
+{
+	return areas_.contains({ aArea.level, aArea.x, aArea.y, aArea.width, aArea.height });
+}
+
+AtlasDirty::Packed AtlasDirty::Take(const Atlas& aAtlas, size_t aMostAreas)
+{
+	Packed packed;
+	auto   next = areas_.begin();
+	for (; next != areas_.end() && packed.areas.size() < aMostAreas; ++next)
+	{
+		const auto& [level, x, y, width, height] = *next;
+		if (level >= aAtlas.Levels())
+		{
+			continue;
+		}
+		const uint32_t levelWidth = LevelSide(aAtlas.width, level);
+		const uint32_t levelHeight = LevelSide(aAtlas.height, level);
+		const uint64_t start = uint64_t(aAtlas.levelOffsets[level]) + uint64_t(y) * levelWidth + x;
+		if (width == 0 || height == 0 || uint64_t(x) + width > levelWidth || uint64_t(y) + height > levelHeight ||
+		    start + uint64_t(height - 1) * levelWidth + width > aAtlas.texels.size())
+		{
+			continue;
+		}
+		PatchAreaGpu area;
+		area.start = uint32_t(start);
+		area.stride = levelWidth;
+		area.width = width;
+		area.height = height;
+		area.source = uint32_t(packed.texels.size());
+		for (uint32_t row = 0; row < height; ++row)
+		{
+			const uint32_t* from = aAtlas.texels.data() + start + size_t(row) * levelWidth;
+			packed.texels.insert(packed.texels.end(), from, from + width);
+		}
+		packed.areas.push_back(area);
+	}
+	areas_.erase(areas_.begin(), next);
+	return packed;
+}
 }

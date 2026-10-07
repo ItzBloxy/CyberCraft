@@ -1,11 +1,15 @@
 #pragma once
 
+#include "render/FrameConstants.h"
+
 #include <array>
 #include <cstdint>
 #include <optional>
+#include <set>
 #include <span>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <vector>
 
 namespace cpmc
@@ -72,4 +76,29 @@ struct AtlasArea
 // out). Nothing changes, and none come back, if the patch doesn't lie inside the top level, aRgba is short, or aAtlas's
 // levels aren't where AtlasFromRgba puts them.
 std::vector<AtlasArea> PatchAtlas(Atlas& aAtlas, uint32_t aX, uint32_t aY, uint32_t aWidth, uint32_t aHeight, std::span<const uint8_t> aRgba);
+
+// Part 5: the atlas's areas that patches changed, waiting for the upload list: each once, however often it was patched
+// since, as the CPU's atlas holds its newest texels.
+class AtlasDirty
+{
+public:
+	void   Add(std::span<const AtlasArea> aAreas);
+	bool   Waiting(const AtlasArea& aArea) const;  // patched since the last Take: a patch to it now replaces that one
+	bool   Empty() const { return areas_.empty(); }
+	size_t Size() const { return areas_.size(); }
+	void   Clear() { areas_.clear(); }
+
+	// The waiting areas packed for the patch pass (PatchCS): its table, and their texels from aAtlas, one area after
+	// another, row by row. An area that doesn't lie inside its level of aAtlas is left out. At most aMostAreas come, as
+	// a dispatch has at most so many groups; the rest wait for the next pass.
+	struct Packed
+	{
+		std::vector<PatchAreaGpu> areas;
+		std::vector<uint32_t>     texels;
+	};
+	Packed Take(const Atlas& aAtlas, size_t aMostAreas = SIZE_MAX);
+
+private:
+	std::set<std::tuple<uint32_t, uint32_t, uint32_t, uint32_t, uint32_t>> areas_;  // level, x, y, width, height
+};
 }

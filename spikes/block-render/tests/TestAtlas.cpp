@@ -200,3 +200,49 @@ TEST(AtlasPatchRefusesWhatDoesntFit)
 	atlas->texels.push_back(0);
 	CHECK(cpmc::PatchAtlas(*atlas, 0, 0, 1, 1, Pixels(1, 1, 7)).empty());
 }
+
+TEST(AtlasDirtyAreasPackedForThePatchPass)
+{
+	// A sprite patched twice waits once, at its newest; each area comes with where it goes in the atlas buffer, and its
+	// texels row by row, one area after another.
+	std::string                error;
+	std::optional<cpmc::Atlas> atlas = cpmc::AtlasFromRgba(9, 7, Pixels(9, 7, 8), error);
+	cpmc::AtlasDirty           dirty;
+	const cpmc::AtlasArea      patched = { 0, 5, 4, 3, 2 };
+	CHECK(!dirty.Waiting(patched));
+	dirty.Add(cpmc::PatchAtlas(*atlas, 5, 4, 3, 2, Pixels(3, 2, 9)));  // levels 0 and 1
+	CHECK(dirty.Waiting(patched));
+	CHECK(!dirty.Waiting({ 0, 5, 4, 3, 1 }));  // another area
+	dirty.Add(cpmc::PatchAtlas(*atlas, 5, 4, 3, 2, Pixels(3, 2, 10)));
+	CHECK_EQ(dirty.Size(), size_t(2));
+	const std::vector<cpmc::AtlasArea> outside = { { 1, 3, 2, 2, 1 }, { 5, 0, 0, 1, 1 } };  // past level 1's side; no level 5
+	dirty.Add(outside);
+	const cpmc::AtlasDirty::Packed packed = dirty.Take(*atlas);
+	CHECK(dirty.Empty());
+	CHECK_EQ(packed.areas.size(), size_t(2));
+	CHECK_EQ(packed.texels.size(), size_t(3 * 2 + 2 * 1));
+	if (packed.areas.size() == 2 && packed.texels.size() == 8)
+	{
+		const cpmc::PatchAreaGpu& top = packed.areas[0];  // level 0's, at 5 4: 4 rows of 9 down, 5 along
+		CHECK_EQ(top.start, 4u * 9u + 5u);
+		CHECK_EQ(top.stride, 9u);
+		CHECK_EQ(top.width, 3u);
+		CHECK_EQ(top.height, 2u);
+		CHECK_EQ(top.source, 0u);
+		CHECK_EQ(packed.texels[0], atlas->texels[4 * 9 + 5]);
+		CHECK_EQ(packed.texels[3], atlas->texels[5 * 9 + 5]);  // the second row
+		const cpmc::PatchAreaGpu& next = packed.areas[1];  // level 1's (4 x 3), at 2 2
+		CHECK_EQ(next.start, atlas->levelOffsets[1] + 2u * 4u + 2u);
+		CHECK_EQ(next.stride, 4u);
+		CHECK_EQ(next.source, 6u);
+		CHECK_EQ(packed.texels[7], atlas->texels[next.start + 1]);
+	}
+	CHECK(!dirty.Waiting(patched));
+	CHECK(dirty.Take(*atlas).areas.empty());
+	// At most so many areas a pass, as a dispatch has at most so many groups: the rest wait for the next.
+	dirty.Add(cpmc::PatchAtlas(*atlas, 5, 4, 3, 2, Pixels(3, 2, 11)));
+	CHECK_EQ(dirty.Take(*atlas, 1).areas.size(), size_t(1));
+	CHECK_EQ(dirty.Size(), size_t(1));
+	CHECK_EQ(dirty.Take(*atlas, 1).areas.size(), size_t(1));
+	CHECK(dirty.Empty());
+}
