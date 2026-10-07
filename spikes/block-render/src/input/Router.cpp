@@ -5,6 +5,7 @@
 #include <Windows.h>
 
 #include <cstring>
+#include <format>
 #include <utility>
 
 namespace cpmc::input
@@ -12,10 +13,13 @@ namespace cpmc::input
 namespace
 {
 // The mouse flags build mode may take: the five buttons' presses and releases, and the wheel. An event without them is
-// movement, or the horizontal wheel, and stays the game's without taking the lock.
+// movement, or the horizontal wheel, and stays the game's without taking the lock, unless a Minecraft screen is build
+// mode's.
 constexpr USHORT kTaken = RI_MOUSE_LEFT_BUTTON_DOWN | RI_MOUSE_LEFT_BUTTON_UP | RI_MOUSE_RIGHT_BUTTON_DOWN | RI_MOUSE_RIGHT_BUTTON_UP |
                           RI_MOUSE_MIDDLE_BUTTON_DOWN | RI_MOUSE_MIDDLE_BUTTON_UP | RI_MOUSE_BUTTON_4_DOWN | RI_MOUSE_BUTTON_4_UP |
                           RI_MOUSE_BUTTON_5_DOWN | RI_MOUSE_BUTTON_5_UP | RI_MOUSE_WHEEL;
+
+constexpr uint16_t kSdlEscape = 41;
 }
 
 bool GameInFront()
@@ -25,8 +29,25 @@ bool GameInFront()
 	return process == GetCurrentProcessId();
 }
 
-Router::Router(LogQueue& aLog, FrontCheck aInFront) : log_(aLog), inFront_(aInFront)
+PointerSpeed ReadPointerSpeed()
 {
+	PointerSpeed speed;
+	int          value = 0;
+	if (SystemParametersInfoW(SPI_GETMOUSESPEED, 0, &value, 0))
+	{
+		speed.speed = value;
+	}
+	int mouse[3]{};  // two thresholds, and the acceleration: "Enhance pointer precision"
+	if (SystemParametersInfoW(SPI_GETMOUSE, 0, mouse, 0))
+	{
+		speed.enhanced = mouse[2] != 0;
+	}
+	return speed;
+}
+
+Router::Router(LogQueue& aLog, FrontCheck aInFront, SpeedCheck aSpeed) : log_(aLog), inFront_(aInFront), speedCheck_(aSpeed)
+{
+	ReadSpeed();
 }
 
 void Router::Inspect(void* aData, uint32_t aBytes)
@@ -43,11 +64,12 @@ void Router::Inspect(void* aData, uint32_t aBytes)
 		++read_;
 		RAWMOUSE mouse;
 		std::memcpy(&mouse, body, sizeof mouse);
-		if (!(mouse.usFlags & MOUSE_MOVE_ABSOLUTE))
+		const bool relative = !(mouse.usFlags & MOUSE_MOVE_ABSOLUTE);
+		if (relative)
 		{
 			mouseX_ += mouse.lLastX;
 		}
-		if ((mouse.usButtonFlags & kTaken) == 0)
+		if ((mouse.usButtonFlags & kTaken) == 0 && !screen_.load())
 		{
 			return;
 		}
@@ -58,11 +80,32 @@ void Router::Inspect(void* aData, uint32_t aBytes)
 		const bool        wasOn = mode_.On();
 		const bool        wasPaused = mode_.Paused();
 		const std::string whyBefore = mode_.Why();
-		const Decision    decision = mode_.Mouse({ mouse.usButtonFlags, int16_t(mouse.usButtonData) }, situation);
+		bool              changed = false;
+		if (ScreenOn() && inFront && relative)
+		{
+			// A Minecraft screen is build mode's: the movement moves Minecraft's cursor, and turns nothing in the game.
+			if (mouse.lLastX != 0 || mouse.lLastY != 0)
+			{
+				if (const std::optional<Pixel> pixel = cursor_.Move(mouse.lLastX, mouse.lLastY, factor_))
+				{
+					Push({ proto::kInCursor, 0, int32_t(pixel->x), int32_t(pixel->y), 0 });
+					++cursorEvents_;
+				}
+				Publish();
+			}
+			mouse.lLastX = 0;
+			mouse.lLastY = 0;
+			changed = true;
+		}
+		const Decision decision = mode_.Mouse({ mouse.usButtonFlags, int16_t(mouse.usButtonData) }, situation);
 		if (decision.hideButtons != 0)
 		{
-			// The game reads buttons and the wheel only from these flags, and the movement from its own fields, which stay.
+			// The game reads buttons and the wheel only from these flags.
 			mouse.usButtonFlags = USHORT(mouse.usButtonFlags & ~decision.hideButtons);
+			changed = true;
+		}
+		if (changed)
+		{
 			std::memcpy(body, &mouse, sizeof mouse);
 		}
 		Apply(decision, wasOn, wasPaused, whyBefore);
@@ -91,6 +134,17 @@ void Router::Inspect(void* aData, uint32_t aBytes)
 	}
 }
 
+void Router::Char(uint16_t aUnit)
+{
+	std::lock_guard               lock(mutex_);
+	const std::optional<uint32_t> point = text_.Take(aUnit);
+	if (point && Printable(*point) && ScreenOn())
+	{
+		Push({ proto::kInText, 0, int32_t(*point), 0, 0 });
+		++charsTyped_;
+	}
+}
+
 void Router::SetLink(link::Link* aLink)
 {
 	std::lock_guard lock(mutex_);
@@ -105,6 +159,13 @@ void Router::Update(bool aLinked, const link::Link::Status& aState, const std::s
 	situation_.minecraft = aState.minecraft;
 	situation_.minecraftInWorld = aState.inWorld;
 	situation_.blocked = (aState.minecraftFlags & proto::kMcDead) ? "Minecraft's player is dead" : aVBlocked;
+	if (aState.screenOpen && !situation_.screenOpen)
+	{
+		ReadSpeed();  // so a change in Windows applies without a restart
+	}
+	situation_.screenOpen = aState.screenOpen;
+	cursor_.SetScreen(aState.screenOpen);
+	closeable_ = aLinked && aState.minecraft && aState.inWorld && !(aState.minecraftFlags & proto::kMcDead) && aState.screenOpen;
 	if (mode_.On())
 	{
 		std::string why = !aState.minecraft             ? "Minecraft has gone"
@@ -118,13 +179,28 @@ void Router::Update(bool aLinked, const link::Link::Status& aState, const std::s
 			Off(std::move(why));
 		}
 	}
+	Refresh();
+}
+
+void Router::SetHudArea(uint32_t aImageWidth, uint32_t aImageHeight, uint32_t aScale)
+{
+	std::lock_guard lock(mutex_);
+	cursor_.SetArea(aImageWidth, aImageHeight, aScale);
+	Publish();
+}
+
+void Router::SetHudCursor(HudCursor* aCursor)
+{
+	std::lock_guard lock(mutex_);
+	hudCursor_ = aCursor;
+	Publish();
 }
 
 int64_t Router::TakeMouseX()
 {
 	const int64_t   counts = mouseX_.exchange(0);
 	std::lock_guard lock(mutex_);
-	return mode_.Paused() ? 0 : counts;  // CET's overlay's cursor, which turns nothing
+	return mode_.Paused() || ScreenOn() ? 0 : counts;  // CET's overlay's cursor, or Minecraft's, which turn nothing
 }
 
 std::optional<std::string> Router::TurnOn()
@@ -141,6 +217,7 @@ std::optional<std::string> Router::TurnOn()
 	}
 	log_.Push("build mode on");
 	LogPause(false);
+	Refresh();
 	return std::nullopt;
 }
 
@@ -171,7 +248,18 @@ std::optional<double> Router::TakePress()
 InputReport Router::Report() const
 {
 	std::lock_guard lock(mutex_);
-	return { mode_.On(), mode_.Why(), mode_.Slot(), read_.load(), mode_.Forwarded(), mode_.Hidden(), mode_.Last(), mode_.Paused() };
+	InputReport     report{ mode_.On(), mode_.Why(), mode_.Slot(), read_.load(), mode_.Forwarded(), mode_.Hidden(), mode_.Last(), mode_.Paused() };
+	report.screenOpen = situation_.screenOpen;
+	report.screen = ScreenOn();
+	report.cursor = cursor_.Image();
+	report.imageWidth = cursor_.ImageWidth();
+	report.imageHeight = cursor_.ImageHeight();
+	report.speed = speed_;
+	report.cursorEvents = cursorEvents_;
+	report.f3Taken = mode_.F3Taken();
+	report.charsTyped = charsTyped_;
+	report.charsRefused = text_.Refused();
+	return report;
 }
 
 void Router::FrontLost()
@@ -182,6 +270,7 @@ void Router::FrontLost()
 		Push({ proto::kInReleaseAll, 0, 0, 0, 0 });
 		log_.Push("the game lost the front in build mode: Minecraft lets go of everything");
 	}
+	Refresh();
 }
 
 void Router::SetOverlay(bool aOpen)
@@ -193,6 +282,7 @@ void Router::SetOverlay(bool aOpen)
 		Push({ proto::kInReleaseAll, 0, 0, 0, 0 });
 	}
 	LogPause(wasPaused);
+	Refresh();
 }
 
 void Router::Apply(const Decision& aDecision, bool aWasOn, bool aWasPaused, const std::string& aWhyBefore)
@@ -200,6 +290,10 @@ void Router::Apply(const Decision& aDecision, bool aWasOn, bool aWasPaused, cons
 	if (aDecision.releaseAll)
 	{
 		Push({ proto::kInReleaseAll, 0, 0, 0, 0 });
+	}
+	if (aWasOn && !mode_.On())
+	{
+		CloseScreen();  // F8, with Minecraft's screen open
 	}
 	for (size_t i = 0; i < aDecision.forwarded; ++i)
 	{
@@ -223,6 +317,7 @@ void Router::Apply(const Decision& aDecision, bool aWasOn, bool aWasPaused, cons
 		log_.Push("build mode stays off: " + mode_.Why());
 	}
 	LogPause(aWasPaused);
+	Refresh();
 }
 
 void Router::LogPause(bool aWasPaused)
@@ -244,7 +339,9 @@ bool Router::Off(std::string aWhy)
 		return false;
 	}
 	Push({ proto::kInReleaseAll, 0, 0, 0, 0 });
+	CloseScreen();
 	log_.Push("build mode off: " + mode_.Why());
+	Refresh();
 	return true;
 }
 
@@ -253,6 +350,54 @@ void Router::Push(const proto::InputEvent& aEvent)
 	if (link_)
 	{
 		link_->Push(aEvent);  // a full ring drops it, and the link counts it
+	}
+}
+
+bool Router::ScreenOn() const
+{
+	return mode_.On() && !mode_.Paused() && situation_.screenOpen;
+}
+
+void Router::Refresh()
+{
+	const bool on = ScreenOn();
+	if (on != screen_.load())
+	{
+		screen_ = on;
+		log_.Push(on ? "a Minecraft screen is build mode's: the mouse moves Minecraft's cursor, and every key is Minecraft's"
+		             : "no Minecraft screen is build mode's: the mouse turns V again");
+	}
+	Publish();
+}
+
+void Router::Publish()
+{
+	if (hudCursor_)
+	{
+		const Pixel back = cursor_.Back();
+		hudCursor_->Set({ back.x, back.y, screen_.load() && cursor_.HasArea() });
+	}
+}
+
+void Router::CloseScreen()
+{
+	if (closeable_)
+	{
+		Push({ proto::kInKey, kSdlEscape, 1, 0, 0 });
+		Push({ proto::kInKey, kSdlEscape, 0, 0, 0 });
+		log_.Push("build mode ended with a Minecraft screen open: Esc closes it");
+	}
+}
+
+void Router::ReadSpeed()
+{
+	speed_ = speedCheck_();
+	factor_ = PointerFactor(speed_.speed);
+	if (!speedLogged_ || speedLogged_->speed != speed_.speed || speedLogged_->enhanced != speed_.enhanced)
+	{
+		speedLogged_ = speed_;
+		log_.Push(std::format("Windows' pointer speed is {} of 20: Minecraft's cursor moves {:.3f} back-buffer pixels a count{}", speed_.speed,
+		                      factor_, speed_.enhanced ? ", without \"Enhance pointer precision\"'s curve" : ""));
 	}
 }
 }

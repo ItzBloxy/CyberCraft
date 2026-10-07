@@ -13,10 +13,16 @@ using namespace cpmc::input;
 namespace
 {
 bool g_inFront = true;
+int  g_speed = 8;  // the user's
 
 bool FakeFront()
 {
 	return g_inFront;
+}
+
+PointerSpeed FakeSpeed()
+{
+	return { g_speed, false };
 }
 
 // The mapping's layout in plain memory, with a link on it: what the router forwards lands in its input ring.
@@ -62,20 +68,32 @@ link::Link::Status Linked()
 	return state;
 }
 
-// A router on a link, in build mode.
+// What the link says with a Minecraft screen open.
+link::Link::Status WithAScreen()
+{
+	link::Link::Status state = Linked();
+	state.screenOpen = true;
+	return state;
+}
+
+// A router on a link, in build mode, with the user's 1280 by 720 HUD image drawn twice its size.
 struct Building
 {
-	Building() : router(log, &FakeFront)
+	Building() : router(log, &FakeFront, &FakeSpeed)
 	{
 		g_inFront = true;
+		g_speed = 8;
+		router.SetHudCursor(&hud);
+		router.SetHudArea(1280, 720, 2);
 		router.SetLink(mapping.link);
 		router.Update(true, Linked());
 		CHECK(!router.TurnOn());
 	}
 
-	LogQueue log;
-	Mapping  mapping;
-	Router   router;
+	LogQueue  log;
+	Mapping   mapping;
+	HudCursor hud;
+	Router    router;
 };
 
 // A mouse event as GetRawInputData copies it: the header, then RAWMOUSE.
@@ -443,4 +461,192 @@ TEST(RouterEndsBuildModeWhenMinecraftsPlayerDies)
 	state.minecraftFlags = proto::kMcInWorld;
 	building.router.Update(true, state);
 	CHECK(!building.router.TurnOn());
+}
+
+TEST(RouterMovesMinecraftsCursorWhileAScreenIsOpen)
+{
+	Building building;
+	building.router.Update(true, WithAScreen());
+	CHECK(Logged(building.log, "a Minecraft screen is build mode's: the mouse moves Minecraft's cursor, and every key is Minecraft's"));
+	CHECK(building.hud.Get().shown);
+	CHECK(building.hud.Get().x == 1280 && building.hud.Get().y == 720);  // the centre, as Minecraft puts its own position
+	auto move = Mouse(0, 0, 10, -4);  // at speed 8, 7.5 and -3 back-buffer pixels: image pixel 643 358
+	Inspect(building.router, move);
+	CHECK_EQ(MouseOf(move).lLastX, LONG(0));  // V doesn't turn
+	CHECK_EQ(MouseOf(move).lLastY, LONG(0));
+	auto inputs = building.mapping.Inputs();
+	CHECK(inputs.size() == 1 && inputs[0].type == proto::kInCursor && inputs[0].a == 643 && inputs[0].b == 358);
+	CHECK(building.hud.Get().x == 1287 && building.hud.Get().y == 717);
+	auto click = Mouse(RI_MOUSE_LEFT_BUTTON_DOWN, 0, 2, 0);  // a click and a move in one event: both Minecraft's
+	Inspect(building.router, click);
+	CHECK_EQ(MouseOf(click).usButtonFlags, USHORT(0));
+	CHECK_EQ(MouseOf(click).lLastX, LONG(0));
+	inputs = building.mapping.Inputs();
+	CHECK(inputs.size() == 2 && inputs[0].type == proto::kInCursor && inputs[0].a == 644 && inputs[1].type == proto::kInMouseButton);
+	CHECK(!building.router.TakePress());               // a click in a screen is no latency mark
+	CHECK_EQ(building.router.TakeMouseX(), 0ll);        // and the moves turn nothing
+	building.router.Update(true, Linked());  // the screen closed
+	CHECK(Logged(building.log, "no Minecraft screen is build mode's: the mouse turns V again"));
+	CHECK(!building.hud.Get().shown);
+	auto turn = Mouse(0, 0, 10, -4);
+	Inspect(building.router, turn);
+	CHECK_EQ(MouseOf(turn).lLastX, LONG(10));
+	CHECK(building.mapping.Inputs().empty());
+	CHECK_EQ(building.router.TakeMouseX(), 10ll);
+}
+
+TEST(RouterSendsTheCursorOnlyAsItsPixelChanges)
+{
+	Building building;
+	building.router.Update(true, WithAScreen());
+	building.mapping.Inputs();
+	for (int i = 0; i < 2; ++i)
+	{
+		auto small = Mouse(0, 0, 1, 0);  // 0.75 back-buffer pixels each: still image pixel 640
+		Inspect(building.router, small);
+	}
+	CHECK(building.mapping.Inputs().empty());
+	auto third = Mouse(0, 0, 1, 0);  // 2.25 in all: pixel 641
+	Inspect(building.router, third);
+	const auto inputs = building.mapping.Inputs();
+	CHECK(inputs.size() == 1 && inputs[0].a == 641 && inputs[0].b == 360);
+	CHECK_EQ(building.router.Report().cursorEvents, 1ull);
+	auto     absolute = Mouse(0, 0, 30000, 30000);  // a remote desktop's position, not a movement: it moves nothing
+	RAWMOUSE mouse = MouseOf(absolute);
+	mouse.usFlags = MOUSE_MOVE_ABSOLUTE;
+	std::memcpy(absolute.data() + sizeof(RAWINPUTHEADER), &mouse, sizeof mouse);
+	Inspect(building.router, absolute);
+	CHECK_EQ(MouseOf(absolute).lLastX, LONG(30000));
+	CHECK(building.mapping.Inputs().empty());
+}
+
+TEST(RouterTypesTextIntoAScreen)
+{
+	Building building;
+	building.router.Char(u'a');  // no screen: nothing to type into
+	CHECK(building.mapping.Inputs().empty());
+	building.router.Update(true, WithAScreen());
+	building.mapping.Inputs();
+	building.router.Char(0x00E6);  // æ
+	building.router.Char(0x000D);  // Enter's character: Enter reaches Minecraft as a key
+	building.router.Char(0xD83D);
+	building.router.Char(0xDE42);  // 🙂
+	building.router.Char(0xDE42);  // a lone second half
+	const auto inputs = building.mapping.Inputs();
+	CHECK(inputs.size() == 2 && inputs[0].type == proto::kInText && inputs[0].a == 0xE6 && inputs[1].a == 0x1F642);
+	const InputReport report = building.router.Report();
+	CHECK_EQ(report.charsTyped, 2ull);
+	CHECK_EQ(report.charsRefused, 1ull);
+	building.router.SetOverlay(true);  // paused: what's typed is CET's overlay's
+	building.mapping.Inputs();
+	building.router.Char(u'b');
+	CHECK(building.mapping.Inputs().empty());
+}
+
+TEST(RouterClosesMinecraftsScreenAsBuildModeEnds)
+{
+	{
+		Building building;
+		building.router.Update(true, WithAScreen());
+		building.mapping.Inputs();
+		auto f8 = Key(0x42, VK_F8);
+		Inspect(building.router, f8);
+		const auto inputs = building.mapping.Inputs();
+		CHECK(inputs.size() == 3 && inputs[0].type == proto::kInReleaseAll);  // Minecraft lets go of everything, then Esc
+		CHECK(inputs.size() == 3 && inputs[1].type == proto::kInKey && inputs[1].code == 41 && inputs[1].a == 1);
+		CHECK(inputs.size() == 3 && inputs[2].type == proto::kInKey && inputs[2].code == 41 && inputs[2].a == 0);
+		CHECK(Logged(building.log, "build mode ended with a Minecraft screen open: Esc closes it"));
+	}
+	{
+		Building building;
+		building.router.Update(true, WithAScreen(), "V is in a workspot");
+		const auto inputs = building.mapping.Inputs();
+		CHECK(inputs.size() == 3 && inputs[1].code == 41);
+	}
+	for (const bool dead : { false, true })
+	{
+		// Minecraft leaving its world, or its player dying and respawning, changes its screens itself: an Esc could find
+		// none, and open the pause menu.
+		Building           building;
+		link::Link::Status state = WithAScreen();
+		if (dead)
+		{
+			state.minecraftFlags = proto::kMcInWorld | proto::kMcDead;
+		}
+		else
+		{
+			state.inWorld = false;
+		}
+		building.router.Update(true, state);
+		CHECK(!building.router.On());
+		const auto inputs = building.mapping.Inputs();
+		CHECK(inputs.size() == 1 && inputs[0].type == proto::kInReleaseAll);
+	}
+	Building building;
+	building.router.Update(false, WithAScreen());  // unlinked
+	CHECK(!building.router.On());
+	CHECK_EQ(building.mapping.Inputs().size(), size_t(1));
+}
+
+TEST(RouterLeavesTheMouseToTheGameWhileAScreenIsntBuildModes)
+{
+	Building building;
+	building.router.SetOverlay(true);  // paused behind CET's overlay
+	building.router.Update(true, WithAScreen());
+	building.mapping.Inputs();
+	auto move = Mouse(0, 0, 10, 0);
+	Inspect(building.router, move);
+	CHECK_EQ(MouseOf(move).lLastX, LONG(10));
+	CHECK(building.mapping.Inputs().empty());
+	CHECK(!building.hud.Get().shown);
+	building.router.SetOverlay(false);  // the overlay closed: the screen is build mode's again
+	CHECK(building.hud.Get().shown);
+	building.router.TurnOff("a build off request");
+	CHECK(!building.hud.Get().shown);
+	auto off = Mouse(0, 0, 10, 0);
+	Inspect(building.router, off);
+	CHECK_EQ(MouseOf(off).lLastX, LONG(10));
+}
+
+TEST(RouterRereadsWindowsPointerSpeedAsAScreenOpens)
+{
+	Building building;
+	CHECK(Logged(building.log, "Windows' pointer speed is 8 of 20: Minecraft's cursor moves 0.750 back-buffer pixels a count"));
+	g_speed = 12;  // changed in Windows while the game runs
+	building.router.Update(true, Linked());
+	CHECK_EQ(building.router.Report().speed.speed, 8);  // read again only as a screen opens
+	building.router.Update(true, WithAScreen());
+	CHECK_EQ(building.router.Report().speed.speed, 12);
+	CHECK(Logged(building.log, "Windows' pointer speed is 12 of 20: Minecraft's cursor moves 1.500 back-buffer pixels a count"));
+	building.mapping.Inputs();
+	auto move = Mouse(0, 0, 2, 0);  // 3 back-buffer pixels: from 1280 to 1283, image pixel 641
+	Inspect(building.router, move);
+	const auto inputs = building.mapping.Inputs();
+	CHECK(inputs.size() == 1 && inputs[0].a == 641);
+	g_speed = 8;
+}
+
+TEST(RouterReportsTheScreen)
+{
+	Building building;
+	auto     f3 = Key(0x3D, VK_F3);
+	auto     f4 = Key(0x3E, VK_F4);
+	Inspect(building.router, f3);
+	Inspect(building.router, f4);  // F3+F4, before the switcher's screen is known
+	building.router.Update(true, WithAScreen());
+	auto move = Mouse(0, 0, 4, 0);  // 3 back-buffer pixels: image pixel 641
+	Inspect(building.router, move);
+	building.router.Char(u'x');
+	const InputReport report = building.router.Report();
+	CHECK(report.screenOpen && report.screen);
+	CHECK(report.cursor.x == 641 && report.cursor.y == 360);
+	CHECK(report.imageWidth == 1280 && report.imageHeight == 720);
+	CHECK_EQ(report.speed.speed, 8);
+	CHECK(!report.speed.enhanced);
+	CHECK_EQ(report.cursorEvents, 1ull);
+	CHECK_EQ(report.f3Taken, 1ull);
+	CHECK_EQ(report.charsTyped, 1ull);
+	building.router.SetOverlay(true);
+	const InputReport paused = building.router.Report();
+	CHECK(paused.screenOpen && !paused.screen);
 }
