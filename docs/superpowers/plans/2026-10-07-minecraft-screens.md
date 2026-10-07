@@ -997,9 +997,13 @@ against SkyCraft's unchanged mod in the `CyberCraft` instance, without the game.
   line typed, the switcher's `Set own game mode to … Mode`, and any command's error.
 - **If Minecraft doesn't link,** its log says why, in lines starting `SkyCraft:`.
 - **If a check fails,** stop and find the cause with superpowers:systematic-debugging before going on. Fixes become new
-  tasks. If a `wait-screen` gives up, the script goes on to its end, but a screen left open would stop the typer's
-  last commands (`not typed: a Minecraft screen is open`): then ask the user to close it in Minecraft's window, and
-  run the end's commands again with a script of their own.
+  tasks.
+  - **SkyCraft logs its first 20 clicks** of a Minecraft session: `SkyCraft: click <button> -> <what it hit> …
+    (grabbed …, screen …)`. If the chest doesn't open, the right-click's line says what it hit: `MISS` means the look
+    missed the chest.
+  - **If a `wait-screen` gives up,** the script goes on to its end, but a screen left open would stop the typer's last
+    commands (`not typed: a Minecraft screen is open`): then ask the user to close it in Minecraft's window, and run
+    the end's commands again with a script of their own.
 
 **Files:**
 - Create: `docs/spikes/2026-10-07-minecraft-screens-results.md`, `docs/spikes/2026-10-07-minecraft-screens-results/`
@@ -1034,13 +1038,21 @@ It takes about a minute once Minecraft is in its world, and up to four if it ope
 minutes. Expected, against the spec's "Step 0":
 - **Linking:** `Minecraft is there (process …)`, `clear all`, the atlas, `HUD images: 1280 x 720`, then `the city
   around region … is all in the ring`.
-- **The chest:** `a screen is open after …` within a second of the right-click; then the status says `a screen open,
-  GUI scale 2`, and the HUD image is saved with most of its middle not transparent.
+- **The chest:**
+  - `a screen is open after …` within a second of the right-click;
+  - in Minecraft's log, SkyCraft's `click 3 -> BLOCK` line for the right-click, with `grabbed true, screen null`;
+  - then the status says `a screen open, GUI scale 2`;
+  - the HUD image is saved with nearly all of its 921,600 pixels not transparent: an open screen darkens the whole
+    window behind it, with a gradient at alpha 192 to 208. Spike 4 found one pixel with a colour above its alpha, at
+    an edge of the hand; a few such are no fault.
 - **The hover highlight:** `HUD box 484 268 to 508 292` (slot 9, hovered) with a mean colour of about 192 in each
   channel (the slot's grey 139 under the highlight's white at alpha 96, then at alpha 32), and `HUD box 520 268 to 544
   292` (slot 10) with about 139; both with alpha 255, over 576 pixels.
-- **The moves:** after Esc, `no screen is open after …`, and in Minecraft's chat `step0: the stick is in slot 4`,
-  `step0: the stone is in slot 5` and `step0: slots 0 and 1 are empty`.
+- **The moves:**
+  - SkyCraft's four `click 1` lines, each with `grabbed false` and the chest's `ContainerScreen`;
+  - after Esc, `no screen is open after …`;
+  - in Minecraft's chat, `step0: the stick is in slot 4`, `step0: the stone is in slot 5` and `step0: slots 0 and 1
+    are empty`.
 - **Typing:** `text: 22 characters typed`, the chat opening and closing, and in Minecraft's chat the line `<SirBloxy>
   step0: typed æøå é @ ~`, its letters whole.
 - **The switcher:** a screen open and closed twice, and two `Set own game mode to … Mode` lines in Minecraft's chat,
@@ -1128,3 +1140,46 @@ The spec's "Changes while planning Part 1" lists what planning settled in the de
 - **`/execute if items` and `unless items`** take a block's `container.<n>` slots, and `*` for any item, in 26.3.
 - **A test that caught too little:** in the first run of the mutations, `CodePoints` accepting a lead byte where a
   continuation belongs went uncaught; `CodePointsDecodeUtf8` now checks `C3 C3`, and all 23 are caught.
+
+## Part 1's deep review
+
+The user asked for a deep self-review of the plan once it was written. It traced each claim step 0 rests on to 26.3's
+classes, SkyCraft's source, `mclink`'s and the link's code, the user's settings and earlier scripts, and walked through
+`screens.txt` line by line as Minecraft would take it.
+
+### What changed
+
+- **Task 4's checks name SkyCraft's own click lines.** SkyCraft logs its first 20 clicks of a session with what each
+  hit and whether a screen was open; the right-click must hit the chest (`BLOCK`, `screen null`), and the four left
+  clicks land in its `ContainerScreen`. If the chest doesn't open, that line says why (`MISS`: the look missed it).
+- **The chest image's check is a number:** nearly all of its 921,600 pixels not transparent, since an open screen
+  darkens the whole window. It was "most of its middle", which `mclink` doesn't measure; and a few pixels with a colour
+  above their alpha are no fault, as spike 4 found one.
+
+### What was checked
+
+- **Minecraft 26.3:**
+  - `Minecraft.isWindowActive` is `Window.isFocused`, which SkyCraft makes true while linked. So `MouseHandler` grabs
+    the mouse after a screen closes, and handles movement each frame, drags included (Part 2's run E needs them);
+  - `MouseHandler.onMove` keeps the position whatever the focus, and a click uses the position at once, so a `cursor`
+    just before a `click` is where it lands;
+  - the switcher opens only for a player allowed `/gamemode` (`GameModeCommand.PERMISSION_CHECK`), which the user's
+    world gives: its logs have `Set own game mode to Creative Mode` from earlier sessions;
+  - it switches in `keyReleased`, on the debug modifier's key, so F3's release must reach Minecraft as a key (Part 2's
+    holders send it where the press went);
+  - the two highlight sprites cover exactly the slot's 16 by 16 inside (`slot.x - 4`, 24 by 24, clear but for the
+    middle), so slot 10's box sees none of slot 9's highlight;
+  - a screen in game draws a full-window gradient, `0xC0101010` to `0xD0101010`, or the blurred menu background;
+  - a right-click on a chest opens it whatever the player holds, since the block's use comes before the item's.
+- **SkyCraft:** `InputBridge` logs clicks as above, takes `kInCursor` as `onMove`'s window position, and refuses
+  `kInText` with no screen open; `SkyClient` sets the player's look from SkyState only with no screen open.
+- **The link and `mclink`:**
+  - SkyState's look comes from `mclink`'s `look` every frame, build mode or not;
+  - right-clicks in build mode placed blocks in spike 5's `drive.txt`, so `click right` there works;
+  - `mclink`'s DDS images open in PIL (one of spike 7's textures, as `DDS RGBA`);
+  - the run's lines quoted in Task 4 are the ones `mclink` prints.
+- **The user's instance:** Minecraft 26.3, Fabric Loader 0.19.5, SkyCraft 0.1.2 and CyberCraft Tweaks 1.6.0 in its
+  latest log, and SkyCraft's waiting line as Task 4 quotes it.
+- **The scenarios where a step fails:** a chest that doesn't open leaves the left clicks to the world; in creative
+  one could break the chest, whose stick and stone would drop, and the end's `/kill` clears them. An Esc with no
+  screen opens the pause menu, which stops the typer's last commands; Task 4 says what to do then.
