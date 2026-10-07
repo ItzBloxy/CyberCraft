@@ -524,3 +524,85 @@ strong: the user would "much rather blended, this is a bit much". So step C need
   SkyCraft sends every entity layer as a cut-out. BlockRender's forward list, which blends the translucent particles
   before DLSS, is the likely place to draw them. The same would serve the translucent entity parts the spec leaves out,
   such as a slime's outer layer.
+
+## Step C's blended mark and animated textures, with `mclink`
+
+Date: 2026-10-07, 19:32:25 to 19:32:41 in Minecraft's log. `tools/mclink/blended.txt` (Task 43) summoned a slime, an
+allay, a vex, a breeze, a warden, a charged creeper and a piglin, AI off, 6 or 7 blocks ahead of the stand-in V at step
+0's spot (x 880), then placed six animated blocks 9 blocks ahead at their markers, without updates, and cleared it all.
+It ran against SkyCraft 0.1.2 with CyberCraft Tweaks 1.6.0 (1.5.0 kept beside it, disabled) in the `CyberCraft`
+instance (Minecraft 26.3, 51 mods, the user's Entity Model Features and Entity Texture Features disabled), without the
+game, with `mclink` at `be8da98` (Part 5's Tasks 37 to 43). The agent installed the mod with the user's leave, with
+Minecraft stopped; the user started and stopped Minecraft. Plan: Task 44.
+
+### Verdict
+
+**Pass.** Minecraft loaded CyberCraft Tweaks 1.6.0 with no mixin error. Every layer the mod marks came translucent, the
+armour additive too, and BlockRender's rule, run by `mclink`, made each the kind the spec has: the see-through and
+emissive ones blended, the armour additive, and the opaque piglin and breeze's body models, as before. SkyCraft's
+patches all landed inside `mclink`'s copy of the atlas, about 830 a second, and the placed blocks' faces lie on the
+patched sprites.
+
+### The checks
+
+- **Every command was answered:** the seven `Summoned new …`, six `Summoned new Marker` and six `Changed the block at
+  889, 6, 2002` to `… 2012`, two apart; then the six blocks back to air, `Killed 7 entities` and `Killed 6 entities`. No
+  warning or error about any of them; no resyncs, nothing rejected, `exit: 0`.
+- **The textures,** named by Minecraft's log (ids 1 to 6 are the player's own: its skin, cape and armour), and which
+  `mclink` found see-through (at least 1 in 50 of the texels that aren't clear partly see-through):
+
+  | Id | Texture | See-through |
+  |---|---|---|
+  | 7 | `slime/slime.png` | yes |
+  | 8 and 9 | `allay/allay.png`, `illager/vex.png` | yes |
+  | 10 to 12 | `breeze/breeze.png`, `breeze/breeze_wind.png`, `breeze/breeze_eyes.png` | the wind's alone |
+  | 13 to 15 | `warden/warden.png`, `warden/warden_bioluminescent_layer.png`, `warden/warden_pulsating_spots_1.png` | the bioluminescent layer's alone |
+  | 16 and 17 | `creeper/creeper.png`, `creeper/creeper_armor.png` | no |
+  | 18 | `piglin/piglin.png` | no |
+  | 19 and 20 | `warden/warden_pulsating_spots_2.png`, `warden/warden_heart.png`, 1.5 and 1.8 s after the rest | no |
+  | 21 | `textures/atlas/particles.png` | yes |
+
+- **The kinds,** in the scenes 3 and 4 s after the summons (13 and 14 batches, about 2,950 vertices):
+
+  | Batch's texture | Kind | Vertices, glowing |
+  |---|---|---|
+  | `slime.png`, its inside | not translucent | 144, none |
+  | `slime.png`, its outer layer | blended | 36, none |
+  | `allay.png`, `vex.png` | blended | 252 each, all (their own block light, 15) |
+  | `breeze.png` | translucent, drawn as a model | 252, none |
+  | `breeze_wind.png` | blended | 252, none |
+  | `breeze_eyes.png` | blended | 72, all |
+  | `warden.png` | not translucent | 360, none |
+  | `warden_bioluminescent_layer.png`, `warden_pulsating_spots_2.png`, `warden_heart.png` | blended | 180, 108 and 36, all |
+  | `creeper.png` | not translucent | 216, none |
+  | `creeper_armor.png` | additive | 216, all |
+  | `piglin.png` | translucent, drawn as a model | 576, none |
+
+  The first spots weren't in either printed scene, as in Task 34: Minecraft submits a warden's layer only while its
+  alpha is above 0.00001, and the heart came in the second.
+- **The patches:** 17,556 by the end (162 MB), all applied, none refused, none from before the atlas; 56 rectangles
+  patched. Every five seconds after the first five: 827 to 831 a second, 7.6 to 7.7 MB a second, 41 or so a
+  Minecraft tick ("Surprises" has the first five).
+- **The placed blocks' section** (55 0 125) came again with each block, its triangles on patched sprites growing as
+  they came: 2 of 118 with the lava cauldron (its lava's surface), then 28 of 182 (the campfire's flames and lit logs),
+  40, 52, 64 (magma, the sea lantern, prismarine: 12 each) and 94 of 248 (the lantern). At the clear it was `removed`,
+  and the last scene, 7 s after the kills, was empty, its world line `nothing`.
+
+### Surprises
+
+- **56 rectangles, not 54:** Minecraft 26.3 has 54 animated block textures (their `.png.mcmeta` files) and no animated
+  item texture, so two of SkyCraft's combined atlas's patched rectangles are most likely block textures that its items'
+  part holds as well, such as seagrass's and sculk vein's, whose flat items draw them. Each lies inside the atlas, as
+  every patch did.
+- **Patches are about 9 KB each on average,** 7.7 MB a second: each is a sprite's whole cell, its border included,
+  larger than its frame. The ring takes it with room to spare (16 MB a frame).
+- **A burst as Minecraft loads its world:** 2,570 a second by `mclink`'s count over the first five seconds, all of them
+  after the atlas came at 2 s, most likely from the ticks Minecraft runs to catch up.
+
+### What it means for run D
+
+- **CyberCraft Tweaks 1.6.0 and BlockRender's rule do what the spec has:** run D should show the slime's outer layer,
+  the allay, the vex, the breeze's wind and eyes and the warden's layers blended, the armour added, and the piglin and
+  the breeze's body as before.
+- **The patch pass should run about 20 times a second,** one for each Minecraft tick's patches, each writing about 40
+  cells at each of their levels.

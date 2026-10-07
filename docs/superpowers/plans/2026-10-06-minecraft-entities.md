@@ -9736,7 +9736,7 @@ From the spec's "Minecraft 26.3" and "The protocol", what the code below relies 
   `minecraft/cybercraft-tweaks/src/main/resources/cybercraft_tweaks.mixins.json`,
   `minecraft/cybercraft-tweaks/src/main/resources/fabric.mod.json`, `minecraft/cybercraft-tweaks/README.md`
 
-- [ ] **Step 1: Write `minecraft/cybercraft-tweaks/src/main/java/dev/cybercraft/tweaks/mixin/MarkBlended.java`**
+- [x] **Step 1: Write `minecraft/cybercraft-tweaks/src/main/java/dev/cybercraft/tweaks/mixin/MarkBlended.java`**
 
 ```java
 package dev.cybercraft.tweaks.mixin;
@@ -9805,7 +9805,7 @@ public abstract class MarkBlended {
 }
 ```
 
-- [ ] **Step 2: Edit `minecraft/cybercraft-tweaks/src/main/java/dev/cybercraft/tweaks/mixin/MarkEmissive.java`'s comment**
+- [x] **Step 2: Edit `minecraft/cybercraft-tweaks/src/main/java/dev/cybercraft/tweaks/mixin/MarkEmissive.java`'s comment**
 
 ```java
  * an enderman's and a phantom's eyes; {@code entity_translucent_emissive}, the warden's, the creaking's, the copper
@@ -9816,7 +9816,7 @@ public abstract class MarkBlended {
  * glowing layers and a breeze's eyes; and {@code energy_swirl}, a charged creeper's and the wither's armour.
 ```
 
-- [ ] **Step 3: Edit `minecraft/cybercraft-tweaks/src/main/resources/cybercraft_tweaks.mixins.json` to add it, on the client**
+- [x] **Step 3: Edit `minecraft/cybercraft-tweaks/src/main/resources/cybercraft_tweaks.mixins.json` to add it, on the client**
 
 ```json
   "client": ["KeepDrawOrder", "MarkEmissive"],
@@ -9825,7 +9825,7 @@ public abstract class MarkBlended {
   "client": ["KeepDrawOrder", "MarkEmissive", "MarkBlended"],
 ```
 
-- [ ] **Step 4: Edit `minecraft/cybercraft-tweaks/src/main/resources/fabric.mod.json` for 1.6.0**
+- [x] **Step 4: Edit `minecraft/cybercraft-tweaks/src/main/resources/fabric.mod.json` for 1.6.0**
 
 ```json
   "version": "1.5.0",
@@ -9838,7 +9838,7 @@ public abstract class MarkBlended {
   "description": "SkyCraft adjusted for Cyberpunk 2077's Night City: nothing digs into the game's ground, so blasts leave no blocks floating above it; V's health share carries into Minecraft's player as build mode starts; and what SkyCraft sends of Minecraft's entities keeps their layers in Minecraft's draw order, with the layers Minecraft draws emissive marked to glow, and those it blends marked blended.",
 ```
 
-- [ ] **Step 5: Edit `minecraft/cybercraft-tweaks/README.md` to say what it does**
+- [x] **Step 5: Edit `minecraft/cybercraft-tweaks/README.md` to say what it does**
 
 ```markdown
 What SkyCraft sends of Minecraft's entities keeps Minecraft's draw order and its glow:
@@ -9869,7 +9869,7 @@ What SkyCraft sends of Minecraft's entities keeps Minecraft's draw order, its gl
   patterns lie on cloth the game lights.
 ```
 
-- [ ] **Step 6: Build CyberCraft Tweaks, and check that SkyCraft's exporter has what the mixin takes**
+- [x] **Step 6: Build CyberCraft Tweaks, and check that SkyCraft's exporter has what the mixin takes**
 
 ```bash
 cd /d/Cyberpunk-Minecraft/minecraft/cybercraft-tweaks && out=$(bash build.sh 2>&1); echo "$out" | tail -2; \
@@ -9882,7 +9882,7 @@ cd /d/Cyberpunk-Minecraft/minecraft/cybercraft-tweaks && out=$(bash build.sh 2>&
 Expected: `built build/cybercraft-tweaks-1.6.0.jar against 26.3-`, then `warnings: 0`,
 `dev/cybercraft/tweaks/mixin/MarkBlended.class`, and `batch calls in batchFor: 3, each with SOLID: 3`.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add minecraft/cybercraft-tweaks/src minecraft/cybercraft-tweaks/README.md \
@@ -9902,7 +9902,7 @@ Its pixels point into the payload, valid during the call, as a texture's do.
 **Files:**
 - Modify: `tests/TestMessages.cpp`, `src/link/Messages.h`, `src/link/Messages.cpp`
 
-- [ ] **Step 1: Edit `tests/TestMessages.cpp` to add the failing tests**
+- [x] **Step 1: Edit `tests/TestMessages.cpp` to add the failing tests**
 
 ```cpp
 // AvatarExporter.send's scene: the origin as three doubles, the counts, the batches {texture, first, count, flags},
@@ -9966,7 +9966,7 @@ TEST(MessagesAtlasPatchRejections)
 	CHECK(!ParseAtlasRegion(Patch(0, 0, 2, 2, 12), 64, 48, error).has_value());
 ```
 
-- [ ] **Step 2: Build; it must fail**
+- [x] **Step 2: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -9975,7 +9975,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `'ParseAtlasRegion': identifier not found`.
 
-- [ ] **Step 3: Edit `src/link/Messages.h` to declare it**
+- [x] **Step 3: Edit `src/link/Messages.h` to declare it**
 
 ```cpp
 // Spike 7: a texture besides the atlas (kRenTexture), for the scene's batches that name its id: an entity's skin, or a
@@ -9999,7 +9999,7 @@ std::optional<AtlasPatch> ParseAtlasRegion(std::span<const uint8_t> aPayload, ui
 // Spike 7: a texture besides the atlas (kRenTexture), for the scene's batches that name its id: an entity's skin, or a
 ```
 
-- [ ] **Step 4: Edit `src/link/Messages.cpp` to add it**
+- [x] **Step 4: Edit `src/link/Messages.cpp` to add it**
 
 ```cpp
 static_assert(sizeof(proto::RenTexture) == 16 && sizeof(proto::RenScene) == 32 && sizeof(proto::RenBatch) == 16);
@@ -10042,7 +10042,7 @@ std::optional<AtlasPatch> ParseAtlasRegion(std::span<const uint8_t> aPayload, ui
 	return AtlasPatch{ header.x, header.y, header.width, header.height, aPayload.subspan(sizeof header, size_t(bytes)) };
 ```
 
-- [ ] **Step 5: Build and run the tests; they must pass**
+- [x] **Step 5: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -10052,7 +10052,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `507 test(s), 0 failure(s)`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -10074,7 +10074,7 @@ cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
 **Files:**
 - Modify: `tests/TestLink.cpp`, `src/link/Link.h`, `src/link/Link.cpp`
 
-- [ ] **Step 1: Edit `tests/TestLink.cpp` to add the failing test**
+- [x] **Step 1: Edit `tests/TestLink.cpp` to add the failing test**
 
 ```cpp
 	void WorldEntities(const WorldTable& aTable) override { worlds.push_back(aTable); }
@@ -10161,7 +10161,7 @@ TEST(LinkPassesOnPatchesOnceTheAtlasIsSeen)
 	CHECK_EQ(sink.patches.size(), size_t(3));
 ```
 
-- [ ] **Step 2: Build; it must fail**
+- [x] **Step 2: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -10170,7 +10170,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `'patchesBeforeAtlas': is not a member of 'cpmc::link::Link::Status'`.
 
-- [ ] **Step 3: Edit `src/link/Link.h` for the sink's call and the atlas's size**
+- [x] **Step 3: Edit `src/link/Link.h` for the sink's call and the atlas's size**
 
 ```cpp
 	virtual void WorldEntities(const WorldTable&) {}  // spike 7: every update; empty while Minecraft isn't in its world
@@ -10189,7 +10189,7 @@ Expected: `'patchesBeforeAtlas': is not a member of 'cpmc::link::Link::Status'`.
 		uint64_t                     patchesBeforeAtlas = 0;   // and patches from before the atlas, skipped
 ```
 
-- [ ] **Step 4: Edit `src/link/Link.cpp` to hand patches on**
+- [x] **Step 4: Edit `src/link/Link.cpp` to hand patches on**
 
 ```cpp
 			status_.atlasSeen = true;
@@ -10225,7 +10225,7 @@ Expected: `'patchesBeforeAtlas': is not a member of 'cpmc::link::Link::Status'`.
 		return false;  // lights, digging, avatar, ragdoll: stepped over
 ```
 
-- [ ] **Step 5: Build and run the tests; they must pass**
+- [x] **Step 5: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -10235,7 +10235,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `508 test(s), 0 failure(s)`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -10264,7 +10264,7 @@ building one from the patched image, and try each refusal.
 **Files:**
 - Modify: `tests/TestAtlas.cpp`, `src/render/Atlas.h`, `src/render/Atlas.cpp`
 
-- [ ] **Step 1: Edit `tests/TestAtlas.cpp` to add the failing tests**
+- [x] **Step 1: Edit `tests/TestAtlas.cpp` to add the failing tests**
 
 ```cpp
 #include "AtlasFixture.h"
@@ -10376,7 +10376,7 @@ TEST(AtlasPatchRefusesWhatDoesntFit)
 }
 ```
 
-- [ ] **Step 2: Build; it must fail**
+- [x] **Step 2: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -10385,7 +10385,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `'PatchAtlas': is not a member of 'cpmc'`.
 
-- [ ] **Step 3: Edit `src/render/Atlas.h` to declare it**
+- [x] **Step 3: Edit `src/render/Atlas.h` to declare it**
 
 ```cpp
 std::optional<Atlas> AtlasFromRgba(uint32_t aWidth, uint32_t aHeight, std::span<const uint8_t> aRgba, std::string& aError);
@@ -10412,7 +10412,7 @@ struct AtlasArea
 std::vector<AtlasArea> PatchAtlas(Atlas& aAtlas, uint32_t aX, uint32_t aY, uint32_t aWidth, uint32_t aHeight, std::span<const uint8_t> aRgba);
 ```
 
-- [ ] **Step 4: Edit `src/render/Atlas.cpp` to add it, building levels as `AtlasFromRgba` does**
+- [x] **Step 4: Edit `src/render/Atlas.cpp` to add it, building levels as `AtlasFromRgba` does**
 
 ```cpp
 	return out;
@@ -10527,7 +10527,7 @@ std::vector<AtlasArea> PatchAtlas(Atlas& aAtlas, uint32_t aX, uint32_t aY, uint3
 }
 ```
 
-- [ ] **Step 5: Build and run the tests; they must pass**
+- [x] **Step 5: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -10537,7 +10537,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `511 test(s), 0 failure(s)`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -10568,7 +10568,7 @@ The frame's kinds (the spec's "Entities: one frame's geometry"):
 **Files:**
 - Modify: `tests/TestEntities.cpp`, `src/entities/Entities.h`, `src/entities/Entities.cpp`
 
-- [ ] **Step 1: Edit `tests/TestEntities.cpp` to add the failing tests**
+- [x] **Step 1: Edit `tests/TestEntities.cpp` to add the failing tests**
 
 ```cpp
 const Vec3d kEye{ 880.5, 7.76, 2007.5 };
@@ -10711,7 +10711,7 @@ TEST(EntitiesDrawEachLayerByItsKind)
 	CHECK(entities.Frame(kEye).draws[0].kind == Kind::Model);
 ```
 
-- [ ] **Step 2: Build; it must fail**
+- [x] **Step 2: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -10720,7 +10720,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `'Texture': is not a member of 'cpmc::entities::Entities'`.
 
-- [ ] **Step 3: Edit `src/entities/Entities.h` for the kinds, the rule and the sort**
+- [x] **Step 3: Edit `src/entities/Entities.h` for the kinds, the rule and the sort**
 
 ```cpp
 #include <optional>
@@ -10832,7 +10832,7 @@ private:
 	std::map<uint32_t, bool>      seeThrough_;  // Part 5: each texture's, by id
 ```
 
-- [ ] **Step 4: Edit `src/entities/Entities.cpp` to add them**
+- [x] **Step 4: Edit `src/entities/Entities.cpp` to add them**
 
 ```cpp
 {
@@ -11007,7 +11007,7 @@ EntityFrame Entities::Frame(const Vec3d& aEye, bool aOutline, uint32_t aGlowLigh
 		lines.push_back(std::format("  batch {}: {}, {} vertices from {}{}, {} glowing", b, texture, batch.count, batch.first, drawn, glowing));
 ```
 
-- [ ] **Step 5: Build and run the tests; they must pass**
+- [x] **Step 5: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -11017,7 +11017,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `515 test(s), 0 failure(s)`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -11042,7 +11042,7 @@ cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
 **Files:**
 - Modify: `tests/TestEntities.cpp`, `src/entities/Entities.h`, `src/entities/Entities.cpp`, `tools/mclink/Main.cpp`
 
-- [ ] **Step 1: Edit `tests/TestEntities.cpp` to add the failing test**
+- [x] **Step 1: Edit `tests/TestEntities.cpp` to add the failing test**
 
 ```cpp
 TEST(EntitiesSortLayersBackToFront)
@@ -11062,7 +11062,7 @@ TEST(EntitiesNameEachBatchsKind)
 TEST(EntitiesSortLayersBackToFront)
 ```
 
-- [ ] **Step 2: Build; it must fail**
+- [x] **Step 2: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -11071,7 +11071,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `'KindWords': identifier not found`.
 
-- [ ] **Step 3: Edit `src/entities/Entities.h` to declare it**
+- [x] **Step 3: Edit `src/entities/Entities.h` to declare it**
 
 ```cpp
 struct EntityFrame
@@ -11084,7 +11084,7 @@ std::string KindWords(const link::SceneBatch& aBatch, EntityDraw::Kind aKind);
 struct EntityFrame
 ```
 
-- [ ] **Step 4: Edit `src/entities/Entities.cpp` to add it, for the request's lines too**
+- [x] **Step 4: Edit `src/entities/Entities.cpp` to add it, for the request's lines too**
 
 ```cpp
 	std::copy(sorted.begin(), sorted.end(), aVertices.begin() + aFirst);
@@ -11114,7 +11114,7 @@ std::string KindWords(const link::SceneBatch& aBatch, EntityDraw::Kind aKind)
 		                            KindWords(batch, BatchKind(batch, aGlowLight)), glowing));
 ```
 
-- [ ] **Step 5: Edit `tools/mclink/Main.cpp` for the kinds and the patches**
+- [x] **Step 5: Edit `tools/mclink/Main.cpp` for the kinds and the patches**
 
 ```cpp
 // feet, and when each blast's push would come; its entity textures, scenes and world-entity table; and refuses to start
@@ -11337,7 +11337,7 @@ SceneSummary Summarize(const SceneMessage& aScene, const std::map<uint32_t, bool
 			reportedPatchBytes = report.patchBytes;
 ```
 
-- [ ] **Step 6: Build and run the tests; they must pass**
+- [x] **Step 6: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -11347,7 +11347,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `516 test(s), 0 failure(s)`.
 
-- [ ] **Step 7: Run mclink without Minecraft**
+- [x] **Step 7: Run mclink without Minecraft**
 
 Minecraft and the game must not be running.
 ```bash
@@ -11357,7 +11357,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && printf 'status\nquit\n' > build
 Expected: `the mapping: created (process …); waiting for Minecraft`, then the status with `Minecraft: absent` and
 `atlas patches: 0 (0.00 MB), 0 rectangles patched, 0 refused; 0 from before the atlas, skipped`. Then `exit: 0`.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -11387,7 +11387,7 @@ It's kept with the other scripts, and the test that parses them takes it too; th
 - Create: `tools/mclink/blended.txt`
 - Modify: `tests/TestMcLinkScript.cpp`, `minecraft/cybercraft-tweaks/README.md`
 
-- [ ] **Step 1: Edit `tests/TestMcLinkScript.cpp` to parse it too**
+- [x] **Step 1: Edit `tests/TestMcLinkScript.cpp` to parse it too**
 
 ```cpp
 	                          "entities.txt", "spawn.txt", "emissive.txt" })
@@ -11396,7 +11396,7 @@ It's kept with the other scripts, and the test that parses them takes it too; th
 	                          "entities.txt", "spawn.txt", "emissive.txt", "blended.txt" })
 ```
 
-- [ ] **Step 2: Build and run the tests; the new one must fail**
+- [x] **Step 2: Build and run the tests; the new one must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -11406,7 +11406,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `FAIL ScriptsInTheRepoParse` and `516 test(s), 2 failure(s)`: the file isn't there yet.
 
-- [ ] **Step 3: Write `tools/mclink/blended.txt`**
+- [x] **Step 3: Write `tools/mclink/blended.txt`**
 
 ```text
 # Spike 7's Part 5: the layers Minecraft blends, sent blended by CyberCraft Tweaks 1.6.0, and animated textures, against
@@ -11468,7 +11468,7 @@ status
 quit
 ```
 
-- [ ] **Step 4: Edit `minecraft/cybercraft-tweaks/README.md` to name it**
+- [x] **Step 4: Edit `minecraft/cybercraft-tweaks/README.md` to name it**
 
 ```markdown
 mod, every vertex of their emissive layers' batches glows (block light 15), and their bodies' don't.
@@ -11481,7 +11481,7 @@ draws the slime's outer layer, the allay, the vex, the breeze's wind and eyes an
 piglin, opaque, as a model.
 ```
 
-- [ ] **Step 5: Build and run the tests; they must pass**
+- [x] **Step 5: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -11491,7 +11491,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `516 test(s), 0 failure(s)`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render minecraft/cybercraft-tweaks/README.md \
@@ -11515,14 +11515,14 @@ instance, without the game.
 **Files:**
 - Modify: `docs/spikes/2026-10-06-minecraft-entities-results.md`
 
-- [ ] **Step 1: Check that the game isn't running**
+- [x] **Step 1: Check that the game isn't running**
 
 ```bash
 tasklist | grep -i -c "cyberpunk2077.exe"
 ```
 Expected: `0`. If it's `1`, ask the user to quit the game: it would hold the mapping.
 
-- [ ] **Step 2: Ask the user to stop Minecraft, and for their leave**
+- [x] **Step 2: Ask the user to stop Minecraft, and for their leave**
 
 Ask the user for their leave to install CyberCraft Tweaks 1.6.0 into the `CyberCraft` instance, keeping 1.5.0
 disabled, and to run the script at x 880 in the `SkyCraft` world, which summons seven mobs and places six blocks, then
@@ -11530,7 +11530,7 @@ clears them; and, if Minecraft is running, to stop it from the Modrinth App. Ask
 Features and Entity Texture Features stay on for Part 5's tests ("Before you start (Part 5)"): if not, they're renamed
 `.jar.disabled` with 1.5.0, and put back after Task 50. Wait for the answers.
 
-- [ ] **Step 3: Install CyberCraft Tweaks 1.6.0**
+- [x] **Step 3: Install CyberCraft Tweaks 1.6.0**
 
 ```bash
 M=/c/Users/BLOXY/AppData/Roaming/ModrinthApp/profiles/CyberCraft/mods
@@ -11547,7 +11547,7 @@ Expected: `cybercraft-tweaks-1.2.0.jar.disabled` to `cybercraft-tweaks-1.5.0.jar
 `entity_texture_features-7.2.5-26.3-fabric`, `.jar` or `.jar.disabled` as they chose, `fabric-api-0.161.0+26.3.jar`
 and `skycraft-fabric-0.1.2.jar`. If a rename fails, Minecraft is still running.
 
-- [ ] **Step 4: Ask the user to start Minecraft**
+- [x] **Step 4: Ask the user to start Minecraft**
 
 The user starts the `CyberCraft` instance from the Modrinth App, and says when its title screen shows. Then:
 ```bash
@@ -11557,7 +11557,7 @@ grep -m1 "cybercraft_tweaks" "$L"; grep "SkyCraft:" "$L" | tail -2; echo "mixin 
 Expected: `cybercraft_tweaks 1.6.0` in Fabric's list of mods, `SkyCraft: can't open Skyrim's shared memory yet (Windows
 error 2: …)`, and `mixin errors: 0`.
 
-- [ ] **Step 5: Run the script**
+- [x] **Step 5: Run the script**
 
 ```bash
 L="/c/Users/BLOXY/AppData/Roaming/ModrinthApp/profiles/CyberCraft/logs/latest.log"; before=$(wc -l < "$L"); \
@@ -11586,18 +11586,18 @@ Give it 2 minutes. Expected:
 - **Nothing left:** each placed block's section `removed` once the blocks are air, the last scene no batches, its world
   line `nothing`, the status's `atlas patches: …, 0 refused; …`, and `exit: 0`.
 
-- [ ] **Step 6: Ask the user to stop Minecraft**
+- [x] **Step 6: Ask the user to stop Minecraft**
 
 Its window is hidden while `mclink` drives it, so the user stops it from the Modrinth App.
 
-- [ ] **Step 7: Record the run in `docs/spikes/2026-10-06-minecraft-entities-results.md`**
+- [x] **Step 7: Record the run in `docs/spikes/2026-10-06-minecraft-entities-results.md`**
 
 A "Step C's blended mark and animated textures, with `mclink`" section after run C's: the versions (CyberCraft Tweaks
 1.6.0, and whether Entity Model Features and Entity Texture Features were on); each mob's batches, with their textures,
 kinds and glowing vertices; the see-through textures; the patches a second and the rectangles; the placed blocks'
 triangles on animated sprites; anything that differs from the spec; and the verdict.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 With the plan, its steps ticked up to this one.
 ```bash
