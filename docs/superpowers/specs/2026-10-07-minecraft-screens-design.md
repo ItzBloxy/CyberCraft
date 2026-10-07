@@ -131,7 +131,8 @@ The user asked for Minecraft's inventory and the F3+F4 switcher during spike 6 (
   (`handleAccumulatedMovement`): with a screen open, `Screen.mouseMoved` at the frame's last position, and with a button
   held `mouseDragged` there too; with the mouse grabbed and no screen, `turnPlayer`. So a drag faster than a slot a
   frame skips slots in Minecraft's own window as well.
-- **The switcher** (`GameModeSwitcherScreen`) cycles creative, survival, adventure and spectator (`GameModeIcon.getNext`).
+- **The switcher** (`GameModeSwitcherScreen`) cycles creative, survival, adventure and spectator
+  (`GameModeIcon.getNext`).
 - **The game rule `immediate_respawn`** is on in the user's world (spike 6), so there's no death screen.
 
 ### BlockRender today (0.22.0)
@@ -186,8 +187,8 @@ text ("Typed text"). Two inputs stay ours:
   prefix, and the five buttons. So a key held as a screen opens or closes is let go on the side that saw its press.
 - **The hotbar slot** isn't followed while a screen is open: there, 1 to 9 swap items and the wheel scrolls.
 - **Leaving the game's window** keeps build mode and the screen, and Minecraft lets go of everything, as now.
-- **Timing:** our side learns of a screen a frame or two after Minecraft opens it (about 30 ms). Until then, inputs go by
-  the no-screen rules. That's also why the T or / that opens chat is never typed into it.
+- **Timing:** our side learns of a screen a frame or two after Minecraft opens it (about 30 ms). Until then, inputs go
+  by the no-screen rules. That's also why the T or / that opens chat is never typed into it.
 
 ## The cursor
 
@@ -231,9 +232,9 @@ by Minecraft's frame and the HUD image's transfer, about 2 to 3 frames, as the u
 - **From `WM_CHAR`:** Windows' characters for each key press, with the keyboard layout, Shift, Caps Lock, AltGr and dead
   keys applied, as Minecraft's own window (SDL) would get them.
 - **Seen by patching the executable's `PeekMessageW` import,** as `GetRawInputData`'s is (`hooks/ImportPatch`): after a
-  call with `PM_REMOVE` that returned a message, a `WM_CHAR` goes to the router. The other call site's sent-messages-only
-  peeks never return one. The game gets every message unchanged; nothing of its
-  own takes text in build mode.
+  call with `PM_REMOVE` that returned a message, a `WM_CHAR` goes to the router. The other call site only peeks for sent
+  messages, so it never returns one. The game gets every message unchanged; nothing of its own takes text in build
+  mode.
 - **Sent as `kInText` only while the screen state is on,** so the key that opened chat, and anything typed outside
   build mode or behind CET's overlay, never reaches Minecraft as text.
 - **One code point each:** a UTF-16 surrogate pair is joined into one; a lone surrogate is dropped.
@@ -331,7 +332,8 @@ After spike 7's runs A to D. BlockRender 0.23.0 deployed while the game is close
 8. Alt-Tab with a screen open, and back.
 9. T no longer opens the phone in build mode; Esc with no screen open still opens the game's menu.
 
-The placed blocks are cleared at the end (`setblock … air strict`). The results doc gets screenshots, as earlier runs'.
+The placed blocks are cleared at the end (`setblock … air strict`). The results doc gets screenshots, as earlier
+runs' did.
 
 ## Risks
 
