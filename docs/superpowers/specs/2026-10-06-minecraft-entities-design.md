@@ -5,8 +5,9 @@ approaches that the user asked for ("Decisions from the brainstorm"). "Found whi
 writing it out added to what was agreed. Then revised after a deep self-review, which checked each claim against its
 source and walked through step 0 and run A as the user would play them: "Changes from the deep review", at the end,
 lists what changed and what was checked. Planning Part 1 settled more, which "Changes while planning Part 1" lists,
-and a read before executing it corrected step 0's script ("Changes before executing Part 1"). The sections above
-already include all of those changes.
+and a read before executing it corrected step 0's script ("Changes before executing Part 1"). Step 0's results, and
+planning Part 2 from them, settled more: "Changes while planning Part 2". The sections above already include all of
+those changes.
 
 ## Purpose
 
@@ -34,8 +35,9 @@ steps"):
    blocks are, with Minecraft's glow written as the G-buffer's emission.
 2. **Step B, a forward pass before DLSS:** translucent particles blended, the targeted block's outline, DLSS's bias
    hint where our things have no motion vectors of their own, and an unlit glow if step A's emission doesn't work.
-3. **Step C, only if run A shows a need: the Minecraft side.** CyberCraft Tweaks keeps Minecraft's draw order for
+3. **Step C, where a step shows a need: the Minecraft side.** CyberCraft Tweaks keeps Minecraft's draw order for
    layered models (villagers' clothes, spider eyes) and marks emissive render types, which SkyCraft's capture drops.
+   Step 0 showed the draw order is needed, so it comes before step A; the emissive mark waits for run A.
 
 ## Decisions from the brainstorm
 
@@ -72,7 +74,8 @@ steps"):
   are Minecraft 26.3's own (checked in its jar); the glow rule is the light Minecraft gives a vertex; the bias hint is
   the game's own buffer. The one hand-set value is step B's `exposure` for blended particles: the game tags no exposure.
 - **Testable steps first.** `mclink` reads what Minecraft really sends before anything is drawn (step 0); step A is
-  checked in the game before step B is built; step C is built only if run A shows it's needed.
+  checked in the game before step B is built; step C is built only where a step shows it's needed (its draw order, after
+  step 0).
 
 ## Non-goals
 
@@ -91,8 +94,8 @@ steps"):
 - **Arrows stuck in NPCs** (`kEvArrowStuck`, drained and counted as now): an arrow that hits an NPC's stand-in vanishes.
 - **Translucent entity parts** (a slime's outer layer; allays and vexes, which Minecraft draws translucent): SkyCraft
   captures every model as a cut-out.
-- **Changes to SkyCraft's mod.** Protocol 11 stays. CyberCraft Tweaks changes only in step C, and only if run A shows
-  the need.
+- **Changes to SkyCraft's mod.** Protocol 11 stays. CyberCraft Tweaks changes only in step C, and only where a step
+  shows the need.
 - **Only these versions:** game 2.31, SkyCraft 0.1.2, Minecraft 26.3, Fabric Loader 0.19.5.
 
 ## Environment (checked on 2026-10-06)
@@ -393,8 +396,10 @@ update.
 
 - **One buffer** (default heap, one `uint` per texel as the atlas), and a table from id to start, width and height,
   passed to the shader per draw.
-- **New textures** are appended by the upload list in `Update`, as sections are. When the buffer is full, a bigger one
-  is made, the old texels copied over on the GPU, and the old one retired.
+- **New textures** are placed as they come and appended by the upload list in `Update`, as sections are. When the
+  buffer is full, a bigger one is made, and the textures already uploaded copied over on the GPU: only those, since
+  copies in one list aren't ordered and the new textures' copies follow. The old buffer is kept until that upload is
+  done, since the upload reads it, and every texture is drawn again once it is.
 - **A texture with a reused id** (only after a clear, which empties the table) goes in afresh.
 - **A batch whose texture isn't on the GPU yet** is skipped that frame and counted. SkyCraft always sends a texture
   before the scene that uses it, so this lasts a frame.
@@ -412,6 +417,7 @@ update.
   it only to the G-buffer list's own fence would let `Update` rewrite it before the forward list reads it, mixing two
   frames' vertices under one frame's draws. The fence after a list, not before it, as `Retired` learnt from Task 52.
 - **The G-buffer pass** takes the newest snapshot and records which; the forward pass of the same frame takes that one.
+  Until step B, the G-buffer list is the only one that reads a snapshot, so it's held to the fence after that list.
 
 ### Step A: into the G-buffer
 
@@ -482,14 +488,16 @@ What it draws, in order:
 A timestamp between the blocks and our entity draws, and around the forward list, give the GPU time of each; the
 status shows them. Main-thread costs (the scene's copy and `Update`'s) go into the existing update timing.
 
-## Step C: the Minecraft side (only if run A shows a need)
+## Step C: the Minecraft side (where a step shows a need)
 
-CyberCraft Tweaks 1.4.0 mixes into SkyCraft's `AvatarExporter`:
-- **draw order:** `order(n)` returns a collector that marks what's submitted through it with `n`; batches are kept per
-  order too, and sent lowest order first, so a layer drawn later in Minecraft is drawn later here and wins at equal
-  depth;
-- **emissive render types:** a batch of an emissive render type (eyes, the warden's glowing layers) carries a free
-  vertex-flag bit, which the shader takes as glow;
+CyberCraft Tweaks mixes into SkyCraft's `AvatarExporter`:
+- **draw order** (1.4.0, before step A, since step 0 showed the villager's layers out of order): `order(n)` returns a
+  collector that marks what's submitted through it with `n`; batches are kept per order too, and sent lowest order
+  first, so a layer drawn later in Minecraft is drawn later here and wins at equal depth. The collector is a `Proxy`
+  that calls the exporter itself with `n` as the order while each call runs; SkyCraft makes its batch inside each call;
+  the batches are a `TreeMap`, keyed by the order above SkyCraft's own key (`order << 40`);
+- **emissive render types** (only if run A shows the need): a batch of an emissive render type (eyes, the warden's
+  glowing layers) carries a free vertex-flag bit, which the shader takes as glow;
 - **per-entity motion** isn't designed here: if `dlsshint 2` isn't enough, it gets a design of its own before any
   code.
 
@@ -531,6 +539,13 @@ Then `/execute at @e[tag=sp7b] run setblock ~ ~ ~ air`, `/kill @e[tag=sp7]` and 
 the NPCs' stand-ins, and a last scene 7 s later, once the mobs' death puffs and the blaze's smoke are gone, shows
 nothing left. This settles, from Minecraft's own data, the sizes and flags step A builds on.
 
+### Step C's draw order, before step A
+
+Step 0 showed the villager's layers out of order, so step C's draw order comes first: CyberCraft Tweaks 1.4.0,
+installed with the user's leave and Minecraft stopped, its 1.3.0 kept disabled to put back; then step 0's script again
+with `mclink`, whose scenes should be step 0's with their batches in Minecraft's draw order. Run A's check 7 then sees
+it in the game.
+
 ### Step A's code
 
 The parsers, the table reader, `Entities`, `WorldShapes`, `EntityTextures` and `Snapshots`, unit-tested; the renderer's
@@ -541,11 +556,12 @@ deployed with the game closed.
 
 In creative (the Fun row), with combat off (the default), so Minecraft's blasts stay in Minecraft and Minecraft's death
 can't kill V. Before the user looks, the agent names what isn't drawn yet: translucent particles, the outline, signs'
-words, name tags.
-1. **Things in place:** a pig, a villager, a spider, a blaze, a lit TNT and a falling sand (the Spawn row, 5 m ahead)
-   stand with their feet on the ground, neither floating nor sunk, animate, are lit like the blocks by day, and stay
-   put while V walks and turns. The `entities` line shows the nearest mob's distance from V (from the world table's
-   shadow records), to compare with the 5 m.
+words, name tags, contact shadows, and a slime's outer layer, drawn solid since SkyCraft captures every model as a
+cut-out. A TNT's blast breaks the placed blocks and drops them, so Clear comes before any TNT.
+1. **Things in place:** a pig, a villager, a spider, a blaze and a slime (the Spawn row, 5 m ahead), a lit TNT
+   (`tnt-ahead`) and a falling sand stand with their feet on the ground, or fall to it, neither floating nor sunk,
+   animate, are lit like the blocks by day, and stay put while V walks and turns. The `entities` line shows the nearest
+   mob's distance from V (from the world table's shadow records), to compare with the 5 m.
 2. **Glow:** at night (Skip Time, as spike 3 did), the TNT's flash, the blaze and the explosion's puffs glow. A few
    `set glow` values are tried, and `set glowlight 14` beside a torch's flame; if nothing glows at any, step B's
    `glowpass` is the way.
@@ -556,8 +572,9 @@ words, name tags.
    survival, since creative breaks blocks at once).
 6. **Contact darkening:** whether the game's ambient occlusion darkens the ground under a pig. If not, `kWeShadow` waits
    for a later step.
-7. **Layers:** the villager's clothes and the spider's eyes, right or wrong. Wrong decides step C.
-8. **Smearing:** the pig walking while V stands, and while V turns. Visible trails decide `dlsshint 2` for step B.
+7. **Layers:** the villager's clothes and the spider's eyes over their bodies, with step C's draw order.
+8. **Smearing:** the slime hopping and the blaze's rods turning, while V stands, and while V turns: mobs don't walk on
+   the city's ground (step 0). Visible trails decide `dlsshint 2` for step B.
 9. **Cost:** the status's GPU times and the frame time, with the herd, then, last, during `tnt-cube`'s blast (125 TNT,
    whose chain may prime more than the scene's 48 entities at once, so some may not be drawn).
 10. **No crash or freeze.** DRED stays on.
@@ -575,10 +592,10 @@ The forward list, its shaders and settings, built and deployed with the game clo
 - `dlsshint` 0, 1 and 2 compared, moving and still;
 - the glow fallback, if run A needed it.
 
-### Step C, if run A needs it
+### Step C's emissive mark, if run A needs it
 
-CyberCraft Tweaks 1.4.0, installed with the user's leave and Minecraft stopped; `mclink` shows the batch order and
-flags; then run A's checks 2 and 7 again in the game.
+CyberCraft Tweaks again, installed with the user's leave and Minecraft stopped; `mclink` shows the batches' flags; then
+run A's check 2 again in the game.
 
 ### The results
 
@@ -596,17 +613,22 @@ flags; then run A's checks 2 and 7 again in the game.
 - **`exposure`** stays `predlss`'s setting, shared with step B's unlit colours.
 - **`entities`** (a request): the newest scene's batches (texture, size, flags, count), the textures (id, size) and the
   world entities by kind, into the log.
-- **The overlay's Spawn row** (Fun): each button types its commands as `mc` requests, each test thing 5 m ahead of
-  Minecraft's player, level (`/execute rotated ~ 0 positioned ^ ^ ^5`, as the named sets do), tagged as in step 0:
-  - a pig, a herd of 10 pigs (10 requests, about 10 s), a villager (with a profession and a level), a spider and a
-    blaze (AI off), each with an empty loot table, as in step 0;
-  - a falling sand, which drops no item where it lands, as in step 0: on the city's ground it can't become a block;
-  - block entities: a chest, a bed, a sign and a banner with patterns, side by side, and a torch, for its flame;
-  - items: a dropped item and a dropped grass block (its top tinted);
+- **The overlay's Spawn rows** (Fun): each button types its commands as `mc` requests, each test thing ahead of
+  Minecraft's player, level (`/execute rotated ~ 0 positioned ^ ^ ^N`, as the named sets do), tagged as in step 0. Each
+  kind has its own distance, so none lands on another:
+  - 5 m ahead: a pig, a villager (with a profession and a level), a spider and a blaze (AI off), and a slime of the
+    smallest size, which hops with no path and doesn't split when it dies, each with an empty loot table, as in step 0;
+  - a herd of 10 pigs, 11 and 13 m ahead (10 requests, about 10 s);
+  - a falling sand from 12 m up, 3 m ahead, which vanishes wherever it lands (`CancelDrop`), even on a placed block, and
+    drops no item if it falls out of the world (`DropItem`);
+  - block entities 8 m ahead, 3 m apart: a chest, a bed (its foot and its head, two blocks, each with a marker), a sign
+    and a banner with patterns, and a torch, for its flame;
+  - items 3 m ahead: a dropped item and a dropped grass block (its top tinted);
   - for step B: a firework, a splash potion and a campfire.
 
-  **Clear** clears what they made, by tag, leaving no drops. A lit TNT and a big blast come from the named sets already
-  there (`tnt-ahead`, `tnt-cube`).
+  **Clear** clears what they made, by tag, leaving no drops: the placed blocks set to air `strict`, without block
+  updates, so neither half of the bed breaks the other with a drop. A lit TNT and a big blast come from the named sets
+  already there (`tnt-ahead`, whose TNT stands on obsidian with a marker, and `tnt-cube`).
 
 ## Measurements and the status
 
@@ -634,7 +656,8 @@ A new status line, `entities`, shown by the overlay:
 - **Builds and deploys** only with the game closed (`tasklist` shows no `Cyberpunk2077.exe`), `CP2077_DIR` set only for
   the deploy and cleared after.
 - **Minecraft's world:** every test thing is tagged and cleared after each step; placed blocks are removed by their
-  markers; and nothing a test makes leaves an untagged drop. Test runs are in creative.
+  markers, without block updates; and nothing a test makes leaves an untagged drop: the placed blocks are cleared
+  before any TNT, whose blast would break and drop them. Test runs are in creative.
 
 ## Error handling
 
@@ -663,14 +686,15 @@ A new status line, `entities`, shown by the overlay:
   G-buffer list's fence until its forward list's, or the next G-buffer list's when no forward list comes; the forward
   pass gets the G-buffer pass's snapshot.
 - **The shader's constants:** the grown b1 checked against the compiled shader's reflection, as `TestShaders` does now.
-- **`Requests`:** the new settings' ranges (`entities`, `glow`, `glowlight`, `glowpass`, `dlsshint`, `outline`) and the
-  `entities` request.
+- **`Requests`:** the `entities` request, and the new settings parsed. Their ranges (`entities`, `glow`, `glowlight`,
+  `glowpass`, `dlsshint`, `outline`) are the renderer's, as every drawing setting's are, which no unit test reaches:
+  run A sends values out of range.
 
 Each new test is broken once to prove it can fail.
 
 ### `mclink`
 
-Step 0's script against the real Minecraft, and the same script after step C, if there is one.
+Step 0's script against the real Minecraft, and the same script again with step C's draw order.
 
 ### In the game
 
@@ -865,3 +889,45 @@ world past its clear. Night City's ground is only collision to Minecraft, in Sky
 
 The Spawn row (Part 2) follows step 0: its mobs have empty loot tables and its falling sand drops no item, so Clear
 leaves nothing behind.
+
+## Changes while planning Part 2
+
+Part 2 was planned from step 0's results (`docs/spikes/2026-10-06-minecraft-entities-results.md`): step A, and step
+C's draw order before it. Its code was written and tested in a scratch clone first, and reviewed against BlockRender's
+code, SkyCraft 0.1.2's bytecode and Minecraft 26.3's classes before the plan was written from it. These changed the
+design; the sections above include them:
+1. **Step C's draw order comes before step A,** in Part 2: step 0 showed a villager's badge sent before its body, by the
+   textures' ids. It's checked with `mclink` first, then by run A's check 7. Its emissive mark still waits for run A.
+   The mixin's collector is a `Proxy` that calls the exporter itself with the order set while each call runs, which
+   works because SkyCraft makes its batch inside each submit call; the batches are a `TreeMap` keyed by the order above
+   SkyCraft's own key ("Step C").
+2. **Run A's smearing check uses a slime,** hopping, and the blaze's rods turning: mobs don't walk on the city's ground
+   (step 0). The Spawn row gains a slime of the smallest size, which hops with no path (26.3's `AbstractCubeMob`) and
+   doesn't split when it dies. It's drawn solid, as the non-goals have it.
+3. **The Spawn rows' layout and their clear,** played through against Minecraft 26.3's classes and SkyCraft's:
+   - every entity but Minecraft's player stands on SkyCraft's blocky copy of the city's ground, so mobs and items stay
+     up, as in step 0;
+   - each kind has its own distance (3, 5, 8, 11 and 13 m), and the block entities stand 3 m apart;
+   - a bed is two blocks, its foot and its head, each with a marker; Clear sets the placed blocks to air `strict`,
+     without block updates, since a bed's half breaks with a drop when the other goes;
+   - the falling sand has `CancelDrop`, so it vanishes even where it lands on a placed block;
+   - Clear comes before any TNT, whose blast would break the placed blocks and drop them.
+4. **`tnt-ahead`'s TNT stands on obsidian, with a marker,** not on stone, which its blast would break and drop; Clear
+   removes the obsidian.
+5. **Entity textures are placed as they come,** so the cap counts them at once, and uploaded by `Update`. The buffer's
+   growth copies only the textures already uploaded, since copies in one list aren't ordered, and keeps the old buffer
+   until that upload is done, since it reads it ("Entity textures on the GPU").
+6. **Until step B, a snapshot is held to the fence after the G-buffer list that took it,** the only list that reads
+   it; an empty snapshot isn't taken; a snapshot buffer that can't be made skips the entities, logged once ("The
+   snapshot ring").
+7. **`WorldWords` moves from `mclink` into `link/WorldTable`,** for the status's `entities` line and the `entities`
+   request.
+8. **The nearest mob is measured from Minecraft's player's feet,** which follow V outside build mode, and which V
+   follows in it.
+9. **The settings' ranges are the renderer's** (`Renderer::Set`), as every drawing setting's are; run A checks them
+   with values out of range ("Testing").
+10. **Link turns drawing to `gbuffer` only from off;** if it was `predlss` or `present`, run A switches it from the
+    overlay, since entities are drawn only in `gbuffer` mode.
+11. **The outline comes with step B,** which draws it: Part 2's `WorldShapes` and `Entities` have no outline kind yet,
+    and the outline's test (its 24 vertices) comes with it.
+12. **BlockRender 0.20.0,** and CyberCraft Tweaks 1.4.0.
