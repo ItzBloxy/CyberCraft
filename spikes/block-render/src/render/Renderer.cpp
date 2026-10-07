@@ -32,12 +32,14 @@ constexpr int64_t  kTrackedFramesAgo = 3;    // a DLSS list tracked longer ago t
 constexpr uint32_t kBackBufferRtv = 0;
 constexpr uint32_t kPredlssRtvs = 1;  // the colour, then the motion vectors
 constexpr uint32_t kGbufferRtvs = 3;  // the base colour, normals, material values and motion vectors
-constexpr uint32_t kRtvs = 7;
+constexpr uint32_t kForwardRtvs = 7;  // step B: the colour, then the bias hint
+constexpr uint32_t kRtvs = 9;
 constexpr uint32_t kOwnDepthDsv = 0;
 constexpr uint32_t kPredlssDsv = 1;
 constexpr uint32_t kGbufferDsv = 2;
 constexpr uint32_t kTaggedDepthDsv = 3;
-constexpr uint32_t kDsvs = 4;
+constexpr uint32_t kForwardDsv = 4;  // step B: the tagged depth, read-only
+constexpr uint32_t kDsvs = 5;
 
 // The G-buffer's render targets in order, as step 1 found them (MainGbuffer checks the game's views have them).
 constexpr DXGI_FORMAT kGbufferFormats[4] = { DXGI_FORMAT_R10G10B10A2_UNORM, DXGI_FORMAT_R10G10B10A2_UNORM, DXGI_FORMAT_R8G8B8A8_UNORM,
@@ -46,6 +48,8 @@ constexpr DXGI_FORMAT kGbufferFormats[4] = { DXGI_FORMAT_R10G10B10A2_UNORM, DXGI
 // The slot of the list ListBefore handed to this thread's ExecuteCommandLists call, for OnSubmitted to signal: the
 // same thread makes both calls, while the main thread may change the mode in between.
 thread_local std::optional<uint32_t> t_insertedSlot;
+// Step B: the forward list's slot, kept apart, as one call could hold both of a frame's lists of ours.
+thread_local std::optional<uint32_t> t_insertedForward;
 
 int64_t Now()
 {
@@ -153,6 +157,7 @@ bool Renderer::SetMode(std::string_view aMode, std::string& aError)
 	latestSubmitted_ = false;
 	gbufferFrame_ = {};
 	gbufferEnd_ = nullptr;
+	DropForward();
 	knownStates_.Forget();
 	lastDrawnFrame_.reset();
 	consecutiveSkips_ = 0;
@@ -244,6 +249,10 @@ bool Renderer::ReloadShaders(std::string& aError)
 	entityDepthPipeline_.Reset();
 	crackPipeline_.Reset();
 	entityPipelinesFailed_ = false;
+	translucentPipeline_.Reset();
+	outlinePipeline_.Reset();
+	hintPipeline_.Reset();
+	forwardPipelinesFailed_ = false;
 	hudShadersFailed_ = false;
 	return true;
 }
@@ -417,6 +426,26 @@ bool Renderer::Set(std::string_view aName, double aValue, std::string& aError)
 			return false;
 		}
 		glowLight_ = uint32_t(aValue);
+		return true;
+	}
+	if (aName == "dlsshint")
+	{
+		if (aValue != 0.0 && aValue != 1.0)
+		{
+			aError = "dlsshint is 1 to mark Minecraft's translucent particles for DLSS, or 0 for nothing";
+			return false;
+		}
+		dlssHint_ = int(aValue);
+		return true;
+	}
+	if (aName == "outline")
+	{
+		if (aValue != 0.0 && aValue != 1.0)
+		{
+			aError = "outline is 1 to draw the targeted block's outline in build mode, or 0 to hide it";
+			return false;
+		}
+		outline_ = aValue == 1.0;
 		return true;
 	}
 	aError = std::format("there's no setting called \"{}\"", aName);
@@ -873,6 +902,130 @@ bool Renderer::EnsureEntityPipelines(bool aReversed)
 	return true;
 }
 
+bool Renderer::EnsureForwardObjects()
+{
+	if (forwardTimingsMapped_)
+	{
+		return true;
+	}
+	const D3D12_QUERY_HEAP_DESC queryDesc{ D3D12_QUERY_HEAP_TYPE_TIMESTAMP, kSlots * 2, 0 };
+	if (!forwardConstants_)
+	{
+		forwardConstants_ = gpu::MakeBuffer(device_, kSlots * kConstantsStride, D3D12_HEAP_TYPE_UPLOAD, D3D12_RESOURCE_STATE_GENERIC_READ);
+	}
+	if (!forwardTimings_)
+	{
+		forwardTimings_ = gpu::MakeBuffer(device_, kSlots * 2 * sizeof(uint64_t), D3D12_HEAP_TYPE_READBACK, D3D12_RESOURCE_STATE_COPY_DEST);
+	}
+	if (!forwardConstants_ || !forwardTimings_ ||
+	    (!forwardQueries_ && FAILED(device_->CreateQueryHeap(&queryDesc, IID_PPV_ARGS(&forwardQueries_)))))
+	{
+		return false;
+	}
+	for (uint32_t slot = 0; slot < kSlots; ++slot)
+	{
+		if (forwardLists_[slot])
+		{
+			continue;
+		}
+		if (FAILED(device_->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&forwardAllocators_[slot]))) ||
+		    FAILED(device_->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, forwardAllocators_[slot].Get(), nullptr,
+		                                      IID_PPV_ARGS(&forwardLists_[slot]))))
+		{
+			forwardLists_[slot].Reset();
+			return false;
+		}
+		d3d::Original().close(forwardLists_[slot].Get());
+		forwardLists_[slot]->SetName(L"BlockRender forward");
+	}
+	if (!forwardConstantsMapped_)
+	{
+		void* mapped = nullptr;
+		if (FAILED(forwardConstants_->Map(0, nullptr, &mapped)))
+		{
+			return false;
+		}
+		forwardConstants_->SetName(L"BlockRender forward constants");
+		forwardConstantsMapped_ = static_cast<uint8_t*>(mapped);
+	}
+	void* mapped = nullptr;
+	if (FAILED(forwardTimings_->Map(0, nullptr, &mapped)))
+	{
+		return false;
+	}
+	forwardTimings_->SetName(L"BlockRender forward timings");
+	forwardTimingsMapped_ = static_cast<uint64_t*>(mapped);  // last: mapped timings mean everything is ready
+	return true;
+}
+
+bool Renderer::EnsureForwardPipelines(bool aReversed)
+{
+	if (translucentPipeline_ && forwardReversed_ == aReversed)
+	{
+		return true;
+	}
+	if (forwardPipelinesFailed_ || !shaders_)
+	{
+		return false;
+	}
+	// The translucent particles: blended over the scene's colour as Minecraft blends them, its alpha left alone; tested
+	// against the tagged depth as the entities are, greater-or-equal, and never written; two-sided.
+	D3D12_GRAPHICS_PIPELINE_STATE_DESC particles{};
+	particles.pRootSignature = rootSignature_.Get();
+	particles.VS = { shaders_->entityVertex.data(), shaders_->entityVertex.size() };
+	particles.PS = { shaders_->translucent.data(), shaders_->translucent.size() };
+	D3D12_RENDER_TARGET_BLEND_DESC& blend = particles.BlendState.RenderTarget[0];
+	blend.BlendEnable = TRUE;
+	blend.SrcBlend = D3D12_BLEND_SRC_ALPHA;
+	blend.DestBlend = D3D12_BLEND_INV_SRC_ALPHA;
+	blend.BlendOp = D3D12_BLEND_OP_ADD;
+	blend.SrcBlendAlpha = D3D12_BLEND_ONE;
+	blend.DestBlendAlpha = D3D12_BLEND_ZERO;
+	blend.BlendOpAlpha = D3D12_BLEND_OP_ADD;
+	blend.LogicOp = D3D12_LOGIC_OP_NOOP;
+	blend.RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_RED | D3D12_COLOR_WRITE_ENABLE_GREEN | D3D12_COLOR_WRITE_ENABLE_BLUE;
+	particles.SampleMask = UINT_MAX;
+	particles.RasterizerState = BlockRasterizer(0);
+	particles.DepthStencilState.DepthEnable = TRUE;
+	particles.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ZERO;
+	particles.DepthStencilState.DepthFunc = aReversed ? D3D12_COMPARISON_FUNC_GREATER_EQUAL : D3D12_COMPARISON_FUNC_LESS_EQUAL;
+	particles.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+	particles.NumRenderTargets = 1;
+	particles.RTVFormats[0] = DXGI_FORMAT_R16G16B16A16_FLOAT;
+	particles.DSVFormat = DXGI_FORMAT_D32_FLOAT;
+	particles.SampleDesc.Count = 1;
+	// The outline: the same, its strips made from the edges by OutlineVS.
+	D3D12_GRAPHICS_PIPELINE_STATE_DESC outline = particles;
+	outline.VS = { shaders_->outlineVertex.data(), shaders_->outlineVertex.size() };
+	outline.PS = { shaders_->outline.data(), shaders_->outline.size() };
+	// DLSS's bias hint: 1 under the particles, unblended, into the R8 hint.
+	D3D12_GRAPHICS_PIPELINE_STATE_DESC hint = particles;
+	hint.PS = { shaders_->hint.data(), shaders_->hint.size() };
+	hint.BlendState.RenderTarget[0] = {};
+	hint.BlendState.RenderTarget[0].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_RED;
+	hint.RTVFormats[0] = DXGI_FORMAT_R8_UNORM;
+	gpu::ComPtr<ID3D12PipelineState> particlePipeline;
+	gpu::ComPtr<ID3D12PipelineState> outlinePipeline;
+	gpu::ComPtr<ID3D12PipelineState> hintPipeline;
+	if (FAILED(device_->CreateGraphicsPipelineState(&particles, IID_PPV_ARGS(&particlePipeline))) ||
+	    FAILED(device_->CreateGraphicsPipelineState(&outline, IID_PPV_ARGS(&outlinePipeline))) ||
+	    FAILED(device_->CreateGraphicsPipelineState(&hint, IID_PPV_ARGS(&hintPipeline))))
+	{
+		forwardPipelinesFailed_ = true;
+		log_.Push("renderer: couldn't create the forward list's pipelines, so Minecraft's translucent particles and the outline aren't "
+		          "drawn; everything else still is");
+		return false;
+	}
+	particlePipeline->SetName(L"BlockRender translucent particles pipeline");
+	outlinePipeline->SetName(L"BlockRender outline pipeline");
+	hintPipeline->SetName(L"BlockRender bias hint pipeline");
+	translucentPipeline_ = particlePipeline;
+	outlinePipeline_ = outlinePipeline;
+	hintPipeline_ = hintPipeline;
+	forwardReversed_ = aReversed;
+	return true;
+}
+
 bool Renderer::EnsureDepthTarget(uint32_t aWidth, uint32_t aHeight)
 {
 	if (depthTarget_ && depthWidth_ == aWidth && depthHeight_ == aHeight)
@@ -918,6 +1071,22 @@ void Renderer::Skip(const std::string& aWhy, bool aCounts)
 	{
 		Fail(std::format("{} frames in a row were skipped ({})", kSkipsBeforeOff, aWhy));
 	}
+}
+
+void Renderer::ForwardSkip(const std::string& aWhy)
+{
+	++stats_.forwardSkipped;
+	stats_.forwardLastSkip = aWhy;
+}
+
+void Renderer::DropForward()
+{
+	if (forward_)
+	{
+		snapshotRing_.Abandon(forward_->snapshot);
+		forward_.reset();
+	}
+	forwardList_ = nullptr;
 }
 
 void Renderer::Fail(const std::string& aWhy)
@@ -974,6 +1143,17 @@ void Renderer::ReadTimings(uint32_t aSlot)
 			entityGpuMsSum_ += double(entityEnd - entityBegin) * 1000.0 / double(timestampFrequency_);
 			++entityGpuSamples_;
 		}
+	}
+}
+
+void Renderer::ReadForwardTimings(uint32_t aSlot)
+{
+	const uint64_t begin = forwardTimingsMapped_[aSlot * 2];
+	const uint64_t end = forwardTimingsMapped_[aSlot * 2 + 1];
+	if (end > begin && timestampFrequency_ > 0)
+	{
+		forwardGpuMsSum_ += double(end - begin) * 1000.0 / double(timestampFrequency_);
+		++forwardGpuSamples_;
 	}
 }
 
@@ -1245,9 +1425,12 @@ Renderer::Stats Renderer::TakeStats()
 	stats.entityTextureMb = double(textures_.Used()) * 4.0 / 1048576.0;
 	stats.entityTexturesLeftOut = texturesLeftOut_;
 	stats.entityGpuMsAverage = entityGpuSamples_ ? entityGpuMsSum_ / double(entityGpuSamples_) : -1.0;
+	stats.outlineOn = outline_;
+	stats.dlssHint = dlssHint_;
+	stats.forwardGpuMsAverage = forwardGpuSamples_ ? forwardGpuMsSum_ / double(forwardGpuSamples_) : -1.0;
 	stats_ = {};
-	gpuMsSum_ = frameMsSum_ = updateMsSum_ = hudCopyMsSum_ = hudGpuMsSum_ = entityGpuMsSum_ = 0.0;
-	gpuSamples_ = frameSamples_ = updateSamples_ = hudCopySamples_ = hudGpuSamples_ = entityGpuSamples_ = 0;
+	gpuMsSum_ = frameMsSum_ = updateMsSum_ = hudCopyMsSum_ = hudGpuMsSum_ = entityGpuMsSum_ = forwardGpuMsSum_ = 0.0;
+	gpuSamples_ = frameSamples_ = updateSamples_ = hudCopySamples_ = hudGpuSamples_ = entityGpuSamples_ = forwardGpuSamples_ = 0;
 	return stats;
 }
 
@@ -1291,6 +1474,7 @@ FrameConstants Renderer::JitteredConstants(const CameraFrame& aCamera, const SlC
 	const std::array<double, 2> jitter = ClipJitter(aGame.jitter[0], aGame.jitter[1], aExtent.width, aExtent.height, jitterSign_);
 	constants.jitter[0] = float(jitter[0]);
 	constants.jitter[1] = float(jitter[1]);
+	constants.entity[2] = OutlinePixels(backWidth_.load(), aExtent.width);  // step B's, as Minecraft draws its own
 	return constants;
 }
 
@@ -1356,7 +1540,9 @@ void Renderer::DrawEntities(ID3D12GraphicsCommandList* aList, const CameraFrame&
 			constants.textureHeight = place->height;
 		}
 		aList->SetGraphicsRoot32BitConstants(1, 8, &constants, 0);
-		d3d::Original().drawInstanced(aList, draw.count, 1, 0, 0);
+		// An outline's vertices are its edges' ends, a pair an edge, from each of which OutlineVS makes six.
+		const uint32_t vertices = draw.kind == entities::EntityDraw::Kind::Outline ? draw.count / 2 * 6 : draw.count;
+		d3d::Original().drawInstanced(aList, vertices, 1, 0, 0);
 	}
 }
 
@@ -1381,6 +1567,10 @@ void Renderer::OnEvaluate(const EvaluateCall& aCall)
 			else if (tag.type == sl::kBufferTypeDepth)
 			{
 				evaluate.depth = tag;
+			}
+			else if (tag.type == sl::kBufferTypeBiasCurrentColorHint)
+			{
+				evaluate.hint = tag;
 			}
 		}
 		std::lock_guard lock(mutex_);
@@ -1586,6 +1776,16 @@ ID3D12CommandList* Renderer::ListBefore(ID3D12CommandQueue* aQueue, ID3D12Comman
 		predlss_ = {};  // each evaluate draws once
 		predlssList_ = nullptr;
 		return ours;
+	}
+	if (list == forwardList_.load())
+	{
+		// Step B: the DLSS list of a frame whose G-buffer list left something for the forward list.
+		std::lock_guard lock(mutex_);
+		if (mode_.load() != Mode::Gbuffer || !forward_ || forward_->list != list)
+		{
+			return nullptr;
+		}
+		return RecordForward(aQueue, static_cast<ID3D12GraphicsCommandList*>(aList));
 	}
 	if (list != gbufferEnd_.load())
 	{
@@ -1952,28 +2152,202 @@ ID3D12CommandList* Renderer::RecordGbuffer(ID3D12CommandQueue* aQueue)
 	slotSnapshot_[slot] = snapshot;
 	slotEntityTimed_[slot] = snapshot.has_value();
 	stats_.entityFrames += snapshot ? 1 : 0;
+	// Step B: the frame's forward list, before its DLSS list, if the snapshot has anything for it, with the snapshot held
+	// for it. A claim an earlier frame left, whose forward list never came, is let go.
+	DropForward();
+	if (snapshot && entities::ForwardDraws(snapshots_[*snapshot].draws, outline_) && snapshotRing_.Take(*snapshot))
+	{
+		forward_ = Forward{ latest_.list, latest_, *camera, constants, extent, *snapshot };
+		forwardList_ = latest_.list;
+	}
 	t_insertedSlot = slot;
+	retired_.ListRecorded();  // until OnSubmitted signals after it, what it draws isn't freed
+	return list;
+}
+
+ID3D12CommandList* Renderer::RecordForward(ID3D12CommandQueue* aQueue, ID3D12GraphicsCommandList* aDlssList)
+{
+	// The frame's hold on its snapshot moves to our list, or is let go if the list can't be drawn.
+	const Forward forward = *std::exchange(forward_, std::nullopt);
+	forwardList_ = nullptr;
+	const auto skip = [&](const std::string& aWhy) -> ID3D12CommandList* {
+		snapshotRing_.Abandon(forward.snapshot);
+		ForwardSkip(aWhy);
+		return nullptr;
+	};
+	const uint64_t completed = fence_->GetCompletedValue();
+	if (completed == UINT64_MAX)
+	{
+		snapshotRing_.Abandon(forward.snapshot);
+		Fail(std::format("the device was removed (0x{:08x})", uint32_t(device_->GetDeviceRemovedReason())));
+		return nullptr;
+	}
+	if (aQueue != queue_)
+	{
+		return skip("the DLSS list went to another queue than the main one");
+	}
+	if (!atlasBuffer_ || completed < atlasReady_)
+	{
+		return skip("the atlas isn't on the GPU");
+	}
+	// The colour and the depth passed the G-buffer list's checks for this same frame (CheckPredlssTargets).
+	auto*            colour = static_cast<ID3D12Resource*>(forward.evaluate.colour.resource);
+	auto*            depth = static_cast<ID3D12Resource*>(forward.evaluate.depth.resource);
+	auto*            hint = static_cast<ID3D12Resource*>(forward.evaluate.hint.resource);
+	const ListState* dlss = d3d::Tracker().Find(aDlssList);
+	if (!dlss || dlss->Recording() || int64_t(d3d::CurrentFrame()) - int64_t(dlss->Frame()) > kTrackedFramesAgo)
+	{
+		return skip("the DLSS list wasn't tracked from its Reset");
+	}
+	const std::optional<uint32_t> colourState = StateBeforeList(*dlss, colour, forward.evaluate.colour.state);
+	const std::optional<uint32_t> depthState = StateBeforeList(*dlss, depth, forward.evaluate.depth.state);
+	if (!colourState || !depthState)
+	{
+		return skip("the colour's or the depth's state before the DLSS list isn't known");
+	}
+	// DLSS's bias hint, while set dlsshint is 1, if the game tags one as step 1 found it and its state is known.
+	std::string             why;
+	std::optional<uint32_t> hintState;
+	if (dlssHint_ == 1 && hint && CheckHintTarget(hint->GetDesc(), colour->GetDesc(), why))
+	{
+		hintState = StateBeforeList(*dlss, hint, forward.evaluate.hint.state);
+	}
+	if (!EnsureForwardObjects())
+	{
+		return skip("couldn't create the forward list's objects");
+	}
+	if (!EnsureForwardPipelines(forward.camera.reversedDepth))
+	{
+		return skip("the forward list's pipelines couldn't be made");
+	}
+	const uint32_t slot = uint32_t(forwardRecordings_ % kSlots);
+	if (completed < forwardSlotFence_[slot])
+	{
+		return skip("the GPU is still busy with an earlier frame");
+	}
+	if (forwardSlotFence_[slot] != 0)
+	{
+		ReadForwardTimings(slot);
+	}
+	std::memcpy(forwardConstantsMapped_ + slot * kConstantsStride, &forward.constants, sizeof(forward.constants));
+
+	// Our own list: calls the hooks watch go through their originals, so nothing of ours reaches the tracker.
+	const d3d::Originals&      original = d3d::Original();
+	ID3D12GraphicsCommandList* list = forwardLists_[slot].Get();
+	if (FAILED(forwardAllocators_[slot]->Reset()) || FAILED(original.reset(list, forwardAllocators_[slot].Get(), translucentPipeline_.Get())))
+	{
+		snapshotRing_.Abandon(forward.snapshot);
+		Fail("couldn't reset a command list");
+		return nullptr;
+	}
+	list->EndQuery(forwardQueries_.Get(), D3D12_QUERY_TYPE_TIMESTAMP, slot * 2);
+	std::vector<Move> wanted = { { colour, *colourState, D3D12_RESOURCE_STATE_RENDER_TARGET },
+		                         { depth, *depthState, D3D12_RESOURCE_STATE_DEPTH_READ } };
+	if (hintState)
+	{
+		wanted.push_back({ hint, *hintState, D3D12_RESOURCE_STATE_RENDER_TARGET });
+	}
+	const std::vector<Move>                   into = MovesInto(wanted);
+	const std::vector<D3D12_RESOURCE_BARRIER> toTargets = Barriers(into);
+	if (!toTargets.empty())
+	{
+		original.resourceBarrier(list, UINT(toTargets.size()), toTargets.data());
+	}
+	const D3D12_CPU_DESCRIPTOR_HANDLE colourRtv = Offset(rtvHeap_->GetCPUDescriptorHandleForHeapStart(), kForwardRtvs, rtvIncrement_);
+	const D3D12_CPU_DESCRIPTOR_HANDLE hintRtv = Offset(rtvHeap_->GetCPUDescriptorHandleForHeapStart(), kForwardRtvs + 1, rtvIncrement_);
+	const D3D12_CPU_DESCRIPTOR_HANDLE dsv = Offset(dsvHeap_->GetCPUDescriptorHandleForHeapStart(), kForwardDsv, dsvIncrement_);
+	D3D12_RENDER_TARGET_VIEW_DESC     colourView{};
+	colourView.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+	colourView.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;
+	original.createRtv(device_, colour, &colourView, colourRtv);
+	if (hintState)
+	{
+		D3D12_RENDER_TARGET_VIEW_DESC hintView = colourView;
+		hintView.Format = DXGI_FORMAT_R8_UNORM;
+		original.createRtv(device_, hint, &hintView, hintRtv);
+	}
+	D3D12_DEPTH_STENCIL_VIEW_DESC depthView{};
+	depthView.Format = DepthViewFormat(depth->GetDesc().Format);
+	depthView.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
+	depthView.Flags = D3D12_DSV_FLAG_READ_ONLY_DEPTH;  // tested, never written
+	original.createDsv(device_, depth, &depthView, dsv);
+	const sl::Extent&    extent = forward.extent;
+	const D3D12_VIEWPORT viewport{ float(extent.left), float(extent.top), float(extent.width), float(extent.height), 0.0f, 1.0f };
+	const D3D12_RECT     scissor{ LONG(extent.left), LONG(extent.top), LONG(extent.left + extent.width), LONG(extent.top + extent.height) };
+	list->RSSetViewports(1, &viewport);
+	list->RSSetScissorRects(1, &scissor);
+	list->SetGraphicsRootSignature(rootSignature_.Get());
+	list->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+	list->SetGraphicsRootConstantBufferView(0, forwardConstants_->GetGPUVirtualAddress() + slot * kConstantsStride);
+	list->SetGraphicsRootShaderResourceView(3, atlasBuffer_->GetGPUVirtualAddress());
+	list->SetGraphicsRootShaderResourceView(4, atlasBuffer_->GetGPUVirtualAddress());  // t2: only step 2's shader reads it
+	// The translucent particles, then the outline, blended into the colour; then the bias hint under the particles.
+	const SnapshotGpu& shot = snapshots_[forward.snapshot];
+	original.omSetRenderTargets(list, 1, &colourRtv, FALSE, &dsv);
+	DrawEntities(list, forward.camera, completed, shot, entities::EntityDraw::Kind::Translucent, true);
+	if (outline_)
+	{
+		list->SetPipelineState(outlinePipeline_.Get());
+		DrawEntities(list, forward.camera, completed, shot, entities::EntityDraw::Kind::Outline, false);
+	}
+	if (hintState)
+	{
+		list->SetPipelineState(hintPipeline_.Get());
+		original.omSetRenderTargets(list, 1, &hintRtv, FALSE, &dsv);
+		DrawEntities(list, forward.camera, completed, shot, entities::EntityDraw::Kind::Translucent, false);
+	}
+	const std::vector<D3D12_RESOURCE_BARRIER> back = Barriers(MovesBack(into));
+	if (!back.empty())
+	{
+		original.resourceBarrier(list, UINT(back.size()), back.data());
+	}
+	list->EndQuery(forwardQueries_.Get(), D3D12_QUERY_TYPE_TIMESTAMP, slot * 2 + 1);
+	list->ResolveQueryData(forwardQueries_.Get(), D3D12_QUERY_TYPE_TIMESTAMP, slot * 2, 2, forwardTimings_.Get(), slot * 2 * sizeof(uint64_t));
+	if (FAILED(original.close(list)))
+	{
+		snapshotRing_.Abandon(forward.snapshot);
+		Fail("couldn't close a command list");
+		return nullptr;
+	}
+	++forwardRecordings_;
+	forwardSlotSnapshot_[slot] = forward.snapshot;
+	++stats_.forwardFrames;
+	stats_.forwardHinted += hintState ? 1 : 0;
+	t_insertedForward = slot;
 	retired_.ListRecorded();  // until OnSubmitted signals after it, what it draws isn't freed
 	return list;
 }
 
 void Renderer::OnSubmitted(ID3D12CommandQueue*, UINT, ID3D12CommandList* const*)
 {
-	if (!t_insertedSlot)
+	if (!t_insertedSlot && !t_insertedForward)
 	{
 		return;
 	}
-	const uint32_t  slot = *t_insertedSlot;
-	t_insertedSlot.reset();
-	std::lock_guard lock(mutex_);
-	slotFence_[slot] = Signal();  // signalled whatever the mode is now: our list went to the GPU
-	retired_.ListSubmitted(slotFence_[slot]);
-	if (const std::optional<uint32_t> snapshot = std::exchange(slotSnapshot_[slot], std::nullopt))
+	const std::optional<uint32_t> slot = std::exchange(t_insertedSlot, std::nullopt);
+	const std::optional<uint32_t> forward = std::exchange(t_insertedForward, std::nullopt);
+	std::lock_guard               lock(mutex_);
+	const uint64_t                fence = Signal();  // signalled whatever the mode is now: our lists went to the GPU
+	if (slot)
 	{
-		snapshotRing_.Submitted(*snapshot, slotFence_[slot]);
+		slotFence_[*slot] = fence;
+		retired_.ListSubmitted(fence);
+		if (const std::optional<uint32_t> snapshot = std::exchange(slotSnapshot_[*slot], std::nullopt))
+		{
+			snapshotRing_.Submitted(*snapshot, fence);
+		}
+		++stats_.drawn;
+		consecutiveSkips_ = 0;
 	}
-	++stats_.drawn;
-	consecutiveSkips_ = 0;
+	if (forward)
+	{
+		forwardSlotFence_[*forward] = fence;
+		retired_.ListSubmitted(fence);
+		if (const std::optional<uint32_t> snapshot = std::exchange(forwardSlotSnapshot_[*forward], std::nullopt))
+		{
+			snapshotRing_.Submitted(*snapshot, fence);
+		}
+	}
 }
 
 void Renderer::OnPresent(IDXGISwapChain* aSwapChain)
@@ -2430,6 +2804,27 @@ void Renderer::Shutdown()
 	}
 	snapshotRing_ = Snapshots(kSnapshots);
 	slotSnapshot_ = {};
+	forward_.reset();
+	forwardList_ = nullptr;
+	forwardSlotSnapshot_ = {};
+	if (forwardConstantsMapped_)
+	{
+		forwardConstants_->Unmap(0, nullptr);
+		forwardConstantsMapped_ = nullptr;
+	}
+	if (forwardTimingsMapped_)
+	{
+		forwardTimings_->Unmap(0, nullptr);
+		forwardTimingsMapped_ = nullptr;
+	}
+	forwardConstants_.Reset();
+	forwardTimings_.Reset();
+	forwardQueries_.Reset();
+	forwardLists_ = {};
+	forwardAllocators_ = {};
+	translucentPipeline_.Reset();
+	outlinePipeline_.Reset();
+	hintPipeline_.Reset();
 	pendingEntities_.reset();
 	pendingTextures_.clear();
 	textureReady_.clear();

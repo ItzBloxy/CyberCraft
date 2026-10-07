@@ -46,6 +46,9 @@ namespace cpmc
 //   then lights, shadows and fogs the blocks as its own. Every list is tracked: the G-buffer's lists are known by their
 //   targets, its end by its transitions, and the states our barriers start from by both. Spike 7 draws Minecraft's
 //   entities in the same list, after the blocks: the newest snapshot's models, then their cracks, then their depth.
+//   Its step B puts a second list of ours, the forward list, just before that frame's DLSS list, with the same
+//   snapshot, camera and jitter: the translucent particles and the outline, blended into the tagged colour, then DLSS's
+//   bias hint under the particles, each tested against the tagged depth.
 class Renderer : public HookEvents
 {
 public:
@@ -60,7 +63,8 @@ public:
 	const Atlas* AtlasData() const;
 	bool         ReloadShaders(std::string& aError);
 	// brightness, tolerance, cull, origin.x/y/z; for predlss, exposure, jittersign and mvsign; for gbuffer, stencil,
-	// metalness, roughness, materialb, gbmotion and gbdepth; spike 7's entities, glow and glowlight
+	// metalness, roughness, materialb, gbmotion and gbdepth; spike 7's entities, glow and glowlight, and step B's dlsshint
+	// and outline
 	bool         Set(std::string_view aName, double aValue, std::string& aError);
 	void         UploadSection(const SectionPos& aSection, std::vector<Vertex> aVertices);  // no vertices: remove it
 	void         ClearSections();  // every section, and every upload waiting
@@ -137,6 +141,14 @@ public:
 		double      entityTextureMb = 0.0;
 		uint64_t    entityTexturesLeftOut = 0;  // at the cap, since the start
 		double      entityGpuMsAverage = -1.0;  // the entities' draws in the G-buffer, on the GPU; below 0: none drawn
+		// Step B's forward list
+		bool        outlineOn = true;            // set outline
+		int         dlssHint = 1;                // set dlsshint
+		uint64_t    forwardFrames = 0;           // forward lists drawn, in the last second
+		uint64_t    forwardHinted = 0;           // of those, the ones that drew DLSS's bias hint
+		uint64_t    forwardSkipped = 0;          // frames whose forward list couldn't be drawn, in the last second
+		std::string forwardLastSkip;             // why, the last time
+		double      forwardGpuMsAverage = -1.0;  // the forward list, on the GPU; below 0: none drawn
 	};
 	Stats TakeStats();  // since the last call
 	void  Shutdown();   // waits for the GPU, then releases everything
@@ -183,6 +195,7 @@ private:
 		SlTag                      colour;  // the scaling input colour
 		SlTag                      motion;
 		SlTag                      depth;
+		SlTag                      hint;  // DLSS's bias hint (step B)
 	};
 
 	// gbuffer: the resources whose states the main queue's lists show, in watched_'s order
@@ -237,6 +250,14 @@ private:
 	// Spike 7: the textures waiting, into the one buffer, grown first if they don't fit, recorded into Upload's list.
 	void UploadEntityTextures(uint64_t aReady, std::vector<gpu::ComPtr<ID3D12Resource>>& aStaging, bool& aFailed);
 	void CopyEntities();  // spike 7: Update's, the frame's geometry into a free snapshot
+	// Step B's forward list, before the DLSS list its frame's G-buffer list left it (forward_): null if it's skipped,
+	// which lets go of the frame's snapshot and never switches drawing off.
+	ID3D12CommandList* RecordForward(ID3D12CommandQueue* aQueue, ID3D12GraphicsCommandList* aDlssList);
+	bool               EnsureForwardObjects();  // its lists, constants and timing queries
+	bool               EnsureForwardPipelines(bool aReversed);  // false, logged once, if they can't be made
+	void               ForwardSkip(const std::string& aWhy);
+	void               DropForward();  // a forward list that won't come: its frame's snapshot let go
+	void               ReadForwardTimings(uint32_t aSlot);
 	void               Skip(const std::string& aWhy, bool aCounts = true);  // aCounts: toward the skips in a row
 	void               Fail(const std::string& aWhy);  // logs, and switches drawing off
 	void               ReleaseTracking();               // if predlss or gbuffer asked for it
@@ -284,7 +305,8 @@ private:
 	int                                                        depthCull_ = -1;
 	bool                                                       depthReversed_ = false;
 	// RTVs: the back buffer; predlss's colour and motion vectors; gbuffer's base colour, normals, material values and
-	// motion vectors. DSVs: our depth buffer; predlss's depth; gbuffer's G-buffer depth and tagged depth.
+	// motion vectors; the forward list's colour and bias hint. DSVs: our depth buffer; predlss's depth; gbuffer's
+	// G-buffer depth and tagged depth; the forward list's tagged depth, read-only.
 	gpu::ComPtr<ID3D12DescriptorHeap>                          rtvHeap_;
 	gpu::ComPtr<ID3D12DescriptorHeap>                          dsvHeap_;
 	uint32_t                                                   rtvIncrement_ = 0;
@@ -396,6 +418,40 @@ private:
 	std::array<bool, kSlots>                    slotEntityTimed_{};
 	double                                      entityGpuMsSum_ = 0.0;
 	uint64_t                                    entityGpuSamples_ = 0;
+
+	// Step B's forward list. A G-buffer list that drew a snapshot with something for it leaves its frame's DLSS list, its
+	// tags, camera and constants, and the snapshot, held for the forward list (Snapshots::Take) until that's recorded,
+	// skipped or dropped.
+	struct Forward
+	{
+		const void*    list = nullptr;  // the frame's DLSS list; compared, never used
+		Evaluate       evaluate;
+		CameraFrame    camera;
+		FrameConstants constants{};
+		sl::Extent     extent{};
+		uint32_t       snapshot = 0;
+	};
+	bool                                                       outline_ = true;  // set outline: the outline in build mode
+	int                                                        dlssHint_ = 1;    // set dlsshint: 1 under the particles, 0 nowhere
+	std::optional<Forward>                                     forward_;
+	std::atomic<const void*>                                   forwardList_{ nullptr };  // forward_->list, read without the lock
+	gpu::ComPtr<ID3D12PipelineState>                           translucentPipeline_;
+	gpu::ComPtr<ID3D12PipelineState>                           outlinePipeline_;
+	gpu::ComPtr<ID3D12PipelineState>                           hintPipeline_;
+	bool                                                       forwardReversed_ = false;
+	bool                                                       forwardPipelinesFailed_ = false;  // until the shaders are reloaded
+	std::array<gpu::ComPtr<ID3D12CommandAllocator>, kSlots>    forwardAllocators_;
+	std::array<gpu::ComPtr<ID3D12GraphicsCommandList>, kSlots> forwardLists_;
+	std::array<uint64_t, kSlots>                               forwardSlotFence_{};
+	std::array<std::optional<uint32_t>, kSlots>                forwardSlotSnapshot_{};  // the snapshot each slot's list holds
+	uint64_t                                                   forwardRecordings_ = 0;
+	gpu::ComPtr<ID3D12Resource>                                forwardConstants_;  // upload: kSlots x kConstantsStride bytes
+	uint8_t*                                                   forwardConstantsMapped_ = nullptr;
+	gpu::ComPtr<ID3D12QueryHeap>                               forwardQueries_;
+	gpu::ComPtr<ID3D12Resource>                                forwardTimings_;  // readback: kSlots x 2 timestamps
+	uint64_t*                                                  forwardTimingsMapped_ = nullptr;
+	double                                                     forwardGpuMsSum_ = 0.0;
+	uint64_t                                                   forwardGpuSamples_ = 0;
 
 	Stats    stats_;
 	double   gpuMsSum_ = 0.0;
