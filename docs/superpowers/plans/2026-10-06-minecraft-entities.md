@@ -8867,7 +8867,7 @@ These commands come back, as in run A:
 **Files:**
 - Modify: `docs/spikes/2026-10-06-minecraft-entities-results.md`
 
-- [ ] **Step 1: Deploy (the game must not be running)**
+- [x] **Step 1: Deploy (the game must not be running)**
 
 ```bash
 tasklist | grep -i -c "cyberpunk2077.exe"
@@ -8885,7 +8885,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default -DCP2
 ```
 Expected: `installed`. The second configure clears `CP2077_DIR` again.
 
-- [ ] **Step 2: In the game: BlockRender 0.21.0 loads**
+- [x] **Step 2: In the game: BlockRender 0.21.0 loads**
 
 Ask the user to start the `CyberCraft` instance, then the game, and to wait at the game's main menu. Then:
 ```bash
@@ -8893,7 +8893,7 @@ L=$(ls -t /e/Cyberpunk2077/red4ext/logs | grep -i blockrender | head -1); grep -
 ```
 Expected: `BlockRender 0.21.0 loaded (game 2.31…), …; dred on, debug layer off; …`, and no error lines.
 
-- [ ] **Step 3: In the game: load, link, creative**
+- [x] **Step 3: In the game: load, link, creative**
 
 Ask the user to load a save on an open pavement by day, with at least 15 m clear ahead of V and a wall or a parked car
 near, and to click Link, then Creative in the overlay's Fun row. Expected: in the log, `link on: …; drawing is gbuffer`
@@ -8902,7 +8902,7 @@ Creative Mode`; in the status, `entities=on: …; the forward list in 0 frames, 
 outline on, dlsshint 1; …`, and the overlay's top lines `Last request: …` and `Requests waiting to be sent: none`. Then
 name what isn't drawn ("Before the user looks", above).
 
-- [ ] **Step 4: In the game: the particles by day (check 1)**
+- [x] **Step 4: In the game: the particles by day (check 1)**
 
 Ask the user to click the Particles row's Firework and look up 6 m ahead; then Splash potion, looking 3 m ahead and a
 little left; then Campfire, looking 3 m ahead and a little right; and to compare each with Minecraft's window. Then to
@@ -8913,7 +8913,7 @@ walk so the wall or the car comes between V and the campfire's smoke. Expected:
   bias hint in` as many, `GPU` a few hundredths of a millisecond, and no `forward lists skipped`; in the overlay's
   `Entities` line, `the forward list in N frames`.
 
-- [ ] **Step 5: In the game: DLSS's bias hint (check 2)**
+- [x] **Step 5: In the game: DLSS's bias hint (check 2)**
 
 With the campfire's smoke in view, send `dump hint`, then view it. Expected: the smoke's shape in white (1) in
 `tag-biasCurrentColorHint.png`, over whatever the game writes there itself, which the record notes. If the smoke's
@@ -8926,14 +8926,14 @@ Then ask the user to click Clear, and once the smoke has gone (about 10 s), send
 Expected: no trace of the smoke's shape: the game clears the hint each frame, so the marks don't stay behind. If they
 stay, `set dlsshint 0` until the forward list clears them itself (a new task).
 
-- [ ] **Step 6: In the game: the outline in build mode (check 3)**
+- [x] **Step 6: In the game: the outline in build mode (check 3)**
 
 Ask the user to click Campfire again, press F8 for build mode, and look at the campfire, then at the ground beside it,
 holding a block (Blocks in hand's Stone bricks). Expected: a thin black outline around the campfire's box, then around
 the block a held block would fill, about as thick as Minecraft's (side by side), steady and unbroken while V walks and
 turns. Send `set outline 0`: it goes; `set outline 1`: it's back. Then F8 again: build mode off, and the outline goes.
 
-- [ ] **Step 7: In the game: Shift+F6 pauses build mode (check 4)**
+- [x] **Step 7: In the game: Shift+F6 pauses build mode (check 4)**
 
 Ask the user to press F8 for build mode, then Shift+F6. Expected: CET's overlay opens; the status's build line `build=on,
 paused while CET's overlay is open; …`, the log `build mode paused: CET's overlay is open`; the overlay's buttons click
@@ -8941,7 +8941,7 @@ paused while CET's overlay is open; …`, the log `build mode paused: CET's over
 reach Minecraft; the outline stays. Then Shift+F6 again: the overlay closes, the log says `build mode goes on: CET's
 overlay closed`, and a right click places a block, as in build mode. Then F8: build mode off.
 
-- [ ] **Step 8: In the game: the overlay's fixes (check 5)**
+- [x] **Step 8: In the game: the overlay's fixes (check 5)**
 
 Ask the user to click More's Block entities and walk slowly forward while its 12 requests go (about 12 s), watching
 the overlay: its rows stay where they are as the requests come and go. Expected: the chest, the bed whole, the sign, the
@@ -8949,41 +8949,41 @@ banner and the torch, each 8 m ahead of where V was when its marker went down, s
 Minecraft's log, a `[CHAT]` reply to each, none an error. Then ask the user to click Clear. Expected: every placed block
 gone, the status's `the newest 0 batches` and `world: nothing` within about 10 s, and nothing left on the ground.
 
-- [ ] **Step 9: In the game: at night (check 6)**
+- [x] **Step 9: In the game: at night (check 6)**
 
 Ask the user to use the game's Skip Time to the night, then click Campfire, Splash potion and Firework, and the Mobs
 row's Spider. Expected: note how bright the particles look beside Minecraft's (which keeps its own time), and whether
 the spider's eyes look as in Minecraft, where they glow, or dark. Too-bright particles at night get a design of their
 own; dark eyes decide step C's emissive mark. Then ask the user to click Clear.
 
-- [ ] **Step 10: In the game: cost (check 7)**
+- [x] **Step 10: In the game: cost (check 7)**
 
 Ask the user to click Campfire, Splash potion and Firework a few times each, and read the status three times, a few
 seconds apart. Note the forward list's GPU time, the frame time (`frame=`), and the entities' GPU time. Then ask the
 user to click Clear.
 
-- [ ] **Step 11: In the game: no crash or freeze (check 8)**
+- [x] **Step 11: In the game: no crash or freeze (check 8)**
 
 Ask the user to click Unlink: Minecraft's entities stay drawn, as its blocks do (the user's choice), then Link again.
 Expected: the game ran without a crash or a freeze throughout.
 
-- [ ] **Step 12: Ask the user to quit the game and stop Minecraft**
+- [x] **Step 12: Ask the user to quit the game and stop Minecraft**
 
-- [ ] **Step 13: Read the log once more**
+- [x] **Step 13: Read the log once more**
 
 ```bash
 L=$(ls -t /e/Cyberpunk2077/red4ext/logs | grep -i blockrender | head -1); grep -E "renderer:|build mode|overlay|set |dump" "/e/Cyberpunk2077/red4ext/logs/$L" | head -200
 ```
 Everything the steps above logged, for the results.
 
-- [ ] **Step 14: Record run B's results in `docs/spikes/2026-10-06-minecraft-entities-results.md`**
+- [x] **Step 14: Record run B's results in `docs/spikes/2026-10-06-minecraft-entities-results.md`**
 
 A "Run B" section: the versions; each check above with its outcome and numbers: the particles by day, hidden and
 compared with Minecraft's; the bias hint's dumps and the trails with `dlsshint` 0 and 1; the outline; Shift+F6; the
 overlay's fixes; the night; the costs; and anything that surprised. Then the spike's answer at the top, for steps A and
 B.
 
-- [ ] **Step 15: Commit**
+- [x] **Step 15: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add docs/spikes/2026-10-06-minecraft-entities-results.md docs/superpowers/plans/2026-10-06-minecraft-entities.md \

@@ -5,14 +5,17 @@ Spike 7 draws Minecraft's entities, block entities, particles and world entities
 them, with `mclink`, without the game; later steps add their sections as they run, and the spike's answer goes at the
 top once step A is in.
 
-**The answer so far, from step A (run A): yes.** Minecraft's mobs, block entities, opaque particles and world entities
-(items, arrows, tridents, cracks) are drawn in Night City where Minecraft has them, posed and animated as Minecraft
-poses them, in Minecraft's draw order (CyberCraft Tweaks 1.4.0). The game lights them as its own geometry, ambient
-occlusion and reflections included, and what Minecraft makes full-bright glows at night through the G-buffer's
-emission. Nothing smeared, and they cost 0.02 ms of GPU a frame, 0.3 ms at the peak of a 125-TNT blast. Step B (Part 3)
-adds what isn't drawn yet: translucent particles and the block outline. Run A also found three things for Part 3 to
-fix: the overlay's block entities lose their markers when V moves, Shift+F6 drops out of build mode, and the overlay's
-buttons move as its lines come and go ("Run A").
+**The answer, from steps A and B (runs A and B): yes, but for emissive layers.** Minecraft's mobs, block entities,
+particles and world entities (items, arrows, tridents, cracks) are drawn in Night City where Minecraft has them, posed
+and animated as Minecraft poses them, in Minecraft's draw order (CyberCraft Tweaks 1.4.0). The game lights the opaque
+ones as its own geometry, ambient occlusion and reflections included, and what Minecraft makes full-bright glows at night
+through the G-buffer's emission. The translucent particles (fireworks' sparks, potions' swirls, campfire smoke) are
+blended in before DLSS, looking as Minecraft's by day and at night, and the targeted block's outline shows in build
+mode. Nothing smeared, the particles neither, without DLSS's bias hint, and it all costs about 0.03 ms of GPU a frame,
+0.3 ms at the peak of a 125-TNT blast. One thing isn't right yet: layers Minecraft makes glow by their render type,
+such as a spider's eyes, are lit like the rest ("Run B"), so step C's emissive mark is still to build. Run A's three
+problems, the overlay's block entities losing their markers, Shift+F6 leaving build mode and the overlay's buttons
+moving, are fixed (Part 3, "Run B").
 
 ## Step 0: what Minecraft sends of its entities, with `mclink`, without the game
 
@@ -332,3 +335,70 @@ buttons type them, Part 3's block entities and Particles row included, at step 0
   Minecraft's player still stood where run A had left it: at x −128, y 6, z 1989 and 1990, oak-plank brown, near spike
   3's corner. Neither this run nor run A placed them (every block both placed was set back to air), so they're older;
   they're left for the user to say.
+
+## Run B: step B in the game
+
+Date: 2026-10-07, 14:57 to 15:22. BlockRender 0.21.0 (`e0b3d24`, Part 3's Tasks 18 to 28) in Cyberpunk 2077 2.31 on
+an RTX 3070, DRED on, linked to SkyCraft 0.1.2 with CyberCraft Tweaks 1.4.0 in the `CyberCraft` instance (Minecraft
+26.3, 51 mods). Drawing in `gbuffer` mode, Minecraft's player in creative, combat off. The user played, clicked the
+overlay and took a screenshot (`2026-10-06-minecraft-entities-results/run-b/`); the agent deployed, sent requests, and
+read the logs, the status and the dumps. Plan: Task 30.
+
+### Verdict
+
+**Pass, but for the spider's eyes.** Step B draws Minecraft's translucent particles and the outline as Minecraft does,
+and run A's three fixes work in the game. Run B settled the spec's open questions:
+- **DLSS's bias hint isn't needed, and ours never reached DLSS:** the game rewrites the hint after the forward list,
+  every frame. With no hint of ours, the particles neither smeared nor ghosted, still or turning.
+- **The particles look right at night** with Minecraft's light alone: no night factor is needed.
+- **The spider's eyes don't glow:** step C's emissive mark is needed.
+
+### The checks
+
+1. **The particles by day** (check 1): the firework's red sparks, the potion's swirl and the campfire's smoke were
+   see-through, as bright as Minecraft's side by side, and hidden behind a wall where it was nearer; the user: "It's
+   perfect". The forward list drew in every frame the G-buffer list did (66 of 66 a second), with the bias hint in each
+   until it was switched off, at 0.008 to 0.010 ms of GPU, none skipped.
+2. **DLSS's bias hint** (check 2): `dump all` with the campfire's smoke in view showed the smoke in the scene's colour,
+   drawn by the forward list, and not a mark of it in the hint as DLSS gets it at the evaluate. Four dumps of the hint
+   held 38, 406 and 0 marked pixels, and 1 with `dlsshint 0`, none where the smoke was: the game's own marks. The dumps'
+   copy is recorded after everything the game puts in the DLSS list before the evaluate, so the game rewrites the hint
+   there, after the forward list, each frame. With `dlsshint 0`, the user saw no trail, ghost or doubled image behind the
+   smoke or the firework's sparks, standing still or turning slowly or quickly. So the hint isn't needed, and the plan's
+   fallback, drawing it in the DLSS list at the evaluate, wasn't built; `dlsshint` stayed 0 for the rest of run B.
+3. **The outline in build mode** (check 3): around the campfire, and around the block a held stone brick would fill on
+   the ground; thin, as thick as Minecraft's, steady and unbroken while V walked and turned. `set outline 0` hid it for
+   5 s and `1` brought it back, and F8 took it away with build mode.
+4. **Shift+F6** (check 4): CET's overlay opened and build mode paused at once (`build mode paused: CET's overlay is
+   open`); the overlay's clicks worked and reached nothing in Minecraft, the view didn't turn, and the outline stayed.
+   When the overlay closed, build mode went on within about a second, from the overlay's own `overlay closed` request
+   (Task 19), after which the log said `build mode goes on: CET's overlay closed`; a right click then placed a block.
+   F8 pressed with the overlay open turned build mode on paused.
+5. **The overlay's fixes** (check 5): the user clicked Block entities and walked forward while its 12 commands went.
+   Each block stood at its own marker, spread along the walk, and the overlay's rows stayed still. Clear set the eight
+   placed blocks back to air (the six block entities' and two campfires', Campfire having been clicked twice) and killed
+   their eight markers, leaving `the newest 0 batches` and `world: nothing`.
+6. **At night** (check 6): the particles looked right beside Minecraft's, still by day there. The spider's red eyes were
+   lit like its body, not glowing (`run-b/spider-eyes-night.webp`): SkyCraft captures the eyes' layer as `SOLID` with
+   the spider's own light, so nothing marks it to glow.
+7. **The cost** (check 7): with up to 2,532 translucent vertices in the scene (fireworks, potions and the campfire's
+   smoke), the forward list took 0.010 to 0.011 ms of GPU a frame and the G-buffer's entity draws 0.002 to 0.015 ms;
+   nothing was skipped, and the game's frame was 15 to 17.6 ms, at night in the city.
+8. **No crash or freeze** (check 8): none, and no new crash report. Unlink, then Link and Unlink again, worked.
+
+### Surprises
+
+- **CET's overlay hides its keys from the game while it's open:** Shift+F6's closing press never reached BlockRender's
+  raw-input hook, so build mode goes on when the overlay says it closed, about a second later. Opening it is seen at
+  once.
+- **A placement row clicked twice places at every marker of its kind:** the second Campfire placed a campfire at its new
+  marker and set the first one again; Clear still took both.
+- **The game's own bias marks are few:** 0 to about 400 pixels a frame, at distant things, never Minecraft's.
+
+### What it means
+
+- **Step C's emissive mark** is needed for the spider's eyes, and for Minecraft's other emissive layers (an enderman's
+  eyes, a phantom's).
+- **The forward list's hint pass does nothing the game keeps,** and costs a little GPU for it: `dlsshint` should
+  default to 0, or the pass go.
+- **The user asked for Cyberpunk's time of day to set Minecraft's,** as a task of its own.
