@@ -91,6 +91,7 @@ add_library(render_core STATIC
 	src/input/FocusWatch.cpp
 	src/input/Router.cpp
 	src/input/Cursor.cpp
+	src/input/Text.cpp
 	src/NpcRegistry.cpp
 	src/CombatInbox.cpp
 )
@@ -197,6 +198,7 @@ add_executable(render_tests
 	tests/TestFocusWatch.cpp
 	tests/TestRouter.cpp
 	tests/TestCursor.cpp
+	tests/TestText.cpp
 	tests/TestTicks.cpp
 	tests/TestVoxels.cpp
 	tests/TestGround.cpp
