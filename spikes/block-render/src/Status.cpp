@@ -307,6 +307,16 @@ std::string FormatLink(const LinkReport& aLink)
 	                   aLink.inputsForwarded, aLink.inputsHidden, OneLine(aLink.lastInput), aLink.inputsDropped,
 	                   aLink.inputHooked ? std::format("GetRawInputData hooked, {} keyboard and mouse events read", aLink.inputsRead)
 	                                     : std::string("GetRawInputData not hooked (see the log)"));
+	const std::string screen = !aLink.screenOpen               ? std::string("no Minecraft screen open")
+	                           : !aLink.screenOurs             ? std::string("a Minecraft screen open, but build mode is off or paused")
+	                           : aLink.cursorImageWidth == 0 ? std::string("a Minecraft screen open, and no HUD image for the cursor yet")
+	                                                           : std::format("a Minecraft screen open, the cursor at {}, {} of {} x {}", aLink.cursorX,
+	                                                                         aLink.cursorY, aLink.cursorImageWidth, aLink.cursorImageHeight);
+	out += std::format("screens={}; Windows speed {} of 20: {:.3f} px a count{}; {} cursor events sent; {} keys taken by the F3 "
+	                   "rule; {} characters typed, {} lone surrogate{} dropped; {}\n",
+	                   screen, aLink.pointerSpeed, aLink.pointerFactor, aLink.pointerEnhanced ? ", without its precision curve" : "",
+	                   aLink.cursorEvents, aLink.f3Taken, aLink.charsTyped, aLink.charsRefused, aLink.charsRefused == 1 ? "" : "s",
+	                   aLink.messageHooked ? "PeekMessageW hooked" : "PeekMessageW not hooked (see the log)");
 	out += FormatDrive(aLink);
 	out += FormatV(aLink);
 	const std::string floor = aLink.floorSent ? std::format("floor {} at height {:.2f} around {:.1f} {:.1f}", aLink.floorEpoch,

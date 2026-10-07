@@ -197,6 +197,44 @@ TEST(StatusWritesBuildMode)
 	CHECK(status.find("link=") < status.find("build=") && status.find("build=") < status.find("positions="));
 }
 
+TEST(StatusWritesTheScreens)
+{
+	cpmc::StatusReport report;
+	cpmc::LinkReport   link;
+	link.screenOpen = true;
+	link.screenOurs = true;
+	link.cursorX = 640;
+	link.cursorY = 360;
+	link.cursorImageWidth = 1280;
+	link.cursorImageHeight = 720;
+	link.pointerSpeed = 8;
+	link.pointerFactor = 0.75;
+	link.cursorEvents = 152;
+	link.f3Taken = 2;
+	link.charsTyped = 37;
+	link.charsRefused = 1;
+	link.messageHooked = true;
+	report.link = link;
+	std::string status = cpmc::FormatStatus(report);
+	CHECK(Has(status, "screens=a Minecraft screen open, the cursor at 640, 360 of 1280 x 720; Windows speed 8 of 20: 0.750 px a "
+	                  "count; 152 cursor events sent; 2 keys taken by the F3 rule; 37 characters typed, 1 lone surrogate "
+	                  "dropped; PeekMessageW hooked"));
+	CHECK(status.find("build=") < status.find("screens=") && status.find("screens=") < status.find("drive="));
+	link.cursorImageWidth = 0;  // no HUD image has come
+	report.link = link;
+	CHECK(cpmc::FormatStatus(report).find("\nscreens=a Minecraft screen open, and no HUD image for the cursor yet;") != std::string::npos);
+	link.screenOurs = false;
+	report.link = link;
+	CHECK(cpmc::FormatStatus(report).find("\nscreens=a Minecraft screen open, but build mode is off or paused;") != std::string::npos);
+	link.screenOpen = false;
+	link.pointerEnhanced = true;
+	link.messageHooked = false;
+	report.link = link;
+	CHECK(Has(cpmc::FormatStatus(report), "screens=no Minecraft screen open; Windows speed 8 of 20: 0.750 px a count, without "
+	                                      "its precision curve; 152 cursor events sent; 2 keys taken by the F3 rule; 37 "
+	                                      "characters typed, 1 lone surrogate dropped; PeekMessageW not hooked (see the log)"));
+}
+
 TEST(StatusWritesTheDrive)
 {
 	cpmc::StatusReport report;

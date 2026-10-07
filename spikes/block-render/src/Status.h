@@ -44,6 +44,20 @@ struct LinkReport
 	uint64_t           inputsHidden = 0;     // from the game
 	uint64_t           inputsDropped = 0;    // with the input ring full
 	std::string        lastInput;            // the last forwarded
+	// Spike 8: Minecraft's screens, the cursor and typed text; screenOpen is Minecraft's own flag
+	bool     screenOurs = false;     // a Minecraft screen is build mode's
+	uint32_t cursorX = 0;            // in the HUD image's pixels
+	uint32_t cursorY = 0;
+	uint32_t cursorImageWidth = 0;   // the HUD image the cursor stays in; 0 before one has come
+	uint32_t cursorImageHeight = 0;
+	int      pointerSpeed = 10;      // Windows', 1 to 20
+	double   pointerFactor = 1.0;    // back-buffer pixels a count
+	bool     pointerEnhanced = false;  // "Enhance pointer precision", whose curve the cursor leaves out
+	uint64_t cursorEvents = 0;       // kInCursor sent
+	uint64_t f3Taken = 0;            // keys Minecraft got because F3 was held
+	uint64_t charsTyped = 0;         // kInText sent
+	uint64_t charsRefused = 0;       // lone surrogates
+	bool     messageHooked = false;  // PeekMessageW's import is patched
 	// Build mode's drive (spike 5's "Status")
 	std::string           drive = "off";             // off, waiting or driving
 	double                driveFor = 0.0;            // seconds in that state

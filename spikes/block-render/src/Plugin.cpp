@@ -30,6 +30,7 @@
 #include "hooks/D3D12Hooks.h"
 #include "hooks/HookGroups.h"
 #include "hooks/StreamlineHooks.h"
+#include "input/MessageHook.h"
 #include "input/RawInputHook.h"
 #include "input/Router.h"
 #include "link/Actors.h"
@@ -75,7 +76,7 @@ namespace
 using Clock = std::chrono::steady_clock;
 using namespace std::chrono_literals;
 
-constexpr const char* kVersion = "0.22.0";
+constexpr const char* kVersion = "0.23.0";
 
 // A number of a version "major.minor.patch", aIndex 0 being the major, so that Query reports kVersion, as the log does.
 constexpr uint32_t VersionNumber(std::string_view aVersion, size_t aIndex)
@@ -109,12 +110,15 @@ std::filesystem::path     g_hudDir;  // the CET overlay's folder, where status.t
 cpmc::LogQueue            g_log;
 bool                      g_hooked = false;       // Streamline's imports are patched
 bool                      g_inputHooked = false;  // GetRawInputData's import is patched
+bool                      g_messageHooked = false;  // PeekMessageW's import is patched (spike 8)
 
 // Made at load and never destroyed: the hooks may call them until the process ends.
 cpmc::FrameLog*      g_frameLog = nullptr;
 cpmc::Dumps*         g_dumps = nullptr;
 cpmc::Renderer*      g_renderer = nullptr;
 cpmc::input::Router* g_router = nullptr;  // where keys and clicks go (the spec's "Input")
+cpmc::HudCursor      g_hudCursor;         // spike 8: Minecraft's cursor, which the router keeps and the HUD pass draws
+cpmc::HudSize        g_hudImage;          // the newest HUD image's size, which the cursor stays in
 
 cpmc::BlockWorld                           g_world;
 cpmc::MeshOptions                          g_meshOptions;
@@ -428,6 +432,7 @@ public:
 
 	void Hud(const cpmc::link::HudFrame& aFrame) override
 	{
+		g_hudImage = { aFrame.width, aFrame.height };
 		g_renderer->SetHudImage(aFrame.width, aFrame.height, aFrame.bottomUp, aFrame.pixels);
 	}
 
@@ -568,6 +573,8 @@ std::optional<cpmc::Vec3d> UpdateLink(double aNow, double aFrameMs)
 	g_renderer->SetHud(g_hudWanted);
 	const cpmc::HudSize back = g_renderer->BackBufferSize();
 	const cpmc::HudSize viewport = cpmc::HudViewport(back.width, back.height, g_hudScale);
+	// Spike 8: the cursor stays in the area the newest HUD image covers, drawn as the HUD pass draws it.
+	g_router->SetHudArea(g_hudImage.width, g_hudImage.height, cpmc::HudScaleFor(back.width, back.height, g_hudImage.width, g_hudImage.height));
 	g_linkSettings.viewportWidth = viewport.width;
 	g_linkSettings.viewportHeight = viewport.height;
 
@@ -626,7 +633,8 @@ std::optional<cpmc::Vec3d> UpdateLink(double aNow, double aFrameMs)
 	{
 		const std::optional<std::string> why = g_router->TurnOn();
 		Report(why ? "build on: it stays off: " + *why
-		           : "build on: Minecraft's player drives V; the movement keys, the mouse buttons, the wheel and 1 to 9 are Minecraft's");
+		           : "build on: Minecraft's player drives V; the movement keys, the mouse buttons, the wheel, 1 to 9, E, T, /, Q, F3 "
+		             "and O are Minecraft's, and with a Minecraft screen open every key");
 	}
 	g_frame.bytes = state.drainedBytes - drainedBefore;
 	g_frame.drainMs = state.drainMs;
@@ -1859,6 +1867,19 @@ cpmc::LinkReport LinkLines(const cpmc::Renderer::Stats& aStats, double aNow)
 	report.inputsForwarded = input.forwarded;
 	report.inputsHidden = input.hidden;
 	report.lastInput = input.last;
+	report.screenOurs = input.screen;
+	report.cursorX = input.cursor.x;
+	report.cursorY = input.cursor.y;
+	report.cursorImageWidth = input.imageWidth;
+	report.cursorImageHeight = input.imageHeight;
+	report.pointerSpeed = input.speed.speed;
+	report.pointerFactor = cpmc::input::PointerFactor(input.speed.speed);
+	report.pointerEnhanced = input.speed.enhanced;
+	report.cursorEvents = input.cursorEvents;
+	report.f3Taken = input.f3Taken;
+	report.charsTyped = input.charsTyped;
+	report.charsRefused = input.charsRefused;
+	report.messageHooked = g_messageHooked;
 	if (g_link)
 	{
 		const cpmc::link::Link::Status& state = g_link->State();
@@ -2307,7 +2328,10 @@ RED4EXT_C_EXPORT bool RED4EXT_CALL Main(RED4ext::v1::PluginHandle aHandle, RED4e
 		g_renderer = new cpmc::Renderer(g_log, g_pluginDir);
 		// Input first: it passes everything until the user links or presses F8.
 		g_router = new cpmc::input::Router(g_log);
+		g_router->SetHudCursor(&g_hudCursor);
+		g_renderer->SetHudCursor(&g_hudCursor);
 		g_inputHooked = cpmc::input::InstallRawInputHook(*g_router, g_log);
+		g_messageHooked = cpmc::input::InstallMessageHook(*g_router, g_log);
 		for (cpmc::HookEvents* listener : std::initializer_list<cpmc::HookEvents*>{ g_frameLog, g_dumps, g_renderer })
 		{
 			cpmc::d3d::AddListener(listener);
@@ -2342,6 +2366,7 @@ RED4EXT_C_EXPORT bool RED4EXT_CALL Main(RED4ext::v1::PluginHandle aHandle, RED4e
 		{
 			g_router->TurnOff("the plugin unloads");  // Minecraft lets go of everything
 			cpmc::input::RemoveRawInputHook();
+			cpmc::input::RemoveMessageHook();
 			g_router->SetLink(nullptr);  // from here on, nothing pushes into the mapping
 		}
 		if (g_renderer)
