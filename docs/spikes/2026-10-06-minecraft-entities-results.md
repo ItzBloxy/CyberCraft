@@ -402,3 +402,80 @@ and run A's three fixes work in the game. Run B settled the spec's open question
 - **The forward list's hint pass does nothing the game keeps,** and costs a little GPU for it: `dlsshint` should
   default to 0, or the pass go.
 - **The user asked for Cyberpunk's time of day to set Minecraft's,** as a task of its own.
+
+## Step C's emissive mark, with `mclink`
+
+Date: 2026-10-07, 15:55 to 15:56. `tools/mclink/emissive.txt` (Task 33) summoned a spider, an enderman, a warden and a
+charged creeper, AI off, 5 or 6 blocks ahead of the stand-in V at step 0's spot (x 880), then killed them. It ran
+against SkyCraft 0.1.2 with CyberCraft Tweaks 1.5.0 (1.4.0 kept beside it, disabled) in the `CyberCraft` instance
+(Minecraft 26.3, 51 mods), without the game, with `mclink` as Part 3 left it. The agent installed the mod with the
+user's leave, with Minecraft stopped; the user started and stopped Minecraft. Plan: Task 34.
+
+### Verdict
+
+**Pass.** Minecraft loaded CyberCraft Tweaks 1.5.0 with no mixin error, and every vertex of each emissive layer's batch
+came with block light 15, which BlockRender's glow rule takes, while the bodies' batches had none. In step 0, before
+the mark, the spider's eyes had none.
+
+### The checks
+
+- **Every summon was answered** (`Summoned new Spider`, `… Enderman`, `… Warden`, `… Creeper`), with no warning or
+  error about one, and the kill too (`Killed 4 entities`). The last scene, 7 s after it, was empty, its world line
+  `nothing`; no resyncs, nothing rejected, `exit: 0`.
+- **The textures,** named by Minecraft's log (ids 1 to 3 are the player's own, as in step 0):
+
+  | Id | Size | Texture |
+  |---|---|---|
+  | 4 and 5 | 64 × 32 | `spider/spider.png` and `spider/spider_eyes.png` |
+  | 6 and 7 | 64 × 32 | `enderman/enderman.png` and `enderman/enderman_eyes.png` |
+  | 8 | 512 × 256 | `textures/atlas/particles.png` |
+  | 9 to 11 | 128 × 128 | `warden/warden.png`, `warden/warden_bioluminescent_layer.png` and `warden/warden_pulsating_spots_1.png` |
+  | 12 and 13 | 64 × 32 | `creeper/creeper.png` and `creeper/creeper_armor.png` |
+  | 14 and 15 | 128 × 128 | `warden/warden_pulsating_spots_2.png` and `warden/warden_heart.png`, 1.6 and 1.9 s after the rest |
+
+- **The scenes,** 3 and 4 s after the summons: each body at order 0 and each emissive layer at order 1, in Minecraft's
+  draw order (1.4.0's), all of them cut-outs:
+
+  | Mob | Its body's batch | Its emissive layers' batches |
+  |---|---|---|
+  | spider | 396 vertices, none glowing | `spider_eyes`: 396 vertices, all glowing |
+  | enderman | 252, none | `enderman_eyes`: 252, all |
+  | warden | 360, none | `warden_bioluminescent_layer`: 180, all; `warden_pulsating_spots_2`: 108, all; `warden_heart`: 36, all, in the second scene |
+  | charged creeper | 216, none | `creeper_armor`: 216, all |
+
+  The first scene had 10 batches and 2,928 vertices, 1,170 of them glowing; the second, 11 batches and 2,970, 1,206
+  glowing: the layers' vertices, and 18 of the enderman's portal particles ("Surprises").
+
+### Surprises
+
+- **The warden's layers come and go from the scenes:** Minecraft submits an emissive layer only while its alpha is above
+  0.00001 (`LivingEntityEmissiveLayer`). In 26.3's `WardenRenderer` the bioluminescent layer's alpha is always 1, the
+  two pulsating spots' are `max(0, cos(age × 0.045) × 0.25)`, out of phase with each other, and the heart's follows its
+  beat. So the first spots were sent once, as their texture shows, but were in neither printed scene, and the heart was
+  in the second. The tendrils' layer, drawn on the warden's own texture when it hears something, wasn't sent.
+- **The enderman's portal particles glow as they age:** 18 of their 552 vertices, 3 particles, had block light 15. In
+  26.3 a portal particle's light gains block emission as it ages, up to 15 at the end of its life
+  (`PortalParticle.getLightCoords`, `LightCoordsUtil.addSmoothBlockEmission`): Minecraft's own light, which SkyCraft
+  sends as it is, not the mod's.
+- **Two warnings in Minecraft's log,** both as SkyCraft opened the world, and both in earlier runs' logs:
+  `Couldn't acquire next surface texture …` (step 0's) and `Requested post effect does not exist:
+  minecraft:end_of_frame`.
+
+### What it means for run C
+
+- **The four mobs' emissive layers should glow at night in the game,** with BlockRender 0.21.0 as it is.
+- **They're drawn solid, not blended:** SkyCraft captures every entity layer as a cut-out (the spec's "Non-goals"), and
+  BlockRender draws each texel whose alpha, times its vertex's, is at least 0.1. Minecraft 26.3 blends the `eyes` and
+  `entity_translucent_emissive` pipelines by alpha, and adds `energy_swirl` to what's under it. Read from 26.3's
+  textures and `WardenRenderer`:
+  - **the spider's and the enderman's eyes** are opaque texels (20 and 6) among clear ones, so they should look as in
+    Minecraft;
+  - **the warden's bioluminescent patches** have texel alphas of 0.19 to 0.43, so they'll show solid, stronger than
+    Minecraft's faint glow; its **spots**, at an alpha of at most 0.25 in Minecraft, show solid for about a third of
+    each 7-second pulse; its **heart**, solid while its beat's alpha is at least 0.1;
+  - **the charged creeper's armour:** its swirl's opaque stripes (644 of 2,048 texels) show solid over the body rather
+    than added to it, and still, since SkyCraft's capture doesn't apply the render type's scrolling.
+- **The enderman's portal particles** glow at the end of their lives, as in Minecraft.
+- **Rain can't hurt the enderman:** endermen take rain damage even with their AI off (`LivingEntity.aiStep`), but the
+  `SkyCraft` world's game rules `advance_weather` and `advance_time` are off and it isn't raining. Minecraft's time of
+  day stands still too, which the later task of setting it from Cyberpunk's will have to change.

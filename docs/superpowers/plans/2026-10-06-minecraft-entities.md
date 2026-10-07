@@ -9164,7 +9164,7 @@ The other emissive-looking render types (`beacon_beam`, `end_crystal_beam`, `lig
 - Modify: `minecraft/cybercraft-tweaks/src/main/resources/cybercraft_tweaks.mixins.json`,
   `minecraft/cybercraft-tweaks/src/main/resources/fabric.mod.json`, `minecraft/cybercraft-tweaks/README.md`
 
-- [ ] **Step 1: Write `minecraft/cybercraft-tweaks/src/main/java/dev/cybercraft/tweaks/mixin/MarkEmissive.java`**
+- [x] **Step 1: Write `minecraft/cybercraft-tweaks/src/main/java/dev/cybercraft/tweaks/mixin/MarkEmissive.java`**
 
 ```java
 package dev.cybercraft.tweaks.mixin;
@@ -9222,7 +9222,7 @@ public abstract class MarkEmissive {
 }
 ```
 
-- [ ] **Step 2: Edit `minecraft/cybercraft-tweaks/src/main/resources/cybercraft_tweaks.mixins.json` to add it, on the client**
+- [x] **Step 2: Edit `minecraft/cybercraft-tweaks/src/main/resources/cybercraft_tweaks.mixins.json` to add it, on the client**
 
 ```json
   "client": ["KeepDrawOrder"],
@@ -9231,7 +9231,7 @@ public abstract class MarkEmissive {
   "client": ["KeepDrawOrder", "MarkEmissive"],
 ```
 
-- [ ] **Step 3: Edit `minecraft/cybercraft-tweaks/src/main/resources/fabric.mod.json` for 1.5.0**
+- [x] **Step 3: Edit `minecraft/cybercraft-tweaks/src/main/resources/fabric.mod.json` for 1.5.0**
 
 ```json
   "version": "1.4.0",
@@ -9244,7 +9244,7 @@ public abstract class MarkEmissive {
   "description": "SkyCraft adjusted for Cyberpunk 2077's Night City: nothing digs into the game's ground, so blasts leave no blocks floating above it; V's health share carries into Minecraft's player as build mode starts; and what SkyCraft sends of Minecraft's entities keeps their layers in Minecraft's draw order, with the layers Minecraft draws emissive marked to glow.",
 ```
 
-- [ ] **Step 4: Edit `minecraft/cybercraft-tweaks/README.md` to say what it does**
+- [x] **Step 4: Edit `minecraft/cybercraft-tweaks/README.md` to say what it does**
 
 ```markdown
 What SkyCraft sends of Minecraft's entities keeps Minecraft's draw order:
@@ -9265,7 +9265,7 @@ What SkyCraft sends of Minecraft's entities keeps Minecraft's draw order and its
   SkyCraft sends lit TNT's white flash, and BlockRender's glow rule makes it glow.
 ```
 
-- [ ] **Step 5: Build CyberCraft Tweaks, and check that SkyCraft's exporter has what the mixin takes**
+- [x] **Step 5: Build CyberCraft Tweaks, and check that SkyCraft's exporter has what the mixin takes**
 
 ```bash
 cd /d/Cyberpunk-Minecraft/minecraft/cybercraft-tweaks && out=$(bash build.sh 2>&1); echo "$out" | tail -2; \
@@ -9281,7 +9281,7 @@ Expected: `built build/cybercraft-tweaks-1.5.0.jar against 26.3-`, then `warning
 `renderToBuffer` call in the method the mixin targets,
 `Method net/minecraft/client/model/Model.renderToBuffer:(Lcom/mojang/blaze3d/vertex/PoseStack;Lcom/mojang/blaze3d/vertex/VertexConsumer;III)V`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add minecraft/cybercraft-tweaks/src minecraft/cybercraft-tweaks/README.md \
@@ -9303,7 +9303,7 @@ with the other scripts, and the test that parses them takes it too; the mod's RE
 - Create: `tools/mclink/emissive.txt`
 - Modify: `tests/TestMcLinkScript.cpp`, `minecraft/cybercraft-tweaks/README.md`
 
-- [ ] **Step 1: Edit `tests/TestMcLinkScript.cpp` to parse it too**
+- [x] **Step 1: Edit `tests/TestMcLinkScript.cpp` to parse it too**
 
 ```cpp
 	                          "entities.txt", "spawn.txt" })
@@ -9312,7 +9312,7 @@ with the other scripts, and the test that parses them takes it too; the mod's RE
 	                          "entities.txt", "spawn.txt", "emissive.txt" })
 ```
 
-- [ ] **Step 2: Build and run the tests; the new one must fail**
+- [x] **Step 2: Build and run the tests; the new one must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -9322,7 +9322,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `FAIL ScriptsInTheRepoParse` and `505 test(s), 2 failure(s)`: the file isn't there yet.
 
-- [ ] **Step 3: Write `tools/mclink/emissive.txt`**
+- [x] **Step 3: Write `tools/mclink/emissive.txt`**
 
 ```text
 # Spike 7's Part 4: the layers Minecraft draws emissive, sent with full light by CyberCraft Tweaks 1.5.0, against
@@ -9359,7 +9359,7 @@ status
 quit
 ```
 
-- [ ] **Step 4: Edit `minecraft/cybercraft-tweaks/README.md` to name it**
+- [x] **Step 4: Edit `minecraft/cybercraft-tweaks/README.md` to name it**
 
 ```markdown
 player's health to half, all and a twentieth of its max, and reads each back with `/data`.
@@ -9370,7 +9370,7 @@ player's health to half, all and a twentieth of its max, and reads each back wit
 mod, every vertex of their emissive layers' batches glows (block light 15), and their bodies' don't.
 ```
 
-- [ ] **Step 5: Build and run the tests; they must pass**
+- [x] **Step 5: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -9380,7 +9380,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `505 test(s), 0 failure(s)`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render minecraft/cybercraft-tweaks/README.md \
@@ -9404,20 +9404,20 @@ instance, without the game.
 **Files:**
 - Modify: `docs/spikes/2026-10-06-minecraft-entities-results.md`
 
-- [ ] **Step 1: Check that the game isn't running**
+- [x] **Step 1: Check that the game isn't running**
 
 ```bash
 tasklist | grep -i -c "cyberpunk2077.exe"
 ```
 Expected: `0`. If it's `1`, ask the user to quit the game: it would hold the mapping.
 
-- [ ] **Step 2: Ask the user to stop Minecraft, and for their leave**
+- [x] **Step 2: Ask the user to stop Minecraft, and for their leave**
 
 Ask the user for their leave to install CyberCraft Tweaks 1.5.0 into the `CyberCraft` instance, keeping 1.4.0 disabled,
 and to run the script at x 880 in the `SkyCraft` world, which kills what it summons; and, if Minecraft is running, to
 stop it from the Modrinth App. Wait for both.
 
-- [ ] **Step 3: Install CyberCraft Tweaks 1.5.0**
+- [x] **Step 3: Install CyberCraft Tweaks 1.5.0**
 
 ```bash
 M=/c/Users/BLOXY/AppData/Roaming/ModrinthApp/profiles/CyberCraft/mods
@@ -9429,7 +9429,7 @@ Expected: `cybercraft-tweaks-1.2.0.jar.disabled`, `cybercraft-tweaks-1.3.0.jar.d
 `entity_model_features-3.3.11-26.3-fabric.jar.disabled` and `entity_texture_features-7.2.5-26.3-fabric.jar.disabled`,
 `fabric-api-0.161.0+26.3.jar` and `skycraft-fabric-0.1.2.jar`. If the rename fails, Minecraft is still running.
 
-- [ ] **Step 4: Ask the user to start Minecraft**
+- [x] **Step 4: Ask the user to start Minecraft**
 
 The user starts the `CyberCraft` instance from the Modrinth App, and says when its title screen shows. Then:
 ```bash
@@ -9439,7 +9439,7 @@ grep -m1 "cybercraft_tweaks" "$L"; grep "SkyCraft:" "$L" | tail -2; echo "mixin 
 Expected: `cybercraft_tweaks 1.5.0` in Fabric's list of mods, `SkyCraft: can't open Skyrim's shared memory yet (Windows
 error 2: …)`, and `mixin errors: 0`.
 
-- [ ] **Step 5: Run the script**
+- [x] **Step 5: Run the script**
 
 ```bash
 L="/c/Users/BLOXY/AppData/Roaming/ModrinthApp/profiles/CyberCraft/logs/latest.log"; before=$(wc -l < "$L"); \
@@ -9456,17 +9456,17 @@ Give it 2 minutes. Expected:
   (`spider`, `enderman`, `warden`, `creeper`) have none.
 - **Nothing left:** the last scene has no batches, its world line `nothing`, and `exit: 0`.
 
-- [ ] **Step 6: Ask the user to stop Minecraft**
+- [x] **Step 6: Ask the user to stop Minecraft**
 
 Its window is hidden while `mclink` drives it, so the user stops it from the Modrinth App.
 
-- [ ] **Step 7: Record the run in `docs/spikes/2026-10-06-minecraft-entities-results.md`**
+- [x] **Step 7: Record the run in `docs/spikes/2026-10-06-minecraft-entities-results.md`**
 
 A "Step C's emissive mark, with `mclink`" section after run B's: the versions (CyberCraft Tweaks 1.5.0); each emissive
 layer's batch, its texture, vertices and glowing vertices, beside the bodies'; anything else that differs from run B's
 Spawn-row scenes; and the verdict.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 With the plan, its steps ticked up to this one.
 ```bash
