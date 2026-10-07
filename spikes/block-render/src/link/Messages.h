@@ -47,6 +47,21 @@ struct AtlasImage
 // 16,384, or the payload is too short.
 std::optional<AtlasImage> ParseAtlas(std::span<const uint8_t> aPayload, std::string& aError);
 
+// Spike 7's Part 5: an animated sprite's frame (kRenAtlasRegion), a patch of Minecraft's combined atlas: the sprite's
+// cell, the frame's edge pixels repeated into its border. RGBA8, top row first.
+struct AtlasPatch
+{
+	uint32_t                 x = 0;  // its top left texel, in the atlas's top level
+	uint32_t                 y = 0;
+	uint32_t                 width = 0;
+	uint32_t                 height = 0;
+	std::span<const uint8_t> rgba;  // width * height * 4 bytes, inside the payload
+};
+
+// A kRenAtlasRegion payload: {u32 x, y, width, height}, then the pixels. Nothing, with aError saying why, if a side is
+// 0, the rectangle doesn't lie inside an atlas of aAtlasWidth x aAtlasHeight, or the payload is too short.
+std::optional<AtlasPatch> ParseAtlasRegion(std::span<const uint8_t> aPayload, uint32_t aAtlasWidth, uint32_t aAtlasHeight, std::string& aError);
+
 // Spike 7: a texture besides the atlas (kRenTexture), for the scene's batches that name its id: an entity's skin, or a
 // whole atlas of Minecraft's other than the blocks' and items' (chests', banners', signs', particles'). RGBA8, top row
 // first. SkyCraft sends each once, and all of them again only after its clear.

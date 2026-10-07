@@ -159,6 +159,18 @@ std::vector<uint8_t> Texture(uint32_t aId, uint32_t aWidth, uint32_t aHeight, si
 	return bytes.data;
 }
 
+// WorldExporter.frame's patch: x, y, width and height, then aBytes bytes of pixels, the i-th i + 1.
+std::vector<uint8_t> Patch(uint32_t aX, uint32_t aY, uint32_t aWidth, uint32_t aHeight, uint32_t aBytes)
+{
+	Bytes bytes;
+	bytes.Put(aX).Put(aY).Put(aWidth).Put(aHeight);
+	for (uint32_t i = 0; i < aBytes; ++i)
+	{
+		bytes.Put(uint8_t(i + 1));
+	}
+	return bytes.data;
+}
+
 // AvatarExporter.send's scene: the origin as three doubles, the counts, the batches {texture, first, count, flags},
 // then aVertices vertices, the i-th at x = i with block light i.
 std::vector<uint8_t> Scene(double aX, uint32_t aVertices, const std::vector<std::array<uint32_t, 4>>& aBatches, uint32_t aClaimed)
@@ -209,6 +221,43 @@ TEST(MessagesTextureRejections)
 	CHECK(!ParseTexture(Texture(3, 4097, 1, 4097 * 4), error).has_value());
 	CHECK(error.find("out of range") != std::string::npos);
 	CHECK(!ParseTexture(Texture(3, 2, 2, 12), error).has_value());
+	CHECK(error.find("needs 16 bytes, and has 12") != std::string::npos);
+}
+
+TEST(MessagesAtlasPatchAsWorldExporterWritesIt)
+{
+	const auto  payload = Patch(16, 32, 2, 1, 8);
+	std::string error;
+	const auto  patch = ParseAtlasRegion(payload, 64, 48, error);
+	CHECK(patch.has_value());
+	if (!patch)
+	{
+		return;
+	}
+	CHECK_EQ(patch->x, 16u);
+	CHECK_EQ(patch->y, 32u);
+	CHECK_EQ(patch->width, 2u);
+	CHECK_EQ(patch->height, 1u);
+	CHECK_EQ(patch->rgba.size(), size_t(8));
+	CHECK_EQ(int(patch->rgba[0]), 1);
+	CHECK_EQ(int(patch->rgba[7]), 8);
+	CHECK(ParseAtlasRegion(Patch(62, 47, 2, 1, 8), 64, 48, error).has_value());  // the far corner is inside too
+}
+
+TEST(MessagesAtlasPatchRejections)
+{
+	std::string error;
+	CHECK(!ParseAtlasRegion(std::vector<uint8_t>(15), 64, 48, error).has_value());
+	CHECK(error.find("no room for its header") != std::string::npos);
+	CHECK(!ParseAtlasRegion(Patch(0, 0, 0, 1, 0), 64, 48, error).has_value());
+	CHECK(error.find("of 0 x 1 at 0 0 isn't inside") != std::string::npos);
+	CHECK(!ParseAtlasRegion(Patch(63, 0, 2, 1, 8), 64, 48, error).has_value());  // past the right edge
+	CHECK(error.find("isn't inside the 64 x 48 atlas") != std::string::npos);
+	CHECK(!ParseAtlasRegion(Patch(0, 47, 1, 2, 8), 64, 48, error).has_value());  // past the bottom
+	CHECK(error.find("at 0 47 isn't inside") != std::string::npos);
+	CHECK(!ParseAtlasRegion(Patch(0xFFFFFFFF, 0, 2, 1, 8), 64, 48, error).has_value());  // x + width wraps in 32 bits
+	CHECK(error.find("at 4294967295 0 isn't inside") != std::string::npos);
+	CHECK(!ParseAtlasRegion(Patch(0, 0, 2, 2, 12), 64, 48, error).has_value());
 	CHECK(error.find("needs 16 bytes, and has 12") != std::string::npos);
 }
 

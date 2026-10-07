@@ -13,6 +13,7 @@ namespace proto = skycraft::proto;
 static_assert(sizeof(proto::RenVertex) == sizeof(Vertex));
 static_assert(sizeof(proto::RenSection) == 16 && sizeof(proto::RenAtlas) == 8);
 static_assert(sizeof(proto::RenTexture) == 16 && sizeof(proto::RenScene) == 32 && sizeof(proto::RenBatch) == 16);
+static_assert(sizeof(proto::RenAtlasRegion) == 16);
 
 std::optional<SectionMesh> ParseSection(std::span<const uint8_t> aPayload, bool aKeepTranslucent, std::string& aError)
 {
@@ -75,6 +76,33 @@ std::optional<AtlasImage> ParseAtlas(std::span<const uint8_t> aPayload, std::str
 		return std::nullopt;
 	}
 	return AtlasImage{ header.width, header.height, aPayload.subspan(sizeof header, size_t(bytes)) };
+}
+
+std::optional<AtlasPatch> ParseAtlasRegion(std::span<const uint8_t> aPayload, uint32_t aAtlasWidth, uint32_t aAtlasHeight, std::string& aError)
+{
+	proto::RenAtlasRegion header;
+	if (aPayload.size() < sizeof header)
+	{
+		aError = std::format("an atlas patch of {} bytes has no room for its header", aPayload.size());
+		return std::nullopt;
+	}
+	std::memcpy(&header, aPayload.data(), sizeof header);
+	// In 64 bits: a corner near 2^32 mustn't wrap back inside.
+	if (header.width == 0 || header.height == 0 || uint64_t(header.x) + header.width > aAtlasWidth ||
+	    uint64_t(header.y) + header.height > aAtlasHeight)
+	{
+		aError = std::format("an atlas patch of {} x {} at {} {} isn't inside the {} x {} atlas", header.width, header.height, header.x,
+		                     header.y, aAtlasWidth, aAtlasHeight);
+		return std::nullopt;
+	}
+	const uint64_t bytes = uint64_t(header.width) * header.height * 4;
+	if (aPayload.size() - sizeof header < bytes)
+	{
+		aError = std::format("a {} x {} atlas patch needs {} bytes, and has {}", header.width, header.height, bytes,
+		                     aPayload.size() - sizeof header);
+		return std::nullopt;
+	}
+	return AtlasPatch{ header.x, header.y, header.width, header.height, aPayload.subspan(sizeof header, size_t(bytes)) };
 }
 
 std::optional<TextureImage> ParseTexture(std::span<const uint8_t> aPayload, std::string& aError)
