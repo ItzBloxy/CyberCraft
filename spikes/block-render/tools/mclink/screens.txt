@@ -1,0 +1,100 @@
+# Spike 8's step 0: Minecraft's side of its screens worked from the game, against SkyCraft's real mod, without the
+# game. mclink sends what BlockRender will: a cursor in the HUD image's pixels, clicks, keys, typed text, and the pause
+# menu's kInOpenMenu. It asks Minecraft for a 1280 x 720 HUD image, which at the user's GUI scale 2 is 640 by 360 GUI
+# pixels: a chest's screen, 176 by 168, is centred at GUI 232 96, so chest slot n (row n / 9, column n % 9) has its
+# centre at window pixel 496 + 36 x column, 244 + 36 x row. Build mode is on throughout: with it off, SkyState says a
+# menu is open, and SkyCraft lets go of every key and button each frame, so F3 couldn't stay held for the switcher.
+# The test chest stands at 882 7 2007, two blocks east of the stand-in V at its eye's height, with a stick and a stone
+# in it: nothing of the user's inventory is touched, and the switcher's two rounds leave the game mode as it was.
+# Start Minecraft first; this waits for its world.
+status
+wait-world 180
+ground city
+at 880.5 6.14 2007.5
+look 270 9
+dump E:\Cyberpunk2077\red4ext\plugins\PhysXProbe\dumps\2026-10-01_14-37-07\collision.obj
+link on
+wait-ground 30
+wait 2
+# The chest, facing the stand-in V, a stick in its slot 0 and a stone in slot 1.
+type /setblock 882 7 2007 minecraft:chest[facing=west]
+type /item replace block 882 7 2007 container.0 with minecraft:stick
+type /item replace block 882 7 2007 container.1 with minecraft:stone
+build on
+wait 2
+# A right-click opens it: the stand-in V looks east and 9 degrees down, at the chest's middle.
+click right
+wait-screen open
+status
+save-hud build\step0\chest.dds
+# The hover highlight: the cursor on empty slot 9 (row 1, column 0), beside empty slot 10, which isn't hovered.
+cursor 496 280
+wait 0.5
+hud-box 484 268 508 292
+hud-box 520 268 544 292
+# The stick from slot 0 to slot 4, and the stone from slot 1 to slot 5: a click picks each up, a click puts it down.
+cursor 496 244
+wait 0.3
+click left
+wait 0.3
+cursor 640 244
+wait 0.3
+click left
+wait 0.3
+cursor 532 244
+wait 0.3
+click left
+wait 0.3
+cursor 676 244
+wait 0.3
+click left
+wait 0.5
+save-hud build\step0\moved.dds
+# Esc closes the chest; the typer types only with no screen open.
+key 41
+wait-screen closed
+type /execute if items block 882 7 2007 container.4 minecraft:stick run say step0: the stick is in slot 4
+type /execute if items block 882 7 2007 container.5 minecraft:stone run say step0: the stone is in slot 5
+type /execute unless items block 882 7 2007 container.0 * unless items block 882 7 2007 container.1 * run say step0: slots 0 and 1 are empty
+# Typing: T opens chat, and text types into it, Danish letters and AltGr's characters included; Enter sends it as a
+# chat line, not a command, since /say would read the @ as the start of an entity selector.
+key 23
+wait-screen open
+text step0: typed æøå é @ ~
+key 40
+wait-screen closed
+# The switcher: F3 held, F4 opens it on the last game mode, and letting go of F3 switches to that. Twice: back again.
+down 60
+wait 0.3
+key 61
+wait-screen open
+save-hud build\step0\switcher.dds
+up 60
+wait-screen closed
+wait 1
+down 60
+wait 0.3
+key 61
+wait-screen open
+up 60
+wait-screen closed
+wait 1
+# The pause menu, opened as O will open it, and closed by Esc.
+pause
+wait-screen open
+save-hud build\step0\pause.dds
+key 41
+wait-screen closed
+# The inventory: E opens it, Esc closes it.
+key 8
+wait-screen open
+save-hud build\step0\inventory.dds
+key 41
+wait-screen closed
+# The end: the chest goes with what's in it, since strict drops nothing, and any item dropped near it is cleared.
+build off
+type /setblock 882 7 2007 minecraft:air strict
+type /kill @e[type=minecraft:item,x=882,y=7,z=2007,distance=..8]
+wait 2
+scene
+status

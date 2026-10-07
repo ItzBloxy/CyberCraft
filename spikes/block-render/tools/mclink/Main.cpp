@@ -13,6 +13,7 @@
 // BlockRender draws it, and the atlas's patches, applied to a copy of the atlas as BlockRender keeps it; and refuses to
 // start while another game side uses the mapping.
 #include "DumpObj.h"
+#include "HudBox.h"
 #include "McLinkScript.h"
 
 #include "Coords.h"
@@ -394,9 +395,9 @@ void PrintSolids(const Solids& aSolids, const Vec3d& aFeet)
 void PrintStatus(const Link& aLink, const Report& aReport, const Vec3d& aFeet)
 {
 	const auto& s = aLink.State();
-	Say("Minecraft: {}{}{}, feet {:.3f} {:.3f} {:.3f}, eye {:.3f} ({:.2f} above the feet), frame {}",
+	Say("Minecraft: {}{}{}, GUI scale {}, feet {:.3f} {:.3f} {:.3f}, eye {:.3f} ({:.2f} above the feet), frame {}",
 	    s.minecraft ? std::format("process {}", s.minecraftPid) : "absent", s.inWorld ? ", in its world" : "",
-	    s.screenOpen ? ", a screen open" : "", s.minecraftFeet.x, s.minecraftFeet.y, s.minecraftFeet.z, s.minecraftEye.y,
+	    s.screenOpen ? ", a screen open" : "", s.guiScale, s.minecraftFeet.x, s.minecraftFeet.y, s.minecraftFeet.z, s.minecraftEye.y,
 	    s.minecraftEye.y - s.minecraftFeet.y, s.minecraftFrames);
 	Say("game side: {}, {} teleports (sequence {}) to {:.3f} {:.3f} {:.3f}, look {:.1f} {:.1f}, floor {} {}", s.inGame ? "in game" : "not in game",
 	    s.teleports, s.teleportSeq, s.target.x, s.target.y, s.target.z, s.look.yaw, s.look.pitch, s.collisionEpoch,
@@ -786,9 +787,26 @@ int main(int aArgc, char** aArgv)
 				link.Push({ proto::kInMouseButton, uint16_t(action.numbers[0]), 0, 0, 0 });
 				break;
 			case Action::Kind::SaveHud:
+			case Action::Kind::HudBox:
 				report.wantHud = true;
 				report.hudReady = false;
 				break;
+			case Action::Kind::Cursor:
+				link.Push({ proto::kInCursor, 0, int32_t(action.numbers[0]), int32_t(action.numbers[1]), 0 });
+				break;
+			case Action::Kind::Text:
+			{
+				// The parser checked the text, so it decodes.
+				const std::vector<uint32_t> points = mclink::CodePoints(action.text).value_or(std::vector<uint32_t>{});
+				size_t                      dropped = 0;
+				for (const uint32_t point : points)
+				{
+					dropped += link.Push({ proto::kInText, 0, int32_t(point), 0, 0 }) ? 0 : 1;
+				}
+				Say("text: {} characters typed{}", points.size(), dropped ? std::format("; {} DROPPED, the input ring is full", dropped) : "");
+				break;
+			}
+			case Action::Kind::Pause: link.Push({ proto::kInOpenMenu, 0, 0, 0, 0 }); break;
 			case Action::Kind::HoldCheck:
 				stray = 0.0;
 				holdFrames = 0;
@@ -867,6 +885,46 @@ int main(int aArgc, char** aArgv)
 				}
 				Say("HUD image saved to {} ({} x {}, top row first): {}; {} pixels not transparent, {} with a colour above their alpha", action.text,
 				    w, h, WriteDds(action.text, w, h, rows.data()) ? "ok" : "FAILED", covered, above);
+			}
+			else if (elapsed > 5.0)
+			{
+				Say("line {}: no HUD image within 5 s", action.line);
+				exitCode = 1;
+				done = true;
+			}
+			break;
+		case Action::Kind::WaitScreen:
+			done = state.screenOpen == action.on;
+			if (done)
+			{
+				Say("{} after {:.2f} s", action.on ? "a screen is open" : "no screen is open", elapsed);
+			}
+			else if (elapsed > action.numbers[0])
+			{
+				Say("line {}: {} within {} s", action.line, action.on ? "no screen opened" : "the screen didn't close", action.numbers[0]);
+				exitCode = 1;
+				done = true;
+			}
+			break;
+		case Action::Kind::HudBox:
+			done = report.hudReady;
+			if (done)
+			{
+				const uint32_t x0 = uint32_t(action.numbers[0]);
+				const uint32_t y0 = uint32_t(action.numbers[1]);
+				const uint32_t x1 = uint32_t(action.numbers[2]);
+				const uint32_t y1 = uint32_t(action.numbers[3]);
+				if (const auto mean = mclink::MeanOfBox(report.hud, report.hudWidth, report.hudHeight, report.hudBottomUp, x0, y0, x1, y1))
+				{
+					Say("HUD box {} {} to {} {}: mean colour {:.1f} {:.1f} {:.1f}, alpha {:.1f}, over {} pixels", x0, y0, x1, y1, mean->r, mean->g,
+					    mean->b, mean->a, mean->pixels);
+				}
+				else
+				{
+					Say("line {}: the box {} {} to {} {} isn't inside the {} x {} HUD image", action.line, x0, y0, x1, y1, report.hudWidth,
+					    report.hudHeight);
+					exitCode = 1;
+				}
 			}
 			else if (elapsed > 5.0)
 			{
