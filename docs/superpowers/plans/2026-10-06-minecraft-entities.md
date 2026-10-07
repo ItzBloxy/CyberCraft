@@ -13404,7 +13404,7 @@ cd /d/Cyberpunk-Minecraft && git add docs/superpowers \
        -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
 ```
 
-- [ ] **Step 4: Finish the branch**
+- [x] **Step 4: Finish the branch**
 
 Use superpowers:finishing-a-development-branch: the tests pass (520), and the user chooses whether
 `spike/minecraft-entities` merges into `main`, as spikes 1 to 6 did.
