@@ -2011,6 +2011,13 @@ cpmc::LinkReport LinkLines(const cpmc::Renderer::Stats& aStats, double aNow)
 	report.snapshotWaits = aStats.snapshotWaits;
 	report.snapshotCut = aStats.snapshotCut;
 	report.entityGpuMsAverage = aStats.entityGpuMsAverage;
+	report.forwardFrames = aStats.forwardFrames;
+	report.forwardHinted = aStats.forwardHinted;
+	report.forwardSkipped = aStats.forwardSkipped;
+	report.forwardLastSkip = aStats.forwardLastSkip;
+	report.forwardGpuMsAverage = aStats.forwardGpuMsAverage;
+	report.outlineOn = aStats.outlineOn;
+	report.dlssHint = aStats.dlssHint;
 	report.worldEntities = cpmc::link::WorldWords(g_entities.Table());
 	report.nearestMob = g_link ? g_entities.NearestMob(g_link->State().minecraftFeet) : std::nullopt;
 	report.health = g_linked ? g_puppet.Health() : std::nullopt;  // once a second, so fall damage shows

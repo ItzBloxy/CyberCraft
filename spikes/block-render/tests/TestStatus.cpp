@@ -454,7 +454,8 @@ TEST(StatusWritesTheEntities)
 	report.link = link;
 	std::string status = cpmc::FormatStatus(report);
 	CHECK(Has(status, "entities=on: 0 scenes a second (0.00 MB/s); the newest 0 batches, 0 vertices, 0 glowing from block light 15, 0 "
-	                  "translucent; 0 textures (0.00 MB), 0 left out; drawn in 0 frames, 0 draws skipped, GPU not measured; world: nothing"));
+	                  "translucent; 0 textures (0.00 MB), 0 left out; drawn in 0 frames, 0 draws skipped, GPU not measured; the forward "
+	                  "list in 0 frames, the bias hint in 0, GPU not measured; outline on, dlsshint 1; world: nothing"));
 	CHECK(status.find("blasts=") < status.find("entities=") && status.find("entities=") < status.find("ring="));
 	link.scenesPerSecond = 60.0;
 	link.sceneMbPerSecond = 7.25;
@@ -472,11 +473,20 @@ TEST(StatusWritesTheEntities)
 	link.nearestMob = 5.04;
 	link.snapshotWaits = 1;
 	link.snapshotCut = 3;
+	link.forwardFrames = 57;
+	link.forwardHinted = 56;
+	link.forwardSkipped = 2;
+	link.forwardLastSkip = "the GPU is still busy with an earlier frame";
+	link.forwardGpuMsAverage = 0.02;
+	link.outlineOn = false;
+	link.dlssHint = 0;
 	report.link = link;
 	CHECK(Has(cpmc::FormatStatus(report),
 	          "entities=on: 60 scenes a second (7.25 MB/s); the newest 12 batches, 4152 vertices, 720 glowing from block light 14, 78 "
-	          "translucent; 14 textures (3.64 MB), 0 left out; drawn in 59 frames, 2 draws skipped, GPU 0.050 ms average; world: 1 arrow, "
-	          "1 block, 1 item, 4 shadows; the nearest mob 5.0 m away; 1 frames waited for a snapshot; 3 draws past a snapshot's 8 MB"));
+	          "translucent; 14 textures (3.64 MB), 0 left out; drawn in 59 frames, 2 draws skipped, GPU 0.050 ms average; the forward "
+	          "list in 57 frames, the bias hint in 56, GPU 0.020 ms average; outline off, dlsshint 0; world: 1 arrow, 1 block, 1 item, 4 "
+	          "shadows; the nearest mob 5.0 m away; 2 forward lists skipped (the GPU is still busy with an earlier frame); 1 frames "
+	          "waited for a snapshot; 3 draws past a snapshot's 8 MB"));
 	link.entitiesOn = false;
 	report.link = link;
 	CHECK(cpmc::FormatStatus(report).find("\nentities=off: 60 scenes a second") != std::string::npos);

@@ -170,6 +170,13 @@ struct LinkReport
 	uint64_t              snapshotWaits = 0;        // frames whose geometry waited for a free snapshot, in the last second
 	uint64_t              snapshotCut = 0;          // draws past a snapshot's 8 MB, in the last second
 	double                entityGpuMsAverage = -1.0;  // their draws, on the GPU; below 0: not measured
+	uint64_t              forwardFrames = 0;        // step B: forward lists drawn, in the last second
+	uint64_t              forwardHinted = 0;        // of those, the ones that drew DLSS's bias hint
+	uint64_t              forwardSkipped = 0;       // frames whose forward list couldn't be drawn, in the last second
+	std::string           forwardLastSkip;          // why, the last time
+	double                forwardGpuMsAverage = -1.0;  // the forward list, on the GPU; below 0: not measured
+	bool                  outlineOn = true;         // set outline
+	int                   dlssHint = 1;             // set dlsshint
 	std::string           worldEntities = "nothing";  // the world-entity table's records by kind, and its outline
 	std::optional<double> nearestMob;               // the nearest player's or mob's feet from Minecraft's player, metres
 	// The render ring
