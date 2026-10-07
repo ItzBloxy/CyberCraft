@@ -221,6 +221,20 @@ TEST(RequestsForTheNpcs)
 	CHECK(off && off->kind == cpmc::Request::Kind::Set && off->what == "npcs" && off->number == 0.0);
 }
 
+TEST(RequestsForTheEntities)
+{
+	std::string error;
+	const auto  entities = cpmc::ParseRequest("entities", error);
+	CHECK(entities && entities->kind == cpmc::Request::Kind::Entities);
+	CHECK(!cpmc::ParseRequest("entities now", error));
+	CHECK_STR(error, "entities takes nothing after it");
+	for (const char* setting : { "set entities 0", "set glow 0.5", "set glowlight 14" })
+	{
+		const auto set = cpmc::ParseRequest(setting, error);
+		CHECK(set && set->kind == cpmc::Request::Kind::Set);
+	}
+}
+
 TEST(RequestsForBlasts)
 {
 	std::string error;

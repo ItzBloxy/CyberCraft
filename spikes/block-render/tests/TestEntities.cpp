@@ -161,6 +161,27 @@ TEST(EntitiesCountTheNewestScene)
 	CHECK_EQ(entities.SceneBytes(), uint64_t(32 + 2 * 16 + 9 * 32));
 }
 
+TEST(EntitiesDescribeTheNewestScene)
+{
+	Entities entities;
+	CHECK_STR(entities.Lines(15, {}).front(), "no scene: nothing of Minecraft's is there");
+	std::vector<Vertex> vertices = Vertices(9);
+	vertices[3].light = 15 | (15u << 8);
+	entities.Scene(Scene(vertices, { { 0, 0, 3, 0 }, { 5, 3, 6, 1 } }, kOrigin));
+	link::WorldTable table;
+	table.entities = { Record(proto::kWeShadow, 885.5f, 6.12f, 2007.5f) };
+	entities.World(table);
+	const std::vector<std::string> lines = entities.Lines(15, { { 5, { 64, 64 } } });
+	CHECK_EQ(lines.size(), size_t(4));
+	if (lines.size() == 4)
+	{
+		CHECK_STR(lines[0], "the newest scene, from 880 7 2007: 2 batches, 9 vertices (1 glowing, 6 translucent)");
+		CHECK_STR(lines[1], "  batch 0: the atlas, 3 vertices from 0, 0 glowing");
+		CHECK_STR(lines[2], "  batch 1: texture 5 (64 x 64), 6 vertices from 3, translucent, 1 glowing");
+		CHECK_STR(lines[3], "world: 1 shadow");
+	}
+}
+
 TEST(EntitiesFindTheNearestMob)
 {
 	Entities entities;

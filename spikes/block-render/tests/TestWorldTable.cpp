@@ -99,6 +99,18 @@ TEST(WorldTableHasAnOutlineOnlyWhenOneIsWhole)
 	CHECK(!CheckWorldTable(broken).outline.has_value());
 }
 
+TEST(WorldTableInWords)
+{
+	WorldTable table;
+	CHECK_STR(WorldWords(table), "nothing");
+	table.entities = { Record(proto::kWeShadow, 1), Record(proto::kWeItem, 2), Record(proto::kWeShadow, 3), Record(proto::kWeArrow, 4) };
+	CHECK_STR(WorldWords(table), "1 arrow, 1 item, 2 shadows");
+	table.outline = std::array<float, 6>{};
+	CHECK_STR(WorldWords(table), "1 arrow, 1 item, 2 shadows; an outline");
+	table.entities.clear();
+	CHECK_STR(WorldWords(table), "an outline");
+}
+
 TEST(WorldTableNamesTheKinds)
 {
 	CHECK_STR(WorldKindName(proto::kWeArrow), "arrow");

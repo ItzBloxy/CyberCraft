@@ -6,7 +6,10 @@
 #include "world/Vertex.h"
 
 #include <cstdint>
+#include <map>
 #include <optional>
+#include <string>
+#include <utility>
 #include <vector>
 
 // Spike 7: one frame's geometry of Minecraft's entities (the spec's "Entities: one frame's geometry"), from the newest
@@ -64,6 +67,9 @@ public:
 	uint64_t                             SceneBytes() const { return sceneBytes_; }
 	// How far the nearest player's or mob's feet (the table's shadows) are from aFeet, Minecraft axes; nothing if none.
 	std::optional<double> NearestMob(const Vec3d& aFeet) const;
+	// The entities request's lines (the spec's "Requests and settings"): the newest scene, then each of its batches with
+	// its texture (and its size, if aSizes has it, by id), vertices and those glowing, then the world entities by kind.
+	std::vector<std::string> Lines(uint32_t aGlowLight, const std::map<uint32_t, std::pair<uint32_t, uint32_t>>& aSizes) const;
 
 private:
 	std::optional<Vec3d>          origin_;  // the newest scene's, while one is there

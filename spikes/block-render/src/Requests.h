@@ -31,6 +31,8 @@ namespace cpmc
 //   punch                      (spike 6: V's punch, what it's read from, and what hits are made with, into the log)
 //   explode <metres> <radius>  (spike 6's Part 3: a blast that far ahead of V, from 0 to 100, as if it were Minecraft's,
 //                               with its radius, over 0 and up to 16)
+//   entities                   (spike 7: the newest scene batch by batch, the textures and the world entities, into the
+//                               log)
 struct Request
 {
 	enum class Kind
@@ -54,6 +56,7 @@ struct Request
 		Hit,
 		Punch,
 		Explode,
+		Entities,
 	};
 
 	Kind        kind = Kind::Log;

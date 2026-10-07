@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <format>
 
 namespace cpmc::entities
 {
@@ -104,5 +105,32 @@ std::optional<double> Entities::NearestMob(const Vec3d& aFeet) const
 		}
 	}
 	return nearest;
+}
+
+std::vector<std::string> Entities::Lines(uint32_t aGlowLight, const std::map<uint32_t, std::pair<uint32_t, uint32_t>>& aSizes) const
+{
+	std::vector<std::string> lines;
+	const SceneCounts        counts = Counts(aGlowLight);
+	lines.push_back(origin_ ? std::format("the newest scene, from {:.0f} {:.0f} {:.0f}: {} batches, {} vertices ({} glowing, {} translucent)",
+	                                      origin_->x, origin_->y, origin_->z, counts.batches, counts.vertices, counts.glowing, counts.translucent)
+	                        : std::string("no scene: nothing of Minecraft's is there"));
+	for (size_t b = 0; b < batches_.size(); ++b)
+	{
+		const link::SceneBatch& batch = batches_[b];
+		const auto              size = aSizes.find(batch.texture);
+		const std::string       texture = batch.texture == 0       ? std::string("the atlas")
+		                                  : size != aSizes.end() ? std::format("texture {} ({} x {})", batch.texture, size->second.first,
+		                                                                       size->second.second)
+		                                                         : std::format("texture {}", batch.texture);
+		uint32_t glowing = 0;
+		for (uint64_t i = batch.first; i < uint64_t(batch.first) + batch.count && i < vertices_.size(); ++i)
+		{
+			glowing += (vertices_[i].light & 0xFF) >= aGlowLight ? 1 : 0;
+		}
+		lines.push_back(std::format("  batch {}: {}, {} vertices from {}{}, {} glowing", b, texture, batch.count, batch.first,
+		                            (batch.flags & 1) ? ", translucent" : "", glowing));
+	}
+	lines.push_back("world: " + link::WorldWords(world_));
+	return lines;
 }
 }

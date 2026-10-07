@@ -256,6 +256,31 @@ std::string FormatBlasts(const LinkReport& aLink)
 	                   aLink.lastBlast.empty() ? std::string("none yet") : "the last " + OneLine(aLink.lastBlast));
 }
 
+// Minecraft's entities (spike 7): the scenes coming, the newest, the textures, what's drawn, and the world entities.
+std::string FormatEntities(const LinkReport& aLink)
+{
+	std::string out = std::format("entities={}: {:.0f} scenes a second ({:.2f} MB/s); the newest {} batches, {} vertices, {} glowing from "
+	                              "block light {}, {} translucent; {} textures ({:.2f} MB), {} left out; drawn in {} frames, {} draws "
+	                              "skipped, GPU {}; world: {}",
+	                              aLink.entitiesOn ? "on" : "off", aLink.scenesPerSecond, aLink.sceneMbPerSecond, aLink.sceneBatches,
+	                              aLink.sceneVertices, aLink.sceneGlowing, aLink.glowLight, aLink.sceneTranslucent, aLink.entityTextures,
+	                              aLink.entityTextureMb, aLink.entityTexturesLeftOut, aLink.entityFrames, aLink.entityDrawsSkipped,
+	                              MsAverage(aLink.entityGpuMsAverage), OneLine(aLink.worldEntities));
+	if (aLink.nearestMob)
+	{
+		out += std::format("; the nearest mob {:.1f} m away", *aLink.nearestMob);
+	}
+	if (aLink.snapshotWaits > 0)
+	{
+		out += std::format("; {} frames waited for a snapshot", aLink.snapshotWaits);
+	}
+	if (aLink.snapshotCut > 0)
+	{
+		out += std::format("; {} draws past a snapshot's 8 MB", aLink.snapshotCut);
+	}
+	return out + "\n";
+}
+
 std::string FormatLink(const LinkReport& aLink)
 {
 	std::string       out;
@@ -288,6 +313,7 @@ std::string FormatLink(const LinkReport& aLink)
 	out += FormatNpcs(aLink);
 	out += FormatCombat(aLink);
 	out += FormatBlasts(aLink);
+	out += FormatEntities(aLink);
 	out += std::format("ring={:.2f} MB in the last second, at most {:.2f} MB in one frame; drain {:.3f} ms average, {:.3f} ms worst; {}; "
 	                   "{} rejected, {} resyncs\n",
 	                   aLink.ringMb, aLink.ringMbWorstFrame, aLink.drainMsAverage, aLink.drainMsWorst,

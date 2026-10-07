@@ -95,19 +95,20 @@ std::optional<Request> ParseRequest(std::string_view aText, std::string& aError)
 	const std::string_view command = words[0];
 	const size_t           arguments = words.size() - 1;
 	if (command == "log" || command == "clear" || command == "reload" || command == "floor" || command == "shapes" || command == "npcs" ||
-	    command == "punch")
+	    command == "punch" || command == "entities")
 	{
 		if (arguments != 0)
 		{
 			return Fail(aError, std::string(command) + " takes nothing after it");
 		}
-		const Request::Kind kind = command == "log"      ? Request::Kind::Log
-		                           : command == "clear"  ? Request::Kind::Clear
-		                           : command == "floor"  ? Request::Kind::Floor
-		                           : command == "shapes" ? Request::Kind::Shapes
-		                           : command == "npcs"   ? Request::Kind::Npcs
-		                           : command == "punch"  ? Request::Kind::Punch
-		                                                 : Request::Kind::Reload;
+		const Request::Kind kind = command == "log"        ? Request::Kind::Log
+		                           : command == "clear"    ? Request::Kind::Clear
+		                           : command == "floor"    ? Request::Kind::Floor
+		                           : command == "shapes"   ? Request::Kind::Shapes
+		                           : command == "npcs"     ? Request::Kind::Npcs
+		                           : command == "punch"    ? Request::Kind::Punch
+		                           : command == "entities" ? Request::Kind::Entities
+		                                                   : Request::Kind::Reload;
 		return Request{ kind };
 	}
 	if (command == "link" || command == "build" || command == "scenewatch" || command == "box")

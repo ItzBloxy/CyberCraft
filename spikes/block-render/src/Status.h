@@ -152,6 +152,25 @@ struct LinkReport
 	double      blastPower = 0.5;    // set blastpower (link::kBlastPower): a blast's hits start at V's punch x damage^this
 	bool        blastKnock = true;   // set blastknock: each living NPC within reach knocked down by the game's forced reaction
 	std::string lastBlast;           // its centre, reach, NPCs within it and its own hits; after its push, knocked down and dead
+	// Minecraft's entities (spike 7)
+	bool                  entitiesOn = true;        // set entities
+	double                scenesPerSecond = 0.0;    // in the last second
+	double                sceneMbPerSecond = 0.0;
+	size_t                sceneBatches = 0;         // the newest scene's
+	uint32_t              sceneVertices = 0;
+	uint32_t              sceneGlowing = 0;         // of those, with block light of at least glowLight
+	uint32_t              sceneTranslucent = 0;     // in translucent batches
+	uint32_t              glowLight = 15;           // set glowlight
+	size_t                entityTextures = 0;       // placed: uploaded, or waiting to be
+	double                entityTextureMb = 0.0;
+	uint64_t              entityTexturesLeftOut = 0;  // at the cap, since the start
+	uint64_t              entityFrames = 0;         // G-buffer lists that drew them, in the last second
+	uint64_t              entityDrawsSkipped = 0;   // their texture not on the GPU yet, or left out; in the last second
+	uint64_t              snapshotWaits = 0;        // frames whose geometry waited for a free snapshot, in the last second
+	uint64_t              snapshotCut = 0;          // draws past a snapshot's 8 MB, in the last second
+	double                entityGpuMsAverage = -1.0;  // their draws, on the GPU; below 0: not measured
+	std::string           worldEntities = "nothing";  // the world-entity table's records by kind, and its outline
+	std::optional<double> nearestMob;               // the nearest player's or mob's feet from Minecraft's player, metres
 	// The render ring
 	double      ringMb = 0.0;            // in the last second
 	double      ringMbWorstFrame = 0.0;  // the most in one frame of it
@@ -223,8 +242,8 @@ struct StatusReport
 };
 
 // Lines of "key=value": mode, frames, blocks, gpu, frame, streamline, hooks, request; with a link, its lines (link, build,
-// drive, v, positions, ground, solids, bodies, npcs, combat, blasts, ring, atlas, hud, latency, burst and processes); then
-// one structure line per structure:
+// drive, v, positions, ground, solids, bodies, npcs, combat, blasts, entities, ring, atlas, hud, latency, burst and
+// processes); then one structure line per structure:
 // "structure=<name> <min x> <min y> <min z> <max x> <max y> <max z>".
 std::string FormatStatus(const StatusReport& aReport);
 }

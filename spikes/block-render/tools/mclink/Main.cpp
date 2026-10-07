@@ -107,26 +107,6 @@ SceneSummary Summarize(const SceneMessage& aScene)
 	return summary;
 }
 
-// The world-entity table's records counted by kind, and its outline: "2 items, 1 shadow; an outline", or "nothing".
-std::string WorldWords(const WorldTable& aTable)
-{
-	std::map<std::string, int> kinds;
-	for (const proto::WorldEntity& record : aTable.entities)
-	{
-		++kinds[WorldKindName(record.kind)];
-	}
-	std::string words;
-	for (const auto& [kind, count] : kinds)
-	{
-		words += std::format("{}{} {}{}", words.empty() ? "" : ", ", count, kind, count == 1 ? "" : "s");
-	}
-	if (aTable.outline)
-	{
-		words += words.empty() ? "an outline" : "; an outline";
-	}
-	return words.empty() ? "nothing" : words;
-}
-
 // What Minecraft sends, reported as it comes.
 struct Report : LinkSink
 {

@@ -442,3 +442,38 @@ TEST(StatusWritesBlasts)
 	                  "player alive"));
 	CHECK(Has(status, "0 unreadable; the bush rule leaves out sight-only shapes: 12 so far"));
 }
+
+TEST(StatusWritesTheEntities)
+{
+	cpmc::StatusReport report;
+	cpmc::LinkReport   link;
+	report.link = link;
+	std::string status = cpmc::FormatStatus(report);
+	CHECK(Has(status, "entities=on: 0 scenes a second (0.00 MB/s); the newest 0 batches, 0 vertices, 0 glowing from block light 15, 0 "
+	                  "translucent; 0 textures (0.00 MB), 0 left out; drawn in 0 frames, 0 draws skipped, GPU not measured; world: nothing"));
+	CHECK(status.find("blasts=") < status.find("entities=") && status.find("entities=") < status.find("ring="));
+	link.scenesPerSecond = 60.0;
+	link.sceneMbPerSecond = 7.25;
+	link.sceneBatches = 12;
+	link.sceneVertices = 4152;
+	link.sceneGlowing = 720;
+	link.sceneTranslucent = 78;
+	link.glowLight = 14;
+	link.entityTextures = 14;
+	link.entityTextureMb = 3.64;
+	link.entityFrames = 59;
+	link.entityDrawsSkipped = 2;
+	link.entityGpuMsAverage = 0.05;
+	link.worldEntities = "1 arrow, 1 block, 1 item, 4 shadows";
+	link.nearestMob = 5.04;
+	link.snapshotWaits = 1;
+	link.snapshotCut = 3;
+	report.link = link;
+	CHECK(Has(cpmc::FormatStatus(report),
+	          "entities=on: 60 scenes a second (7.25 MB/s); the newest 12 batches, 4152 vertices, 720 glowing from block light 14, 78 "
+	          "translucent; 14 textures (3.64 MB), 0 left out; drawn in 59 frames, 2 draws skipped, GPU 0.050 ms average; world: 1 arrow, "
+	          "1 block, 1 item, 4 shadows; the nearest mob 5.0 m away; 1 frames waited for a snapshot; 3 draws past a snapshot's 8 MB"));
+	link.entitiesOn = false;
+	report.link = link;
+	CHECK(cpmc::FormatStatus(report).find("\nentities=off: 60 scenes a second") != std::string::npos);
+}

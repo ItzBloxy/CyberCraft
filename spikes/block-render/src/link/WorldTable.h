@@ -5,6 +5,7 @@
 #include <array>
 #include <cstdint>
 #include <optional>
+#include <string>
 #include <vector>
 
 // Spike 7: Minecraft's world entities (SkyCraft's WorldExporter), the light path for small things SkyCraft's game side
@@ -26,4 +27,8 @@ WorldTable CheckWorldTable(const proto::WorldEntities& aTable);
 
 // A record's kind as a word: "arrow", "item", "trident", "block", "crack" or "shadow"; "other" for anything else.
 const char* WorldKindName(uint32_t aKind);
+
+// The table's records counted by kind, the kinds in alphabetical order, and its outline: "1 arrow, 2 items; an
+// outline", or "nothing".
+std::string WorldWords(const WorldTable& aTable);
 }

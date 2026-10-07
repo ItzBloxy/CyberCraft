@@ -75,7 +75,7 @@ namespace
 using Clock = std::chrono::steady_clock;
 using namespace std::chrono_literals;
 
-constexpr const char* kVersion = "0.19.1";
+constexpr const char* kVersion = "0.20.0";
 
 // A number of a version "major.minor.patch", aIndex 0 being the major, so that Query reports kVersion, as the log does.
 constexpr uint32_t VersionNumber(std::string_view aVersion, size_t aIndex)
@@ -223,6 +223,11 @@ uint64_t                        g_deaths = 0;
 std::string                     g_lastHit;
 std::string                     g_lastHurt;
 
+// Spike 7: Minecraft's entities (its spec's "The frame"): the newest scene and world-entity table, made into each frame's
+// geometry for the renderer, and the textures' sizes, for the entities request. Main thread only.
+cpmc::entities::Entities                          g_entities;
+std::map<uint32_t, std::pair<uint32_t, uint32_t>> g_entityTextureSizes;  // by id: width and height
+
 // Spike 6's Minecraft blasts (its spec's "Part 3"), and V's health share for Minecraft's player (its follow-up). Main
 // thread only.
 cpmc::link::Blasts g_blasts;                                 // the last moments' blasts: their own hits, their pushes
@@ -278,6 +283,9 @@ struct SecondFigures
 	double   moduleMsSum = 0.0;
 	double   moduleMsWorst = 0.0;
 	uint64_t moduleCalls = 0;
+	// Spike 7's entities
+	uint64_t scenesAtStart = 0;
+	uint64_t sceneBytesAtStart = 0;
 };
 SecondFigures g_second;
 
@@ -383,8 +391,21 @@ public:
 	void ClearAll() override
 	{
 		g_renderer->ClearSections();
-		::Log("Minecraft cleared its sections: it sends everything again");
+		g_renderer->ClearEntityTextures();
+		g_entities.Clear();
+		g_entityTextureSizes.clear();
+		::Log("Minecraft cleared its sections and textures: it sends everything again");
 	}
+
+	// Spike 7: Minecraft's entity textures, its scenes of entities and particles, and its world-entity table.
+	void Texture(const cpmc::link::TextureImage& aTexture) override
+	{
+		g_entityTextureSizes[aTexture.id] = { aTexture.width, aTexture.height };
+		g_renderer->AddEntityTexture(aTexture.id, aTexture.width, aTexture.height, aTexture.rgba);
+	}
+
+	void Scene(const cpmc::link::SceneMessage& aScene) override { g_entities.Scene(aScene); }
+	void WorldEntities(const cpmc::link::WorldTable& aTable) override { g_entities.World(aTable); }
 
 	void Explosion(const skycraft::proto::McEvent& aEvent) override
 	{
@@ -1617,6 +1638,22 @@ void BoxRequest(bool aOn)
 	Report(g_bodies.Box(aOn, player->feet, player->forward));
 }
 
+// entities (spike 7): the newest scene batch by batch, the textures and the world entities, into the log.
+void EntitiesRequest()
+{
+	for (const std::string& line : g_entities.Lines(g_renderer->GlowLight(), g_entityTextureSizes))
+	{
+		Log("entities: {}", line);
+	}
+	std::string textures;
+	for (const auto& [id, size] : g_entityTextureSizes)
+	{
+		textures += std::format("{}{} ({} x {})", textures.empty() ? "" : ", ", id, size.first, size.second);
+	}
+	Log("entities: {} textures: {}", g_entityTextureSizes.size(), textures.empty() ? "none" : textures);
+	Report("entities: the newest scene, the textures and the world entities, in the log");
+}
+
 // The command in aFolder's blockrender.request, if there is one: in the plugin's folder, where the agent writes it, or
 // the overlay's, where its buttons do. The overlay can't rename a finished file into place, so there a command counts
 // only once its line ends (aWholeLine).
@@ -1684,6 +1721,7 @@ void RunRequest(const std::filesystem::path& aFolder, bool aWholeLine)
 		Report("punch: V's punch, what it's read from, and what hits are made with, in the log");
 		break;
 	case cpmc::Request::Kind::Explode: ExplodeRequest(*request); break;
+	case cpmc::Request::Kind::Entities: EntitiesRequest(); break;
 	}
 }
 
@@ -1947,6 +1985,28 @@ cpmc::LinkReport LinkLines(const cpmc::Renderer::Stats& aStats, double aNow)
 	report.blastPower = g_blastPower;
 	report.blastKnock = g_blastKnock;
 	report.lastBlast = g_lastBlast;
+	// Spike 7's entities, Minecraft's player's feet standing for V's
+	const uint32_t                              glowLight = g_renderer->GlowLight();
+	const cpmc::entities::Entities::SceneCounts counts = g_entities.Counts(glowLight);
+	const double                                entitySeconds = std::max(aNow - g_second.start, 0.001);
+	report.entitiesOn = aStats.entitiesOn;
+	report.scenesPerSecond = double(g_entities.Scenes() - g_second.scenesAtStart) / entitySeconds;
+	report.sceneMbPerSecond = double(g_entities.SceneBytes() - g_second.sceneBytesAtStart) / 1048576.0 / entitySeconds;
+	report.sceneBatches = counts.batches;
+	report.sceneVertices = counts.vertices;
+	report.sceneGlowing = counts.glowing;
+	report.sceneTranslucent = counts.translucent;
+	report.glowLight = glowLight;
+	report.entityTextures = aStats.entityTextures;
+	report.entityTextureMb = aStats.entityTextureMb;
+	report.entityTexturesLeftOut = aStats.entityTexturesLeftOut;
+	report.entityFrames = aStats.entityFrames;
+	report.entityDrawsSkipped = aStats.entityDrawsSkipped;
+	report.snapshotWaits = aStats.snapshotWaits;
+	report.snapshotCut = aStats.snapshotCut;
+	report.entityGpuMsAverage = aStats.entityGpuMsAverage;
+	report.worldEntities = cpmc::link::WorldWords(g_entities.Table());
+	report.nearestMob = g_link ? g_entities.NearestMob(g_link->State().minecraftFeet) : std::nullopt;
 	report.health = g_linked ? g_puppet.Health() : std::nullopt;  // once a second, so fall damage shows
 	report.hideV = g_hideV;
 	report.vHidden = g_hidden.On();
@@ -1993,6 +2053,8 @@ void StartSecond(double aNow)
 {
 	g_second = {};
 	g_second.start = aNow;
+	g_second.scenesAtStart = g_entities.Scenes();
+	g_second.sceneBytesAtStart = g_entities.SceneBytes();
 	if (g_link)
 	{
 		const cpmc::link::Link::Status& state = g_link->State();
@@ -2116,6 +2178,15 @@ bool OnUpdate(RED4ext::CGameApplication*)
 	Fight(seconds, feet);
 	ListNpcs(seconds, feet);
 	SendHurts(seconds);
+	if (g_link)
+	{
+		// Spike 7: this frame's entities, which the renderer's Update copies into a snapshot, drawn only into the G-buffer.
+		g_entities.InWorld(g_link->State().inWorld);
+		if (g_renderer->ModeName() == "gbuffer")
+		{
+			g_renderer->SetEntities(g_entities.Frame(g_link->State().minecraftEye));
+		}
+	}
 	const auto [time, folderName] = Timestamps();
 	if (g_frameLog->Capturing())
 	{

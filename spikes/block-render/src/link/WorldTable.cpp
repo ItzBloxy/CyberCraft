@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <format>
+#include <map>
 
 namespace cpmc::link
 {
@@ -55,5 +57,24 @@ const char* WorldKindName(uint32_t aKind)
 	case proto::kWeShadow: return "shadow";
 	default: return "other";
 	}
+}
+
+std::string WorldWords(const WorldTable& aTable)
+{
+	std::map<std::string, int> kinds;
+	for (const proto::WorldEntity& record : aTable.entities)
+	{
+		++kinds[WorldKindName(record.kind)];
+	}
+	std::string words;
+	for (const auto& [kind, count] : kinds)
+	{
+		words += std::format("{}{} {}{}", words.empty() ? "" : ", ", count, kind, count == 1 ? "" : "s");
+	}
+	if (aTable.outline)
+	{
+		words += words.empty() ? "an outline" : "; an outline";
+	}
+	return words.empty() ? "nothing" : words;
 }
 }
