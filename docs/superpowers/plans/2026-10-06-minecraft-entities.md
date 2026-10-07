@@ -8993,19 +8993,19 @@ cd /d/Cyberpunk-Minecraft && git add docs/spikes/2026-10-06-minecraft-entities-r
 
 ---
 
-### Task 31: Close the spike
+### Task 31: Close Part 3, and plan Part 4
 
-- [ ] **Step 1: Add "How Part 3 went" to this plan**
+- [x] **Step 1: Add "How Part 3 went" to this plan**
 
 At the end, after "Found while planning Part 3": what ran as written, what changed, and what Task 29's `mclink` run and
 run B found.
 
-- [ ] **Step 2: Bring the spec up to date**
+- [x] **Step 2: Bring the spec up to date**
 
 In its "Changes while executing Part 3": anything run B changed in the design, and what's left for later (a night
 factor for the particles, step C's emissive mark), each with what run B saw.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add docs/superpowers \
@@ -9013,10 +9013,11 @@ cd /d/Cyberpunk-Minecraft && git add docs/superpowers \
        -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
 ```
 
-- [ ] **Step 4: Finish the branch**
+- [ ] **Step 4: Plan Part 4**
 
-Use superpowers:finishing-a-development-branch: the tests pass (505), and the user chooses whether
-`spike/minecraft-entities` merges into `main`, as spikes 1 to 6 did.
+The user chose to build step C's emissive mark before the spike closes ("How Part 3 went"). Use superpowers:writing-plans
+to add Part 4's tasks, from Task 32 on, to this plan, verified as Parts 1 to 3 were; finishing the branch moves to Part
+4's close. Changes to the spec found while planning go in its "Changes while planning Part 4".
 
 ## Found while planning Part 3
 
@@ -9047,3 +9048,26 @@ The spec's "Changes while planning Part 3" lists what planning settled in the de
   (505). Tasks 25 and 28 change a test each.
 - **The replay** passed as written: every build, expected failure and test count, the overlay's syntax and the DLL's
   imports, with each task's files identical to the scratch clone's.
+
+## How Part 3 went
+
+Part 3 ran on 2026-10-07, the user starting the games and playing run B.
+- **Ran as written:** Tasks 18 to 28, through the plan runner, each task's code identical to the verified clone's; 505
+  tests, no warnings, BlockRender importing nothing from PhysX. The deploy, Task 30's step 1, installed at once.
+- **Task 29** passed: Minecraft 26.3 answered every command of the Spawn rows, each block entity stood at its marker,
+  the particles came as translucent batches, the campfire's outline was the box expected, and Clear left nothing of the
+  script's. The solids count also showed two older oak-plank blocks near spike 3's corner, from before the spike's
+  runs; they're left.
+- **Run B (Task 30)** passed all its checks but the spider's eyes:
+  - the particles look as Minecraft's by day and at night, hidden where they should be, at 0.01 ms of GPU;
+  - the outline is steady, and Minecraft's width;
+  - Shift+F6 pauses build mode, and the overlay's own word ends the pause, since CET's overlay hides its keys from the
+    game while it's open;
+  - the overlay's block entities stay at their markers, and its rows stay still;
+  - DLSS's bias hint never reached DLSS: the game rewrites it after the forward list, and nothing smeared without it;
+  - the spider's eyes don't glow, so step C's emissive mark is needed.
+- **Changed while running:** `dlsshint` was set to 0 after check 2, for the rest of run B. The plan's fallback for the
+  hint, drawing it in the DLSS list at the evaluate, wasn't built, since nothing needed it.
+- **Asked for during run B:** Cyberpunk's time of day setting Minecraft's, as a task of its own.
+- **The user's choices after run B:** step C's emissive mark becomes Part 4, before the spike closes, so Task 31's last
+  step plans it instead of finishing the branch; and the bias hint pass stays as it is.

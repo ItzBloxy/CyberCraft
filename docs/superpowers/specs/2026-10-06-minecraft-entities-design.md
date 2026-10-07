@@ -1017,3 +1017,19 @@ include them:
 10. **The status's `entities` line** shows the forward list: its frames, those with the hint, its GPU time and skips,
     and the two settings; the overlay's `Entities` line, its frames.
 11. **BlockRender 0.21.0.**
+
+## Changes while executing Part 3
+
+Run B (the results' "Run B") settled what the sections above left open:
+1. **DLSS's bias hint isn't needed:** the game rewrites it inside its DLSS list, after the forward list, every frame,
+   so the forward list's marks never reach DLSS; and the particles neither smear nor ghost without them. The hint pass
+   does nothing the game keeps; the user chose to leave it as it is, `dlsshint` 1 by default, and the fallback of
+   drawing it in the DLSS list at the evaluate isn't needed.
+2. **No night factor:** the particles, lit by Minecraft's light alone, look right at night.
+3. **Step C's emissive mark is needed:** a spider's eyes, which Minecraft draws with an emissive render type, are lit
+   like its body, since SkyCraft captures the layer as `SOLID` with the entity's own light.
+4. **CET's overlay hides its keys from the game while it's open,** so its closing Shift+F6 never reaches BlockRender:
+   the overlay's own word (`overlay closed`) is what ends build mode's pause, about a second after it closes. Opening
+   it is seen at once.
+5. **Step C's emissive mark is Part 4,** the user's choice, before the spike closes. Cyberpunk's time of day setting
+   Minecraft's, which the user asked for during run B, is a task of its own, for later.
