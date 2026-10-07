@@ -1850,7 +1850,8 @@ From the results' "Step 0" (`docs/spikes/2026-10-06-minecraft-entities-results.m
     inside the call. The layers' orders were read from Minecraft 26.3's classes: `VillagerProfessionLayer` submits the
     biome, profession and level at `order(1)` to `order(3)`, and `EyesLayer` at `order(1)`.
   - The overlay's Spawn rows were played through against Minecraft 26.3's classes and SkyCraft's, for where each thing
-    lands and what it leaves behind ("Found while planning Part 2").
+    lands and what it leaves behind ("Found while planning Part 2"), then typed into Minecraft with `mclink` during
+    Task 7 ("Found while executing Part 2").
 
   So a failure while following the plan most likely means a transcription slip: compare against the plan's code first.
 - **What only Minecraft and the game can test:** the draw order with SkyCraft's real mod (Task 7), and everything drawn
@@ -1874,7 +1875,7 @@ From the results' "Step 0" (`docs/spikes/2026-10-06-minecraft-entities-results.m
 | File | Responsibility |
 |---|---|
 | `minecraft/cybercraft-tweaks/` (`KeepDrawOrder.java`, `cybercraft_tweaks.mixins.json`, `fabric.mod.json`, `README.md`) | CyberCraft Tweaks 1.4.0: what SkyCraft sends of Minecraft's entities, in Minecraft's draw order |
-| `tools/mclink/entities.txt` | Step 0's script: creative once Minecraft's loading screen has closed |
+| `tools/mclink/entities.txt` | Step 0's script: creative once Minecraft's loading screen has closed (Task 6), and the sand's block as 26.3 reads it (Task 15) |
 | `src/entities/WorldShapes.*` | The world entities' triangles: dropped items and blocks, arrows, tridents and cracks |
 | `src/entities/Entities.*` | One frame's geometry from the newest scene and table; their counts, the nearest mob, and the `entities` request's lines |
 | `src/render/EntityTextures.*` | Where each entity texture goes in one buffer, 64 MB at most |
@@ -5425,8 +5426,13 @@ obsidian. The obsidian gets a marker, so Clear removes it too; the marker goes `
 the test's rule that "ahead" is level asks. The overlay's `Entities: on/off` button switches `set entities`, and an
 `Entities:` line shows the status's scenes a second, frames drawn, textures and the nearest mob.
 
+The falling sand's block is given as Minecraft 26.3 reads it, a block id (`BlockState:"minecraft:sand"`), here and in
+step 0's script: Task 7 found 26.3 refusing step 0's `{Name:"minecraft:sand"}`, the sand coming only from the falling
+block's default.
+
 **Files:**
-- Modify: `tests/TestCommands.cpp`, `src/link/Commands.cpp`, `tools/blockrender_hud/init.lua`
+- Modify: `tests/TestCommands.cpp`, `src/link/Commands.cpp`, `tools/mclink/entities.txt`,
+  `tools/blockrender_hud/init.lua`
 
 - [ ] **Step 1: Edit `tests/TestCommands.cpp` to check `tnt-ahead`'s obsidian and marker**
 
@@ -5465,7 +5471,18 @@ harness counts failed checks, not tests.
 			                             "/execute rotated ~ 0 positioned ^ ^ ^4 run summon marker ~ ~-1 ~ {Tags:[\"sp7b\"]}",
 ```
 
-- [ ] **Step 4: Build and run the tests; they must pass**
+- [ ] **Step 4: Edit `tools/mclink/entities.txt` to give the falling sand's block as 26.3 reads it**
+
+```text
+type /execute rotated ~ 0 positioned ^-4 ^ ^5 run summon minecraft:falling_block ~ ~12 ~ {BlockState:{Name:"minecraft:sand"},DropItem:0b,Tags:["sp7"]}
+```
+```text
+type /execute rotated ~ 0 positioned ^-4 ^ ^5 run summon minecraft:falling_block ~ ~12 ~ {BlockState:"minecraft:sand",DropItem:0b,Tags:["sp7"]}
+```
+
+- [ ] **Step 5: Build and run the tests; they must pass**
+
+The tests parse step 0's script too.
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -5475,7 +5492,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `493 test(s), 0 failure(s)`.
 
-- [ ] **Step 5: Edit `tools/blockrender_hud/init.lua` to add the Spawn rows, Clear, and the Entities button and line**
+- [ ] **Step 6: Edit `tools/blockrender_hud/init.lua` to add the Spawn rows, Clear, and the Entities button and line**
 
 ```lua
 -- combat), and a line each for the last request's reply and the requests waiting to be sent, build mode (F8) with its
@@ -5560,7 +5577,7 @@ local fun = {
     { label = "More, ahead:", buttons = {
         { label = "10 pigs", commands = herd },
         { label = "Falling sand", commands = { ahead("^ ^ ^3") .. "summon minecraft:falling_block ~ ~12 ~ "
-            .. '{BlockState:{Name:"minecraft:sand"},DropItem:0b,CancelDrop:1b,Tags:["sp7"]}' } },
+            .. '{BlockState:"minecraft:sand",DropItem:0b,CancelDrop:1b,Tags:["sp7"]}' } },
         { label = "Block entities", commands = blockEntities },
         { label = "Dropped items", commands = {
             ahead("^-1 ^ ^3") .. 'summon minecraft:item ~ ~1 ~ {Item:{id:"minecraft:diamond",count:1},PickupDelay:32767,Tags:["sp7"]}',
@@ -5620,18 +5637,18 @@ local fun = {
             ImGui.Text("Entities: " .. entities)
 ```
 
-- [ ] **Step 6: Check the overlay's syntax**
+- [ ] **Step 7: Check the overlay's syntax**
 
 ```bash
 luac -p /d/Cyberpunk-Minecraft/spikes/block-render/tools/blockrender_hud/init.lua && echo "syntax ok"
 ```
 Expected: `syntax ok`.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
-  && git commit -q -m "minecraft-entities: the overlay's Spawn rows, Clear and entities line, and tnt-ahead's TNT on obsidian with a marker" \
+  && git commit -q -m "minecraft-entities: the overlay's Spawn rows, Clear and entities line, tnt-ahead's TNT on obsidian with a marker, and the falling sand's block as 26.3 reads it" \
        -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
 ```
 
@@ -5749,7 +5766,8 @@ any trail, ghost or doubled image behind them; trails decide step B's `dlsshint 
 Ask the user to click More's Block entities, which places them 8 m ahead (12 requests, about 12 s). Expected: a chest; a
 whole red bed; an oak sign, its face blank; a white banner with a red stripe across its top and a black creeper face,
 each pattern over the cloth; a torch, with its flame if it's drawn. In Minecraft's log, a `[CHAT]` reply to each, and
-none an error.
+none an error. The chest and the banner are step A's; the bed, the sign and the torch are block models in 26.3, drawn
+with the blocks (Task 7's check).
 
 - [ ] **Step 7: In the game: world entities and cracks (check 5)**
 
@@ -5832,7 +5850,7 @@ cd /d/Cyberpunk-Minecraft && git add docs/spikes/2026-10-06-minecraft-entities-r
 
 - [ ] **Step 1: Add "How Part 2 went" to this plan**
 
-At the end, after "Found while planning Part 2": what ran as written, what changed, and what step C's `mclink` run and
+At the end, after "Found while executing Part 2": what ran as written, what changed, and what step C's `mclink` run and
 run A found.
 
 - [ ] **Step 2: Plan Part 3**
@@ -5884,3 +5902,17 @@ The spec's "Changes while planning Part 2" lists what planning settled in the de
   makes the report, so under `%TEMP%`, where MSBuild doesn't track headers, its mutation touches that test.
 - **The replay** caught one expectation: the test harness counts failed checks, not tests, so Task 15's failing test
   shows `3 failure(s)`, its three new checks.
+
+## Found while executing Part 2
+
+- **Task 7 passed** (the results' "Step C's draw order, with `mclink`"): every scene's batches in Minecraft's draw
+  order, and nothing else changed from step 0.
+- **26.3 reads a falling block's `BlockState` as a block id,** or a map keyed `id` (`BlockState.CODEC`), not as
+  `{Name:…}`: Minecraft's log showed `Failed to decode value '{Name:"minecraft:sand"}' from field 'BlockState'`, the
+  sand coming only from the falling block's default. Task 15 now gives the id, in the overlay and in step 0's script
+  (a new step), and its commit says so.
+- **The Spawn rows were typed into Minecraft with `mclink`,** with the user's leave, after Task 7's run and with the
+  sand fixed: every command was answered without an error, and Clear left nothing (the results' "The overlay's Spawn
+  rows, with `mclink`").
+- **Beds, signs and torches are block models in 26.3,** in SkyCraft's section mesh, so they're drawn with the blocks;
+  only the chest and the banner of Task 15's block entities are step A's. Task 16's check 4 says so.

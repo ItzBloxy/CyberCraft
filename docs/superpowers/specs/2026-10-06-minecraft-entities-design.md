@@ -6,8 +6,8 @@ writing it out added to what was agreed. Then revised after a deep self-review, 
 source and walked through step 0 and run A as the user would play them: "Changes from the deep review", at the end,
 lists what changed and what was checked. Planning Part 1 settled more, which "Changes while planning Part 1" lists,
 and a read before executing it corrected step 0's script ("Changes before executing Part 1"). Step 0's results, and
-planning Part 2 from them, settled more: "Changes while planning Part 2". The sections above already include all of
-those changes.
+planning Part 2 from them, settled more: "Changes while planning Part 2", and "Changes while executing Part 2". The
+sections above already include all of those changes.
 
 ## Purpose
 
@@ -16,8 +16,8 @@ for Cyberpunk 2077. Night City shows Minecraft's blocks (spike 3), its HUD (spik
 Minecraft's player (spike 5) and fight with Minecraft's weapons (spike 6). Nothing else Minecraft draws is there:
 - **entities:** lit TNT, falling blocks, minecarts, boats, mobs. In spike 6's step 5b, as the handoff tells it, a TNT
   block was drawn until lit, then vanished, and went off 4 s later where it was;
-- **block entities,** which Minecraft draws apart from its section meshes: chests, beds, signs, banners, and pistons
-  while they move;
+- **block entities,** which Minecraft draws apart from its section meshes: chests, banners, and pistons while they
+  move. Beds and signs are block models in 26.3, in the section meshes, so they're drawn with the blocks already;
 - **particles:** explosions, smoke, block debris, crits;
 - **dropped and thrown items, arrows and tridents;**
 - **the block-breaking cracks and the targeted block's outline.**
@@ -566,7 +566,8 @@ cut-out. A TNT's blast breaks the placed blocks and drops them, so Clear comes b
    `set glow` values are tried, and `set glowlight 14` beside a torch's flame; if nothing glows at any, step B's
    `glowpass` is the way.
 3. **The explosion:** its puffs, smoke and debris come and go as in Minecraft.
-4. **Block entities:** a chest, a bed and a sign show, and the banner's patterns show over its cloth.
+4. **Block entities:** a chest shows, and the banner's patterns over its cloth; the bed and the sign, block models in
+   26.3, show with the blocks.
 5. **World entities:** a dropped item and a dropped block (the Spawn row: build mode doesn't forward Q), arrows (the Fun
    row's bow) and a thrown trident (its trident), stuck where they hit Night City, and cracks while mining (briefly in
    survival, since creative breaks blocks at once).
@@ -622,7 +623,8 @@ run A's check 2 again in the game.
   - a falling sand from 12 m up, 3 m ahead, which vanishes wherever it lands (`CancelDrop`), even on a placed block, and
     drops no item if it falls out of the world (`DropItem`);
   - block entities 8 m ahead, 3 m apart: a chest, a bed (its foot and its head, two blocks, each with a marker), a sign
-    and a banner with patterns, and a torch, for its flame;
+    and a banner with patterns, and a torch, for its flame (the bed, the sign and the torch are block models in 26.3,
+    drawn with the blocks);
   - items 3 m ahead: a dropped item and a dropped grass block (its top tinted);
   - for step B: a firework, a splash potion and a campfire.
 
@@ -931,3 +933,15 @@ design; the sections above include them:
 11. **The outline comes with step B,** which draws it: Part 2's `WorldShapes` and `Entities` have no outline kind yet,
     and the outline's test (its 24 vertices) comes with it.
 12. **BlockRender 0.20.0,** and CyberCraft Tweaks 1.4.0.
+
+## Changes while executing Part 2
+
+Step C's `mclink` run (Task 7) and a check of the overlay's Spawn rows typed into Minecraft after it (the results'
+"Step C's draw order, with `mclink`") found two things the sections above now include:
+1. **A falling block's `BlockState` is a block id in 26.3** (`"minecraft:sand"`), or a map keyed `id`, not
+   `{Name:...}`, which 26.3 refused with a warning, the sand coming only from the falling block's default. Step 0's script
+   and the Spawn row now give the id. "Changes while planning Part 1" had `BlockState` among the data checked against
+   26.3's classes: its form wasn't.
+2. **Beds, signs and torches are block models in 26.3,** in the section meshes SkyCraft sends, so BlockRender draws
+   them with the blocks already; of the Spawn row's block entities, step A draws the chest and the banner ("Purpose",
+   run A's check 4).
