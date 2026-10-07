@@ -1284,7 +1284,7 @@ The spec's "Moving it" and "Where it starts":
 - Create: `src/input/Cursor.h`, `src/input/Cursor.cpp`, `tests/TestCursor.cpp`
 - Modify: `CMakeLists.txt`
 
-- [ ] **Step 1: Write the failing test, `tests/TestCursor.cpp`**
+- [x] **Step 1: Write the failing test, `tests/TestCursor.cpp`**
 
 ```cpp
 #include "Harness.h"
@@ -1387,7 +1387,7 @@ TEST(CursorWithoutAnImageGoesNowhere)
 }
 ```
 
-- [ ] **Step 2: Edit `CMakeLists.txt` to add the test**
+- [x] **Step 2: Edit `CMakeLists.txt` to add the test**
 
 ```cmake
 	tests/TestRouter.cpp
@@ -1397,7 +1397,7 @@ TEST(CursorWithoutAnImageGoesNowhere)
 	tests/TestCursor.cpp
 ```
 
-- [ ] **Step 3: Build; it must fail**
+- [x] **Step 3: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -1406,7 +1406,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `error C1083: Cannot open include file: 'input/Cursor.h'`.
 
-- [ ] **Step 4: Write `src/input/Cursor.h`**
+- [x] **Step 4: Write `src/input/Cursor.h`**
 
 ```cpp
 #pragma once
@@ -1473,7 +1473,7 @@ private:
 }
 ```
 
-- [ ] **Step 5: Write `src/input/Cursor.cpp`**
+- [x] **Step 5: Write `src/input/Cursor.cpp`**
 
 ```cpp
 #include "input/Cursor.h"
@@ -1565,7 +1565,7 @@ void Cursor::Clamp()
 }
 ```
 
-- [ ] **Step 6: Edit `CMakeLists.txt` to add the source**
+- [x] **Step 6: Edit `CMakeLists.txt` to add the source**
 
 ```cmake
 	src/input/Router.cpp
@@ -1575,7 +1575,7 @@ void Cursor::Clamp()
 	src/input/Cursor.cpp
 ```
 
-- [ ] **Step 7: Build and run the tests; they must pass**
+- [x] **Step 7: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -1585,7 +1585,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `531 test(s), 0 failure(s)`.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -1606,7 +1606,7 @@ Enter, Tab, Esc and Ctrl's letters reach Minecraft as keys.
 - Create: `src/input/Text.h`, `src/input/Text.cpp`, `tests/TestText.cpp`
 - Modify: `CMakeLists.txt`
 
-- [ ] **Step 1: Write the failing test, `tests/TestText.cpp`**
+- [x] **Step 1: Write the failing test, `tests/TestText.cpp`**
 
 ```cpp
 #include "Harness.h"
@@ -1655,7 +1655,7 @@ TEST(TextKnowsWhatMinecraftTypes)
 }
 ```
 
-- [ ] **Step 2: Edit `CMakeLists.txt` to add the test**
+- [x] **Step 2: Edit `CMakeLists.txt` to add the test**
 
 ```cmake
 	tests/TestCursor.cpp
@@ -1665,7 +1665,7 @@ TEST(TextKnowsWhatMinecraftTypes)
 	tests/TestText.cpp
 ```
 
-- [ ] **Step 3: Build; it must fail**
+- [x] **Step 3: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -1674,7 +1674,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `error C1083: Cannot open include file: 'input/Text.h'`.
 
-- [ ] **Step 4: Write `src/input/Text.h`**
+- [x] **Step 4: Write `src/input/Text.h`**
 
 ```cpp
 #pragma once
@@ -1705,7 +1705,7 @@ private:
 }
 ```
 
-- [ ] **Step 5: Write `src/input/Text.cpp`**
+- [x] **Step 5: Write `src/input/Text.cpp`**
 
 ```cpp
 #include "input/Text.h"
@@ -1747,7 +1747,7 @@ std::optional<uint32_t> Utf16Text::Take(uint16_t aUnit)
 }
 ```
 
-- [ ] **Step 6: Edit `CMakeLists.txt` to add the source**
+- [x] **Step 6: Edit `CMakeLists.txt` to add the source**
 
 ```cmake
 	src/input/Cursor.cpp
@@ -1757,7 +1757,7 @@ std::optional<uint32_t> Utf16Text::Take(uint16_t aUnit)
 	src/input/Text.cpp
 ```
 
-- [ ] **Step 7: Build and run the tests; they must pass**
+- [x] **Step 7: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -1767,7 +1767,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `534 test(s), 0 failure(s)`.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -1791,7 +1791,7 @@ The spec's "Drawing it":
 **Files:**
 - Modify: `src/render/Hud.h`, `src/render/Hud.cpp`, `tests/TestHud.cpp`
 
-- [ ] **Step 1: Edit `tests/TestHud.cpp` to add the failing tests**
+- [x] **Step 1: Edit `tests/TestHud.cpp` to add the failing tests**
 
 ```cpp
 	CHECK_EQ(*slots.TakeNewest(), 2u);
@@ -1850,7 +1850,7 @@ TEST(HudCursorKeepsItsSpotWhole)
 }
 ```
 
-- [ ] **Step 2: Build; it must fail**
+- [x] **Step 2: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -1859,7 +1859,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `error C2065: 'HudCursor': undeclared identifier`, with `CursorPart`'s parts undeclared too.
 
-- [ ] **Step 3: Edit `src/render/Hud.h` to declare them**
+- [x] **Step 3: Edit `src/render/Hud.h` to declare them**
 
 ```cpp
 #include <array>
@@ -1911,7 +1911,7 @@ private:
 // Which of the three upload buffers each image goes through. The main thread copies an image into a slot the GPU has
 ```
 
-- [ ] **Step 4: Edit `src/render/Hud.cpp` to add them**
+- [x] **Step 4: Edit `src/render/Hud.cpp` to add them**
 
 ```cpp
 #include <algorithm>
@@ -1960,7 +1960,7 @@ HudCursor::Spot HudCursor::Get() const
 	return { uint32_t(packed & 0x7FFFFFFFu), uint32_t((packed >> 31) & 0x7FFFFFFFu), (packed >> 62) != 0 };
 ```
 
-- [ ] **Step 5: Build and run the tests; they must pass**
+- [x] **Step 5: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -1970,7 +1970,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `537 test(s), 0 failure(s)`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -2004,7 +2004,7 @@ key.
 **Files:**
 - Modify: `src/input/BuildMode.h`, `src/input/BuildMode.cpp`, `tests/TestBuildMode.cpp`
 
-- [ ] **Step 1: Edit `tests/TestBuildMode.cpp` to add the failing tests**
+- [x] **Step 1: Edit `tests/TestBuildMode.cpp` to add the failing tests**
 
 ```cpp
 	CHECK(Passes(mode.Key(Press(0x12), Ready())));        // E: the game's iconic weapon, still the game's
@@ -2155,7 +2155,7 @@ TEST(BuildModeSendsAKeysReleaseWhereItsPressWentAcrossAScreen)
 TEST(BuildModeTakesTheOverlaysOwnWord)
 ```
 
-- [ ] **Step 2: Build; it must fail**
+- [x] **Step 2: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -2165,7 +2165,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 Expected: `error C2039: 'screenOpen': is not a member of 'cpmc::input::Situation'`, and `F3Taken` not a member of
 `BuildMode`.
 
-- [ ] **Step 3: Edit `src/input/BuildMode.h` to add the screen state and the holders**
+- [x] **Step 3: Edit `src/input/BuildMode.h` to add the screen state and the holders**
 
 ```cpp
 // every input is the overlay's and the game's, and build mode goes on when it closes. A press's repeats and its release
@@ -2214,7 +2214,7 @@ Expected: `error C2039: 'screenOpen': is not a member of 'cpmc::input::Situation
 	uint64_t                    f3Taken_ = 0;
 ```
 
-- [ ] **Step 4: Write `src/input/BuildMode.cpp`**
+- [x] **Step 4: Write `src/input/BuildMode.cpp`**
 
 The whole file: its key handling is rewritten around `PlaceKey`.
 
@@ -2655,7 +2655,7 @@ void BuildMode::Scroll(int16_t aWheel)
 }
 ```
 
-- [ ] **Step 5: Build and run the tests; they must pass**
+- [x] **Step 5: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -2665,7 +2665,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `543 test(s), 0 failure(s)`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -2696,7 +2696,7 @@ The spec's "The cursor", "Typed text" and "Edge cases", in `Router`:
 **Files:**
 - Modify: `src/input/Router.h`, `src/input/Router.cpp`, `tests/TestRouter.cpp`
 
-- [ ] **Step 1: Edit `tests/TestRouter.cpp` to add the failing tests**
+- [x] **Step 1: Edit `tests/TestRouter.cpp` to add the failing tests**
 
 The test router gets the user's speed, 8, a HUD cursor, and the user's HUD image, 1280 by 720 at twice its size.
 
@@ -2953,7 +2953,7 @@ TEST(RouterReportsTheScreen)
 }
 ```
 
-- [ ] **Step 2: Build; it must fail**
+- [x] **Step 2: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -2962,7 +2962,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `error C2039: 'Char': is not a member of 'cpmc::input::Router'`, with `SetHudArea` and `SetHudCursor` too.
 
-- [ ] **Step 3: Write `src/input/Router.h`**
+- [x] **Step 3: Write `src/input/Router.h`**
 
 ```cpp
 #pragma once
@@ -3099,7 +3099,7 @@ private:
 }
 ```
 
-- [ ] **Step 4: Write `src/input/Router.cpp`**
+- [x] **Step 4: Write `src/input/Router.cpp`**
 
 ```cpp
 #include "input/Router.h"
@@ -3507,7 +3507,7 @@ void Router::ReadSpeed()
 }
 ```
 
-- [ ] **Step 5: Build and run the tests; they must pass**
+- [x] **Step 5: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -3517,7 +3517,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `550 test(s), 0 failure(s)`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -3537,7 +3537,7 @@ from `HudCursor`'s atomic, so Present never waits on the router's lock.
 **Files:**
 - Modify: `src/render/FrameConstants.h`, `shaders/blocks.hlsl`, `src/render/Renderer.h`, `src/render/Renderer.cpp`
 
-- [ ] **Step 1: Edit `src/render/FrameConstants.h` to grow `HudConstants`**
+- [x] **Step 1: Edit `src/render/FrameConstants.h` to grow `HudConstants`**
 
 ```cpp
 	uint32_t width = 0;     // the image's
@@ -3560,7 +3560,7 @@ static_assert(sizeof(HudConstants) == 16);
 static_assert(sizeof(HudConstants) == 32);  // root parameter 1 has 8 values
 ```
 
-- [ ] **Step 2: Build and run the tests; the shader check must fail**
+- [x] **Step 2: Build and run the tests; the shader check must fail**
 
 The shader's `Hud` buffer is still 16 bytes.
 ```bash
@@ -3571,7 +3571,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `FAIL ShadersCompileFromTheShaderFile` and `550 test(s), 1 failure(s)`.
 
-- [ ] **Step 3: Edit `shaders/blocks.hlsl` to draw the arrow**
+- [x] **Step 3: Edit `shaders/blocks.hlsl` to draw the arrow**
 
 ```hlsl
     uint4 hudInfo;  // the image's width and height; back-buffer pixels per texel; 1 if its rows are stored bottom-up
@@ -3612,7 +3612,7 @@ float4 HudPS(float4 position : SV_Position) : SV_Target0
     }
 ```
 
-- [ ] **Step 4: Edit `src/render/Renderer.h` to take the cursor's spot**
+- [x] **Step 4: Edit `src/render/Renderer.h` to take the cursor's spot**
 
 ```cpp
 	HudSize BackBufferSize() const { return { backWidth_.load(), backHeight_.load() }; }  // as the last Present saw it
@@ -3630,7 +3630,7 @@ float4 HudPS(float4 position : SV_Position) : SV_Target0
 	std::atomic<const HudCursor*>                              hudCursor_{ nullptr };
 ```
 
-- [ ] **Step 5: Edit `src/render/Renderer.cpp` to give it to the HUD pass**
+- [x] **Step 5: Edit `src/render/Renderer.cpp` to give it to the HUD pass**
 
 ```cpp
 	const HudConstants hud{ hudShown_.width, hudShown_.height, scale, hudShown_.bottomUp ? 1u : 0u };
@@ -3645,7 +3645,7 @@ float4 HudPS(float4 position : SV_Position) : SV_Target0
 	list->SetGraphicsRoot32BitConstants(1, 8, &hud, 0);
 ```
 
-- [ ] **Step 6: Build and run the tests; they must pass**
+- [x] **Step 6: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -3655,7 +3655,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `550 test(s), 0 failure(s)`.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -3676,7 +3676,7 @@ message it took off the queue (`PM_REMOVE`, and a true return) that is a `WM_CHA
 - Create: `src/input/MessageHook.h`, `src/input/MessageHook.cpp`
 - Modify: `CMakeLists.txt`
 
-- [ ] **Step 1: Write `src/input/MessageHook.h`**
+- [x] **Step 1: Write `src/input/MessageHook.h`**
 
 ```cpp
 #pragma once
@@ -3699,7 +3699,7 @@ void RemoveMessageHook();
 }
 ```
 
-- [ ] **Step 2: Write `src/input/MessageHook.cpp`**
+- [x] **Step 2: Write `src/input/MessageHook.cpp`**
 
 ```cpp
 #include "input/MessageHook.h"
@@ -3764,7 +3764,7 @@ void RemoveMessageHook()
 }
 ```
 
-- [ ] **Step 3: Edit `CMakeLists.txt` to add the source**
+- [x] **Step 3: Edit `CMakeLists.txt` to add the source**
 
 ```cmake
 	src/input/RawInputHook.cpp
@@ -3774,7 +3774,7 @@ void RemoveMessageHook()
 	src/input/MessageHook.cpp
 ```
 
-- [ ] **Step 4: Build and run the tests; they must pass**
+- [x] **Step 4: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -3784,7 +3784,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `550 test(s), 0 failure(s)`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -3812,7 +3812,7 @@ cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
 **Files:**
 - Modify: `src/Status.h`, `src/Status.cpp`, `src/Plugin.cpp`, `tests/TestStatus.cpp`
 
-- [ ] **Step 1: Edit `tests/TestStatus.cpp` to add the failing test**
+- [x] **Step 1: Edit `tests/TestStatus.cpp` to add the failing test**
 
 ```cpp
 	CHECK(status.find("link=") < status.find("build=") && status.find("build=") < status.find("positions="));
@@ -3859,7 +3859,7 @@ TEST(StatusWritesTheScreens)
 	                                      "characters typed, 1 lone surrogate dropped; PeekMessageW not hooked (see the log)"));
 ```
 
-- [ ] **Step 2: Build; it must fail**
+- [x] **Step 2: Build; it must fail**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -3868,7 +3868,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: `error C2039: 'screenOurs': is not a member of 'cpmc::LinkReport'`.
 
-- [ ] **Step 3: Edit `src/Status.h` to add the report's fields**
+- [x] **Step 3: Edit `src/Status.h` to add the report's fields**
 
 ```cpp
 	std::string        lastInput;            // the last forwarded
@@ -3891,7 +3891,7 @@ Expected: `error C2039: 'screenOurs': is not a member of 'cpmc::LinkReport'`.
 	bool     messageHooked = false;  // PeekMessageW's import is patched
 ```
 
-- [ ] **Step 4: Edit `src/Status.cpp` to write the line**
+- [x] **Step 4: Edit `src/Status.cpp` to write the line**
 
 ```cpp
 	                                     : std::string("GetRawInputData not hooked (see the log)"));
@@ -3910,7 +3910,7 @@ Expected: `error C2039: 'screenOurs': is not a member of 'cpmc::LinkReport'`.
 	                   aLink.messageHooked ? "PeekMessageW hooked" : "PeekMessageW not hooked (see the log)");
 ```
 
-- [ ] **Step 5: Edit `src/Plugin.cpp` to wire it all in, as 0.23.0**
+- [x] **Step 5: Edit `src/Plugin.cpp` to wire it all in, as 0.23.0**
 
 ```cpp
 #include "hooks/StreamlineHooks.h"
@@ -4002,7 +4002,7 @@ cpmc::HudSize        g_hudImage;          // the newest HUD image's size, which 
 			cpmc::input::RemoveMessageHook();
 ```
 
-- [ ] **Step 6: Build and run the tests; they must pass**
+- [x] **Step 6: Build and run the tests; they must pass**
 
 ```bash
 CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
@@ -4012,7 +4012,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /de
 ```
 Expected: no error or warning lines, then `551 test(s), 0 failure(s)`.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
@@ -4071,7 +4071,7 @@ going on. Fixes become new tasks.
 **Files:**
 - Modify: `docs/spikes/2026-10-07-minecraft-screens-results.md`
 
-- [ ] **Step 1: Deploy (the game must not be running)**
+- [x] **Step 1: Deploy (the game must not be running)**
 
 ```bash
 tasklist | grep -i -c "cyberpunk2077.exe"
@@ -4089,7 +4089,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default -DCP2
 ```
 Expected: `installed`. The second configure clears `CP2077_DIR` again.
 
-- [ ] **Step 2: In the game: BlockRender 0.23.0 loads**
+- [x] **Step 2: In the game: BlockRender 0.23.0 loads**
 
 Ask the user to start the `CyberCraft` instance, then the game, and to wait at the game's main menu. Then:
 ```bash
@@ -4099,13 +4099,13 @@ Expected: `BlockRender 0.23.0 loaded (game 2.31…)`; `GetRawInputData hooked; t
 hooked: what's typed reaches Minecraft's screens`; `Windows' pointer speed is 8 of 20: Minecraft's cursor moves 0.750
 back-buffer pixels a count`; and no error lines.
 
-- [ ] **Step 3: In the game: link, and build mode**
+- [x] **Step 3: In the game: link, and build mode**
 
 Ask the user to load a save somewhere open by day, click Link in the overlay, close it, and press F8. Expected: in the
 log, `build mode on`; in the status, `build=on`, then `screens=no Minecraft screen open; Windows speed 8 of 20: 0.750 px
 a count; 0 cursor events sent; …; PeekMessageW hooked`.
 
-- [ ] **Step 4: In the game: the inventory (check 1)**
+- [x] **Step 4: In the game: the inventory (check 1)**
 
 Ask the user to press E, move the mouse around, then press Esc. Expected:
 - the inventory in the HUD, the arrow at the screen's middle, following the mouse at the desktop's speed, sharp, white
@@ -4115,7 +4115,7 @@ Ask the user to press E, move the mouse around, then press Esc. Expected:
 - in the status while it's open, `screens=a Minecraft screen open, the cursor at …` with the cursor's pixel changing;
 - after Esc, the inventory gone, and the game's own menu NOT opened (risk 8).
 
-- [ ] **Step 5: In the game: moving items in survival (check 2)**
+- [x] **Step 5: In the game: moving items in survival (check 2)**
 
 Send `mc /gamemode survival`. Ask the user, in the inventory, to pick up and put down an item, shift-click one between
 the hotbar and the inventory, drag half the golden apples across a few slots and put them back in slot 6 as 64, press
@@ -4123,32 +4123,32 @@ a number key over a slot, and press Q over one; then close it with E. Expected: 
 highlight following the arrow, a carried item trailing it a little; then send the clear's last request (`/kill` of the
 items within 10 blocks) for what Q dropped: Minecraft's chat says `Killed …`.
 
-- [ ] **Step 6: In the game: the creative inventory (check 3)**
+- [x] **Step 6: In the game: the creative inventory (check 3)**
 
 Send `mc /gamemode creative`. Ask the user to press E, click through a few tabs, scroll one with the wheel, open the
 search tab and type `stone`, then close it with Esc. Expected: as in Minecraft; the typed letters in the search box;
 the status's `slot` unchanged by the wheel and number keys while it was open.
 
-- [ ] **Step 7: In the game: chat (check 4)**
+- [x] **Step 7: In the game: chat (check 4)**
 
 Ask the user to press T, type `Hej æøå é @ ~` (capitals with Shift, @ with AltGr+2, é with ´ then e), try Backspace,
 the arrow keys, Ctrl+A and Ctrl+C, then Ctrl+V to paste it twice, and send it with Enter; then to press Minecraft's
 command key (`-` on their keyboard), type `time query daytime` and press Enter. Expected: in Minecraft's chat, the line
 `<ItzBloxy> Hej æøå é @ ~…` with the letters whole; then `The time is …`; T opening no phone in the game.
 
-- [ ] **Step 8: In the game: F3 (check 5)**
+- [x] **Step 8: In the game: F3 (check 5)**
 
 Ask the user to tap F3 (the debug screen shows; again, it goes), then hold F3 and press F4 a few times (the switcher
 cycles), let go of F3 on Survival, then do it again back to Creative; then F3+N into spectator, look around without
 moving, and F3+N back. Expected: Minecraft's chat says `Set own game mode to …` each time; V stays where it stood.
 
-- [ ] **Step 9: In the game: the pause menu (check 6)**
+- [x] **Step 9: In the game: the pause menu (check 6)**
 
 Ask the user to press O, open Options, drag a slider and put it back where it was, click Done, then press Esc.
 Expected: Minecraft's pause menu, its blurred background over Night City, the slider dragging with the arrow; Esc
 closing it and no game menu opening.
 
-- [ ] **Step 10: In the game: a crafting table and a chest (check 7)**
+- [x] **Step 10: In the game: a crafting table and a chest (check 7)**
 
 Send the test blocks' four requests. Ask the user to look at the crafting table and right-click it, craft something
 (planks from a log, say, if they have one; or just move an item in and out), close it with Esc; then right-click the
@@ -4157,32 +4157,32 @@ chest, put an item in, and with the chest still open press F8. Expected: the che
 and press Shift+F6 to open CET's overlay, then Shift+F6 again. Expected: build mode paused while the overlay is open,
 the arrow gone; back with the chest still open and the arrow where it was.
 
-- [ ] **Step 11: In the game: Alt-Tab (check 8)**
+- [x] **Step 11: In the game: Alt-Tab (check 8)**
 
 With the chest open, ask the user to Alt-Tab to Claude Code and back. Expected: the log's `the game lost the front in
 build mode: Minecraft lets go of everything`; back in the game, the chest still open, and the arrow working. Then Esc.
 
-- [ ] **Step 12: In the game: the keys left to the game (check 9)**
+- [x] **Step 12: In the game: the keys left to the game (check 9)**
 
 Ask the user to press Esc with no Minecraft screen open. Expected: build mode ends (`Esc left it`) and the game's menu
 opens, as before. Then send the clear's three requests. Expected: in Minecraft's chat, `Changed the block at …` twice,
 `Killed …` for the markers, and for the items, `Killed …` or `No entity was found`; the two blocks gone.
 
-- [ ] **Step 13: Ask the user to quit the game and stop Minecraft**
+- [x] **Step 13: Ask the user to quit the game and stop Minecraft**
 
-- [ ] **Step 14: Read the log once more**
+- [x] **Step 14: Read the log once more**
 
 ```bash
 L=$(ls -t /e/Cyberpunk2077/red4ext/logs | grep -i blockrender | head -1); grep -E "build mode|screen|pointer|hooked|request" "/e/Cyberpunk2077/red4ext/logs/$L" | head -200
 ```
 Everything the steps above logged, for the results.
 
-- [ ] **Step 15: Record run E's results in `docs/spikes/2026-10-07-minecraft-screens-results.md`**
+- [x] **Step 15: Record run E's results in `docs/spikes/2026-10-07-minecraft-screens-results.md`**
 
 A "Run E" section: the versions; each check above with its outcome; how the cursor felt; anything that surprised.
 Then the spike's answer at the top.
 
-- [ ] **Step 16: Commit**
+- [x] **Step 16: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add docs/spikes docs/superpowers/plans/2026-10-07-minecraft-screens.md \
