@@ -161,6 +161,8 @@ struct LinkReport
 	uint32_t              sceneVertices = 0;
 	uint32_t              sceneGlowing = 0;         // of those, with block light of at least glowLight
 	uint32_t              sceneTranslucent = 0;     // in translucent batches
+	uint32_t              sceneBlended = 0;         // Part 5: its batches drawn blended before DLSS
+	uint32_t              sceneAdditive = 0;        // and added
 	uint32_t              glowLight = 15;           // set glowlight
 	size_t                entityTextures = 0;       // placed: uploaded, or waiting to be
 	double                entityTextureMb = 0.0;
@@ -177,6 +179,7 @@ struct LinkReport
 	double                forwardGpuMsAverage = -1.0;  // the forward list, on the GPU; below 0: not measured
 	bool                  outlineOn = true;         // set outline
 	int                   dlssHint = 1;             // set dlsshint
+	bool                  blendOn = true;           // set blend
 	std::string           worldEntities = "nothing";  // the world-entity table's records by kind, and its outline
 	std::optional<double> nearestMob;               // the nearest player's or mob's feet from Minecraft's player, metres
 	// The render ring
@@ -192,6 +195,17 @@ struct LinkReport
 	uint64_t    translucentDropped = 0;  // since the start
 	double      updateMsAverage = -1.0;  // the renderer's Update; below 0: not measured
 	double      updateMsWorst = -1.0;
+	// Part 5's animated textures: SkyCraft's patches to the atlas, in the last second
+	uint64_t    patchesApplied = 0;        // into the CPU's atlas
+	uint64_t    patchesRefused = 0;        // with no atlas they fit
+	uint64_t    patchesDropped = 0;        // replaced before the upload list wrote them, or with set animate 0
+	double      patchMb = 0.0;             // of those applied
+	uint64_t    patchPasses = 0;           // upload lists that wrote them into the GPU's atlas
+	double      patchCpuMsAverage = -1.0;  // a patch's, with the packing; below 0: none
+	double      patchGpuMsAverage = -1.0;  // a pass's, on the GPU; below 0: none timed
+	size_t      patchAreasWaiting = 0;     // for the next pass, now
+	bool        animateOn = true;          // set animate
+	uint64_t    patchesBeforeAtlas = 0;    // the link's, since the start: for an atlas it hadn't seen, skipped
 	// The HUD
 	int         hudSetting = 1;  // 0 never, 1 in build mode, 2 always
 	uint32_t    hudScale = 2;

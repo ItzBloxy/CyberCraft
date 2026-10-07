@@ -75,7 +75,7 @@ namespace
 using Clock = std::chrono::steady_clock;
 using namespace std::chrono_literals;
 
-constexpr const char* kVersion = "0.21.0";
+constexpr const char* kVersion = "0.22.0";
 
 // A number of a version "major.minor.patch", aIndex 0 being the major, so that Query reports kVersion, as the log does.
 constexpr uint32_t VersionNumber(std::string_view aVersion, size_t aIndex)
@@ -392,15 +392,23 @@ public:
 	{
 		g_renderer->ClearSections();
 		g_renderer->ClearEntityTextures();
-		g_entities.Clear();
+		g_entities.ClearAll();
 		g_entityTextureSizes.clear();
 		::Log("Minecraft cleared its sections and textures: it sends everything again");
 	}
 
-	// Spike 7: Minecraft's entity textures, its scenes of entities and particles, and its world-entity table.
+	// Part 5: an animated sprite's frame, into the atlas
+	void AtlasRegion(const cpmc::link::AtlasPatch& aPatch) override
+	{
+		g_renderer->ApplyAtlasPatch(aPatch.x, aPatch.y, aPatch.width, aPatch.height, aPatch.rgba);
+	}
+
+	// Spike 7: Minecraft's entity textures, each noted for whether it's see-through (Part 5), its scenes of entities and
+	// particles, and its world-entity table.
 	void Texture(const cpmc::link::TextureImage& aTexture) override
 	{
 		g_entityTextureSizes[aTexture.id] = { aTexture.width, aTexture.height };
+		g_entities.Texture(aTexture.id, aTexture.rgba);
 		g_renderer->AddEntityTexture(aTexture.id, aTexture.width, aTexture.height, aTexture.rgba);
 	}
 
@@ -2002,6 +2010,8 @@ cpmc::LinkReport LinkLines(const cpmc::Renderer::Stats& aStats, double aNow)
 	report.sceneVertices = counts.vertices;
 	report.sceneGlowing = counts.glowing;
 	report.sceneTranslucent = counts.translucent;
+	report.sceneBlended = counts.blended;
+	report.sceneAdditive = counts.additive;
 	report.glowLight = glowLight;
 	report.entityTextures = aStats.entityTextures;
 	report.entityTextureMb = aStats.entityTextureMb;
@@ -2018,6 +2028,7 @@ cpmc::LinkReport LinkLines(const cpmc::Renderer::Stats& aStats, double aNow)
 	report.forwardGpuMsAverage = aStats.forwardGpuMsAverage;
 	report.outlineOn = aStats.outlineOn;
 	report.dlssHint = aStats.dlssHint;
+	report.blendOn = aStats.blendOn;
 	report.worldEntities = cpmc::link::WorldWords(g_entities.Table());
 	report.nearestMob = g_link ? g_entities.NearestMob(g_link->State().minecraftFeet) : std::nullopt;
 	report.health = g_linked ? g_puppet.Health() : std::nullopt;  // once a second, so fall damage shows
@@ -2035,6 +2046,16 @@ cpmc::LinkReport LinkLines(const cpmc::Renderer::Stats& aStats, double aNow)
 	                                                    g_minecraftAtlas ? "Minecraft's" : "atlas.bin's");
 	report.updateMsAverage = aStats.updateMsAverage;
 	report.updateMsWorst = aStats.updateMsWorst;
+	report.patchesApplied = aStats.patchesApplied;
+	report.patchesRefused = aStats.patchesRefused;
+	report.patchesDropped = aStats.patchesDropped;
+	report.patchMb = double(aStats.patchBytes) / 1048576.0;
+	report.patchPasses = aStats.patchPasses;
+	report.patchCpuMsAverage = aStats.patchCpuMsAverage;
+	report.patchGpuMsAverage = aStats.patchGpuMsAverage;
+	report.patchAreasWaiting = aStats.patchAreasWaiting;
+	report.animateOn = aStats.animateOn;
+	report.patchesBeforeAtlas = g_link ? g_link->State().patchesBeforeAtlas : 0;
 	report.hudSetting = g_hudSetting;
 	report.hudScale = g_hudScale;
 	report.hudWanted = g_hudWanted;
@@ -2194,11 +2215,11 @@ bool OnUpdate(RED4ext::CGameApplication*)
 	if (g_link)
 	{
 		// Spike 7: this frame's entities, which the renderer's Update copies into a snapshot, drawn only in gbuffer mode, with
-		// the targeted block's outline while build mode is on, paused or not.
+		// the targeted block's outline while build mode is on, paused or not, and each batch's kind at set glowlight.
 		g_entities.InWorld(g_link->State().inWorld);
 		if (g_renderer->ModeName() == "gbuffer")
 		{
-			g_renderer->SetEntities(g_entities.Frame(g_link->State().minecraftEye, g_router->On()));
+			g_renderer->SetEntities(g_entities.Frame(g_link->State().minecraftEye, g_router->On(), g_renderer->GlowLight()));
 		}
 	}
 	const auto [time, folderName] = Timestamps();

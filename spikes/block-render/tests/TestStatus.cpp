@@ -78,6 +78,13 @@ TEST(StatusWritesTheLinksLines)
 	link.atlas = "2048 x 2576, 5 levels, Minecraft's";
 	link.updateMsAverage = 0.05;
 	link.updateMsWorst = 1.2;
+	link.patchesApplied = 812;
+	link.patchesDropped = 3;
+	link.patchMb = 7.52;
+	link.patchPasses = 60;
+	link.patchCpuMsAverage = 0.02;
+	link.patchGpuMsAverage = 0.011;
+	link.patchAreasWaiting = 4;
 	link.hudSetting = 2;
 	link.hudWanted = true;
 	link.hudReceived = 60;
@@ -107,7 +114,8 @@ TEST(StatusWritesTheLinksLines)
 	CHECK(Has(status, "ring=7.52 MB in the last second, at most 0.15 MB in one frame; drain 0.120 ms average, 0.900 ms worst; "
 	                  "812 atlas patch (7.52 MB), 3 section (0.01 MB); 0 rejected, 0 resyncs"));
 	CHECK(Has(status, "atlas=2048 x 2576, 5 levels, Minecraft's; 0 translucent triangles dropped; update 0.050 ms average, "
-	                  "1.200 ms worst"));
+	                  "1.200 ms worst; patches 812 applied, 0 refused and 3 dropped in the last second (7.52 MB), 60 passes, CPU "
+	                  "0.020 ms average a patch, GPU 0.011 ms average a pass, 4 areas waiting, animate on"));
 	CHECK(Has(status, "hud=always, scale 2, showing; 60 images received (210.9 MB), 0 dropped and 59 drawn in the last second, "
 	                  "1280 x 720, rows bottom-up; copy 0.400 ms average; pass 0.050 ms average on the GPU; 0 skipped; "
 	                  "0 refused since the start"));
@@ -131,13 +139,30 @@ TEST(StatusWritesTheLinkWithMinecraftAbsent)
 	const std::string status = cpmc::FormatStatus(report);
 	CHECK(Has(status, "link=not linked; the mapping refused: another game side (process 12) is using it; Minecraft absent; not in game"));
 	CHECK(Has(status, "positions=Minecraft's eye unknown; V's camera unknown; 0 teleports in the last second; floor not sent"));
-	CHECK(Has(status, "atlas=none yet; 0 translucent triangles dropped; update not measured"));
+	CHECK(Has(status, "atlas=none yet; 0 translucent triangles dropped; update not measured; patches 0 applied, 0 refused and 0 "
+	                  "dropped in the last second (0.00 MB), 0 passes, CPU not measured, GPU not measured, 0 areas waiting, "
+	                  "animate on"));
 	CHECK(Has(status, "hud=in build mode, scale 2, not showing; 0 images received (0.0 MB), 0 dropped and 0 drawn in the last "
 	                  "second, no image yet; copy not measured; pass not measured; 4 skipped (no image yet); 2 refused since the "
 	                  "start"));
 	CHECK(Has(status, "latency=no samples yet: type a command, or click in build mode, while V stands still"));
 	CHECK(Has(status, "burst=none yet"));
 	CHECK(Has(status, "processes=Cyberpunk 50% of a core, 100 MB; Minecraft not running"));
+}
+
+TEST(StatusWritesTheAtlasPatches)
+{
+	// Part 5: patches refused with no atlas they fit, dropped with set animate 0, and the link's from before the atlas.
+	cpmc::StatusReport report;
+	cpmc::LinkReport   link;
+	link.patchesRefused = 2;
+	link.patchesDropped = 40;
+	link.animateOn = false;
+	link.patchesBeforeAtlas = 5;
+	report.link = link;
+	CHECK(Has(cpmc::FormatStatus(report), "atlas=none yet; 0 translucent triangles dropped; update not measured; patches 0 applied, 2 "
+	                                      "refused and 40 dropped in the last second (0.00 MB), 0 passes, CPU not measured, GPU not "
+	                                      "measured, 0 areas waiting, animate off; 5 from before the atlas, skipped"));
 }
 
 TEST(StatusWritesBuildMode)
@@ -453,9 +478,10 @@ TEST(StatusWritesTheEntities)
 	cpmc::LinkReport   link;
 	report.link = link;
 	std::string status = cpmc::FormatStatus(report);
-	CHECK(Has(status, "entities=on: 0 scenes a second (0.00 MB/s); the newest 0 batches, 0 vertices, 0 glowing from block light 15, 0 "
-	                  "translucent; 0 textures (0.00 MB), 0 left out; drawn in 0 frames, 0 draws skipped, GPU not measured; the forward "
-	                  "list in 0 frames, the bias hint in 0, GPU not measured; outline on, dlsshint 1; world: nothing"));
+	CHECK(Has(status, "entities=on: 0 scenes a second (0.00 MB/s); the newest 0 batches (0 blended, 0 additive), 0 vertices, 0 glowing "
+	                  "from block light 15, 0 translucent; 0 textures (0.00 MB), 0 left out; drawn in 0 frames, 0 draws skipped, GPU not "
+	                  "measured; the forward list in 0 frames, the bias hint in 0, GPU not measured; outline on, dlsshint 1, blend on; "
+	                  "world: nothing"));
 	CHECK(status.find("blasts=") < status.find("entities=") && status.find("entities=") < status.find("ring="));
 	link.scenesPerSecond = 60.0;
 	link.sceneMbPerSecond = 7.25;
@@ -480,13 +506,16 @@ TEST(StatusWritesTheEntities)
 	link.forwardGpuMsAverage = 0.02;
 	link.outlineOn = false;
 	link.dlssHint = 0;
+	link.sceneBlended = 3;
+	link.sceneAdditive = 1;
+	link.blendOn = false;
 	report.link = link;
 	CHECK(Has(cpmc::FormatStatus(report),
-	          "entities=on: 60 scenes a second (7.25 MB/s); the newest 12 batches, 4152 vertices, 720 glowing from block light 14, 78 "
-	          "translucent; 14 textures (3.64 MB), 0 left out; drawn in 59 frames, 2 draws skipped, GPU 0.050 ms average; the forward "
-	          "list in 57 frames, the bias hint in 56, GPU 0.020 ms average; outline off, dlsshint 0; world: 1 arrow, 1 block, 1 item, 4 "
-	          "shadows; the nearest mob 5.0 m away; 2 forward lists skipped (the GPU is still busy with an earlier frame); 1 frames "
-	          "waited for a snapshot; 3 draws past a snapshot's 8 MB"));
+	          "entities=on: 60 scenes a second (7.25 MB/s); the newest 12 batches (3 blended, 1 additive), 4152 vertices, 720 glowing "
+	          "from block light 14, 78 translucent; 14 textures (3.64 MB), 0 left out; drawn in 59 frames, 2 draws skipped, GPU 0.050 ms "
+	          "average; the forward list in 57 frames, the bias hint in 56, GPU 0.020 ms average; outline off, dlsshint 0, blend off; "
+	          "world: 1 arrow, 1 block, 1 item, 4 shadows; the nearest mob 5.0 m away; 2 forward lists skipped (the GPU is still busy "
+	          "with an earlier frame); 1 frames waited for a snapshot; 3 draws past a snapshot's 8 MB"));
 	link.entitiesOn = false;
 	report.link = link;
 	CHECK(cpmc::FormatStatus(report).find("\nentities=off: 60 scenes a second") != std::string::npos);
