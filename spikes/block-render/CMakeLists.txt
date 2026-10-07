@@ -111,6 +111,7 @@ add_library(render_runtime STATIC
 	src/log/Dumps.cpp
 	src/render/Renderer.cpp
 	src/input/RawInputHook.cpp
+	src/input/MessageHook.cpp
 	src/physx/SceneHooks.cpp
 	src/physx/Bodies.cpp
 )
