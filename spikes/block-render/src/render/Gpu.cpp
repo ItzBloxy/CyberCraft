@@ -35,7 +35,8 @@ Footprint FootprintOf(ID3D12Device* aDevice, const D3D12_RESOURCE_DESC& aDesc, u
 	return footprint;
 }
 
-ComPtr<ID3D12Resource> MakeBuffer(ID3D12Device* aDevice, uint64_t aBytes, D3D12_HEAP_TYPE aHeap, D3D12_RESOURCE_STATES aState)
+ComPtr<ID3D12Resource> MakeBuffer(ID3D12Device* aDevice, uint64_t aBytes, D3D12_HEAP_TYPE aHeap, D3D12_RESOURCE_STATES aState,
+                                  D3D12_RESOURCE_FLAGS aFlags)
 {
 	D3D12_HEAP_PROPERTIES heap{};
 	heap.Type = aHeap;
@@ -47,6 +48,7 @@ ComPtr<ID3D12Resource> MakeBuffer(ID3D12Device* aDevice, uint64_t aBytes, D3D12_
 	desc.MipLevels = 1;
 	desc.SampleDesc.Count = 1;
 	desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+	desc.Flags = aFlags;
 	ComPtr<ID3D12Resource> buffer;
 	if (FAILED(aDevice->CreateCommittedResource(&heap, D3D12_HEAP_FLAG_NONE, &desc, aState, nullptr, IID_PPV_ARGS(&buffer))))
 	{

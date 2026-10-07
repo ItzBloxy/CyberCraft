@@ -65,7 +65,7 @@ public:
 	bool         ReloadShaders(std::string& aError);
 	// brightness, tolerance, cull, origin.x/y/z; for predlss, exposure, jittersign and mvsign; for gbuffer, stencil,
 	// metalness, roughness, materialb, gbmotion and gbdepth; spike 7's entities, glow and glowlight, step B's dlsshint
-	// and outline, and Part 5's blend
+	// and outline, and Part 5's blend and animate
 	bool         Set(std::string_view aName, double aValue, std::string& aError);
 	void         UploadSection(const SectionPos& aSection, std::vector<Vertex> aVertices);  // no vertices: remove it
 	void         ClearSections();  // every section, and every upload waiting
@@ -100,6 +100,13 @@ public:
 	void     ClearEntityTextures();
 	void     SetEntities(entities::EntityFrame aFrame);
 	uint32_t GlowLight() const;  // set glowlight
+
+	// Spike 7's Part 5: an animated sprite's frame, aWidth x aHeight RGBA8 pixels at aX aY of the atlas's top level,
+	// patched into the atlas at once (PatchAtlas), its levels under it rebuilt. The areas it changed wait for the next
+	// Update's upload list, whose patch pass writes them into the GPU's atlas; a patch to an area still waiting replaces
+	// the one before, which counts as dropped. Until the atlas is on the GPU, its whole upload carries them. With set
+	// animate 0, or no atlas it fits, nothing changes, and it's counted.
+	void ApplyAtlasPatch(uint32_t aX, uint32_t aY, uint32_t aWidth, uint32_t aHeight, std::span<const uint8_t> aRgba);
 
 	struct Stats
 	{
@@ -151,6 +158,16 @@ public:
 		std::string forwardLastSkip;             // why, the last time
 		double      forwardGpuMsAverage = -1.0;  // the forward list, on the GPU; below 0: none drawn
 		bool        blendOn = true;              // Part 5's set blend
+		// Part 5's animated textures, in the last second
+		bool        animateOn = true;          // set animate
+		uint64_t    patchesApplied = 0;        // into the CPU's atlas
+		uint64_t    patchesDropped = 0;        // replaced by a newer one before the upload list wrote it, or with set animate 0
+		uint64_t    patchesRefused = 0;        // with no atlas they fit
+		uint64_t    patchBytes = 0;            // of the patches applied
+		size_t      patchAreasWaiting = 0;     // for the next upload list, now
+		uint64_t    patchPasses = 0;           // upload lists that wrote patches into the GPU's atlas
+		double      patchCpuMsAverage = -1.0;  // a patch's, rebuilding its levels, with the packing; below 0: none
+		double      patchGpuMsAverage = -1.0;  // a patch pass's, on the GPU; below 0: none timed
 	};
 	Stats TakeStats();  // since the last call
 	void  Shutdown();   // waits for the GPU, then releases everything
@@ -260,6 +277,9 @@ private:
 	                  std::span<const KindPipeline> aKinds, bool aCount);
 	// Spike 7: the textures waiting, into the one buffer, grown first if they don't fit, recorded into Upload's list.
 	void UploadEntityTextures(uint64_t aReady, std::vector<gpu::ComPtr<ID3D12Resource>>& aStaging, bool& aFailed);
+	// Part 5: the atlas's waiting areas, packed and written into the GPU's atlas by the patch pass, in Upload's list.
+	void RecordPatches();
+	bool EnsurePatchObjects();  // the patch pass's root signature, pipeline and timing; false, logged once, if not
 	void CopyEntities();  // spike 7: Update's, the frame's geometry into a free snapshot
 	// Step B's forward list, before the DLSS list its frame's G-buffer list left it (forward_): null if it's skipped,
 	// which lets go of the frame's snapshot and never switches drawing off.
@@ -342,9 +362,27 @@ private:
 	uint64_t                                                   timestampFrequency_ = 0;
 
 	std::optional<Atlas>                                           atlas_;
-	gpu::ComPtr<ID3D12Resource>                                    atlasBuffer_;
+	gpu::ComPtr<ID3D12Resource>                                    atlasBuffer_;  // with unordered access, for the patch pass
 	uint64_t                                                       atlasReady_ = 0;
 	bool                                                           atlasUploaded_ = false;
+	// Part 5's animated textures: the areas waiting for the patch pass, and its objects. Its upload buffer is reused: Upload
+	// records a list only once the last one is done.
+	bool                                                           animate_ = true;  // set animate
+	AtlasDirty                                                     dirty_;
+	gpu::ComPtr<ID3D12RootSignature>                               patchRootSignature_;
+	gpu::ComPtr<ID3D12PipelineState>                               patchPipeline_;
+	bool                                                           patchFailed_ = false;  // logged; until the shaders are reloaded
+	gpu::ComPtr<ID3D12Resource>                                    patchUpload_;
+	uint8_t*                                                       patchUploadMapped_ = nullptr;
+	uint64_t                                                       patchUploadBytes_ = 0;
+	gpu::ComPtr<ID3D12QueryHeap>                                   patchQueries_;  // 2 timestamps, around the pass
+	gpu::ComPtr<ID3D12Resource>                                    patchTimings_;  // readback
+	uint64_t*                                                      patchTimingsMapped_ = nullptr;
+	bool                                                           patchTimed_ = false;  // the last upload list timed a pass
+	double                                                         patchCpuMsSum_ = 0.0;
+	uint64_t                                                       patchCpuSamples_ = 0;
+	double                                                         patchGpuMsSum_ = 0.0;
+	uint64_t                                                       patchGpuSamples_ = 0;
 	std::map<SectionPos, SectionGpu>                               sections_;
 	PendingSections                                                pending_;
 	Retired<gpu::ComPtr<ID3D12Resource>>                           retired_;

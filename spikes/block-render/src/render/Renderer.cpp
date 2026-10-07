@@ -208,6 +208,7 @@ bool Renderer::LoadAtlas(std::string& aError)
 	std::lock_guard lock(mutex_);
 	atlas_ = std::move(*atlas);
 	atlasUploaded_ = false;
+	dirty_.Clear();  // a new atlas: its whole upload is due
 	log_.Push(std::format("atlas: {} x {}, {} levels, {} blocks", atlas_->width, atlas_->height, atlas_->Levels(), atlas_->blocks.size()));
 	return true;
 }
@@ -217,6 +218,7 @@ void Renderer::SetAtlas(Atlas aAtlas)
 	std::lock_guard lock(mutex_);
 	atlas_ = std::move(aAtlas);
 	atlasUploaded_ = false;
+	dirty_.Clear();  // a new atlas, at its sprites' first frames: its whole upload is due
 }
 
 const Atlas* Renderer::AtlasData() const
@@ -255,6 +257,8 @@ bool Renderer::ReloadShaders(std::string& aError)
 	blendedPipeline_.Reset();
 	additivePipeline_.Reset();
 	forwardPipelinesFailed_ = false;
+	patchPipeline_.Reset();
+	patchFailed_ = false;
 	hudShadersFailed_ = false;
 	return true;
 }
@@ -460,6 +464,16 @@ bool Renderer::Set(std::string_view aName, double aValue, std::string& aError)
 		blend_ = aValue == 1.0;
 		return true;
 	}
+	if (aName == "animate")
+	{
+		if (aValue != 0.0 && aValue != 1.0)
+		{
+			aError = "animate is 1 to play Minecraft's animated textures, or 0 to leave the atlas as it is";
+			return false;
+		}
+		animate_ = aValue == 1.0;
+		return true;
+	}
 	aError = std::format("there's no setting called \"{}\"", aName);
 	return false;
 }
@@ -520,6 +534,35 @@ void Renderer::SetEntities(entities::EntityFrame aFrame)
 {
 	std::lock_guard lock(mutex_);
 	pendingEntities_ = std::move(aFrame);
+}
+
+void Renderer::ApplyAtlasPatch(uint32_t aX, uint32_t aY, uint32_t aWidth, uint32_t aHeight, std::span<const uint8_t> aRgba)
+{
+	const auto      start = std::chrono::steady_clock::now();
+	std::lock_guard lock(mutex_);
+	if (!animate_)
+	{
+		++stats_.patchesDropped;  // set animate 0: the atlas stays as it is
+		return;
+	}
+	const std::vector<AtlasArea> areas = atlas_ ? cpmc::PatchAtlas(*atlas_, aX, aY, aWidth, aHeight, aRgba) : std::vector<AtlasArea>();
+	if (areas.empty())
+	{
+		++stats_.patchesRefused;  // no atlas, or one it doesn't fit
+		return;
+	}
+	++stats_.patchesApplied;
+	stats_.patchBytes += aRgba.size();
+	if (atlasUploaded_)
+	{
+		if (dirty_.Waiting(areas.front()))
+		{
+			++stats_.patchesDropped;  // the sprite's last frame never reached the GPU: this one replaces it
+		}
+		dirty_.Add(areas);  // for the next patch pass; until then, the whole atlas's upload carries it
+	}
+	patchCpuMsSum_ += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+	++patchCpuSamples_;
 }
 
 uint32_t Renderer::GlowLight() const
@@ -1209,8 +1252,18 @@ void Renderer::Upload()
 		return;  // the device was removed: the plugin reports it
 	}
 	retired_.Free(completed);
+	if (patchTimed_ && completed >= uploadFence_)
+	{
+		// Part 5: the last upload list's patch pass, timed around its dispatch.
+		patchTimed_ = false;
+		if (patchTimingsMapped_[1] > patchTimingsMapped_[0] && timestampFrequency_ > 0)
+		{
+			patchGpuMsSum_ += double(patchTimingsMapped_[1] - patchTimingsMapped_[0]) * 1000.0 / double(timestampFrequency_);
+			++patchGpuSamples_;
+		}
+	}
 	const bool atlasDue = atlas_ && !atlasUploaded_;
-	if ((pending_.Size() == 0 && !atlasDue && pendingTextures_.empty()) || completed < uploadFence_)
+	if ((pending_.Size() == 0 && !atlasDue && pendingTextures_.empty() && dirty_.Empty()) || completed < uploadFence_)
 	{
 		return;
 	}
@@ -1223,8 +1276,8 @@ void Renderer::Upload()
 	const uint64_t                           ready = fenceValue_ + 1;  // the value the Signal below sets
 	std::vector<gpu::ComPtr<ID3D12Resource>> staging;
 	bool                                     failed = false;
-	const auto upload = [&](const void* aData, uint64_t aBytes) -> gpu::ComPtr<ID3D12Resource> {
-		auto  target = gpu::MakeBuffer(device_, aBytes, D3D12_HEAP_TYPE_DEFAULT, D3D12_RESOURCE_STATE_COMMON);
+	const auto upload = [&](const void* aData, uint64_t aBytes, D3D12_RESOURCE_FLAGS aFlags = D3D12_RESOURCE_FLAG_NONE) -> gpu::ComPtr<ID3D12Resource> {
+		auto  target = gpu::MakeBuffer(device_, aBytes, D3D12_HEAP_TYPE_DEFAULT, D3D12_RESOURCE_STATE_COMMON, aFlags);
 		auto  source = gpu::MakeBuffer(device_, aBytes, D3D12_HEAP_TYPE_UPLOAD, D3D12_RESOURCE_STATE_GENERIC_READ);
 		void* mapped = nullptr;
 		if (!target || !source || FAILED(source->Map(0, nullptr, &mapped)))
@@ -1244,13 +1297,15 @@ void Renderer::Upload()
 		{
 			Retire(atlasBuffer_);
 		}
-		atlasBuffer_ = upload(atlas_->texels.data(), atlas_->texels.size() * sizeof(uint32_t));
+		// With unordered access, for Part 5's patch pass; the CPU's atlas holds every patch so far.
+		atlasBuffer_ = upload(atlas_->texels.data(), atlas_->texels.size() * sizeof(uint32_t), D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
 		if (atlasBuffer_)
 		{
 			atlasBuffer_->SetName(L"BlockRender atlas");
 		}
 		atlasReady_ = ready;
 		atlasUploaded_ = true;
+		dirty_.Clear();
 	}
 	bool watched = false;
 	for (auto& [section, vertices] : pending_.Take())
@@ -1280,6 +1335,7 @@ void Renderer::Upload()
 		}
 	}
 	UploadEntityTextures(ready, staging, failed);
+	RecordPatches();
 	original.close(uploadList_.Get());
 	ID3D12CommandList* lists[] = { uploadList_.Get() };
 	original.executeCommandLists(queue_, 1, lists);
@@ -1353,6 +1409,147 @@ void Renderer::UploadEntityTextures(uint64_t aReady, std::vector<gpu::ComPtr<ID3
 		textureReady_[texture.id] = aReady;
 	}
 	pendingTextures_.clear();
+}
+
+void Renderer::RecordPatches()
+{
+	if (dirty_.Empty())
+	{
+		return;
+	}
+	if (!atlas_ || !atlasBuffer_ || !EnsurePatchObjects())
+	{
+		// No atlas on the GPU, its upload failed, or no patch pass: the GPU's atlas keeps the frames it has, and the
+		// CPU's stays current for its next whole upload.
+		dirty_.Clear();
+		return;
+	}
+	const auto               start = std::chrono::steady_clock::now();
+	const AtlasDirty::Packed packed = dirty_.Take(*atlas_, D3D12_CS_DISPATCH_MAX_THREAD_GROUPS_PER_DIMENSION);
+	if (packed.areas.empty())
+	{
+		return;
+	}
+	// One buffer: the area table, then the texels from the next 256 bytes on. The last upload list that read it is done
+	// (Upload records a list only then), so it's written in place, or replaced at once when it's too small.
+	const uint64_t tableBytes = packed.areas.size() * sizeof(PatchAreaGpu);
+	const uint64_t texelsAt = (tableBytes + 255) / 256 * 256;
+	const uint64_t bytes = texelsAt + packed.texels.size() * sizeof(uint32_t);
+	if (bytes > patchUploadBytes_)
+	{
+		if (patchUploadMapped_)
+		{
+			patchUpload_->Unmap(0, nullptr);
+		}
+		patchUpload_.Reset();
+		patchUploadMapped_ = nullptr;
+		patchUploadBytes_ = 0;
+		const uint64_t size = std::max<uint64_t>(std::bit_ceil(bytes), 64ull << 10);
+		auto           buffer = gpu::MakeBuffer(device_, size, D3D12_HEAP_TYPE_UPLOAD, D3D12_RESOURCE_STATE_GENERIC_READ);
+		void*          mapped = nullptr;
+		if (!buffer || FAILED(buffer->Map(0, nullptr, &mapped)))
+		{
+			patchFailed_ = true;
+			patchPipeline_.Reset();
+			log_.Push("renderer: couldn't create the atlas patches' upload buffer, so Minecraft's animated textures stay as they are on the GPU");
+			return;
+		}
+		buffer->SetName(L"BlockRender atlas patches");
+		patchUpload_ = buffer;
+		patchUploadMapped_ = static_cast<uint8_t*>(mapped);
+		patchUploadBytes_ = size;
+	}
+	std::memcpy(patchUploadMapped_, packed.areas.data(), size_t(tableBytes));
+	std::memcpy(patchUploadMapped_ + texelsAt, packed.texels.data(), packed.texels.size() * sizeof(uint32_t));
+	PatchConstants constants;
+	constants.areas = uint32_t(packed.areas.size());
+	constants.texels = uint32_t(packed.texels.size());
+	constants.atlasTexels = uint32_t(atlas_->texels.size());
+	// The atlas, in the common state between lists, takes the writes, then goes back for the draws to read.
+	const d3d::Originals&        original = d3d::Original();
+	const D3D12_RESOURCE_BARRIER into = Transition(atlasBuffer_.Get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+	const D3D12_RESOURCE_BARRIER back = Transition(atlasBuffer_.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COMMON);
+	original.resourceBarrier(uploadList_.Get(), 1, &into);
+	uploadList_->SetComputeRootSignature(patchRootSignature_.Get());
+	uploadList_->SetPipelineState(patchPipeline_.Get());
+	uploadList_->SetComputeRoot32BitConstants(0, 4, &constants, 0);
+	uploadList_->SetComputeRootShaderResourceView(1, patchUpload_->GetGPUVirtualAddress());
+	uploadList_->SetComputeRootShaderResourceView(2, patchUpload_->GetGPUVirtualAddress() + texelsAt);
+	uploadList_->SetComputeRootUnorderedAccessView(3, atlasBuffer_->GetGPUVirtualAddress());
+	uploadList_->EndQuery(patchQueries_.Get(), D3D12_QUERY_TYPE_TIMESTAMP, 0);
+	original.dispatch(uploadList_.Get(), constants.areas, 1, 1);  // a group an area; past the hook, as every call of ours
+	uploadList_->EndQuery(patchQueries_.Get(), D3D12_QUERY_TYPE_TIMESTAMP, 1);
+	original.resourceBarrier(uploadList_.Get(), 1, &back);
+	uploadList_->ResolveQueryData(patchQueries_.Get(), D3D12_QUERY_TYPE_TIMESTAMP, 0, 2, patchTimings_.Get(), 0);
+	patchTimed_ = true;
+	++stats_.patchPasses;
+	patchCpuMsSum_ += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+}
+
+bool Renderer::EnsurePatchObjects()
+{
+	if (patchPipeline_)
+	{
+		return true;
+	}
+	if (patchFailed_ || !shaders_ || !d3d::Original().dispatch)
+	{
+		return false;
+	}
+	const auto fail = [this](const char* aWhat) {
+		patchFailed_ = true;
+		log_.Push(std::format("renderer: couldn't create the atlas patch pass's {}, so Minecraft's animated textures stay as they are on the "
+		                      "GPU; everything else is drawn",
+		                      aWhat));
+		return false;
+	};
+	if (!patchRootSignature_)
+	{
+		// b0 the pass's constants, t0 the areas, t1 their texels, u0 the atlas: root descriptors, as the draws'.
+		D3D12_ROOT_PARAMETER parameters[4]{};
+		parameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
+		parameters[0].Constants = { 0, 0, 4 };
+		parameters[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV;
+		parameters[1].Descriptor = { 0, 0 };
+		parameters[2].ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV;
+		parameters[2].Descriptor = { 1, 0 };
+		parameters[3].ParameterType = D3D12_ROOT_PARAMETER_TYPE_UAV;
+		parameters[3].Descriptor = { 0, 0 };
+		const D3D12_ROOT_SIGNATURE_DESC rootDesc{ 4, parameters, 0, nullptr, D3D12_ROOT_SIGNATURE_FLAG_NONE };
+		gpu::ComPtr<ID3DBlob>           blob;
+		gpu::ComPtr<ID3DBlob>           error;
+		if (FAILED(D3D12SerializeRootSignature(&rootDesc, D3D_ROOT_SIGNATURE_VERSION_1, &blob, &error)) ||
+		    FAILED(device_->CreateRootSignature(0, blob->GetBufferPointer(), blob->GetBufferSize(), IID_PPV_ARGS(&patchRootSignature_))))
+		{
+			return fail("root signature");
+		}
+		patchRootSignature_->SetName(L"BlockRender patch root signature");
+	}
+	if (!patchQueries_)
+	{
+		const D3D12_QUERY_HEAP_DESC queryDesc{ D3D12_QUERY_HEAP_TYPE_TIMESTAMP, 2, 0 };
+		auto                        timings = gpu::MakeBuffer(device_, 2 * sizeof(uint64_t), D3D12_HEAP_TYPE_READBACK, D3D12_RESOURCE_STATE_COPY_DEST);
+		void*                       mapped = nullptr;
+		if (!timings || FAILED(timings->Map(0, nullptr, &mapped)) || FAILED(device_->CreateQueryHeap(&queryDesc, IID_PPV_ARGS(&patchQueries_))))
+		{
+			patchQueries_.Reset();
+			return fail("timing queries");
+		}
+		timings->SetName(L"BlockRender patch timings");
+		patchTimings_ = timings;
+		patchTimingsMapped_ = static_cast<uint64_t*>(mapped);
+	}
+	D3D12_COMPUTE_PIPELINE_STATE_DESC desc{};
+	desc.pRootSignature = patchRootSignature_.Get();
+	desc.CS = { shaders_->patch.data(), shaders_->patch.size() };
+	gpu::ComPtr<ID3D12PipelineState> pipeline;
+	if (FAILED(device_->CreateComputePipelineState(&desc, IID_PPV_ARGS(&pipeline))))
+	{
+		return fail("pipeline");
+	}
+	pipeline->SetName(L"BlockRender patch pipeline");
+	patchPipeline_ = pipeline;
+	return true;
 }
 
 void Renderer::CopyEntities()
@@ -1461,9 +1658,15 @@ Renderer::Stats Renderer::TakeStats()
 	stats.dlssHint = dlssHint_;
 	stats.blendOn = blend_;
 	stats.forwardGpuMsAverage = forwardGpuSamples_ ? forwardGpuMsSum_ / double(forwardGpuSamples_) : -1.0;
+	stats.animateOn = animate_;
+	stats.patchAreasWaiting = dirty_.Size();
+	stats.patchCpuMsAverage = patchCpuSamples_ ? patchCpuMsSum_ / double(patchCpuSamples_) : -1.0;
+	stats.patchGpuMsAverage = patchGpuSamples_ ? patchGpuMsSum_ / double(patchGpuSamples_) : -1.0;
 	stats_ = {};
 	gpuMsSum_ = frameMsSum_ = updateMsSum_ = hudCopyMsSum_ = hudGpuMsSum_ = entityGpuMsSum_ = forwardGpuMsSum_ = 0.0;
 	gpuSamples_ = frameSamples_ = updateSamples_ = hudCopySamples_ = hudGpuSamples_ = entityGpuSamples_ = forwardGpuSamples_ = 0;
+	patchCpuMsSum_ = patchGpuMsSum_ = 0.0;
+	patchCpuSamples_ = patchGpuSamples_ = 0;
 	return stats;
 }
 

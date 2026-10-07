@@ -27,8 +27,9 @@ uint32_t PlaneCount(ID3D12Device* aDevice, DXGI_FORMAT aFormat);
 
 Footprint FootprintOf(ID3D12Device* aDevice, const D3D12_RESOURCE_DESC& aDesc, uint32_t aSubresource);
 
-// A buffer in aHeap (default or readback), in aState.
-ComPtr<ID3D12Resource> MakeBuffer(ID3D12Device* aDevice, uint64_t aBytes, D3D12_HEAP_TYPE aHeap, D3D12_RESOURCE_STATES aState);
+// A buffer in aHeap (default or readback), in aState, with aFlags (spike 7's Part 5: unordered access for the atlas).
+ComPtr<ID3D12Resource> MakeBuffer(ID3D12Device* aDevice, uint64_t aBytes, D3D12_HEAP_TYPE aHeap, D3D12_RESOURCE_STATES aState,
+                                  D3D12_RESOURCE_FLAGS aFlags = D3D12_RESOURCE_FLAG_NONE);
 
 // Records into aList, which may be the game's: a copy of subresource aSubresource of aSource into aDest at offset 0,
 // laid out as aFootprint. Unless aState already allows copying, aSource moves from aState to the copy state and back
