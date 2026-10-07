@@ -21,6 +21,14 @@ would disagree about where the ground is.
   damage alone, so without this mod nothing happens; with it, Minecraft's player's health becomes the same share of its
   max health, and Minecraft's log says so.
 
+What SkyCraft sends of Minecraft's entities keeps Minecraft's draw order:
+- **An entity's layers come in order** (`KeepDrawOrder`, from 1.4.0). Minecraft draws an entity's layers each over the
+  one before at the same depth: a villager's body, then its biome's clothes, its profession's and its level's badge
+  (`order` 0 to 3), a spider's eyes over its body, a banner's patterns over its cloth. SkyCraft's `AvatarExporter`
+  answers `order(n)` with itself and keeps its batches in a `HashMap`, so they go out in the textures' ids' order:
+  spike 7's step 0 had a villager's badge before its body. With the mod, `order(n)` hands back a stand-in that submits
+  with n as the order, each batch is kept by its order, and the batches go out lowest order first.
+
 It targets SkyCraft 0.1.2's classes by name, so `fabric.mod.json` asks for exactly that version: Fabric won't start with
 another SkyCraft until this mod is checked against it.
 
@@ -50,3 +58,5 @@ the mod, nothing is revealed behind them.
 `spikes/block-render/tools/mclink/blast.txt` blows up TNT on Night City's ground at a fresh spot: with the mod, the solid
 blocks around it are the same afterwards as before. `spikes/block-render/tools/mclink/blasts.txt` sets Minecraft's
 player's health to half, all and a twentieth of its max, and reads each back with `/data`.
+`spikes/block-render/tools/mclink/entities.txt` prints each scene's batches in the order they come: with the mod, a
+villager's body comes before its biome's clothes, those before its profession's, and those before its level's badge.
