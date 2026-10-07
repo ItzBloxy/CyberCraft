@@ -158,6 +158,7 @@ struct Sink : LinkSink
 	void Texture(const TextureImage& aTexture) override { textures.push_back({ aTexture.id, aTexture.width }); }
 	void Scene(const SceneMessage& aScene) override { scenes.push_back({ aScene.origin.x, aScene.batches.size(), aScene.vertexCount }); }
 	void WorldEntities(const WorldTable& aTable) override { worlds.push_back(aTable); }
+	void AtlasRegion(const AtlasPatch& aPatch) override { patches.push_back({ aPatch.x, aPatch.y, aPatch.width, aPatch.height }); }
 	void Log(const std::string& aLine) override { log.push_back(aLine); }
 
 	int Count(const std::string& aStart) const  // log lines starting with aStart
@@ -191,7 +192,8 @@ struct Sink : LinkSink
 	};
 	std::vector<std::pair<uint32_t, uint32_t>> textures;  // id and width
 	std::vector<SeenScene>                     scenes;
-	std::vector<WorldTable>                    worlds;  // one an update
+	std::vector<WorldTable>                    worlds;   // one an update
+	std::vector<std::array<uint32_t, 4>>       patches;  // x, y, width and height
 	std::vector<std::string>                   log;
 };
 
@@ -253,6 +255,15 @@ std::vector<uint8_t> SectionPayload(int32_t aX, uint32_t aVertices, uint32_t aCl
 	std::memcpy(payload.data() + 4, &zero, 4);
 	std::memcpy(payload.data() + 8, &zero, 4);
 	std::memcpy(payload.data() + 12, &aClaimed, 4);
+	return payload;
+}
+
+// Spike 7's Part 5: a kRenAtlasRegion payload, aWidth x aHeight at aX aY, as WorldExporter.frame sends it.
+std::vector<uint8_t> PatchPayload(uint32_t aX, uint32_t aY, uint32_t aWidth, uint32_t aHeight)
+{
+	std::vector<uint8_t> payload(16 + size_t(aWidth) * aHeight * 4, 0x40);
+	const uint32_t       header[4] = { aX, aY, aWidth, aHeight };
+	std::memcpy(payload.data(), header, sizeof header);
 	return payload;
 }
 
@@ -540,18 +551,53 @@ TEST(LinkStepsOverOtherMessagesAndKeepsToTheBudget)
 	minecraft.Send(proto::kRenAtlas, Atlas2x2());
 	for (int i = 0; i < 3; ++i)
 	{
-		minecraft.Send(proto::kRenAtlasRegion, std::vector<uint8_t>(4000));
+		minecraft.Send(proto::kRenLights, std::vector<uint8_t>(4000));
 		minecraft.Send(proto::kRenSection, SectionPayload(i, 3, 3));
 	}
 	LinkSettings settings;
 	settings.ringBudget = 100;  // the atlas (32 bytes) and one section (120 bytes) reach it
 	link.Update(At(1.0), settings, sink);
 	CHECK_EQ(sink.sections.size(), size_t(1));
-	CHECK_EQ(link.State().messages[proto::kRenAtlasRegion], 1ull);  // stepped over, without counting toward the budget
+	CHECK_EQ(link.State().messages[proto::kRenLights], 1ull);  // stepped over, without counting toward the budget
 	link.Update(At(1.1), kSettings, sink);
 	CHECK_EQ(sink.sections.size(), size_t(3));
-	CHECK_EQ(link.State().messages[proto::kRenAtlasRegion], 3ull);
+	CHECK_EQ(link.State().messages[proto::kRenLights], 3ull);
 	CHECK_EQ(link.State().messages[proto::kRenSection], 3ull);
+}
+
+TEST(LinkPassesOnPatchesOnceTheAtlasIsSeen)
+{
+	FakeMinecraft minecraft;
+	Link          link(minecraft.base);
+	Sink          sink;
+	minecraft.Send(proto::kRenAtlasRegion, PatchPayload(0, 0, 1, 1));  // a frame for an atlas we never saw
+	link.Update(At(1.0), kSettings, sink);
+	CHECK(sink.patches.empty());
+	CHECK_EQ(link.State().patchesBeforeAtlas, 1ull);
+	minecraft.Send(proto::kRenClearAll, {});
+	minecraft.Send(proto::kRenAtlas, Atlas2x2());
+	minecraft.Send(proto::kRenAtlasRegion, PatchPayload(1, 0, 1, 2));  // the 2 x 2 atlas's right column
+	minecraft.Send(proto::kRenAtlasRegion, PatchPayload(1, 1, 1, 2));  // one past its bottom
+	link.Update(At(1.1), kSettings, sink);
+	CHECK_EQ(link.State().atlasWidth, 2u);
+	CHECK_EQ(link.State().atlasHeight, 2u);
+	CHECK_EQ(link.State().patchesBeforeAtlas, 1ull);
+	CHECK_EQ(link.State().rejected, 1ull);
+	CHECK(link.State().lastRejected.find("of 1 x 2 at 1 1 isn't inside the 2 x 2 atlas") != std::string::npos);
+	CHECK_EQ(sink.patches.size(), size_t(1));
+	if (sink.patches.size() == 1)
+	{
+		CHECK(sink.patches[0] == (std::array<uint32_t, 4>{ 1, 0, 1, 2 }));
+	}
+	// The patches the link takes count toward the ring's budget: the first reaches it, so the second waits an update.
+	minecraft.Send(proto::kRenAtlasRegion, PatchPayload(0, 0, 2, 2));
+	minecraft.Send(proto::kRenAtlasRegion, PatchPayload(0, 1, 2, 1));
+	LinkSettings settings;
+	settings.ringBudget = 20;
+	link.Update(At(1.2), settings, sink);
+	CHECK_EQ(sink.patches.size(), size_t(2));
+	link.Update(At(1.3), settings, sink);
+	CHECK_EQ(sink.patches.size(), size_t(3));
 }
 
 TEST(LinkRejectsABadPayloadAndCarriesOn)

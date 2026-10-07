@@ -418,6 +418,8 @@ bool Link::Take(const RingMessage& aMessage, const LinkSettings& aSettings, Link
 		if (const auto atlas = ParseAtlas(aMessage.payload, error))
 		{
 			status_.atlasSeen = true;
+			status_.atlasWidth = atlas->width;
+			status_.atlasHeight = atlas->height;
 			aSink.Atlas(*atlas);
 		}
 		else
@@ -483,8 +485,23 @@ bool Link::Take(const RingMessage& aMessage, const LinkSettings& aSettings, Link
 			reject();
 		}
 		return true;
+	case proto::kRenAtlasRegion:
+		if (!status_.atlasSeen)
+		{
+			++status_.patchesBeforeAtlas;  // a frame for an atlas we never saw, or the one Minecraft's clear dropped
+			return false;
+		}
+		if (const auto patch = ParseAtlasRegion(aMessage.payload, status_.atlasWidth, status_.atlasHeight, error))
+		{
+			aSink.AtlasRegion(*patch);
+		}
+		else
+		{
+			reject();
+		}
+		return true;
 	default:
-		return false;  // atlas patches, lights, digging, avatar, ragdoll: stepped over
+		return false;  // lights, digging, avatar, ragdoll: stepped over
 	}
 }
 

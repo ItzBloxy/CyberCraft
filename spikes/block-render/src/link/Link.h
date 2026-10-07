@@ -76,6 +76,7 @@ public:
 	virtual void Texture(const TextureImage&) {}      // spike 7: an entity texture, once the atlas has been seen
 	virtual void Scene(const SceneMessage&) {}        // spike 7: this Minecraft frame's entities and particles, likewise
 	virtual void WorldEntities(const WorldTable&) {}  // spike 7: every update; empty while Minecraft isn't in its world
+	virtual void AtlasRegion(const AtlasPatch&) {}    // spike 7's Part 5: an animated sprite's frame, inside the atlas
 	virtual void Log(const std::string&) {}
 };
 
@@ -188,6 +189,9 @@ public:
 		size_t                       solidSections = 0;  // Minecraft's sections with solid blocks, kept (spike 5's "Part 3")
 		uint64_t                     solidBlocks = 0;    // and their solid blocks
 		uint64_t                     entitiesBeforeAtlas = 0;  // spike 7: textures and scenes from before the atlas, skipped
+		uint32_t                     atlasWidth = 0;           // spike 7's Part 5: the last atlas's size, for its patches
+		uint32_t                     atlasHeight = 0;
+		uint64_t                     patchesBeforeAtlas = 0;   // and patches from before the atlas, skipped
 		// Spike 7: the world-entity table, as the last update read it
 		size_t                       worldEntities = 0;  // its records that passed the checks
 		uint32_t                     worldLeftOut = 0;   // and those that didn't
