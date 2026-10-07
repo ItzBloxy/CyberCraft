@@ -30,7 +30,8 @@ local combat = nil       -- the combat line: on or off; V's weapon drawn or not;
 local combatOn = nil     -- whether Minecraft's hits land as V's and V's hurts go to Minecraft: "on" or "off"
 local blasts = nil       -- the blasts line, with combat on: how many, and the last's NPCs within it, its own hits, and
                          -- those knocked down and dead after its push
-local entities = nil     -- the entities line (spike 7): on or off, scenes a second, frames drawn, textures, the nearest mob
+local entities = nil     -- the entities line (spike 7): on or off, scenes a second, frames drawn and with the forward
+                         -- list (step B), textures, the nearest mob
 local entitiesOn = nil   -- whether Minecraft's entities are drawn: "on" or "off"
 local vLook = nil        -- the v line: V hidden in build mode, or seen and why
 local hideV = nil        -- whether V's meshes are hidden in build mode: "on" or "off"
@@ -72,10 +73,11 @@ local function wear(head, chest, legs, feet)
 end
 
 -- Spike 7's Spawn rows: Minecraft's things ahead of its player, level, each tagged sp7, and each block placed with a
--- marker tagged sp7b, so Clear removes them all and spares the NPCs' stand-ins. Each kind has its own distance, so none
--- lands on another: the dropped items and the sand 3 blocks ahead, the mobs 5, the block entities 8 and the herd 11 and
--- 13. The mobs have no loot and the sand vanishes where it lands, so nothing is left behind. A TNT's blast breaks the
--- placed blocks and drops them, so Clear comes before any TNT.
+-- marker tagged sp7b, so Clear removes them all and spares the NPCs' stand-ins. Each kind has its own place, so none
+-- lands on another: the dropped items and the sand 3 blocks ahead, the potion and the campfire 3 ahead to either side,
+-- the mobs 5, the firework 6, the block entities 8 and the herd 11 and 13. The mobs have no loot and the sand vanishes
+-- where it lands, so nothing is left behind. A TNT's blast breaks the placed blocks and drops them, so Clear comes
+-- before any TNT.
 local function ahead(where)
     return "/execute rotated ~ 0 positioned " .. where .. " run "
 end
@@ -156,6 +158,21 @@ local fun = {
         { label = "Spider", commands = { mob("^2 ^ ^5", "spider", ",NoAI:1b") } },
         { label = "Blaze", commands = { mob("^4 ^ ^5", "blaze", ",NoAI:1b", "~ ~1 ~") } },
         { label = "Slime", commands = { mob("^-4 ^ ^5", "slime", ",Size:0") } },
+    } },
+    -- Step B's translucent particles: a firework bursting overhead, 6 blocks ahead (look up for it); a splash potion
+    -- that breaks on the ground 3 ahead and 3 to the left (^ is left first); and a lit campfire 3 ahead and 3 to the
+    -- right, whose smoke rises until Clear, placed at its marker as the block entities are.
+    { label = "Particles, ahead:", buttons = {
+        { label = "Firework", commands = { ahead("^ ^ ^6") .. "summon minecraft:firework_rocket ~ ~ ~ "
+            .. '{LifeTime:20,Tags:["sp7"],FireworksItem:{id:"minecraft:firework_rocket",count:1,components:'
+            .. '{"minecraft:fireworks":{explosions:[{shape:"large_ball",colors:[I;16711680]}]}}}}' } },
+        { label = "Splash potion", commands = { ahead("^3 ^ ^3") .. "summon minecraft:splash_potion ~ ~2 ~ "
+            .. '{Tags:["sp7"],Item:{id:"minecraft:splash_potion",count:1,components:'
+            .. '{"minecraft:potion_contents":{potion:"minecraft:regeneration"}}}}' } },
+        { label = "Campfire", commands = {
+            ahead("^-3 ^ ^3") .. 'summon minecraft:marker ~ ~ ~ {Tags:["sp7b","sp7campfire"]}',
+            "/execute at @e[tag=sp7campfire] run setblock ~ ~ ~ minecraft:campfire",
+        } },
     } },
     -- The sand drops from 12 blocks up and vanishes where it lands (CancelDrop), even on a block, and drops no item if it
     -- falls out of the world (DropItem).
@@ -325,9 +342,11 @@ local function readStatus()
             entitiesOn = entityState
             local scenes = line:match("^entities=%a+: (%d+ scenes a second)")
             local drawn = line:match("; drawn in (%d+ frames)")
+            local forward = line:match("; the forward list in (%d+ frames)")
             local textures = line:match("; (%d+ textures) %(")
             local nearest = line:match("; the nearest mob ([%d.]+ m) away")
             entities = entityState .. (scenes and (", " .. scenes) or "") .. (drawn and (", drawn in " .. drawn) or "")
+                .. (forward and (", the forward list in " .. forward) or "")
                 .. (textures and (", " .. textures) or "") .. (nearest and (", the nearest mob " .. nearest .. " away") or "")
         end
         if name ~= nil then
