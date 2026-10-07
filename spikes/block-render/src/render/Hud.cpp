@@ -1,6 +1,7 @@
 #include "render/Hud.h"
 
 #include <algorithm>
+#include <cmath>
 
 namespace cpmc
 {
@@ -40,6 +41,39 @@ std::optional<uint32_t> HudTexel(uint32_t aX, uint32_t aY, uint32_t aWidth, uint
 		return std::nullopt;
 	}
 	return (aBottomUp ? aHeight - 1 - y : y) * aWidth + x;
+}
+
+uint32_t CursorHeight(uint32_t aBackHeight)
+{
+	return std::max(1u, uint32_t(std::lround(18.0 * aBackHeight / 1080.0)));
+}
+
+CursorPart CursorAt(uint32_t aX, uint32_t aY, uint32_t aTipX, uint32_t aTipY, uint32_t aHeight)
+{
+	if (aHeight == 0)
+	{
+		return CursorPart::None;
+	}
+	const float height = float(aHeight);
+	const float edge = 1.5f * height / 18.0f;
+	const float x = float(aX) + 0.5f - float(aTipX);
+	const float y = float(aY) + 0.5f - float(aTipY);
+	if (x < 0.0f || y < 0.0f || y >= height || x > y * 0.6f)
+	{
+		return CursorPart::None;
+	}
+	return x < edge || x > y * 0.6f - edge || y > height - edge ? CursorPart::Edge : CursorPart::Fill;
+}
+
+void HudCursor::Set(const Spot& aSpot)
+{
+	packed_.store(uint64_t(aSpot.x & 0x7FFFFFFFu) | (uint64_t(aSpot.y & 0x7FFFFFFFu) << 31) | (aSpot.shown ? 1ull << 62 : 0ull));
+}
+
+HudCursor::Spot HudCursor::Get() const
+{
+	const uint64_t packed = packed_.load();
+	return { uint32_t(packed & 0x7FFFFFFFu), uint32_t((packed >> 31) & 0x7FFFFFFFu), (packed >> 62) != 0 };
 }
 
 std::optional<uint32_t> HudSlots::BeginWrite(uint64_t aCompleted)

@@ -102,3 +102,51 @@ TEST(HudSlotsReplaceTheWaitingImageWhenTheGpuHasTheRest)
 	slots.EndWrite(2);
 	CHECK_EQ(*slots.TakeNewest(), 2u);
 }
+
+TEST(HudCursorScalesWithTheScreen)
+{
+	CHECK_EQ(CursorHeight(1080), 18u);  // SkyCraft's
+	CHECK_EQ(CursorHeight(1440), 24u);  // the user's
+	CHECK_EQ(CursorHeight(2160), 36u);
+	CHECK_EQ(CursorHeight(720), 12u);
+	CHECK_EQ(CursorHeight(768), 13u);  // rounded
+	CHECK_EQ(CursorHeight(0), 1u);
+}
+
+TEST(HudCursorIsSkyCraftsArrow)
+{
+	// 18 pixels tall, its tip at 100 200, each pixel judged at its centre, as HudPS sees SV_Position.
+	CHECK(CursorAt(100, 200, 100, 200, 18) == CursorPart::None);  // the tip's own pixel: its centre is outside the slope
+	CHECK(CursorAt(100, 205, 100, 200, 18) == CursorPart::Edge);  // the left edge
+	CHECK(CursorAt(102, 210, 100, 200, 18) == CursorPart::Fill);
+	CHECK(CursorAt(105, 210, 100, 200, 18) == CursorPart::Edge);  // the slanted edge
+	CHECK(CursorAt(106, 210, 100, 200, 18) == CursorPart::None);  // past it
+	CHECK(CursorAt(102, 217, 100, 200, 18) == CursorPart::Edge);  // the bottom edge
+	CHECK(CursorAt(100, 218, 100, 200, 18) == CursorPart::None);  // below it
+	CHECK(CursorAt(99, 210, 100, 200, 18) == CursorPart::None);   // left of the tip
+	// Twice as tall, the edges twice as wide.
+	CHECK(CursorAt(5, 20, 0, 0, 36) == CursorPart::Fill);
+	CHECK(CursorAt(2, 20, 0, 0, 36) == CursorPart::Edge);
+	CHECK(CursorAt(5, 20, 0, 0, 0) == CursorPart::None);  // no cursor
+}
+
+TEST(HudCursorKeepsItsSpotWhole)
+{
+	HudCursor cursor;
+	CHECK(!cursor.Get().shown);
+	cursor.Set({ 2559, 1439, true });
+	HudCursor::Spot spot = cursor.Get();
+	CHECK(spot.shown);
+	CHECK_EQ(spot.x, 2559u);
+	CHECK_EQ(spot.y, 1439u);
+	cursor.Set({ 7679, 4319, false });
+	spot = cursor.Get();
+	CHECK(!spot.shown);
+	CHECK_EQ(spot.x, 7679u);
+	CHECK_EQ(spot.y, 4319u);
+	cursor.Set({ 0x7FFFFFFF, 0x7FFFFFFF, false });  // the largest spot: its parts stay apart
+	spot = cursor.Get();
+	CHECK(!spot.shown);
+	CHECK_EQ(spot.x, 0x7FFFFFFFu);
+	CHECK_EQ(spot.y, 0x7FFFFFFFu);
+}

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <atomic>
 #include <cstdint>
 #include <optional>
 
@@ -32,6 +33,42 @@ uint32_t HudScaleFor(uint32_t aBackWidth, uint32_t aBackHeight, uint32_t aWidth,
 // texel from the top left, and rows flipped when they're stored bottom-up. Nothing outside the image, where the pass
 // shows nothing.
 std::optional<uint32_t> HudTexel(uint32_t aX, uint32_t aY, uint32_t aWidth, uint32_t aHeight, uint32_t aScale, bool aBottomUp);
+
+// Spike 8: the cursor's arrow, SkyCraft's, which the HUD pass draws over the image while a Minecraft screen is open in
+// build mode (its spec's "Drawing it"). Its height in back-buffer pixels: 18 at 1,080 lines, scaled with the back
+// buffer's height and rounded, at least 1.
+uint32_t CursorHeight(uint32_t aBackHeight);
+
+enum class CursorPart
+{
+	None,
+	Edge,  // black
+	Fill,  // white
+};
+
+// The part of the arrow, its tip at (aTipX, aTipY) and aHeight pixels tall (0: no cursor), at back-buffer pixel (aX, aY),
+// judged at the pixel's centre: inside where the slope 0.6 a pixel down leaves it, its edges 1.5 pixels wide at 18
+// pixels tall and as much wider as it's taller. HudPS does the same arithmetic.
+CursorPart CursorAt(uint32_t aX, uint32_t aY, uint32_t aTipX, uint32_t aTipY, uint32_t aHeight);
+
+// Where the cursor is, for the HUD pass: the router writes it as it moves and as screens open and close, and the pass reads
+// it at Present. Its spot is one atomic, so x and y never tear.
+class HudCursor
+{
+public:
+	struct Spot
+	{
+		uint32_t x = 0;  // back-buffer pixels, below 2^31 each
+		uint32_t y = 0;
+		bool     shown = false;
+	};
+
+	void Set(const Spot& aSpot);
+	Spot Get() const;
+
+private:
+	std::atomic<uint64_t> packed_{ 0 };  // x in bits 0 to 30, y in 31 to 61, shown in 62
+};
 
 // Which of the three upload buffers each image goes through. The main thread copies an image into a slot the GPU has
 // finished with, and it waits there as the newest. The HUD pass takes the newest, once, and the GPU reads it until its
