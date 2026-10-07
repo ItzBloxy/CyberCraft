@@ -4,7 +4,8 @@ Date: 2026-10-07. Status: agreed with the user section by section in the brainst
 end, lists what writing it out added to what was agreed. Then revised after a deep self-review at the user's request,
 which checked each claim against its source and walked through step 0 and run E as they would run: "Changes from the
 deep review", at the end, lists what changed and what was checked. Planning Part 1 (step 0) settled more: "Changes
-while planning Part 1". The sections above them include those changes.
+while planning Part 1", and planning Part 2 more again: "Changes while planning Part 2". The sections above them
+include those changes.
 
 ## Purpose
 
@@ -304,8 +305,8 @@ by Minecraft's frame and the HUD image's transfer, about 2 to 3 frames, as the u
 
 - **A `screens=` status line,** after `build=`: whether a Minecraft screen is open and whose the cursor is, its position
   in the image's pixels (`cursor 640, 360 of 1280 × 720`), the pointer speed used (`Windows speed 8 of 20: 0.75 px a
-  count`), cursor events sent, keys taken by the F3 rule, characters typed and dropped, and whether `PeekMessageW` is
-  hooked.
+  count`), cursor events sent, keys taken by the F3 rule, characters typed and lone surrogates dropped, and whether
+  `PeekMessageW` is hooked.
 - **The log:** a screen opening and closing (with build mode's state), the `PeekMessageW` patch, the pointer speed read,
   and the Esc that closes a screen as build mode ends.
 
@@ -405,6 +406,9 @@ nothing, the chest's contents included. The results doc gets screenshots, as ear
    `TranslateMessage` of the legacy `WM_KEYDOWN`), not verified. The other order would do no harm: a text field types
    on characters and ignores printable keys, a screen without one ignores characters, and SkyCraft drops a character
    when no screen is open.
+8. **A key hidden from the game's Raw Input still reaches its window as `WM_KEYDOWN`.** Spike 4 found the game reads keys
+   only through Raw Input, and it imports no `GetKeyState` or `GetAsyncKeyState`; but Esc was never hidden before. Run
+   E checks that closing a Minecraft screen with Esc opens no game menu.
 
 ## Found while writing
 
@@ -508,3 +512,21 @@ results. Planning it changed step 0 ("Step 0: Minecraft's side, with mclink" abo
 - **The link keeps McState's GUI scale,** which mclink's status prints: the slots' pixels hold only at the user's scale
   2, and nothing read it.
 - **The typed line is a chat line,** not `/say`, which would read the `@` as the start of an entity selector.
+
+## Changes while planning Part 2
+
+Step 0 passed as the spec has it ("How Part 1 went" in the plan), so Part 2 (Tasks 6 to 15) builds the design as
+written. Planning it settled these:
+- **An F6 without Shift goes on as any key,** where build mode used to pass it to the game at once. So F3+F6 reaches
+  Minecraft as "Where each input goes" says, and so does an F6 in a screen.
+- **The Esc's rule is worked out in each update** (`closeable_`: linked, Minecraft in its world, its player alive, a
+  screen open), from that frame's state. So an ending found in the same update, Minecraft leaving its world or its
+  player dying, sends no Esc, as "Edge cases" has it.
+- **The status counts characters typed and lone surrogates dropped.** Control characters come on every Enter and
+  Backspace, and reach Minecraft as keys, so they aren't counted as dropped.
+- **The arrow is tested before the image** in `HudPS`, which returns nothing outside the image, so the arrow shows
+  wherever the cursor is.
+- **Run E's crafting table and chest are placed by request,** at markers, as spike 7's run D placed its blocks, and
+  cleared at them with `strict`, which drops nothing. A `/kill` of items within 10 blocks of V clears what Q drops.
+- **Risk 8 added:** a key hidden from the game's Raw Input still reaches its window as `WM_KEYDOWN`, and Esc was never
+  hidden before. Run E checks that Esc closing a Minecraft screen opens no game menu.

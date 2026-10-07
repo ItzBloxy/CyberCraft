@@ -1,4 +1,4 @@
-# Minecraft's Screens Implementation Plan, Part 1 (step 0)
+# Minecraft's Screens Implementation Plan, Parts 1 and 2 (step 0, then BlockRender 0.23.0 and run E)
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 >
@@ -32,14 +32,9 @@ deployed.
 
 **Spec:** [docs/superpowers/specs/2026-10-07-minecraft-screens-design.md](../specs/2026-10-07-minecraft-screens-design.md)
 
-**Part 2** (BlockRender 0.23.0 and run E) is planned after step 0, from its results:
-- build mode's screen state and its keys (`input/BuildMode`, `input/Router`);
-- the cursor (`input/Cursor`) and its arrow in the HUD pass;
-- typed text (`input/Text`, `input/MessageHook`);
-- the status line;
-- run E in the game.
-
-Step 0 settles the pixels and the inputs Part 2 builds on.
+**Part 2** (Tasks 6 to 15) builds BlockRender 0.23.0, which works Minecraft's screens from the game in build mode (build
+mode's keys, the cursor and its arrow, typed text, the status line), then runs run E in the game. It was planned after
+step 0, from its results, and its own section below says how it's built.
 
 ---
 
@@ -1113,7 +1108,7 @@ cd /d/Cyberpunk-Minecraft && git add docs/superpowers/plans/2026-10-07-minecraft
        -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
 ```
 
-- [ ] **Step 3: Record Part 2's plan**
+- [x] **Step 3: Record Part 2's plan**
 
 With superpowers:writing-plans, from the spec and step 0's results: BlockRender 0.23.0 (build mode's screen state and
 keys, the cursor and its arrow, typed text, the status line), then run E with the user. Part 2's tasks follow this
@@ -1211,3 +1206,3038 @@ Part 1 ran on 2026-10-07, after the plan's deep review, as the user said to star
   - `kInText` delivers any code point whole.
 
   Nothing in the spec's design for Part 2 changes.
+
+---
+
+## Part 2: BlockRender 0.23.0, and run E
+
+**Goal:** Part 2 of spike 8: Minecraft's screens worked from the game in build mode, as the spec's "Where each input
+goes", "The cursor" and "Typed text" have them, then run E in the game with the user. Step 0 settled Minecraft's side:
+the cursor's pixels are the HUD image's, screens open 0.00 to 0.10 s after their input, and `kInText` delivers any code
+point whole ("How Part 1 went").
+
+**Architecture:** the pure parts are plain C++ in `render_core`, tested without the game; the patch and the wiring are
+in `render_runtime` and `Plugin.cpp`, which only the game tests.
+- **`input/Cursor`:** Windows' pointer speed table; the cursor's position in back-buffer pixels, centred as a screen
+  opens, kept in the HUD image, and its image pixel, for `kInCursor`, only when that pixel changes.
+- **`input/Text`:** WM_CHAR's UTF-16 code units made into code points, lone surrogates refused, and `Printable`.
+- **`render/Hud`:** the arrow's height and shape (`CursorHeight`, `CursorAt`, which `HudPS` mirrors), and `HudCursor`,
+  the spot the router writes and the HUD pass reads, in one atomic.
+- **`input/BuildMode`:** holders for every key; E, T, /, Q and F3 Minecraft's; every key while F3's press is
+  Minecraft's; O sends `kInOpenMenu`; with a Minecraft screen open, every input Minecraft's; no latency mark, and the
+  slot readout kept, in a screen.
+- **`input/Router`:** while a screen is build mode's, the mouse's movement moves the cursor and is hidden from the game,
+  typed characters go as `kInText`, and `TakeMouseX` gives 0; build mode ending with a screen open sends Esc, if
+  Minecraft is linked, in its world and alive; Windows' speed is read again as a screen opens.
+- **The HUD pass:** `HudConstants` grows to 8 values, and `HudPS` draws the arrow before the image.
+- **`input/MessageHook`:** the executable's `PeekMessageW` import patched, each WM_CHAR taken off the queue to the
+  router.
+- **BlockRender 0.23.0:** the hook installed and removed, the HUD image's size and the cursor's spot shared, and a
+  `screens=` status line.
+
+---
+
+## Before you start (Part 2)
+
+As Part 1's "Before you start", with these:
+- **Already verified:** Part 2's code was compiled and tested in the scratch clone, Tasks 6 to 13 replayed in a fresh
+  clone exactly as written (every build, test and failure checked, the files identical to the clone's), and each new
+  test broken once by a mutation of the code it covers: 52 mutations, all caught.
+- **Test counts:** 526 at the start, then 531, 534, 537, 543, 550, 550, 550 and 551 after Tasks 6 to 13.
+- **The game:** builds deploy only with `CP2077_DIR` set, which only Task 14's deploy step sets, with the game closed.
+- **What only the game can test:** the patch, the arrow, and how it all feels, in Task 14's run E, with the user.
+- **The user's world:** run E places a crafting table and a chest at markers tagged `sp8b`, removed at its end without
+  updates (`strict`), so they drop nothing, and clears any item dropped near V.
+
+## File map (Part 2)
+
+All paths are relative to `spikes/block-render/`.
+
+| File | Responsibility |
+|---|---|
+| `CMakeLists.txt` | The new sources and tests |
+| `src/input/Cursor.*` | `PointerFactor`; `Cursor`: the position, its area, centring, and the image pixel |
+| `src/input/Text.*` | `Utf16Text`, `Printable` |
+| `src/render/Hud.*` | `CursorHeight`, `CursorAt`, `HudCursor` |
+| `src/input/BuildMode.*` | The screen state's routing, holders for every key, the new keys, the F3 rule, O |
+| `src/input/Router.*` | The cursor, typed text, the Esc as build mode ends, `ReadPointerSpeed`, the report |
+| `src/render/FrameConstants.h`, `shaders/blocks.hlsl`, `src/render/Renderer.*` | The arrow in the HUD pass |
+| `src/input/MessageHook.*` | The `PeekMessageW` patch |
+| `src/Status.*`, `src/Plugin.cpp` | The `screens=` line; the wiring; 0.23.0 |
+| `tests/TestCursor.cpp`, `tests/TestText.cpp` | The new units' tests |
+| `tests/TestHud.cpp`, `tests/TestBuildMode.cpp`, `tests/TestRouter.cpp`, `tests/TestStatus.cpp` | Their new tests |
+
+---
+
+### Task 6: The cursor
+
+The spec's "Moving it" and "Where it starts":
+- **`PointerFactor`:** back-buffer pixels a raw count, by Windows' table with "Enhance pointer precision" off (1/32 and
+  1/16 at speeds 1 and 2, eighths up to 1 at 10, quarters up to 3.5 at 20); a speed out of range counts as 10's.
+- **`Cursor`:** its position in back-buffer pixels, fractions kept, clamped inside the area the HUD image covers (its
+  size times its scale) and never on the far edge. As Minecraft's flag goes from clear to set it goes to the image's
+  centre pixel, as `MouseHandler.releaseMouse` puts Minecraft's position (the window's size over 2, rounded down);
+  from one screen straight to another it stays. `Move` says the image pixel only when it changed. With no image yet it
+  goes nowhere.
+
+**Files:**
+- Create: `src/input/Cursor.h`, `src/input/Cursor.cpp`, `tests/TestCursor.cpp`
+- Modify: `CMakeLists.txt`
+
+- [ ] **Step 1: Write the failing test, `tests/TestCursor.cpp`**
+
+```cpp
+#include "Harness.h"
+
+#include "input/Cursor.h"
+
+using namespace cpmc::input;
+
+namespace
+{
+// The user's: a 1280 by 720 HUD image drawn at twice its size on a 2560 by 1440 back buffer.
+Cursor OnTheUsersScreen()
+{
+	Cursor cursor;
+	cursor.SetArea(1280, 720, 2);
+	return cursor;
+}
+
+bool At(const Pixel& aPixel, uint32_t aX, uint32_t aY)
+{
+	return aPixel.x == aX && aPixel.y == aY;
+}
+}
+
+TEST(CursorFollowsWindowsPointerSpeed)
+{
+	// Windows' factors with "Enhance pointer precision" off, by speed 1 to 20.
+	const double factors[] = { 1.0 / 32, 1.0 / 16, 1.0 / 8, 2.0 / 8, 3.0 / 8, 4.0 / 8, 5.0 / 8, 6.0 / 8, 7.0 / 8, 1.0,
+		                       1.25,     1.5,      1.75,    2.0,     2.25,    2.5,     2.75,    3.0,     3.25,    3.5 };
+	for (int speed = 1; speed <= 20; ++speed)
+	{
+		CHECK_EQ(PointerFactor(speed), factors[speed - 1]);
+	}
+	CHECK_EQ(PointerFactor(0), 1.0);  // out of range: the default's
+	CHECK_EQ(PointerFactor(21), 1.0);
+}
+
+TEST(CursorStartsAtTheCentreAsAScreenOpens)
+{
+	Cursor cursor = OnTheUsersScreen();
+	cursor.SetScreen(true);
+	CHECK(At(cursor.Image(), 640, 360));  // as Minecraft puts its own position: the window's size over 2
+	CHECK(At(cursor.Back(), 1280, 720));
+	cursor.Move(100, 50, 1.0);
+	cursor.SetScreen(true);  // still open, or one screen straight after another: it stays
+	CHECK(At(cursor.Image(), 690, 385));
+	cursor.SetScreen(false);
+	CHECK(At(cursor.Image(), 690, 385));  // closed: it stays where it was, unseen
+	cursor.SetScreen(true);
+	CHECK(At(cursor.Image(), 640, 360));
+	Cursor odd;
+	odd.SetArea(1281, 721, 1);
+	odd.SetScreen(true);
+	CHECK(At(odd.Image(), 640, 360));  // Minecraft's 640.5 and 360.5, in whole pixels
+}
+
+TEST(CursorMovesInBackBufferPixelsAndCarriesTheFractions)
+{
+	Cursor cursor = OnTheUsersScreen();
+	cursor.SetScreen(true);
+	CHECK(!cursor.Move(1, 0, 0.75).has_value());  // 1280.75: still image pixel 640
+	CHECK(!cursor.Move(1, 0, 0.75).has_value());  // 1281.5
+	const auto moved = cursor.Move(1, 0, 0.75);   // 1282.25: pixel 641
+	CHECK(moved.has_value() && At(*moved, 641, 360));
+	CHECK(At(cursor.Back(), 1282, 720));
+	const auto down = cursor.Move(-3, 4, 0.75);  // back to 1280, and 723
+	CHECK(down.has_value() && At(*down, 640, 361));
+	CHECK(!cursor.Move(0, 0, 0.75).has_value());
+}
+
+TEST(CursorStaysInTheImage)
+{
+	Cursor cursor = OnTheUsersScreen();
+	cursor.SetScreen(true);
+	const auto corner = cursor.Move(-100000, -100000, 1.0);
+	CHECK(corner.has_value() && At(*corner, 0, 0));
+	const auto far = cursor.Move(1000000, 1000000, 1.0);
+	CHECK(far.has_value() && At(*far, 1279, 719));
+	CHECK(cursor.Back().x < 2560 && cursor.Back().y < 1440);
+	cursor.SetArea(640, 360, 4);  // hudscale 4: the same screen, a smaller image
+	CHECK(At(cursor.Image(), 639, 359));
+	cursor.SetArea(320, 180, 4);  // and a smaller screen
+	CHECK(At(cursor.Image(), 319, 179));
+	CHECK(At(cursor.Back(), 1279, 719));
+}
+
+TEST(CursorWithoutAnImageGoesNowhere)
+{
+	Cursor cursor;
+	CHECK(!cursor.HasArea());
+	cursor.SetScreen(true);
+	CHECK(!cursor.Move(10, 10, 1.0).has_value());
+	CHECK(At(cursor.Image(), 0, 0));
+	cursor.SetArea(0, 0, 2);  // Minecraft has sent no HUD image yet
+	CHECK(!cursor.HasArea());
+	cursor.SetArea(1280, 720, 0);  // a scale of 0 counts as 1
+	CHECK(cursor.HasArea());
+	const auto moved = cursor.Move(5, 5, 1.0);
+	CHECK(moved.has_value() && At(*moved, 5, 5));
+}
+```
+
+- [ ] **Step 2: Edit `CMakeLists.txt` to add the test**
+
+```cmake
+	tests/TestRouter.cpp
+```
+```cmake
+	tests/TestRouter.cpp
+	tests/TestCursor.cpp
+```
+
+- [ ] **Step 3: Build; it must fail**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -o -E "error C[0-9]+: [^[]*" | sort -u | head -3
+```
+Expected: `error C1083: Cannot open include file: 'input/Cursor.h'`.
+
+- [ ] **Step 4: Write `src/input/Cursor.h`**
+
+```cpp
+#pragma once
+
+#include <cstdint>
+#include <optional>
+
+// The cursor BlockRender keeps while a Minecraft screen is open in build mode (spike 8's "The cursor"): moved by the
+// mouse's raw counts at Windows' pointer speed, kept in back-buffer pixels with their fractions, clamped to the area the
+// HUD image covers, and given to Minecraft in the image's pixels, which are its window's. Pure, and not thread-safe: the
+// router holds its lock around every call.
+namespace cpmc::input
+{
+// Windows' pointer speed (SPI_GETMOUSESPEED, 1 to 20, 10 by default), and whether "Enhance pointer precision" is on.
+struct PointerSpeed
+{
+	int  speed = 10;
+	bool enhanced = false;
+};
+
+// Back-buffer pixels a raw count, by Windows' table with "Enhance pointer precision" off: 1/32 and 1/16 at 1 and 2, then
+// eighths up to 1 at 10, then quarters up to 3.5 at 20. Its curve, when it's on, isn't followed. A speed out of range
+// counts as the default's.
+double PointerFactor(int aSpeed);
+
+// A pixel, whole, from the top left.
+struct Pixel
+{
+	uint32_t x = 0;
+	uint32_t y = 0;
+
+	bool operator==(const Pixel&) const = default;
+};
+
+class Cursor
+{
+public:
+	// The HUD image's size, and the back-buffer pixels each of its texels covers each way: the area the cursor stays in.
+	// The position is clamped into a new area. A size of 0 leaves no area, and the cursor nowhere; a scale of 0 counts
+	// as 1.
+	void SetArea(uint32_t aImageWidth, uint32_t aImageHeight, uint32_t aScale);
+	// Minecraft's screen flag, each frame. Going from clear to set puts the cursor at the image's centre, as Minecraft's
+	// own MouseHandler.releaseMouse puts its position as a screen opens; from one screen straight to another it stays.
+	void SetScreen(bool aOpen);
+	// A mouse event's raw counts, at aFactor back-buffer pixels a count: the image pixel it moved to, if that changed.
+	std::optional<Pixel> Move(int32_t aDx, int32_t aDy, double aFactor);
+
+	bool     HasArea() const { return width_ > 0 && height_ > 0; }
+	Pixel    Image() const;  // in the image's pixels, for Minecraft
+	Pixel    Back() const;   // in back-buffer pixels, for the arrow
+	uint32_t ImageWidth() const { return width_; }
+	uint32_t ImageHeight() const { return height_; }
+
+private:
+	void Clamp();
+
+	uint32_t width_ = 0;  // the image's
+	uint32_t height_ = 0;
+	uint32_t scale_ = 1;
+	double   x_ = 0.0;  // back-buffer pixels
+	double   y_ = 0.0;
+	bool     screen_ = false;
+};
+}
+```
+
+- [ ] **Step 5: Write `src/input/Cursor.cpp`**
+
+```cpp
+#include "input/Cursor.h"
+
+#include <algorithm>
+#include <cmath>
+
+namespace cpmc::input
+{
+double PointerFactor(int aSpeed)
+{
+	if (aSpeed < 1 || aSpeed > 20)
+	{
+		return 1.0;
+	}
+	if (aSpeed <= 2)
+	{
+		return aSpeed == 1 ? 1.0 / 32.0 : 1.0 / 16.0;
+	}
+	if (aSpeed <= 10)
+	{
+		return (aSpeed - 2) / 8.0;
+	}
+	return 1.0 + (aSpeed - 10) / 4.0;
+}
+
+void Cursor::SetArea(uint32_t aImageWidth, uint32_t aImageHeight, uint32_t aScale)
+{
+	width_ = aImageWidth;
+	height_ = aImageHeight;
+	scale_ = std::max(aScale, 1u);
+	Clamp();
+}
+
+void Cursor::SetScreen(bool aOpen)
+{
+	if (aOpen && !screen_ && HasArea())
+	{
+		x_ = double(width_ / 2) * scale_;
+		y_ = double(height_ / 2) * scale_;
+	}
+	screen_ = aOpen;
+}
+
+std::optional<Pixel> Cursor::Move(int32_t aDx, int32_t aDy, double aFactor)
+{
+	if (!HasArea())
+	{
+		return std::nullopt;
+	}
+	const Pixel before = Image();
+	x_ += aDx * aFactor;
+	y_ += aDy * aFactor;
+	Clamp();
+	const Pixel after = Image();
+	if (after == before)
+	{
+		return std::nullopt;
+	}
+	return after;
+}
+
+Pixel Cursor::Image() const
+{
+	if (!HasArea())
+	{
+		return {};
+	}
+	return { std::min(uint32_t(x_ / scale_), width_ - 1), std::min(uint32_t(y_ / scale_), height_ - 1) };
+}
+
+Pixel Cursor::Back() const
+{
+	return { uint32_t(x_), uint32_t(y_) };
+}
+
+void Cursor::Clamp()
+{
+	if (!HasArea())
+	{
+		x_ = 0.0;
+		y_ = 0.0;
+		return;
+	}
+	// Inside the area's last pixel, never on its far edge.
+	x_ = std::clamp(x_, 0.0, std::nextafter(double(width_) * scale_, 0.0));
+	y_ = std::clamp(y_, 0.0, std::nextafter(double(height_) * scale_, 0.0));
+}
+}
+```
+
+- [ ] **Step 6: Edit `CMakeLists.txt` to add the source**
+
+```cmake
+	src/input/Router.cpp
+```
+```cmake
+	src/input/Router.cpp
+	src/input/Cursor.cpp
+```
+
+- [ ] **Step 7: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `531 test(s), 0 failure(s)`.
+
+- [ ] **Step 8: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "minecraft-screens: the cursor, at Windows' pointer speed, centred as a screen opens and kept in the HUD image" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 7: Typed text
+
+The spec's "Typed text": `Utf16Text` takes WM_CHAR's code units one at a time and gives a code point once it's whole,
+joining a surrogate pair and refusing a lone half (a second half with no first, or a first half followed by anything but
+a second), which it counts. `Printable` says what Minecraft gets as text: nothing below 0x20, and not 0x7F; Backspace,
+Enter, Tab, Esc and Ctrl's letters reach Minecraft as keys.
+
+**Files:**
+- Create: `src/input/Text.h`, `src/input/Text.cpp`, `tests/TestText.cpp`
+- Modify: `CMakeLists.txt`
+
+- [ ] **Step 1: Write the failing test, `tests/TestText.cpp`**
+
+```cpp
+#include "Harness.h"
+
+#include "input/Text.h"
+
+using namespace cpmc::input;
+
+TEST(TextTakesWholeCodePoints)
+{
+	Utf16Text text;
+	CHECK_EQ(text.Take(u'a').value_or(0), uint32_t('a'));
+	CHECK_EQ(text.Take(0x00E6).value_or(0), uint32_t(0xE6));  // æ, typed on the user's Danish layout
+	CHECK_EQ(text.Take(0x20AC).value_or(0), uint32_t(0x20AC));  // €, with AltGr
+	CHECK(!text.Take(0xD83D).has_value());                     // 🙂's first half waits for its second
+	CHECK_EQ(text.Take(0xDE42).value_or(0), uint32_t(0x1F642));
+	CHECK_EQ(text.Refused(), 0ull);
+}
+
+TEST(TextRefusesLoneSurrogates)
+{
+	Utf16Text text;
+	CHECK(!text.Take(0xDE42).has_value());  // a second half with no first
+	CHECK_EQ(text.Refused(), 1ull);
+	CHECK(!text.Take(0xD83D).has_value());
+	CHECK_EQ(text.Take(u'b').value_or(0), uint32_t('b'));  // a first half with no second: it's refused, and b goes on
+	CHECK_EQ(text.Refused(), 2ull);
+	CHECK(!text.Take(0xD83D).has_value());
+	CHECK(!text.Take(0xD83D).has_value());  // a first half after a first half: the earlier is refused
+	CHECK_EQ(text.Refused(), 3ull);
+	CHECK_EQ(text.Take(0xDE00).value_or(0), uint32_t(0x1F600));
+}
+
+TEST(TextKnowsWhatMinecraftTypes)
+{
+	CHECK(Printable(' '));
+	CHECK(Printable('a'));
+	CHECK(Printable(0xE6));
+	CHECK(Printable(0x1F642));
+	CHECK(!Printable(0x08));  // Backspace, a key to Minecraft
+	CHECK(!Printable(0x0D));  // Enter
+	CHECK(!Printable(0x16));  // Ctrl+V
+	CHECK(!Printable(0x1B));  // Esc
+	CHECK(!Printable(0x1F));
+	CHECK(!Printable(0x7F));  // Ctrl+Backspace
+}
+```
+
+- [ ] **Step 2: Edit `CMakeLists.txt` to add the test**
+
+```cmake
+	tests/TestCursor.cpp
+```
+```cmake
+	tests/TestCursor.cpp
+	tests/TestText.cpp
+```
+
+- [ ] **Step 3: Build; it must fail**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -o -E "error C[0-9]+: [^[]*" | sort -u | head -3
+```
+Expected: `error C1083: Cannot open include file: 'input/Text.h'`.
+
+- [ ] **Step 4: Write `src/input/Text.h`**
+
+```cpp
+#pragma once
+
+#include <cstdint>
+#include <optional>
+
+// Typed text (spike 8's "Typed text"): WM_CHAR's UTF-16 code units made into code points, and which of those Minecraft
+// gets as text. Pure, and not thread-safe: the router holds its lock around every call.
+namespace cpmc::input
+{
+// Whether Minecraft gets aPoint as text: nothing below 0x20, and not 0x7F. Backspace, Enter, Tab, Esc and Ctrl's letters
+// reach Minecraft as keys, as SDL gives them.
+bool Printable(uint32_t aPoint);
+
+class Utf16Text
+{
+public:
+	// One code unit: the code point it completes, or nothing while a surrogate pair's first half waits for its second.
+	// A lone half is refused: a second half with no first, or a first half followed by anything but a second.
+	std::optional<uint32_t> Take(uint16_t aUnit);
+	uint64_t                Refused() const { return refused_; }
+
+private:
+	std::optional<uint16_t> high_;  // a first half, waiting
+	uint64_t                refused_ = 0;
+};
+}
+```
+
+- [ ] **Step 5: Write `src/input/Text.cpp`**
+
+```cpp
+#include "input/Text.h"
+
+namespace cpmc::input
+{
+bool Printable(uint32_t aPoint)
+{
+	return aPoint >= 0x20 && aPoint != 0x7F;
+}
+
+std::optional<uint32_t> Utf16Text::Take(uint16_t aUnit)
+{
+	const bool first = aUnit >= 0xD800 && aUnit <= 0xDBFF;
+	const bool second = aUnit >= 0xDC00 && aUnit <= 0xDFFF;
+	if (high_ && second)
+	{
+		const uint32_t point = 0x10000 + ((uint32_t(*high_) - 0xD800) << 10) + (aUnit - 0xDC00u);
+		high_.reset();
+		return point;
+	}
+	if (high_)
+	{
+		++refused_;  // a first half with no second
+		high_.reset();
+	}
+	if (first)
+	{
+		high_ = aUnit;
+		return std::nullopt;
+	}
+	if (second)
+	{
+		++refused_;
+		return std::nullopt;
+	}
+	return aUnit;
+}
+}
+```
+
+- [ ] **Step 6: Edit `CMakeLists.txt` to add the source**
+
+```cmake
+	src/input/Cursor.cpp
+```
+```cmake
+	src/input/Cursor.cpp
+	src/input/Text.cpp
+```
+
+- [ ] **Step 7: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `534 test(s), 0 failure(s)`.
+
+- [ ] **Step 8: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "minecraft-screens: typed text, WM_CHAR's code units made into code points, and what Minecraft types" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 8: The arrow, and its spot for the HUD pass
+
+The spec's "Drawing it":
+- **`CursorHeight`:** 18 back-buffer pixels at 1,080 lines, scaled with the height and rounded, at least 1: 24 on the
+  user's 1,440.
+- **`CursorAt`:** SkyCraft's arrow, judged at each pixel's centre as `SV_Position` is: inside where the slope 0.6 a
+  pixel down leaves it, below its tip and above its height; its edges (left, slanted and bottom) 1.5 pixels wide at 18
+  tall, black, and the rest white. `HudPS` does the same arithmetic in Task 11.
+- **`HudCursor`:** the spot the router writes as the cursor moves and screens open and close, and the HUD pass reads at
+  Present: x, y and whether it's shown, packed into one 64-bit atomic so they never tear.
+
+**Files:**
+- Modify: `src/render/Hud.h`, `src/render/Hud.cpp`, `tests/TestHud.cpp`
+
+- [ ] **Step 1: Edit `tests/TestHud.cpp` to add the failing tests**
+
+```cpp
+	CHECK_EQ(*slots.TakeNewest(), 2u);
+}
+```
+```cpp
+	CHECK_EQ(*slots.TakeNewest(), 2u);
+}
+
+TEST(HudCursorScalesWithTheScreen)
+{
+	CHECK_EQ(CursorHeight(1080), 18u);  // SkyCraft's
+	CHECK_EQ(CursorHeight(1440), 24u);  // the user's
+	CHECK_EQ(CursorHeight(2160), 36u);
+	CHECK_EQ(CursorHeight(720), 12u);
+	CHECK_EQ(CursorHeight(768), 13u);  // rounded
+	CHECK_EQ(CursorHeight(0), 1u);
+}
+
+TEST(HudCursorIsSkyCraftsArrow)
+{
+	// 18 pixels tall, its tip at 100 200, each pixel judged at its centre, as HudPS sees SV_Position.
+	CHECK(CursorAt(100, 200, 100, 200, 18) == CursorPart::None);  // the tip's own pixel: its centre is outside the slope
+	CHECK(CursorAt(100, 205, 100, 200, 18) == CursorPart::Edge);  // the left edge
+	CHECK(CursorAt(102, 210, 100, 200, 18) == CursorPart::Fill);
+	CHECK(CursorAt(105, 210, 100, 200, 18) == CursorPart::Edge);  // the slanted edge
+	CHECK(CursorAt(106, 210, 100, 200, 18) == CursorPart::None);  // past it
+	CHECK(CursorAt(102, 217, 100, 200, 18) == CursorPart::Edge);  // the bottom edge
+	CHECK(CursorAt(100, 218, 100, 200, 18) == CursorPart::None);  // below it
+	CHECK(CursorAt(99, 210, 100, 200, 18) == CursorPart::None);   // left of the tip
+	// Twice as tall, the edges twice as wide.
+	CHECK(CursorAt(5, 20, 0, 0, 36) == CursorPart::Fill);
+	CHECK(CursorAt(2, 20, 0, 0, 36) == CursorPart::Edge);
+	CHECK(CursorAt(5, 20, 0, 0, 0) == CursorPart::None);  // no cursor
+}
+
+TEST(HudCursorKeepsItsSpotWhole)
+{
+	HudCursor cursor;
+	CHECK(!cursor.Get().shown);
+	cursor.Set({ 2559, 1439, true });
+	HudCursor::Spot spot = cursor.Get();
+	CHECK(spot.shown);
+	CHECK_EQ(spot.x, 2559u);
+	CHECK_EQ(spot.y, 1439u);
+	cursor.Set({ 7679, 4319, false });
+	spot = cursor.Get();
+	CHECK(!spot.shown);
+	CHECK_EQ(spot.x, 7679u);
+	CHECK_EQ(spot.y, 4319u);
+	cursor.Set({ 0x7FFFFFFF, 0x7FFFFFFF, false });  // the largest spot: its parts stay apart
+	spot = cursor.Get();
+	CHECK(!spot.shown);
+	CHECK_EQ(spot.x, 0x7FFFFFFFu);
+	CHECK_EQ(spot.y, 0x7FFFFFFFu);
+}
+```
+
+- [ ] **Step 2: Build; it must fail**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -o -E "error C[0-9]+: [^[]*" | sort -u | head -3
+```
+Expected: `error C2065: 'HudCursor': undeclared identifier`, with `CursorPart`'s parts undeclared too.
+
+- [ ] **Step 3: Edit `src/render/Hud.h` to declare them**
+
+```cpp
+#include <array>
+```
+```cpp
+#include <array>
+#include <atomic>
+```
+```cpp
+// Which of the three upload buffers each image goes through. The main thread copies an image into a slot the GPU has
+```
+```cpp
+// Spike 8: the cursor's arrow, SkyCraft's, which the HUD pass draws over the image while a Minecraft screen is open in
+// build mode (its spec's "Drawing it"). Its height in back-buffer pixels: 18 at 1,080 lines, scaled with the back
+// buffer's height and rounded, at least 1.
+uint32_t CursorHeight(uint32_t aBackHeight);
+
+enum class CursorPart
+{
+	None,
+	Edge,  // black
+	Fill,  // white
+};
+
+// The part of the arrow, its tip at (aTipX, aTipY) and aHeight pixels tall (0: no cursor), at back-buffer pixel (aX, aY),
+// judged at the pixel's centre: inside where the slope 0.6 a pixel down leaves it, its edges 1.5 pixels wide at 18
+// pixels tall and as much wider as it's taller. HudPS does the same arithmetic.
+CursorPart CursorAt(uint32_t aX, uint32_t aY, uint32_t aTipX, uint32_t aTipY, uint32_t aHeight);
+
+// Where the cursor is, for the HUD pass: the router writes it as it moves and as screens open and close, and the pass reads
+// it at Present. Its spot is one atomic, so x and y never tear.
+class HudCursor
+{
+public:
+	struct Spot
+	{
+		uint32_t x = 0;  // back-buffer pixels, below 2^31 each
+		uint32_t y = 0;
+		bool     shown = false;
+	};
+
+	void Set(const Spot& aSpot);
+	Spot Get() const;
+
+private:
+	std::atomic<uint64_t> packed_{ 0 };  // x in bits 0 to 30, y in 31 to 61, shown in 62
+};
+
+// Which of the three upload buffers each image goes through. The main thread copies an image into a slot the GPU has
+```
+
+- [ ] **Step 4: Edit `src/render/Hud.cpp` to add them**
+
+```cpp
+#include <algorithm>
+```
+```cpp
+#include <algorithm>
+#include <cmath>
+```
+```cpp
+	return (aBottomUp ? aHeight - 1 - y : y) * aWidth + x;
+```
+```cpp
+	return (aBottomUp ? aHeight - 1 - y : y) * aWidth + x;
+}
+
+uint32_t CursorHeight(uint32_t aBackHeight)
+{
+	return std::max(1u, uint32_t(std::lround(18.0 * aBackHeight / 1080.0)));
+}
+
+CursorPart CursorAt(uint32_t aX, uint32_t aY, uint32_t aTipX, uint32_t aTipY, uint32_t aHeight)
+{
+	if (aHeight == 0)
+	{
+		return CursorPart::None;
+	}
+	const float height = float(aHeight);
+	const float edge = 1.5f * height / 18.0f;
+	const float x = float(aX) + 0.5f - float(aTipX);
+	const float y = float(aY) + 0.5f - float(aTipY);
+	if (x < 0.0f || y < 0.0f || y >= height || x > y * 0.6f)
+	{
+		return CursorPart::None;
+	}
+	return x < edge || x > y * 0.6f - edge || y > height - edge ? CursorPart::Edge : CursorPart::Fill;
+}
+
+void HudCursor::Set(const Spot& aSpot)
+{
+	packed_.store(uint64_t(aSpot.x & 0x7FFFFFFFu) | (uint64_t(aSpot.y & 0x7FFFFFFFu) << 31) | (aSpot.shown ? 1ull << 62 : 0ull));
+}
+
+HudCursor::Spot HudCursor::Get() const
+{
+	const uint64_t packed = packed_.load();
+	return { uint32_t(packed & 0x7FFFFFFFu), uint32_t((packed >> 31) & 0x7FFFFFFFu), (packed >> 62) != 0 };
+```
+
+- [ ] **Step 5: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `537 test(s), 0 failure(s)`.
+
+- [ ] **Step 6: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "minecraft-screens: the cursor's arrow, SkyCraft's, scaled with the screen, and its spot for the HUD pass" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 9: Build mode: Minecraft's screens' keys
+
+The spec's "Where each input goes", in `BuildMode`, which stays pure:
+- **Holders for every key,** by scan code and E0 prefix (512, after the five buttons'), so any key's repeats and
+  release go where its press went. A key's new press is placed by `PlaceKey`, in this order:
+  1. build mode off or paused: the game's;
+  2. a Minecraft screen open (`Situation::screenOpen`, the link's flag): Minecraft's, the menu keys and O too;
+  3. F3's press Minecraft's: Minecraft's, counted (`F3Taken`), so F3+F4, F3+N, F3+F6 and F3+Esc work;
+  4. a menu key (Esc, I, M, J, P, K, H; no longer T): build mode ends, and the game opens its menu;
+  5. O: `kInOpenMenu`, and its repeats and release go nowhere;
+  6. 1 to 9, and the taken keys: W, A, S, D, Space, Left Shift, Left Ctrl, and now E, T, /, Q and F3, Minecraft's; C and
+     Right Ctrl only hidden;
+  7. anything else: the game's.
+- **F8 and Shift+F6** stay build mode's before any of that. An F6 without Shift now goes on as any key, so it reaches
+  Minecraft with a screen open or F3 held.
+- **In a screen,** 1 to 9 and the wheel don't move the slot readout, a side button doesn't clear it, and a click makes
+  no latency mark.
+
+Two of Task 9's older checks change with it: E is no longer the game's (F stands in for it), and T is no longer a menu
+key.
+
+**Files:**
+- Modify: `src/input/BuildMode.h`, `src/input/BuildMode.cpp`, `tests/TestBuildMode.cpp`
+
+- [ ] **Step 1: Edit `tests/TestBuildMode.cpp` to add the failing tests**
+
+```cpp
+	CHECK(Passes(mode.Key(Press(0x12), Ready())));        // E: the game's iconic weapon, still the game's
+```
+```cpp
+	CHECK(Passes(mode.Key(Press(0x21), Ready())));        // F: the game's interact, still the game's
+```
+```cpp
+	for (const int key : { 0x01, 0x17, 0x32, 0x24, 0x19, 0x25, 0x23, 0x14 })  // Esc I M J P K H T
+```
+```cpp
+	for (const int key : { 0x01, 0x17, 0x32, 0x24, 0x19, 0x25, 0x23 })  // Esc I M J P K H: T is Minecraft's chat
+```
+```cpp
+TEST(BuildModeTakesTheOverlaysOwnWord)
+```
+```cpp
+TEST(BuildModeGivesMinecraftItsScreensKeys)
+{
+	// E, T, / and Q (spike 8's "No Minecraft screen open"), as set-1 scan codes, and the SDL scancodes Minecraft gets.
+	const std::pair<uint16_t, uint16_t> keys[] = { { 0x12, 8 }, { 0x14, 23 }, { 0x35, 56 }, { 0x10, 20 } };
+	BuildMode                           mode = On();
+	for (const auto& [scanCode, sdl] : keys)
+	{
+		const Decision down = mode.Key(Press(scanCode), Ready());
+		CHECK(down.hideKey && down.forwarded == 1 && Is(down.forward[0], proto::kInKey, sdl, 1));
+		const Decision up = mode.Key(Release(scanCode), Ready());
+		CHECK(up.hideKey && up.forwarded == 1 && Is(up.forward[0], proto::kInKey, sdl, 0));
+	}
+	CHECK(mode.On());  // T opens Minecraft's chat, and no longer leaves build mode
+	CHECK_STR(mode.Last(), "Q up");
+	CHECK(Passes(mode.Key(Press(0x35, true), Ready())));  // the keypad's /
+	BuildMode off;
+	for (const auto& [scanCode, sdl] : keys)
+	{
+		CHECK(Passes(off.Key(Press(scanCode), Ready())));
+	}
+}
+
+TEST(BuildModeGivesMinecraftEveryKeyWhileF3IsHeld)
+{
+	BuildMode      mode = On();
+	const Decision f3 = mode.Key(Press(0x3D), Ready());
+	CHECK(f3.hideKey && Is(f3.forward[0], proto::kInKey, 60, 1));
+	const Decision f4 = mode.Key(Press(0x3E), Ready());  // F3+F4: the game mode switcher
+	CHECK(f4.hideKey && Is(f4.forward[0], proto::kInKey, 61, 1));
+	CHECK(Is(mode.Key(Release(0x3E), Ready()).forward[0], proto::kInKey, 61, 0));
+	CHECK(Is(mode.Key(Press(0x31), Ready()).forward[0], proto::kInKey, 17, 1));  // F3+N: spectator
+	mode.Key(Release(0x31), Ready());
+	CHECK(Is(mode.Key(Press(0x40), Ready()).forward[0], proto::kInKey, 63, 1));  // F3+F6: debug options
+	mode.Key(Release(0x40), Ready());
+	const Decision esc = mode.Key(Press(0x01), Ready());  // F3+Esc: Minecraft's, not a menu key
+	CHECK(esc.hideKey && Is(esc.forward[0], proto::kInKey, 41, 1));
+	CHECK(mode.On());
+	mode.Key(Release(0x01), Ready());
+	CHECK_EQ(mode.F3Taken(), 4ull);
+	CHECK(Is(mode.Key(Release(0x3D), Ready()).forward[0], proto::kInKey, 60, 0));
+	CHECK(Passes(mode.Key(Press(0x3E), Ready())));  // a plain F4 is the game's again
+	mode.Key(Release(0x3E), Ready());
+	// F8 stays build mode's, F3 held or not.
+	mode.Key(Press(0x3D), Ready());
+	CHECK(mode.Key(Press(kF8), Ready()).releaseAll);
+	CHECK(!mode.On());
+	const Decision f3Up = mode.Key(Release(0x3D), Ready());  // Minecraft let go of everything: F3's release goes nowhere
+	CHECK(f3Up.hideKey && f3Up.forwarded == 0);
+}
+
+TEST(BuildModeOpensMinecraftsPauseMenuOnO)
+{
+	BuildMode      mode = On();
+	const Decision o = mode.Key(Press(0x18), Ready());
+	CHECK(o.hideKey && o.forwarded == 1 && Is(o.forward[0], proto::kInOpenMenu, 0, 0));
+	CHECK_STR(mode.Last(), "O, Minecraft's pause menu");
+	const Decision repeat = mode.Key(Press(0x18), Ready());  // one pause menu a press: its repeats and release go nowhere
+	CHECK(repeat.hideKey && repeat.forwarded == 0);
+	const Decision up = mode.Key(Release(0x18), Ready());
+	CHECK(up.hideKey && up.forwarded == 0);
+	BuildMode off;
+	CHECK(Passes(off.Key(Press(0x18), Ready())));
+}
+
+TEST(BuildModeGivesMinecraftEveryInputWithAScreenOpen)
+{
+	BuildMode mode = On();
+	mode.Key(Press(0x04), Ready());  // 3, before any screen
+	mode.Key(Release(0x04), Ready());
+	Situation screen = Ready();
+	screen.screenOpen = true;
+	// Every key, the game's menu keys too: typing, and Esc and E closing the screen.
+	const std::pair<RawKey, uint16_t> keys[] = { { Press(0x21), 9 },  { Press(0x01), 41 },     { Press(0x17), 12 }, { Press(0x18), 18 },
+		                                         { Press(0x2E), 6 },  { Press(0x1D, true), 228 }, { Press(0x40), 63 }, { Press(0x12), 8 } };
+	for (const auto& [key, sdl] : keys)
+	{
+		const Decision down = mode.Key(key, screen);
+		CHECK(down.hideKey && down.forwarded == 1 && Is(down.forward[0], proto::kInKey, sdl, 1));
+		const Decision up = mode.Key({ key.scanCode, key.extended, true }, screen);
+		CHECK(up.hideKey && Is(up.forward[0], proto::kInKey, sdl, 0));
+	}
+	CHECK(mode.On());
+	// 1 to 9 swap items there, and the wheel scrolls: the slot stays as it was.
+	CHECK(Is(mode.Key(Press(0x06), screen).forward[0], proto::kInKey, 34, 1));  // 5
+	mode.Key(Release(0x06), screen);
+	const Decision wheel = mode.Mouse({ RI_MOUSE_WHEEL, -120 }, screen);
+	CHECK(wheel.hideButtons == RI_MOUSE_WHEEL && Is(wheel.forward[0], proto::kInScroll, 0, -120));
+	mode.Mouse({ RI_MOUSE_BUTTON_4_DOWN, 0 }, screen);
+	mode.Mouse({ RI_MOUSE_BUTTON_4_UP, 0 }, screen);
+	CHECK_EQ(mode.Slot().value_or(0), 3);
+	// A click there changes no block: no latency mark.
+	const Decision click = mode.Mouse({ RI_MOUSE_LEFT_BUTTON_DOWN, 0 }, screen);
+	CHECK(Is(click.forward[0], proto::kInMouseButton, 1, 1));
+	CHECK(!click.press);
+	mode.Mouse({ RI_MOUSE_LEFT_BUTTON_UP, 0 }, screen);
+	// F8 stays build mode's.
+	CHECK(mode.Key(Press(kF8), screen).releaseAll);
+	CHECK(!mode.On());
+}
+
+TEST(BuildModeKeepsShiftF6WithAScreenOpen)
+{
+	BuildMode mode = On();
+	Situation screen = Ready();
+	screen.screenOpen = true;
+	CHECK(mode.Key(Press(0x2A), screen).forwarded == 1);  // Shift: Minecraft's
+	const Decision f6 = mode.Key(Press(0x40), screen);
+	CHECK(f6.releaseAll && !f6.hideKey && f6.forwarded == 0);  // CET's overlay, which pauses build mode
+	CHECK(mode.Paused());
+	CHECK(Passes(mode.Key(Press(0x21), screen)));  // paused: every input is the overlay's and the game's
+	CHECK(Passes(mode.Mouse({ RI_MOUSE_LEFT_BUTTON_DOWN, 0 }, screen)));
+	BuildMode off;
+	CHECK(Passes(off.Key(Press(0x21), screen)));  // a screen open with build mode off isn't build mode's
+	CHECK(Passes(off.Key(Press(0x01), screen)));
+}
+
+TEST(BuildModeSendsAKeysReleaseWhereItsPressWentAcrossAScreen)
+{
+	BuildMode mode = On();
+	Situation screen = Ready();
+	screen.screenOpen = true;
+	CHECK(Passes(mode.Key(Press(0x21), Ready())));  // F, the game's, held as a screen opens
+	CHECK(Passes(mode.Key(Press(0x21), screen)));   // its repeat is still the game's
+	CHECK(Passes(mode.Key(Release(0x21), screen)));
+	CHECK(mode.Key(Press(0x22), screen).forwarded == 1);  // G, pressed in the screen, is let go of after it closes
+	const Decision release = mode.Key(Release(0x22), Ready());
+	CHECK(release.hideKey && Is(release.forward[0], proto::kInKey, 10, 0));
+	CHECK(Passes(mode.Key(Press(0x22), Ready())));  // and pressed again, it's the game's
+}
+
+TEST(BuildModeTakesTheOverlaysOwnWord)
+```
+
+- [ ] **Step 2: Build; it must fail**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -o -E "error C[0-9]+: [^[]*" | sort -u | head -3
+```
+Expected: `error C2039: 'screenOpen': is not a member of 'cpmc::input::Situation'`, and `F3Taken` not a member of
+`BuildMode`.
+
+- [ ] **Step 3: Edit `src/input/BuildMode.h` to add the screen state and the holders**
+
+```cpp
+// every input is the overlay's and the game's, and build mode goes on when it closes. A press's repeats and its release
+// go where the press went, so neither side is left holding an input that only the other saw let go. Pure, and not
+// thread-safe: the router (input/Router.h) holds its lock around every call.
+```
+```cpp
+// every input is the overlay's and the game's, and build mode goes on when it closes. Since spike 8 (its spec's "Where
+// each input goes"), E, T, /, Q and F3 are Minecraft's too, every key while F3's press is Minecraft's, and O opens
+// Minecraft's pause menu; with a Minecraft screen open, every input but F8 and Shift+F6 is Minecraft's. A press's repeats
+// and its release go where the press went, for every key and button, so neither side is left holding an input that only
+// the other saw let go. Pure, and not thread-safe: the router (input/Router.h) holds its lock around every call.
+```
+```cpp
+	                      // Known even when the link finds no V, as in a car, where the camera isn't V's eye
+```
+```cpp
+	                      // Known even when the link finds no V, as in a car, where the camera isn't V's eye
+	bool screenOpen = false;  // Minecraft says a screen is open (spike 8): with build mode on and not paused, every input
+	                          // is Minecraft's
+```
+```cpp
+	uint64_t           Hidden() const { return hidden_; }        // inputs hidden from the game
+```
+```cpp
+	uint64_t           Hidden() const { return hidden_; }        // inputs hidden from the game
+	uint64_t           F3Taken() const { return f3Taken_; }      // keys' presses Minecraft got only because F3 was held
+```
+```cpp
+	static constexpr size_t kInputs = 23;  // the five mouse buttons, the keys 1 to 9, then nine other keys it takes
+
+	Holder Route(size_t aInput, bool aDown);
+```
+```cpp
+	static constexpr size_t kInputs = 5 + 512;  // the five mouse buttons, then every key by its scan code, then with E0
+
+	Holder Route(size_t aInput, bool aDown);
+	// Where a key's new press goes. A menu key's ends build mode first, and O's sends kInOpenMenu.
+	Holder PlaceKey(const RawKey& aKey, const Situation& aSituation, Decision& aDecision);
+```
+```cpp
+	uint64_t                    hidden_ = 0;
+```
+```cpp
+	uint64_t                    hidden_ = 0;
+	uint64_t                    f3Taken_ = 0;
+```
+
+- [ ] **Step 4: Write `src/input/BuildMode.cpp`**
+
+The whole file: its key handling is rewritten around `PlaceKey`.
+
+```cpp
+#include "input/BuildMode.h"
+
+#include "input/Scancodes.h"
+
+#include <Windows.h>
+
+#include <cmath>
+#include <format>
+#include <initializer_list>
+#include <iterator>
+#include <utility>
+
+namespace cpmc::input
+{
+namespace
+{
+constexpr uint16_t kF3 = 0x3D;
+constexpr uint16_t kF6 = 0x40;
+constexpr uint16_t kF8 = 0x42;
+constexpr uint16_t kO = 0x18;
+constexpr uint16_t kLeftShift = 0x2A;
+constexpr uint16_t kRightShift = 0x36;
+
+// The keys that open the game's menus (Esc, I, M, J, P, K and H): its name, or null. T, the game's phone, is Minecraft's
+// chat since spike 8.
+const char* MenuKey(const RawKey& aKey)
+{
+	if (aKey.extended)
+	{
+		return nullptr;
+	}
+	switch (aKey.scanCode)
+	{
+	case 0x01: return "Esc";
+	case 0x17: return "I";
+	case 0x32: return "M";
+	case 0x24: return "J";
+	case 0x19: return "P";
+	case 0x25: return "K";
+	case 0x23: return "H";
+	default: return nullptr;
+	}
+}
+
+// The mouse buttons build mode takes, as Raw Input flags them and SDL numbers them. The side buttons are Minecraft's
+// too: Cyberpunk binds neither, and the user's Minecraft picks hotbar slots with them.
+struct Button
+{
+	uint16_t    down;
+	uint16_t    up;
+	uint16_t    sdl;
+	const char* name;
+};
+
+constexpr Button kButtons[] = {
+	{ RI_MOUSE_LEFT_BUTTON_DOWN, RI_MOUSE_LEFT_BUTTON_UP, 1, "the left button" },
+	{ RI_MOUSE_RIGHT_BUTTON_DOWN, RI_MOUSE_RIGHT_BUTTON_UP, 3, "the right button" },
+	{ RI_MOUSE_MIDDLE_BUTTON_DOWN, RI_MOUSE_MIDDLE_BUTTON_UP, 2, "the middle button" },
+	{ RI_MOUSE_BUTTON_4_DOWN, RI_MOUSE_BUTTON_4_UP, 4, "mouse button 4" },
+	{ RI_MOUSE_BUTTON_5_DOWN, RI_MOUSE_BUTTON_5_UP, 5, "mouse button 5" },
+};
+constexpr size_t kButtonCount = std::size(kButtons);  // their holders come first, then the keys'
+constexpr size_t kSideButtons = 3;                    // the first side button's index
+
+// The other keys build mode takes with no Minecraft screen open: Minecraft's movement keys (spike 5's "Keys") and the
+// keys of its screens (spike 8), forwarded, and the game's crouch keys, only hidden, so V can't crouch under the puppet.
+// C is Minecraft's toolbar-saving key, so it isn't forwarded either. The forwarded keys are physical keys: Minecraft
+// applies its own bindings to them. The keys 1 to 9 are taken too.
+struct TakenKey
+{
+	uint16_t    scanCode;  // set 1, without its E0 prefix
+	bool        extended;
+	bool        forward;  // to Minecraft, as well as hidden from the game
+	const char* name;
+};
+
+constexpr TakenKey kTakenKeys[] = {
+	{ 0x11, false, true, "W" },        { 0x1E, false, true, "A" },         { 0x1F, false, true, "S" },
+	{ 0x20, false, true, "D" },        { 0x39, false, true, "Space" },     { 0x2A, false, true, "Left Shift" },
+	{ 0x1D, false, true, "Left Ctrl" }, { 0x12, false, true, "E" },        { 0x14, false, true, "T" },
+	{ 0x35, false, true, "/" },        { 0x10, false, true, "Q" },         { kF3, false, true, "F3" },
+	{ 0x2E, false, false, "C" },       { 0x1D, true, false, "Right Ctrl" },
+};
+
+const TakenKey* Taken(const RawKey& aKey)
+{
+	for (const TakenKey& taken : kTakenKeys)
+	{
+		if (aKey.scanCode == taken.scanCode && aKey.extended == taken.extended)
+		{
+			return &taken;
+		}
+	}
+	return nullptr;
+}
+
+// The keys 1 to 9: the digit, or 0.
+int Digit(const RawKey& aKey)
+{
+	return !aKey.extended && aKey.scanCode >= 0x02 && aKey.scanCode <= 0x0A ? aKey.scanCode - 0x01 : 0;
+}
+
+std::string KeyName(const RawKey& aKey)
+{
+	if (const int digit = Digit(aKey))
+	{
+		return std::format("the key {}", digit);
+	}
+	if (const TakenKey* taken = Taken(aKey))
+	{
+		return taken->name;
+	}
+	if (const char* menu = MenuKey(aKey))
+	{
+		return menu;
+	}
+	if (!aKey.extended && aKey.scanCode == kO)
+	{
+		return "O";
+	}
+	return std::format("the key of scan code {:#04x}{}", aKey.scanCode, aKey.extended ? " E0" : "");
+}
+
+// A key's holder: after the buttons', by its scan code, and those with the E0 prefix 256 further on. None past 0xFF.
+std::optional<size_t> KeyIndex(const RawKey& aKey)
+{
+	if (aKey.scanCode > 0xFF)
+	{
+		return std::nullopt;
+	}
+	return kButtonCount + (aKey.extended ? 256u : 0u) + aKey.scanCode;
+}
+
+constexpr size_t kF3Index = kButtonCount + kF3;
+
+int Sign(double aValue)
+{
+	return aValue > 0.0 ? 1 : aValue < 0.0 ? -1 : 0;
+}
+}
+
+Decision BuildMode::Key(const RawKey& aKey, const Situation& aSituation)
+{
+	Decision decision;
+	if (!aKey.extended && (aKey.scanCode == kLeftShift || aKey.scanCode == kRightShift))
+	{
+		(aKey.scanCode == kLeftShift ? leftShift_ : rightShift_) = !aKey.up;
+	}
+	if (!aSituation.inFront)
+	{
+		return decision;  // not the user at the game: nothing goes to Minecraft
+	}
+	if (!aKey.extended && aKey.scanCode == kF8)
+	{
+		// F8 is build mode's alone, and its repeats do nothing.
+		decision.hideKey = true;
+		++hidden_;
+		const bool press = !aKey.up && !f8Down_;
+		f8Down_ = !aKey.up;
+		if (!press)
+		{
+			return decision;
+		}
+		if (on_)
+		{
+			decision.releaseAll = TurnOff("F8 turned it off");
+		}
+		else if (!aSituation.linked)
+		{
+			decision.requestLink = true;
+		}
+		else
+		{
+			TurnOn(aSituation);
+		}
+		return decision;
+	}
+	if (!aKey.extended && aKey.scanCode == kF6)
+	{
+		// Shift+F6 opens and closes CET's overlay, which pauses build mode while it's open, so its clicks don't reach
+		// Minecraft. The overlay sees the key, and a repeat changes nothing. An F6 alone goes on as any other key: with a
+		// Minecraft screen open, or F3 held, it's Minecraft's.
+		const bool press = !aKey.up && !f6Down_;
+		f6Down_ = !aKey.up;
+		if (leftShift_ || rightShift_)
+		{
+			if (press)
+			{
+				decision.releaseAll = SetOverlay(!overlay_);
+			}
+			return decision;
+		}
+	}
+	const std::optional<size_t> index = KeyIndex(aKey);
+	if (!index)
+	{
+		return decision;
+	}
+	Holder& holder = held_[*index];
+	if (!aKey.up && holder == Holder::None)
+	{
+		holder = PlaceKey(aKey, aSituation, decision);
+	}
+	const Holder to = holder;  // a repeat or a release goes where its press went
+	if (aKey.up)
+	{
+		holder = Holder::None;
+	}
+	if (to == Holder::Minecraft || to == Holder::Neither)
+	{
+		decision.hideKey = true;
+		++hidden_;
+	}
+	if (to == Holder::Minecraft)
+	{
+		Forward(decision, { proto::kInKey, SdlScancode(aKey.scanCode, aKey.extended), aKey.up ? 0 : 1, 0, 0 },
+		        std::format("{} {}", KeyName(aKey), aKey.up ? "up" : "down"));
+		const int digit = Digit(aKey);
+		if (digit != 0 && !aKey.up && !aSituation.screenOpen)
+		{
+			slot_ = digit;  // in a Minecraft screen, 1 to 9 swap items instead
+		}
+	}
+	return decision;
+}
+
+BuildMode::Holder BuildMode::PlaceKey(const RawKey& aKey, const Situation& aSituation, Decision& aDecision)
+{
+	if (!on_ || overlay_)
+	{
+		return Holder::Game;
+	}
+	if (aSituation.screenOpen)
+	{
+		return Holder::Minecraft;  // a Minecraft screen is open: every key is Minecraft's, typing and Esc included
+	}
+	if ((aKey.extended || aKey.scanCode != kF3) && held_[kF3Index] == Holder::Minecraft)
+	{
+		++f3Taken_;
+		return Holder::Minecraft;  // F3's combinations: F3+F4, F3+N, F3+F6 and the rest
+	}
+	if (const char* menu = MenuKey(aKey))
+	{
+		aDecision.releaseAll = TurnOff(std::format("{} left it", menu));
+		return Holder::Game;  // and the game opens its menu
+	}
+	if (!aKey.extended && aKey.scanCode == kO)
+	{
+		Forward(aDecision, { proto::kInOpenMenu, 0, 0, 0, 0 }, "O, Minecraft's pause menu");
+		return Holder::Neither;  // one pause menu a press: its repeats and release go nowhere
+	}
+	if (Digit(aKey) != 0)
+	{
+		return Holder::Minecraft;
+	}
+	if (const TakenKey* taken = Taken(aKey))
+	{
+		return taken->forward ? Holder::Minecraft : Holder::Neither;
+	}
+	return Holder::Game;
+}
+
+Decision BuildMode::Mouse(const RawMouse& aMouse, const Situation& aSituation)
+{
+	Decision decision;
+	if (!aSituation.inFront)
+	{
+		return decision;
+	}
+	const bool screen = on_ && !overlay_ && aSituation.screenOpen;
+	for (size_t i = 0; i < kButtonCount; ++i)
+	{
+		for (const bool down : { true, false })
+		{
+			const uint16_t flag = down ? kButtons[i].down : kButtons[i].up;
+			if (!(aMouse.buttons & flag))
+			{
+				continue;
+			}
+			const Holder to = Route(i, down);
+			if (to == Holder::Minecraft || to == Holder::Neither)
+			{
+				decision.hideButtons |= flag;
+				++hidden_;
+			}
+			if (to == Holder::Minecraft)
+			{
+				Forward(decision, { proto::kInMouseButton, kButtons[i].sdl, down ? 1 : 0, 0, 0 },
+				        std::format("{} {}", kButtons[i].name, down ? "down" : "up"));
+				if (screen)
+				{
+					// In a Minecraft screen a click changes no block, and a side button picks no slot.
+				}
+				else if (i < kSideButtons)
+				{
+					decision.press = decision.press || down;  // a side button changes no block: no latency to time
+				}
+				else if (down)
+				{
+					slot_.reset();  // which slot it picks, if any, is Minecraft's own binding
+				}
+			}
+		}
+	}
+	if ((aMouse.buttons & RI_MOUSE_WHEEL) && on_ && !overlay_)
+	{
+		decision.hideButtons |= RI_MOUSE_WHEEL;
+		++hidden_;
+		Forward(decision, { proto::kInScroll, 0, aMouse.wheel, 0, 0 }, std::format("the wheel, {}", aMouse.wheel));
+		if (!screen)
+		{
+			Scroll(aMouse.wheel);  // in a Minecraft screen, the wheel scrolls it instead
+		}
+	}
+	return decision;
+}
+
+bool BuildMode::TurnOn(const Situation& aSituation)
+{
+	if (on_)
+	{
+		return true;
+	}
+	if (!aSituation.minecraftInWorld)
+	{
+		why_ = aSituation.minecraft ? "Minecraft isn't in its world" : "Minecraft isn't there";
+	}
+	else if (!aSituation.linked)
+	{
+		why_ = "it isn't linked";
+	}
+	else if (!aSituation.blocked.empty())
+	{
+		why_ = aSituation.blocked;  // first: in a car the camera isn't V's eye, so the link finds no V
+	}
+	else if (!aSituation.inGame)
+	{
+		why_ = "V isn't found";
+	}
+	else
+	{
+		on_ = true;
+		why_.clear();
+	}
+	return on_;
+}
+
+bool BuildMode::TurnOff(std::string aWhy)
+{
+	if (!on_)
+	{
+		return false;
+	}
+	on_ = false;
+	why_ = std::move(aWhy);
+	LetGo();
+	return true;
+}
+
+bool BuildMode::LostFront()
+{
+	held_.fill(Holder::None);
+	f8Down_ = false;
+	f6Down_ = false;
+	leftShift_ = false;
+	rightShift_ = false;
+	return on_;
+}
+
+bool BuildMode::SetOverlay(bool aOpen)
+{
+	const bool pauses = aOpen && !overlay_ && on_;
+	overlay_ = aOpen;
+	if (pauses)
+	{
+		LetGo();
+	}
+	return pauses;
+}
+
+void BuildMode::LetGo()
+{
+	for (Holder& holder : held_)
+	{
+		if (holder == Holder::Minecraft)
+		{
+			holder = Holder::Neither;  // Minecraft lets go of it now: its repeats and release go nowhere
+		}
+	}
+}
+
+BuildMode::Holder BuildMode::Route(size_t aInput, bool aDown)
+{
+	Holder& holder = held_[aInput];
+	if (aDown && holder == Holder::None)
+	{
+		holder = on_ && !overlay_ ? Holder::Minecraft : Holder::Game;  // a press goes where build mode says
+	}
+	const Holder to = holder;  // a repeat or a release goes where its press went
+	if (!aDown)
+	{
+		holder = Holder::None;
+	}
+	return to;  // None: a release whose press was never seen, which the game ignores unless it holds the input
+}
+
+void BuildMode::Forward(Decision& aDecision, const proto::InputEvent& aEvent, std::string aWhat)
+{
+	if (aDecision.forwarded < aDecision.forward.size())
+	{
+		aDecision.forward[aDecision.forwarded++] = aEvent;
+		++forwarded_;
+		last_ = std::move(aWhat);
+	}
+}
+
+void BuildMode::Scroll(int16_t aWheel)
+{
+	// As Minecraft's ScrollWheelHandler counts it: turning the other way starts over, and each event moves the slot one
+	// step at most, by its whole notches, keeping the fraction for the next. Up is the slot to the left.
+	const double notches = aWheel / 120.0;
+	if (scroll_ != 0.0 && Sign(notches) != Sign(scroll_))
+	{
+		scroll_ = 0.0;
+	}
+	scroll_ += notches;
+	const double whole = std::trunc(scroll_);
+	scroll_ -= whole;
+	if (whole != 0.0 && slot_)
+	{
+		slot_ = (*slot_ - 1 - Sign(whole) + 9) % 9 + 1;
+	}
+}
+}
+```
+
+- [ ] **Step 5: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `543 test(s), 0 failure(s)`.
+
+- [ ] **Step 6: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "minecraft-screens: build mode gives Minecraft its screens' keys, every key while F3 is held and with a screen open, and O its pause menu" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 10: The router: the cursor, typed text, and the Esc as build mode ends
+
+The spec's "The cursor", "Typed text" and "Edge cases", in `Router`:
+- **The screen state,** `ScreenOn`: build mode on, not paused, and the link's screen flag; kept in an atomic, so mouse
+  movement alone still skips the lock while it's off. Each change is logged, and published to the HUD's cursor.
+- **Mouse movement,** while it's on and the game in front: a relative event's counts move the cursor at Windows' speed
+  (`factor_`), a changed image pixel goes as `kInCursor`, and the event's movement is zeroed, so V doesn't turn. An
+  absolute event (a remote desktop's) moves nothing, and is left as it is. Buttons and the wheel go through build mode
+  as before.
+- **`Char`:** one WM_CHAR code unit; a whole, printable code point goes as `kInText` while the state is on.
+- **`Update`:** the screen flag into `Situation`; Windows' speed read again as it goes from clear to set; the cursor
+  told (centring); and `closeable_`: linked, Minecraft there, in its world, its player alive and a screen open.
+- **The Esc:** build mode ending, by F8 (`Apply`) or any other way (`Off`), sends Esc's press and release after
+  Minecraft lets go of everything, if `closeable_`.
+- **`TakeMouseX`** gives 0 while the state is on, as while paused.
+- **`SetHudArea`, `SetHudCursor`,** and the report's new fields. `ReadPointerSpeed` reads Windows' (`SPI_GETMOUSESPEED`,
+  and `SPI_GETMOUSE`'s third value for "Enhance pointer precision"); the tests give their own.
+
+**Files:**
+- Modify: `src/input/Router.h`, `src/input/Router.cpp`, `tests/TestRouter.cpp`
+
+- [ ] **Step 1: Edit `tests/TestRouter.cpp` to add the failing tests**
+
+The test router gets the user's speed, 8, a HUD cursor, and the user's HUD image, 1280 by 720 at twice its size.
+
+```cpp
+bool g_inFront = true;
+```
+```cpp
+bool g_inFront = true;
+int  g_speed = 8;  // the user's
+```
+```cpp
+	return g_inFront;
+```
+```cpp
+	return g_inFront;
+}
+
+PointerSpeed FakeSpeed()
+{
+	return { g_speed, false };
+```
+```cpp
+// A router on a link, in build mode.
+struct Building
+{
+	Building() : router(log, &FakeFront)
+	{
+		g_inFront = true;
+```
+```cpp
+// What the link says with a Minecraft screen open.
+link::Link::Status WithAScreen()
+{
+	link::Link::Status state = Linked();
+	state.screenOpen = true;
+	return state;
+}
+
+// A router on a link, in build mode, with the user's 1280 by 720 HUD image drawn twice its size.
+struct Building
+{
+	Building() : router(log, &FakeFront, &FakeSpeed)
+	{
+		g_inFront = true;
+		g_speed = 8;
+		router.SetHudCursor(&hud);
+		router.SetHudArea(1280, 720, 2);
+```
+```cpp
+	LogQueue log;
+	Mapping  mapping;
+	Router   router;
+```
+```cpp
+	LogQueue  log;
+	Mapping   mapping;
+	HudCursor hud;
+	Router    router;
+```
+```cpp
+	CHECK(!building.router.TurnOn());
+}
+```
+```cpp
+	CHECK(!building.router.TurnOn());
+}
+
+TEST(RouterMovesMinecraftsCursorWhileAScreenIsOpen)
+{
+	Building building;
+	building.router.Update(true, WithAScreen());
+	CHECK(Logged(building.log, "a Minecraft screen is build mode's: the mouse moves Minecraft's cursor, and every key is Minecraft's"));
+	CHECK(building.hud.Get().shown);
+	CHECK(building.hud.Get().x == 1280 && building.hud.Get().y == 720);  // the centre, as Minecraft puts its own position
+	auto move = Mouse(0, 0, 10, -4);  // at speed 8, 7.5 and -3 back-buffer pixels: image pixel 643 358
+	Inspect(building.router, move);
+	CHECK_EQ(MouseOf(move).lLastX, LONG(0));  // V doesn't turn
+	CHECK_EQ(MouseOf(move).lLastY, LONG(0));
+	auto inputs = building.mapping.Inputs();
+	CHECK(inputs.size() == 1 && inputs[0].type == proto::kInCursor && inputs[0].a == 643 && inputs[0].b == 358);
+	CHECK(building.hud.Get().x == 1287 && building.hud.Get().y == 717);
+	auto click = Mouse(RI_MOUSE_LEFT_BUTTON_DOWN, 0, 2, 0);  // a click and a move in one event: both Minecraft's
+	Inspect(building.router, click);
+	CHECK_EQ(MouseOf(click).usButtonFlags, USHORT(0));
+	CHECK_EQ(MouseOf(click).lLastX, LONG(0));
+	inputs = building.mapping.Inputs();
+	CHECK(inputs.size() == 2 && inputs[0].type == proto::kInCursor && inputs[0].a == 644 && inputs[1].type == proto::kInMouseButton);
+	CHECK(!building.router.TakePress());               // a click in a screen is no latency mark
+	CHECK_EQ(building.router.TakeMouseX(), 0ll);        // and the moves turn nothing
+	building.router.Update(true, Linked());  // the screen closed
+	CHECK(Logged(building.log, "no Minecraft screen is build mode's: the mouse turns V again"));
+	CHECK(!building.hud.Get().shown);
+	auto turn = Mouse(0, 0, 10, -4);
+	Inspect(building.router, turn);
+	CHECK_EQ(MouseOf(turn).lLastX, LONG(10));
+	CHECK(building.mapping.Inputs().empty());
+	CHECK_EQ(building.router.TakeMouseX(), 10ll);
+}
+
+TEST(RouterSendsTheCursorOnlyAsItsPixelChanges)
+{
+	Building building;
+	building.router.Update(true, WithAScreen());
+	building.mapping.Inputs();
+	for (int i = 0; i < 2; ++i)
+	{
+		auto small = Mouse(0, 0, 1, 0);  // 0.75 back-buffer pixels each: still image pixel 640
+		Inspect(building.router, small);
+	}
+	CHECK(building.mapping.Inputs().empty());
+	auto third = Mouse(0, 0, 1, 0);  // 2.25 in all: pixel 641
+	Inspect(building.router, third);
+	const auto inputs = building.mapping.Inputs();
+	CHECK(inputs.size() == 1 && inputs[0].a == 641 && inputs[0].b == 360);
+	CHECK_EQ(building.router.Report().cursorEvents, 1ull);
+	auto     absolute = Mouse(0, 0, 30000, 30000);  // a remote desktop's position, not a movement: it moves nothing
+	RAWMOUSE mouse = MouseOf(absolute);
+	mouse.usFlags = MOUSE_MOVE_ABSOLUTE;
+	std::memcpy(absolute.data() + sizeof(RAWINPUTHEADER), &mouse, sizeof mouse);
+	Inspect(building.router, absolute);
+	CHECK_EQ(MouseOf(absolute).lLastX, LONG(30000));
+	CHECK(building.mapping.Inputs().empty());
+}
+
+TEST(RouterTypesTextIntoAScreen)
+{
+	Building building;
+	building.router.Char(u'a');  // no screen: nothing to type into
+	CHECK(building.mapping.Inputs().empty());
+	building.router.Update(true, WithAScreen());
+	building.mapping.Inputs();
+	building.router.Char(0x00E6);  // æ
+	building.router.Char(0x000D);  // Enter's character: Enter reaches Minecraft as a key
+	building.router.Char(0xD83D);
+	building.router.Char(0xDE42);  // 🙂
+	building.router.Char(0xDE42);  // a lone second half
+	const auto inputs = building.mapping.Inputs();
+	CHECK(inputs.size() == 2 && inputs[0].type == proto::kInText && inputs[0].a == 0xE6 && inputs[1].a == 0x1F642);
+	const InputReport report = building.router.Report();
+	CHECK_EQ(report.charsTyped, 2ull);
+	CHECK_EQ(report.charsRefused, 1ull);
+	building.router.SetOverlay(true);  // paused: what's typed is CET's overlay's
+	building.mapping.Inputs();
+	building.router.Char(u'b');
+	CHECK(building.mapping.Inputs().empty());
+}
+
+TEST(RouterClosesMinecraftsScreenAsBuildModeEnds)
+{
+	{
+		Building building;
+		building.router.Update(true, WithAScreen());
+		building.mapping.Inputs();
+		auto f8 = Key(0x42, VK_F8);
+		Inspect(building.router, f8);
+		const auto inputs = building.mapping.Inputs();
+		CHECK(inputs.size() == 3 && inputs[0].type == proto::kInReleaseAll);  // Minecraft lets go of everything, then Esc
+		CHECK(inputs.size() == 3 && inputs[1].type == proto::kInKey && inputs[1].code == 41 && inputs[1].a == 1);
+		CHECK(inputs.size() == 3 && inputs[2].type == proto::kInKey && inputs[2].code == 41 && inputs[2].a == 0);
+		CHECK(Logged(building.log, "build mode ended with a Minecraft screen open: Esc closes it"));
+	}
+	{
+		Building building;
+		building.router.Update(true, WithAScreen(), "V is in a workspot");
+		const auto inputs = building.mapping.Inputs();
+		CHECK(inputs.size() == 3 && inputs[1].code == 41);
+	}
+	for (const bool dead : { false, true })
+	{
+		// Minecraft leaving its world, or its player dying and respawning, changes its screens itself: an Esc could find
+		// none, and open the pause menu.
+		Building           building;
+		link::Link::Status state = WithAScreen();
+		if (dead)
+		{
+			state.minecraftFlags = proto::kMcInWorld | proto::kMcDead;
+		}
+		else
+		{
+			state.inWorld = false;
+		}
+		building.router.Update(true, state);
+		CHECK(!building.router.On());
+		const auto inputs = building.mapping.Inputs();
+		CHECK(inputs.size() == 1 && inputs[0].type == proto::kInReleaseAll);
+	}
+	Building building;
+	building.router.Update(false, WithAScreen());  // unlinked
+	CHECK(!building.router.On());
+	CHECK_EQ(building.mapping.Inputs().size(), size_t(1));
+}
+
+TEST(RouterLeavesTheMouseToTheGameWhileAScreenIsntBuildModes)
+{
+	Building building;
+	building.router.SetOverlay(true);  // paused behind CET's overlay
+	building.router.Update(true, WithAScreen());
+	building.mapping.Inputs();
+	auto move = Mouse(0, 0, 10, 0);
+	Inspect(building.router, move);
+	CHECK_EQ(MouseOf(move).lLastX, LONG(10));
+	CHECK(building.mapping.Inputs().empty());
+	CHECK(!building.hud.Get().shown);
+	building.router.SetOverlay(false);  // the overlay closed: the screen is build mode's again
+	CHECK(building.hud.Get().shown);
+	building.router.TurnOff("a build off request");
+	CHECK(!building.hud.Get().shown);
+	auto off = Mouse(0, 0, 10, 0);
+	Inspect(building.router, off);
+	CHECK_EQ(MouseOf(off).lLastX, LONG(10));
+}
+
+TEST(RouterRereadsWindowsPointerSpeedAsAScreenOpens)
+{
+	Building building;
+	CHECK(Logged(building.log, "Windows' pointer speed is 8 of 20: Minecraft's cursor moves 0.750 back-buffer pixels a count"));
+	g_speed = 12;  // changed in Windows while the game runs
+	building.router.Update(true, Linked());
+	CHECK_EQ(building.router.Report().speed.speed, 8);  // read again only as a screen opens
+	building.router.Update(true, WithAScreen());
+	CHECK_EQ(building.router.Report().speed.speed, 12);
+	CHECK(Logged(building.log, "Windows' pointer speed is 12 of 20: Minecraft's cursor moves 1.500 back-buffer pixels a count"));
+	building.mapping.Inputs();
+	auto move = Mouse(0, 0, 2, 0);  // 3 back-buffer pixels: from 1280 to 1283, image pixel 641
+	Inspect(building.router, move);
+	const auto inputs = building.mapping.Inputs();
+	CHECK(inputs.size() == 1 && inputs[0].a == 641);
+	g_speed = 8;
+}
+
+TEST(RouterReportsTheScreen)
+{
+	Building building;
+	auto     f3 = Key(0x3D, VK_F3);
+	auto     f4 = Key(0x3E, VK_F4);
+	Inspect(building.router, f3);
+	Inspect(building.router, f4);  // F3+F4, before the switcher's screen is known
+	building.router.Update(true, WithAScreen());
+	auto move = Mouse(0, 0, 4, 0);  // 3 back-buffer pixels: image pixel 641
+	Inspect(building.router, move);
+	building.router.Char(u'x');
+	const InputReport report = building.router.Report();
+	CHECK(report.screenOpen && report.screen);
+	CHECK(report.cursor.x == 641 && report.cursor.y == 360);
+	CHECK(report.imageWidth == 1280 && report.imageHeight == 720);
+	CHECK_EQ(report.speed.speed, 8);
+	CHECK(!report.speed.enhanced);
+	CHECK_EQ(report.cursorEvents, 1ull);
+	CHECK_EQ(report.f3Taken, 1ull);
+	CHECK_EQ(report.charsTyped, 1ull);
+	building.router.SetOverlay(true);
+	const InputReport paused = building.router.Report();
+	CHECK(paused.screenOpen && !paused.screen);
+}
+```
+
+- [ ] **Step 2: Build; it must fail**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -o -E "error C[0-9]+: [^[]*" | sort -u | head -3
+```
+Expected: `error C2039: 'Char': is not a member of 'cpmc::input::Router'`, with `SetHudArea` and `SetHudCursor` too.
+
+- [ ] **Step 3: Write `src/input/Router.h`**
+
+```cpp
+#pragma once
+
+#include "LogQueue.h"
+#include "input/BuildMode.h"
+#include "input/Cursor.h"
+#include "input/Text.h"
+#include "link/Link.h"
+#include "render/Hud.h"
+
+#include <atomic>
+#include <cstdint>
+#include <mutex>
+#include <optional>
+#include <string>
+
+// Where the game's keyboard and mouse events go (the spec's "Input"), between four threads: the game's input thread,
+// through the GetRawInputData patch (input/RawInputHook.h) and, for typed text, the PeekMessageW patch
+// (input/MessageHook.h); the focus watch's; and the main thread, which keeps the link and what it says about Minecraft
+// and V current, and turns build mode on and off. One lock guards build mode and the link, so once the main thread takes
+// the link away, nothing pushes into the mapping. Since spike 8, while a Minecraft screen is build mode's (on, not
+// paused, and Minecraft saying a screen is open), the mouse's movement moves Minecraft's cursor instead of turning V,
+// typed characters go to Minecraft, and build mode ending closes the screen with Esc.
+namespace cpmc::input
+{
+// Whether the foreground window belongs to this process.
+bool GameInFront();
+// Windows' pointer speed, and whether "Enhance pointer precision" is on, as SystemParametersInfo says.
+PointerSpeed ReadPointerSpeed();
+
+// Build mode and the hook, for the status.
+struct InputReport
+{
+	bool               on = false;
+	std::string        why;            // why it's off
+	std::optional<int> slot;           // Minecraft's hotbar slot, 1 to 9, once a number key has set it
+	uint64_t           read = 0;       // keyboard and mouse events read
+	uint64_t           forwarded = 0;  // events for Minecraft's input ring
+	uint64_t           hidden = 0;     // inputs hidden from the game
+	std::string        last;           // the last input forwarded
+	bool               paused = false;  // on, behind CET's overlay
+	// Spike 8
+	bool         screenOpen = false;  // Minecraft says a screen is open
+	bool         screen = false;      // and it's build mode's: the mouse moves Minecraft's cursor, and every key is Minecraft's
+	Pixel        cursor;              // in the HUD image's pixels
+	uint32_t     imageWidth = 0;      // the HUD image the cursor stays in; 0 before one has come
+	uint32_t     imageHeight = 0;
+	PointerSpeed speed;               // Windows', as last read
+	uint64_t     cursorEvents = 0;    // kInCursor sent
+	uint64_t     f3Taken = 0;         // keys Minecraft got because F3 was held
+	uint64_t     charsTyped = 0;      // kInText sent
+	uint64_t     charsRefused = 0;    // lone surrogates
+};
+
+class Router
+{
+public:
+	using FrontCheck = bool (*)();
+	using SpeedCheck = PointerSpeed (*)();
+	explicit Router(LogQueue& aLog, FrontCheck aInFront = &GameInFront, SpeedCheck aSpeed = &ReadPointerSpeed);
+
+	// From the patch, once GetRawInputData has copied an event into aData, aBytes of it. A keyboard or mouse event that
+	// build mode takes is hidden from the game in place, and forwarded. Anything else, or too short, is left alone.
+	void Inspect(void* aData, uint32_t aBytes);
+	// From the PeekMessageW patch: one of WM_CHAR's UTF-16 code units. While a Minecraft screen is build mode's, each whole,
+	// printable code point goes to Minecraft as kInText.
+	void Char(uint16_t aUnit);
+
+	// From the main thread. The link: once the mapping opens, and null again at unload.
+	void SetLink(link::Link* aLink);
+	// Once a frame, after the link's update: whether the user linked, what the link says, and why V can't be placed, if
+	// it can't (spike 5), even when the link finds no V. Build mode ends if Minecraft or V is gone, or the link, or V
+	// can't be placed, or Minecraft's player dies; why V can't be placed is said before "V isn't found". A Minecraft
+	// screen opening re-reads Windows' pointer speed, and puts the cursor at the image's centre.
+	void Update(bool aLinked, const link::Link::Status& aState, const std::string& aVBlocked = {});
+	// Once a frame, before Update: the HUD image's size and the back-buffer pixels each of its texels covers, which the
+	// cursor stays in.
+	void SetHudArea(uint32_t aImageWidth, uint32_t aImageHeight, uint32_t aScale);
+	// Where the HUD pass finds the cursor, which the router keeps current; null for none.
+	void SetHudCursor(HudCursor* aCursor);
+	// The mouse's movement along x since the last call, in raw counts: for the turn a teleport adds back (spike 5). None
+	// while build mode is paused, when the mouse is CET's overlay's, or while a Minecraft screen is build mode's.
+	int64_t TakeMouseX();
+	// Build mode on: nothing, or why it stays off.
+	std::optional<std::string> TurnOn();
+	// Build mode off, saying why: true if it was on.
+	bool                  TurnOff(std::string aWhy);
+	bool                  On() const;
+	bool                  TakeLinkRequest();  // F8 asked for the link, since the last call
+	std::optional<double> TakePress();        // when a mouse button's press last went to Minecraft (SteadySeconds), once
+	InputReport           Report() const;
+
+	// From the focus watch: the game has just stopped being in front.
+	void FrontLost();
+	// From the main thread: CET's overlay opened or closed, as the overlay itself says (spike 7's `overlay` request).
+	void SetOverlay(bool aOpen);
+
+private:
+	// With the lock held.
+	void Apply(const Decision& aDecision, bool aWasOn, bool aWasPaused, const std::string& aWhyBefore);
+	void LogPause(bool aWasPaused);  // build mode paused, or going on again, since aWasPaused
+	bool Off(std::string aWhy);
+	void Push(const proto::InputEvent& aEvent);
+	bool ScreenOn() const;  // a Minecraft screen is build mode's
+	void Refresh();         // the screen state, and the HUD's cursor, after anything that may change them
+	void Publish();         // the HUD's cursor
+	void CloseScreen();     // build mode ended: Esc closes Minecraft's screen, if it's there to close
+	void ReadSpeed();
+
+	LogQueue&             log_;
+	FrontCheck            inFront_;
+	SpeedCheck            speedCheck_;
+	mutable std::mutex    mutex_;
+	BuildMode             mode_;
+	link::Link*           link_ = nullptr;
+	Situation             situation_;  // the main thread's part: the link, Minecraft and V
+	bool                  linkRequested_ = false;
+	std::optional<double> press_;
+	std::atomic<uint64_t> read_{ 0 };
+	std::atomic<int64_t>  mouseX_{ 0 };
+	// Spike 8
+	std::atomic<bool>           screen_{ false };  // ScreenOn, for the movement's way in without the lock
+	bool                        closeable_ = false;  // linked, Minecraft in its world, its player alive, a screen open
+	Cursor                      cursor_;
+	Utf16Text                   text_;
+	HudCursor*                  hudCursor_ = nullptr;
+	PointerSpeed                speed_;
+	std::optional<PointerSpeed> speedLogged_;
+	double                      factor_ = 1.0;
+	uint64_t                    cursorEvents_ = 0;
+	uint64_t                    charsTyped_ = 0;
+};
+}
+```
+
+- [ ] **Step 4: Write `src/input/Router.cpp`**
+
+```cpp
+#include "input/Router.h"
+
+#include "Measurements.h"
+
+#include <Windows.h>
+
+#include <cstring>
+#include <format>
+#include <utility>
+
+namespace cpmc::input
+{
+namespace
+{
+// The mouse flags build mode may take: the five buttons' presses and releases, and the wheel. An event without them is
+// movement, or the horizontal wheel, and stays the game's without taking the lock, unless a Minecraft screen is build
+// mode's.
+constexpr USHORT kTaken = RI_MOUSE_LEFT_BUTTON_DOWN | RI_MOUSE_LEFT_BUTTON_UP | RI_MOUSE_RIGHT_BUTTON_DOWN | RI_MOUSE_RIGHT_BUTTON_UP |
+                          RI_MOUSE_MIDDLE_BUTTON_DOWN | RI_MOUSE_MIDDLE_BUTTON_UP | RI_MOUSE_BUTTON_4_DOWN | RI_MOUSE_BUTTON_4_UP |
+                          RI_MOUSE_BUTTON_5_DOWN | RI_MOUSE_BUTTON_5_UP | RI_MOUSE_WHEEL;
+
+constexpr uint16_t kSdlEscape = 41;
+}
+
+bool GameInFront()
+{
+	DWORD process = 0;
+	GetWindowThreadProcessId(GetForegroundWindow(), &process);
+	return process == GetCurrentProcessId();
+}
+
+PointerSpeed ReadPointerSpeed()
+{
+	PointerSpeed speed;
+	int          value = 0;
+	if (SystemParametersInfoW(SPI_GETMOUSESPEED, 0, &value, 0))
+	{
+		speed.speed = value;
+	}
+	int mouse[3]{};  // two thresholds, and the acceleration: "Enhance pointer precision"
+	if (SystemParametersInfoW(SPI_GETMOUSE, 0, mouse, 0))
+	{
+		speed.enhanced = mouse[2] != 0;
+	}
+	return speed;
+}
+
+Router::Router(LogQueue& aLog, FrontCheck aInFront, SpeedCheck aSpeed) : log_(aLog), inFront_(aInFront), speedCheck_(aSpeed)
+{
+	ReadSpeed();
+}
+
+void Router::Inspect(void* aData, uint32_t aBytes)
+{
+	if (!aData || aBytes < sizeof(RAWINPUTHEADER))
+	{
+		return;
+	}
+	RAWINPUTHEADER header;
+	std::memcpy(&header, aData, sizeof header);
+	uint8_t* const body = static_cast<uint8_t*>(aData) + sizeof header;
+	if (header.dwType == RIM_TYPEMOUSE && aBytes >= sizeof header + sizeof(RAWMOUSE))
+	{
+		++read_;
+		RAWMOUSE mouse;
+		std::memcpy(&mouse, body, sizeof mouse);
+		const bool relative = !(mouse.usFlags & MOUSE_MOVE_ABSOLUTE);
+		if (relative)
+		{
+			mouseX_ += mouse.lLastX;
+		}
+		if ((mouse.usButtonFlags & kTaken) == 0 && !screen_.load())
+		{
+			return;
+		}
+		const bool      inFront = inFront_();
+		std::lock_guard lock(mutex_);
+		Situation       situation = situation_;
+		situation.inFront = inFront;
+		const bool        wasOn = mode_.On();
+		const bool        wasPaused = mode_.Paused();
+		const std::string whyBefore = mode_.Why();
+		bool              changed = false;
+		if (ScreenOn() && inFront && relative)
+		{
+			// A Minecraft screen is build mode's: the movement moves Minecraft's cursor, and turns nothing in the game.
+			if (mouse.lLastX != 0 || mouse.lLastY != 0)
+			{
+				if (const std::optional<Pixel> pixel = cursor_.Move(mouse.lLastX, mouse.lLastY, factor_))
+				{
+					Push({ proto::kInCursor, 0, int32_t(pixel->x), int32_t(pixel->y), 0 });
+					++cursorEvents_;
+				}
+				Publish();
+			}
+			mouse.lLastX = 0;
+			mouse.lLastY = 0;
+			changed = true;
+		}
+		const Decision decision = mode_.Mouse({ mouse.usButtonFlags, int16_t(mouse.usButtonData) }, situation);
+		if (decision.hideButtons != 0)
+		{
+			// The game reads buttons and the wheel only from these flags.
+			mouse.usButtonFlags = USHORT(mouse.usButtonFlags & ~decision.hideButtons);
+			changed = true;
+		}
+		if (changed)
+		{
+			std::memcpy(body, &mouse, sizeof mouse);
+		}
+		Apply(decision, wasOn, wasPaused, whyBefore);
+	}
+	else if (header.dwType == RIM_TYPEKEYBOARD && aBytes >= sizeof header + sizeof(RAWKEYBOARD))
+	{
+		++read_;
+		RAWKEYBOARD key;
+		std::memcpy(&key, body, sizeof key);
+		const bool      inFront = inFront_();
+		std::lock_guard lock(mutex_);
+		Situation       situation = situation_;
+		situation.inFront = inFront;
+		const bool        wasOn = mode_.On();
+		const bool        wasPaused = mode_.Paused();
+		const std::string whyBefore = mode_.Why();
+		const Decision    decision = mode_.Key({ key.MakeCode, (key.Flags & RI_KEY_E0) != 0, (key.Flags & RI_KEY_BREAK) != 0 }, situation);
+		if (decision.hideKey)
+		{
+			// A no-op: the game skips a key whose virtual key is 0xFF.
+			key.MakeCode = 0;
+			key.VKey = 0xFF;
+			std::memcpy(body, &key, sizeof key);
+		}
+		Apply(decision, wasOn, wasPaused, whyBefore);
+	}
+}
+
+void Router::Char(uint16_t aUnit)
+{
+	std::lock_guard               lock(mutex_);
+	const std::optional<uint32_t> point = text_.Take(aUnit);
+	if (point && Printable(*point) && ScreenOn())
+	{
+		Push({ proto::kInText, 0, int32_t(*point), 0, 0 });
+		++charsTyped_;
+	}
+}
+
+void Router::SetLink(link::Link* aLink)
+{
+	std::lock_guard lock(mutex_);
+	link_ = aLink;
+}
+
+void Router::Update(bool aLinked, const link::Link::Status& aState, const std::string& aVBlocked)
+{
+	std::lock_guard lock(mutex_);
+	situation_.linked = aLinked;
+	situation_.inGame = aState.inGame;
+	situation_.minecraft = aState.minecraft;
+	situation_.minecraftInWorld = aState.inWorld;
+	situation_.blocked = (aState.minecraftFlags & proto::kMcDead) ? "Minecraft's player is dead" : aVBlocked;
+	if (aState.screenOpen && !situation_.screenOpen)
+	{
+		ReadSpeed();  // so a change in Windows applies without a restart
+	}
+	situation_.screenOpen = aState.screenOpen;
+	cursor_.SetScreen(aState.screenOpen);
+	closeable_ = aLinked && aState.minecraft && aState.inWorld && !(aState.minecraftFlags & proto::kMcDead) && aState.screenOpen;
+	if (mode_.On())
+	{
+		std::string why = !aState.minecraft             ? "Minecraft has gone"
+		                  : !aState.inWorld             ? "Minecraft left its world"
+		                  : !aLinked                    ? "unlinked"
+		                  : !situation_.blocked.empty() ? situation_.blocked
+		                  : !aState.inGame              ? "V isn't found"
+		                                                : std::string();
+		if (!why.empty())
+		{
+			Off(std::move(why));
+		}
+	}
+	Refresh();
+}
+
+void Router::SetHudArea(uint32_t aImageWidth, uint32_t aImageHeight, uint32_t aScale)
+{
+	std::lock_guard lock(mutex_);
+	cursor_.SetArea(aImageWidth, aImageHeight, aScale);
+	Publish();
+}
+
+void Router::SetHudCursor(HudCursor* aCursor)
+{
+	std::lock_guard lock(mutex_);
+	hudCursor_ = aCursor;
+	Publish();
+}
+
+int64_t Router::TakeMouseX()
+{
+	const int64_t   counts = mouseX_.exchange(0);
+	std::lock_guard lock(mutex_);
+	return mode_.Paused() || ScreenOn() ? 0 : counts;  // CET's overlay's cursor, or Minecraft's, which turn nothing
+}
+
+std::optional<std::string> Router::TurnOn()
+{
+	std::lock_guard lock(mutex_);
+	if (mode_.On())
+	{
+		return std::nullopt;
+	}
+	if (!mode_.TurnOn(situation_))
+	{
+		log_.Push("build mode stays off: " + mode_.Why());
+		return mode_.Why();
+	}
+	log_.Push("build mode on");
+	LogPause(false);
+	Refresh();
+	return std::nullopt;
+}
+
+bool Router::TurnOff(std::string aWhy)
+{
+	std::lock_guard lock(mutex_);
+	return Off(std::move(aWhy));
+}
+
+bool Router::On() const
+{
+	std::lock_guard lock(mutex_);
+	return mode_.On();
+}
+
+bool Router::TakeLinkRequest()
+{
+	std::lock_guard lock(mutex_);
+	return std::exchange(linkRequested_, false);
+}
+
+std::optional<double> Router::TakePress()
+{
+	std::lock_guard lock(mutex_);
+	return std::exchange(press_, std::nullopt);
+}
+
+InputReport Router::Report() const
+{
+	std::lock_guard lock(mutex_);
+	InputReport     report{ mode_.On(), mode_.Why(), mode_.Slot(), read_.load(), mode_.Forwarded(), mode_.Hidden(), mode_.Last(), mode_.Paused() };
+	report.screenOpen = situation_.screenOpen;
+	report.screen = ScreenOn();
+	report.cursor = cursor_.Image();
+	report.imageWidth = cursor_.ImageWidth();
+	report.imageHeight = cursor_.ImageHeight();
+	report.speed = speed_;
+	report.cursorEvents = cursorEvents_;
+	report.f3Taken = mode_.F3Taken();
+	report.charsTyped = charsTyped_;
+	report.charsRefused = text_.Refused();
+	return report;
+}
+
+void Router::FrontLost()
+{
+	std::lock_guard lock(mutex_);
+	if (mode_.LostFront())
+	{
+		Push({ proto::kInReleaseAll, 0, 0, 0, 0 });
+		log_.Push("the game lost the front in build mode: Minecraft lets go of everything");
+	}
+	Refresh();
+}
+
+void Router::SetOverlay(bool aOpen)
+{
+	std::lock_guard lock(mutex_);
+	const bool      wasPaused = mode_.Paused();
+	if (mode_.SetOverlay(aOpen))
+	{
+		Push({ proto::kInReleaseAll, 0, 0, 0, 0 });
+	}
+	LogPause(wasPaused);
+	Refresh();
+}
+
+void Router::Apply(const Decision& aDecision, bool aWasOn, bool aWasPaused, const std::string& aWhyBefore)
+{
+	if (aDecision.releaseAll)
+	{
+		Push({ proto::kInReleaseAll, 0, 0, 0, 0 });
+	}
+	if (aWasOn && !mode_.On())
+	{
+		CloseScreen();  // F8, with Minecraft's screen open
+	}
+	for (size_t i = 0; i < aDecision.forwarded; ++i)
+	{
+		Push(aDecision.forward[i]);
+	}
+	if (aDecision.press)
+	{
+		press_ = SteadySeconds();
+	}
+	if (aDecision.requestLink)
+	{
+		linkRequested_ = true;
+		log_.Push("F8: linking first, then build mode");
+	}
+	if (mode_.On() != aWasOn)
+	{
+		log_.Push(mode_.On() ? "build mode on" : "build mode off: " + mode_.Why());
+	}
+	else if (!mode_.On() && mode_.Why() != aWhyBefore)
+	{
+		log_.Push("build mode stays off: " + mode_.Why());
+	}
+	LogPause(aWasPaused);
+	Refresh();
+}
+
+void Router::LogPause(bool aWasPaused)
+{
+	if (mode_.Paused() && !aWasPaused)
+	{
+		log_.Push("build mode paused: CET's overlay is open");
+	}
+	else if (!mode_.Paused() && aWasPaused && mode_.On())
+	{
+		log_.Push("build mode goes on: CET's overlay closed");
+	}
+}
+
+bool Router::Off(std::string aWhy)
+{
+	if (!mode_.TurnOff(std::move(aWhy)))
+	{
+		return false;
+	}
+	Push({ proto::kInReleaseAll, 0, 0, 0, 0 });
+	CloseScreen();
+	log_.Push("build mode off: " + mode_.Why());
+	Refresh();
+	return true;
+}
+
+void Router::Push(const proto::InputEvent& aEvent)
+{
+	if (link_)
+	{
+		link_->Push(aEvent);  // a full ring drops it, and the link counts it
+	}
+}
+
+bool Router::ScreenOn() const
+{
+	return mode_.On() && !mode_.Paused() && situation_.screenOpen;
+}
+
+void Router::Refresh()
+{
+	const bool on = ScreenOn();
+	if (on != screen_.load())
+	{
+		screen_ = on;
+		log_.Push(on ? "a Minecraft screen is build mode's: the mouse moves Minecraft's cursor, and every key is Minecraft's"
+		             : "no Minecraft screen is build mode's: the mouse turns V again");
+	}
+	Publish();
+}
+
+void Router::Publish()
+{
+	if (hudCursor_)
+	{
+		const Pixel back = cursor_.Back();
+		hudCursor_->Set({ back.x, back.y, screen_.load() && cursor_.HasArea() });
+	}
+}
+
+void Router::CloseScreen()
+{
+	if (closeable_)
+	{
+		Push({ proto::kInKey, kSdlEscape, 1, 0, 0 });
+		Push({ proto::kInKey, kSdlEscape, 0, 0, 0 });
+		log_.Push("build mode ended with a Minecraft screen open: Esc closes it");
+	}
+}
+
+void Router::ReadSpeed()
+{
+	speed_ = speedCheck_();
+	factor_ = PointerFactor(speed_.speed);
+	if (!speedLogged_ || speedLogged_->speed != speed_.speed || speedLogged_->enhanced != speed_.enhanced)
+	{
+		speedLogged_ = speed_;
+		log_.Push(std::format("Windows' pointer speed is {} of 20: Minecraft's cursor moves {:.3f} back-buffer pixels a count{}", speed_.speed,
+		                      factor_, speed_.enhanced ? ", without \"Enhance pointer precision\"'s curve" : ""));
+	}
+}
+}
+```
+
+- [ ] **Step 5: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `550 test(s), 0 failure(s)`.
+
+- [ ] **Step 6: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "minecraft-screens: the router moves Minecraft's cursor and types its text while a screen is build mode's, and closes it as build mode ends" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 11: The HUD pass draws the arrow
+
+`HudConstants` grows from 4 values to 8, which root parameter 1 already has: the cursor's tip in back-buffer pixels,
+and its arrow's height, 0 for none. `HudPS` tests the arrow first (`CursorPart`, `CursorAt`'s arithmetic), since the
+image pass returns nothing outside the image. The renderer reads the router's spot as it records the pass at Present,
+from `HudCursor`'s atomic, so Present never waits on the router's lock.
+
+**Files:**
+- Modify: `src/render/FrameConstants.h`, `shaders/blocks.hlsl`, `src/render/Renderer.h`, `src/render/Renderer.cpp`
+
+- [ ] **Step 1: Edit `src/render/FrameConstants.h` to grow `HudConstants`**
+
+```cpp
+	uint32_t width = 0;     // the image's
+	uint32_t height = 0;
+	uint32_t scale = 1;     // back-buffer pixels per image texel, each way
+	uint32_t bottomUp = 0;  // 1 if its rows are stored bottom-up
+};
+static_assert(sizeof(HudConstants) == 16);
+```
+```cpp
+	uint32_t width = 0;         // the image's
+	uint32_t height = 0;
+	uint32_t scale = 1;         // back-buffer pixels per image texel, each way
+	uint32_t bottomUp = 0;      // 1 if its rows are stored bottom-up
+	uint32_t cursorX = 0;       // spike 8: the cursor's tip, in back-buffer pixels
+	uint32_t cursorY = 0;
+	uint32_t cursorHeight = 0;  // its arrow's height in back-buffer pixels; 0: no cursor
+	uint32_t unused = 0;
+};
+static_assert(sizeof(HudConstants) == 32);  // root parameter 1 has 8 values
+```
+
+- [ ] **Step 2: Build and run the tests; the shader check must fail**
+
+The shader's `Hud` buffer is still 16 bytes.
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | grep -v "^PASS" | tail -2
+```
+Expected: `FAIL ShadersCompileFromTheShaderFile` and `550 test(s), 1 failure(s)`.
+
+- [ ] **Step 3: Edit `shaders/blocks.hlsl` to draw the arrow**
+
+```hlsl
+    uint4 hudInfo;  // the image's width and height; back-buffer pixels per texel; 1 if its rows are stored bottom-up
+```
+```hlsl
+    uint4 hudInfo;    // the image's width and height; back-buffer pixels per texel; 1 if its rows are stored bottom-up
+    uint4 hudCursor;  // spike 8: the cursor's tip in back-buffer pixels; its arrow's height, 0 for none; unused
+```
+```hlsl
+float4 HudPS(float4 position : SV_Position) : SV_Target0
+{
+```
+```hlsl
+// Spike 8: the part of the cursor's arrow at a pixel's centre, SkyCraft's arrow: 0 none, 1 its black edge, 2 its white
+// fill. src/render/Hud.cpp's CursorAt does the same arithmetic.
+uint CursorPart(float2 position)
+{
+    if (hudCursor.z == 0)
+    {
+        return 0;
+    }
+    const float  height = (float)hudCursor.z;
+    const float  edge = 1.5 * height / 18.0;
+    const float2 p = position - (float2)hudCursor.xy;
+    if (p.x < 0.0 || p.y < 0.0 || p.y >= height || p.x > p.y * 0.6)
+    {
+        return 0;
+    }
+    return p.x < edge || p.x > p.y * 0.6 - edge || p.y > height - edge ? 1 : 2;
+}
+
+float4 HudPS(float4 position : SV_Position) : SV_Target0
+{
+    const uint part = CursorPart(position.xy);
+    if (part != 0)
+    {
+        return part == 1 ? float4(0.0, 0.0, 0.0, 1.0) : float4(1.0, 1.0, 1.0, 1.0);  // opaque, over the image
+    }
+```
+
+- [ ] **Step 4: Edit `src/render/Renderer.h` to take the cursor's spot**
+
+```cpp
+	HudSize BackBufferSize() const { return { backWidth_.load(), backHeight_.load() }; }  // as the last Present saw it
+```
+```cpp
+	HudSize BackBufferSize() const { return { backWidth_.load(), backHeight_.load() }; }  // as the last Present saw it
+	// Spike 8: where the HUD pass finds the cursor, which it draws over the image while it's shown; null for none.
+	void SetHudCursor(const HudCursor* aCursor) { hudCursor_.store(aCursor); }
+```
+```cpp
+	std::atomic<bool>                                          hudWanted_{ false };
+```
+```cpp
+	std::atomic<bool>                                          hudWanted_{ false };
+	std::atomic<const HudCursor*>                              hudCursor_{ nullptr };
+```
+
+- [ ] **Step 5: Edit `src/render/Renderer.cpp` to give it to the HUD pass**
+
+```cpp
+	const HudConstants hud{ hudShown_.width, hudShown_.height, scale, hudShown_.bottomUp ? 1u : 0u };
+	list->SetGraphicsRoot32BitConstants(1, 4, &hud, 0);
+```
+```cpp
+	// Spike 8: the cursor's newest spot, as the input thread left it, so the arrow moves in the frame the mouse does.
+	const HudCursor*      cursor = hudCursor_.load();
+	const HudCursor::Spot spot = cursor ? cursor->Get() : HudCursor::Spot{};
+	const HudConstants    hud{ hudShown_.width, hudShown_.height, scale, hudShown_.bottomUp ? 1u : 0u, spot.x, spot.y,
+                            spot.shown ? CursorHeight(uint32_t(target.Height)) : 0u, 0u };
+	list->SetGraphicsRoot32BitConstants(1, 8, &hud, 0);
+```
+
+- [ ] **Step 6: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `550 test(s), 0 failure(s)`.
+
+- [ ] **Step 7: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "minecraft-screens: the HUD pass draws the cursor's arrow at its newest spot" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 12: The `PeekMessageW` patch
+
+As `GetRawInputData`'s (`input/RawInputHook`): the executable's import, found by name and pointed at the replacement
+with one atomic write once the router and the original are stored. The replacement calls the original, and for a
+message it took off the queue (`PM_REMOVE`, and a true return) that is a `WM_CHAR`, hands its code unit to
+`Router::Char`. The game's pump gets every message as before. Only the game can test it; here it must build.
+
+**Files:**
+- Create: `src/input/MessageHook.h`, `src/input/MessageHook.cpp`
+- Modify: `CMakeLists.txt`
+
+- [ ] **Step 1: Write `src/input/MessageHook.h`**
+
+```cpp
+#pragma once
+
+#include "LogQueue.h"
+#include "input/Router.h"
+
+// The patch on Cyberpunk2077.exe's import of PeekMessageW (spike 8's "Typed text"). The game's one message pump takes
+// every message through it with PM_REMOVE, then calls TranslateMessage, which makes each key's WM_CHAR, and
+// DispatchMessageW; its other call only peeks for sent messages. The replacement calls the original, then hands each
+// WM_CHAR it took off the queue to the router, which types it into Minecraft's screen while one is build mode's. The
+// game gets every message unchanged. Only the game can test this file.
+namespace cpmc::input
+{
+// Patches the import. False, with nothing patched, if the exe doesn't import it by name.
+bool InstallMessageHook(Router& aRouter, LogQueue& aLog);
+
+// Puts the import back. A call already in the replacement finishes through the router, which outlives it.
+void RemoveMessageHook();
+}
+```
+
+- [ ] **Step 2: Write `src/input/MessageHook.cpp`**
+
+```cpp
+#include "input/MessageHook.h"
+
+#include "hooks/ImportPatch.h"
+
+#include <Windows.h>
+
+#include <optional>
+
+namespace cpmc::input
+{
+namespace
+{
+using PeekMessageWFn = BOOL(WINAPI*)(LPMSG, HWND, UINT, UINT, UINT);
+
+PeekMessageWFn             g_original = nullptr;
+Router*                    g_router = nullptr;
+std::optional<ImportPatch> g_patch;
+
+BOOL WINAPI PeekMessageHook(LPMSG aMessage, HWND aWindow, UINT aFirst, UINT aLast, UINT aRemove)
+{
+	const BOOL taken = g_original(aMessage, aWindow, aFirst, aLast, aRemove);
+	// Only a message taken off the queue: a peek that leaves it there would see it again.
+	if (taken && aMessage && (aRemove & PM_REMOVE) && aMessage->message == WM_CHAR)
+	{
+		g_router->Char(uint16_t(aMessage->wParam));  // a UTF-16 code unit, from the W function
+	}
+	return taken;
+}
+}
+
+bool InstallMessageHook(Router& aRouter, LogQueue& aLog)
+{
+	std::optional<ImportPatch> patch = FindImport(GetModuleHandleW(nullptr), "user32.dll", "PeekMessageW");
+	if (!patch)
+	{
+		aLog.Push("the game doesn't import PeekMessageW by name: typing in Minecraft's screens won't work");
+		return false;
+	}
+	// Both before the patch, so no call reaches the replacement without them.
+	g_router = &aRouter;
+	g_original = reinterpret_cast<PeekMessageWFn>(patch->original);
+	if (!ApplyImport(*patch, reinterpret_cast<void*>(&PeekMessageHook)))
+	{
+		aLog.Push("PeekMessageW's import couldn't be patched: typing in Minecraft's screens won't work");
+		return false;
+	}
+	g_patch = *patch;
+	aLog.Push("PeekMessageW hooked: what's typed reaches Minecraft's screens");
+	return true;
+}
+
+void RemoveMessageHook()
+{
+	if (g_patch)
+	{
+		RestoreImport(*g_patch);
+		g_patch.reset();
+	}
+}
+}
+```
+
+- [ ] **Step 3: Edit `CMakeLists.txt` to add the source**
+
+```cmake
+	src/input/RawInputHook.cpp
+```
+```cmake
+	src/input/RawInputHook.cpp
+	src/input/MessageHook.cpp
+```
+
+- [ ] **Step 4: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `550 test(s), 0 failure(s)`.
+
+- [ ] **Step 5: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "minecraft-screens: the PeekMessageW patch, which hands each WM_CHAR the game's pump takes to the router" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 13: BlockRender 0.23.0: the wiring and the status
+
+- **The status's `screens=` line,** after `build=` (the spec's "Status and log"): whether a Minecraft screen is open and
+  build mode's, the cursor in the image's pixels, Windows' speed and factor (and whether its precision curve is left
+  out), cursor events sent, keys taken by the F3 rule, characters typed and lone surrogates dropped, and whether
+  `PeekMessageW` is hooked.
+- **The plugin:**
+  - one `HudCursor`, given to the router and the renderer at load;
+  - the `PeekMessageW` patch installed beside `GetRawInputData`'s, and removed at unload;
+  - the newest HUD image's size kept from the sink, and given to the router each frame before its update, with the
+    scale the HUD pass draws it at (`HudScaleFor`);
+  - the report's new fields;
+  - `build on`'s reply naming the new keys;
+  - version 0.23.0.
+
+**Files:**
+- Modify: `src/Status.h`, `src/Status.cpp`, `src/Plugin.cpp`, `tests/TestStatus.cpp`
+
+- [ ] **Step 1: Edit `tests/TestStatus.cpp` to add the failing test**
+
+```cpp
+	CHECK(status.find("link=") < status.find("build=") && status.find("build=") < status.find("positions="));
+```
+```cpp
+	CHECK(status.find("link=") < status.find("build=") && status.find("build=") < status.find("positions="));
+}
+
+TEST(StatusWritesTheScreens)
+{
+	cpmc::StatusReport report;
+	cpmc::LinkReport   link;
+	link.screenOpen = true;
+	link.screenOurs = true;
+	link.cursorX = 640;
+	link.cursorY = 360;
+	link.cursorImageWidth = 1280;
+	link.cursorImageHeight = 720;
+	link.pointerSpeed = 8;
+	link.pointerFactor = 0.75;
+	link.cursorEvents = 152;
+	link.f3Taken = 2;
+	link.charsTyped = 37;
+	link.charsRefused = 1;
+	link.messageHooked = true;
+	report.link = link;
+	std::string status = cpmc::FormatStatus(report);
+	CHECK(Has(status, "screens=a Minecraft screen open, the cursor at 640, 360 of 1280 x 720; Windows speed 8 of 20: 0.750 px a "
+	                  "count; 152 cursor events sent; 2 keys taken by the F3 rule; 37 characters typed, 1 lone surrogate "
+	                  "dropped; PeekMessageW hooked"));
+	CHECK(status.find("build=") < status.find("screens=") && status.find("screens=") < status.find("drive="));
+	link.cursorImageWidth = 0;  // no HUD image has come
+	report.link = link;
+	CHECK(cpmc::FormatStatus(report).find("\nscreens=a Minecraft screen open, and no HUD image for the cursor yet;") != std::string::npos);
+	link.screenOurs = false;
+	report.link = link;
+	CHECK(cpmc::FormatStatus(report).find("\nscreens=a Minecraft screen open, but build mode is off or paused;") != std::string::npos);
+	link.screenOpen = false;
+	link.pointerEnhanced = true;
+	link.messageHooked = false;
+	report.link = link;
+	CHECK(Has(cpmc::FormatStatus(report), "screens=no Minecraft screen open; Windows speed 8 of 20: 0.750 px a count, without "
+	                                      "its precision curve; 152 cursor events sent; 2 keys taken by the F3 rule; 37 "
+	                                      "characters typed, 1 lone surrogate dropped; PeekMessageW not hooked (see the log)"));
+```
+
+- [ ] **Step 2: Build; it must fail**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -o -E "error C[0-9]+: [^[]*" | sort -u | head -3
+```
+Expected: `error C2039: 'screenOurs': is not a member of 'cpmc::LinkReport'`.
+
+- [ ] **Step 3: Edit `src/Status.h` to add the report's fields**
+
+```cpp
+	std::string        lastInput;            // the last forwarded
+```
+```cpp
+	std::string        lastInput;            // the last forwarded
+	// Spike 8: Minecraft's screens, the cursor and typed text; screenOpen is Minecraft's own flag
+	bool     screenOurs = false;     // a Minecraft screen is build mode's
+	uint32_t cursorX = 0;            // in the HUD image's pixels
+	uint32_t cursorY = 0;
+	uint32_t cursorImageWidth = 0;   // the HUD image the cursor stays in; 0 before one has come
+	uint32_t cursorImageHeight = 0;
+	int      pointerSpeed = 10;      // Windows', 1 to 20
+	double   pointerFactor = 1.0;    // back-buffer pixels a count
+	bool     pointerEnhanced = false;  // "Enhance pointer precision", whose curve the cursor leaves out
+	uint64_t cursorEvents = 0;       // kInCursor sent
+	uint64_t f3Taken = 0;            // keys Minecraft got because F3 was held
+	uint64_t charsTyped = 0;         // kInText sent
+	uint64_t charsRefused = 0;       // lone surrogates
+	bool     messageHooked = false;  // PeekMessageW's import is patched
+```
+
+- [ ] **Step 4: Edit `src/Status.cpp` to write the line**
+
+```cpp
+	                                     : std::string("GetRawInputData not hooked (see the log)"));
+```
+```cpp
+	                                     : std::string("GetRawInputData not hooked (see the log)"));
+	const std::string screen = !aLink.screenOpen               ? std::string("no Minecraft screen open")
+	                           : !aLink.screenOurs             ? std::string("a Minecraft screen open, but build mode is off or paused")
+	                           : aLink.cursorImageWidth == 0 ? std::string("a Minecraft screen open, and no HUD image for the cursor yet")
+	                                                           : std::format("a Minecraft screen open, the cursor at {}, {} of {} x {}", aLink.cursorX,
+	                                                                         aLink.cursorY, aLink.cursorImageWidth, aLink.cursorImageHeight);
+	out += std::format("screens={}; Windows speed {} of 20: {:.3f} px a count{}; {} cursor events sent; {} keys taken by the F3 "
+	                   "rule; {} characters typed, {} lone surrogate{} dropped; {}\n",
+	                   screen, aLink.pointerSpeed, aLink.pointerFactor, aLink.pointerEnhanced ? ", without its precision curve" : "",
+	                   aLink.cursorEvents, aLink.f3Taken, aLink.charsTyped, aLink.charsRefused, aLink.charsRefused == 1 ? "" : "s",
+	                   aLink.messageHooked ? "PeekMessageW hooked" : "PeekMessageW not hooked (see the log)");
+```
+
+- [ ] **Step 5: Edit `src/Plugin.cpp` to wire it all in, as 0.23.0**
+
+```cpp
+#include "hooks/StreamlineHooks.h"
+```
+```cpp
+#include "hooks/StreamlineHooks.h"
+#include "input/MessageHook.h"
+```
+```cpp
+constexpr const char* kVersion = "0.22.0";
+```
+```cpp
+constexpr const char* kVersion = "0.23.0";
+```
+```cpp
+bool                      g_inputHooked = false;  // GetRawInputData's import is patched
+```
+```cpp
+bool                      g_inputHooked = false;  // GetRawInputData's import is patched
+bool                      g_messageHooked = false;  // PeekMessageW's import is patched (spike 8)
+```
+```cpp
+cpmc::input::Router* g_router = nullptr;  // where keys and clicks go (the spec's "Input")
+```
+```cpp
+cpmc::input::Router* g_router = nullptr;  // where keys and clicks go (the spec's "Input")
+cpmc::HudCursor      g_hudCursor;         // spike 8: Minecraft's cursor, which the router keeps and the HUD pass draws
+cpmc::HudSize        g_hudImage;          // the newest HUD image's size, which the cursor stays in
+```
+```cpp
+	{
+		g_renderer->SetHudImage(aFrame.width, aFrame.height, aFrame.bottomUp, aFrame.pixels);
+```
+```cpp
+	{
+		g_hudImage = { aFrame.width, aFrame.height };
+		g_renderer->SetHudImage(aFrame.width, aFrame.height, aFrame.bottomUp, aFrame.pixels);
+```
+```cpp
+	const cpmc::HudSize viewport = cpmc::HudViewport(back.width, back.height, g_hudScale);
+```
+```cpp
+	const cpmc::HudSize viewport = cpmc::HudViewport(back.width, back.height, g_hudScale);
+	// Spike 8: the cursor stays in the area the newest HUD image covers, drawn as the HUD pass draws it.
+	g_router->SetHudArea(g_hudImage.width, g_hudImage.height, cpmc::HudScaleFor(back.width, back.height, g_hudImage.width, g_hudImage.height));
+```
+```cpp
+		           : "build on: Minecraft's player drives V; the movement keys, the mouse buttons, the wheel and 1 to 9 are Minecraft's");
+```
+```cpp
+		           : "build on: Minecraft's player drives V; the movement keys, the mouse buttons, the wheel, 1 to 9, E, T, /, Q, F3 "
+		             "and O are Minecraft's, and with a Minecraft screen open every key");
+```
+```cpp
+	report.lastInput = input.last;
+```
+```cpp
+	report.lastInput = input.last;
+	report.screenOurs = input.screen;
+	report.cursorX = input.cursor.x;
+	report.cursorY = input.cursor.y;
+	report.cursorImageWidth = input.imageWidth;
+	report.cursorImageHeight = input.imageHeight;
+	report.pointerSpeed = input.speed.speed;
+	report.pointerFactor = cpmc::input::PointerFactor(input.speed.speed);
+	report.pointerEnhanced = input.speed.enhanced;
+	report.cursorEvents = input.cursorEvents;
+	report.f3Taken = input.f3Taken;
+	report.charsTyped = input.charsTyped;
+	report.charsRefused = input.charsRefused;
+	report.messageHooked = g_messageHooked;
+```
+```cpp
+		g_router = new cpmc::input::Router(g_log);
+		g_inputHooked = cpmc::input::InstallRawInputHook(*g_router, g_log);
+```
+```cpp
+		g_router = new cpmc::input::Router(g_log);
+		g_router->SetHudCursor(&g_hudCursor);
+		g_renderer->SetHudCursor(&g_hudCursor);
+		g_inputHooked = cpmc::input::InstallRawInputHook(*g_router, g_log);
+		g_messageHooked = cpmc::input::InstallMessageHook(*g_router, g_log);
+```
+```cpp
+			cpmc::input::RemoveRawInputHook();
+```
+```cpp
+			cpmc::input::RemoveRawInputHook();
+			cpmc::input::RemoveMessageHook();
+```
+
+- [ ] **Step 6: Build and run the tests; they must pass**
+
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C" | sort -u; \
+  ./build/RelWithDebInfo/render_tests.exe | tail -1
+```
+Expected: no error or warning lines, then `551 test(s), 0 failure(s)`.
+
+- [ ] **Step 7: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render \
+  && git commit -q -m "minecraft-screens: BlockRender 0.23.0 wires the screens in: the PeekMessageW patch, the cursor's area and spot, and the screens status line" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 14: In the game: run E
+
+Run E of the spec's "Testing", with the user, on BlockRender 0.23.0, linked to SkyCraft's Minecraft in the `CyberCraft`
+instance, Minecraft's window hidden as always. V somewhere open, by day; build mode on with F8.
+
+**What the agent sends,** each a request, as `mc` and Minecraft's command, typed into Minecraft's chat, and only while
+no Minecraft screen is open (the typer refuses then):
+- **the test blocks,** 3 blocks ahead of Minecraft's player, a crafting table to the right and a chest to the left,
+  each at a marker tagged `sp8b`, set without updates:
+  ```text
+  mc /execute rotated ~ 0 positioned ^1 ^ ^3 run summon minecraft:marker ~ ~ ~ {Tags:["sp8b","sp8table"]}
+  mc /execute at @e[tag=sp8table] run setblock ~ ~ ~ minecraft:crafting_table strict
+  mc /execute rotated ~ 0 positioned ^-1 ^ ^3 run summon minecraft:marker ~ ~ ~ {Tags:["sp8b","sp8chest"]}
+  mc /execute at @e[tag=sp8chest] run setblock ~ ~ ~ minecraft:chest[facing=north] strict
+  ```
+- **the clear,** at the end: the blocks at their markers to air, without updates, so the chest's contents vanish with
+  it, then the markers, then any item dropped within 10 blocks:
+  ```text
+  mc /execute at @e[tag=sp8b] run setblock ~ ~ ~ minecraft:air strict
+  mc /kill @e[tag=sp8b]
+  mc /kill @e[type=minecraft:item,distance=..10]
+  ```
+
+These commands come back, as in spike 7's runs:
+- **Send a request,** atomically: the plugin runs it within a second. Replace `REQUEST` with the request, with each `"`
+  in it written `\"`, and send the next only once the status's `request=` line shows the last.
+  ```bash
+  P=/e/Cyberpunk2077/red4ext/plugins/BlockRender; printf '%s\n' "REQUEST" > "$P/request.tmp" && mv "$P/request.tmp" "$P/blockrender.request"
+  ```
+- **The log's newest lines:**
+  ```bash
+  L=$(ls -t /e/Cyberpunk2077/red4ext/logs | grep -i blockrender | head -1); tail -30 "/e/Cyberpunk2077/red4ext/logs/$L"
+  ```
+- **The status:**
+  ```bash
+  cat /e/Cyberpunk2077/bin/x64/plugins/cyber_engine_tweaks/mods/blockrender_hud/status.txt
+  ```
+- **Minecraft's log, for the chat:**
+  ```bash
+  grep -E "\[CHAT\]" "/c/Users/BLOXY/AppData/Roaming/ModrinthApp/profiles/CyberCraft/logs/latest.log" | tail -10
+  ```
+
+**If the game freezes,** read the logs and the newest folder in `%LOCALAPPDATA%\REDEngine\ReportQueue`, and force-close
+it only when the user asks. If a check fails, stop and find the cause with superpowers:systematic-debugging before
+going on. Fixes become new tasks.
+
+**Files:**
+- Modify: `docs/spikes/2026-10-07-minecraft-screens-results.md`
+
+- [ ] **Step 1: Deploy (the game must not be running)**
+
+```bash
+tasklist | grep -i -c "cyberpunk2077.exe"
+```
+Expected: `0`. If it's `1`, ask the user to quit the game first, because a running game locks the DLL.
+```bash
+CMAKE="/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+P=/e/Cyberpunk2077/red4ext/plugins/BlockRender
+H=/e/Cyberpunk2077/bin/x64/plugins/cyber_engine_tweaks/mods/blockrender_hud
+cd /d/Cyberpunk-Minecraft/spikes/block-render && "$CMAKE" --preset default -DCP2077_DIR=E:/Cyberpunk2077 > /dev/null \
+  && "$CMAKE" --build --preset release -- -m -v:minimal 2>&1 | grep -E "error C|warning C|error MSB"; \
+  "$CMAKE" --preset default -DCP2077_DIR= > /dev/null; \
+  cmp build/RelWithDebInfo/BlockRender.dll "$P/BlockRender.dll" && cmp shaders/blocks.hlsl "$P/shaders/blocks.hlsl" \
+  && cmp tools/blockrender_hud/init.lua "$H/init.lua" && echo installed
+```
+Expected: `installed`. The second configure clears `CP2077_DIR` again.
+
+- [ ] **Step 2: In the game: BlockRender 0.23.0 loads**
+
+Ask the user to start the `CyberCraft` instance, then the game, and to wait at the game's main menu. Then:
+```bash
+L=$(ls -t /e/Cyberpunk2077/red4ext/logs | grep -i blockrender | head -1); grep -E "loaded|hooked|pointer speed|ERROR|error" "/e/Cyberpunk2077/red4ext/logs/$L" | head -8
+```
+Expected: `BlockRender 0.23.0 loaded (game 2.31…)`; `GetRawInputData hooked; the focus watch runs`; `PeekMessageW
+hooked: what's typed reaches Minecraft's screens`; `Windows' pointer speed is 8 of 20: Minecraft's cursor moves 0.750
+back-buffer pixels a count`; and no error lines.
+
+- [ ] **Step 3: In the game: link, and build mode**
+
+Ask the user to load a save somewhere open by day, click Link in the overlay, close it, and press F8. Expected: in the
+log, `build mode on`; in the status, `build=on`, then `screens=no Minecraft screen open; Windows speed 8 of 20: 0.750 px
+a count; 0 cursor events sent; …; PeekMessageW hooked`.
+
+- [ ] **Step 4: In the game: the inventory (check 1)**
+
+Ask the user to press E, move the mouse around, then press Esc. Expected:
+- the inventory in the HUD, the arrow at the screen's middle, following the mouse at the desktop's speed, sharp, white
+  with a black edge, 24 pixels tall;
+- V's view not turning while it's open;
+- in the log, `a Minecraft screen is build mode's: …`, then `no Minecraft screen is build mode's: …` after Esc;
+- in the status while it's open, `screens=a Minecraft screen open, the cursor at …` with the cursor's pixel changing;
+- after Esc, the inventory gone, and the game's own menu NOT opened (risk 8).
+
+- [ ] **Step 5: In the game: moving items in survival (check 2)**
+
+Send `mc /gamemode survival`. Ask the user, in the inventory, to pick up and put down an item, shift-click one between
+the hotbar and the inventory, drag half the golden apples across a few slots and put them back in slot 6 as 64, press
+a number key over a slot, and press Q over one; then close it with E. Expected: each as in Minecraft, the hover
+highlight following the arrow, a carried item trailing it a little; then send the clear's last request (`/kill` of the
+items within 10 blocks) for what Q dropped: Minecraft's chat says `Killed …`.
+
+- [ ] **Step 6: In the game: the creative inventory (check 3)**
+
+Send `mc /gamemode creative`. Ask the user to press E, click through a few tabs, scroll one with the wheel, open the
+search tab and type `stone`, then close it with Esc. Expected: as in Minecraft; the typed letters in the search box;
+the status's `slot` unchanged by the wheel and number keys while it was open.
+
+- [ ] **Step 7: In the game: chat (check 4)**
+
+Ask the user to press T, type `Hej æøå é @ ~` (capitals with Shift, @ with AltGr+2, é with ´ then e), try Backspace,
+the arrow keys, Ctrl+A and Ctrl+C, then Ctrl+V to paste it twice, and send it with Enter; then to press Minecraft's
+command key (`-` on their keyboard), type `time query daytime` and press Enter. Expected: in Minecraft's chat, the line
+`<ItzBloxy> Hej æøå é @ ~…` with the letters whole; then `The time is …`; T opening no phone in the game.
+
+- [ ] **Step 8: In the game: F3 (check 5)**
+
+Ask the user to tap F3 (the debug screen shows; again, it goes), then hold F3 and press F4 a few times (the switcher
+cycles), let go of F3 on Survival, then do it again back to Creative; then F3+N into spectator, look around without
+moving, and F3+N back. Expected: Minecraft's chat says `Set own game mode to …` each time; V stays where it stood.
+
+- [ ] **Step 9: In the game: the pause menu (check 6)**
+
+Ask the user to press O, open Options, drag a slider and put it back where it was, click Done, then press Esc.
+Expected: Minecraft's pause menu, its blurred background over Night City, the slider dragging with the arrow; Esc
+closing it and no game menu opening.
+
+- [ ] **Step 10: In the game: a crafting table and a chest (check 7)**
+
+Send the test blocks' four requests. Ask the user to look at the crafting table and right-click it, craft something
+(planks from a log, say, if they have one; or just move an item in and out), close it with Esc; then right-click the
+chest, put an item in, and with the chest still open press F8. Expected: the chest closes and build mode ends (log:
+`build mode ended with a Minecraft screen open: Esc closes it`). Then ask them to press F8 again, open the chest,
+and press Shift+F6 to open CET's overlay, then Shift+F6 again. Expected: build mode paused while the overlay is open,
+the arrow gone; back with the chest still open and the arrow where it was.
+
+- [ ] **Step 11: In the game: Alt-Tab (check 8)**
+
+With the chest open, ask the user to Alt-Tab to Claude Code and back. Expected: the log's `the game lost the front in
+build mode: Minecraft lets go of everything`; back in the game, the chest still open, and the arrow working. Then Esc.
+
+- [ ] **Step 12: In the game: the keys left to the game (check 9)**
+
+Ask the user to press Esc with no Minecraft screen open. Expected: build mode ends (`Esc left it`) and the game's menu
+opens, as before. Then send the clear's three requests. Expected: in Minecraft's chat, `Changed the block at …` twice,
+`Killed …` for the markers, and for the items, `Killed …` or `No entity was found`; the two blocks gone.
+
+- [ ] **Step 13: Ask the user to quit the game and stop Minecraft**
+
+- [ ] **Step 14: Read the log once more**
+
+```bash
+L=$(ls -t /e/Cyberpunk2077/red4ext/logs | grep -i blockrender | head -1); grep -E "build mode|screen|pointer|hooked|request" "/e/Cyberpunk2077/red4ext/logs/$L" | head -200
+```
+Everything the steps above logged, for the results.
+
+- [ ] **Step 15: Record run E's results in `docs/spikes/2026-10-07-minecraft-screens-results.md`**
+
+A "Run E" section: the versions; each check above with its outcome; how the cursor felt; anything that surprised.
+Then the spike's answer at the top.
+
+- [ ] **Step 16: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add docs/spikes docs/superpowers/plans/2026-10-07-minecraft-screens.md \
+  && git commit -q -m "minecraft-screens: run E's results" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 15: Close the spike
+
+- [ ] **Step 1: Record how Part 2 went, in this plan**
+
+At the end, after "Found while planning Part 2": what ran as written, what changed, and what run E found.
+
+- [ ] **Step 2: Record the spec's changes while executing Part 2**
+
+In its "Changes while executing Part 2": anything Part 2 changed in the design, and what's left for later.
+
+- [ ] **Step 3: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add docs/superpowers \
+  && git commit -q -m "minecraft-screens plan: how Part 2 went" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+- [ ] **Step 4: Record the branch's finish**
+
+Use superpowers:finishing-a-development-branch: the tests pass (551), and the user chooses whether
+`spike/minecraft-screens` merges into `main`, as spikes 1 to 7 did.
+
+## Found while planning Part 2
+
+The spec's "Changes while planning Part 2" lists what planning changed in the design. In the plan itself:
+- **One way through `PlaceKey`.** Build mode's keys used to be a fixed list of 23 holders checked one by one. With every
+  key Minecraft's in a screen, every key needs a holder, so a key's new press is placed once, in one order (Task 9),
+  and its repeats and release follow the holder.
+- **F6 without Shift** used to be passed to the game at once. It now goes on as any key, so F3+F6 reaches Minecraft,
+  and an F6 typed in a screen does too.
+- **The Esc lives in the router,** in `CloseScreen`, which both of build mode's endings call: `Apply` after a key's
+  decision ended it (F8), and `Off` for the rest. `closeable_` is worked out in each `Update`, from the frame's state,
+  so an ending found in that same update (Minecraft leaving its world, its player dying) sends none.
+- **The cursor's area comes from the newest HUD image,** which the plugin keeps from the link's sink, at the scale the
+  HUD pass draws it (`HudScaleFor`), given to the router each frame before its update.
+- **`HudCursor` packs x, y and shown into one atomic,** so the HUD pass at Present never reads an x from one move and a
+  y from another.
+- **The status's typed-text count** is of characters typed and lone surrogates dropped: control characters are expected
+  on every Enter and Backspace, so they aren't counted as dropped.
+- **An absolute mouse event** in a screen is left as it is, and moves nothing; the first mutation list found no test for
+  it, so `RouterSendsTheCursorOnlyAsItsPixelChanges` checks one.
+- **Run E's test blocks are placed by request,** at markers, as spike 7's run D placed its blocks, and cleared at them
+  with `strict`, which drops nothing; the user doesn't place them. A `/kill` of items within 10 blocks clears what Q
+  drops.
+- **Risk 8, found while planning:** a key hidden from the game's Raw Input still reaches its window as `WM_KEYDOWN`.
+  Spike 4 found that the game reads keys only through Raw Input, and the game imports no `GetKeyState` or
+  `GetAsyncKeyState`, but Esc was never hidden before: run E checks that closing a Minecraft screen with Esc opens no
+  game menu.
