@@ -2,9 +2,9 @@
 
 Spike 9 makes Minecraft's mobs find their way on Night City's ground
 ([the spec](../superpowers/specs/2026-10-08-minecraft-paths-design.md)): wander, go to targets, keep up with their
-owner as pets, fly around the city's walls, and not see V through them, from CyberCraft Tweaks 1.7.0. Step 0 checks
-Minecraft's side with `mclink`, without the game, twice: first with 1.6.0 as the control, then with 1.7.0. Run F checks
-it in the game.
+owner as pets, fly around the city's walls, and not see V through them, from CyberCraft Tweaks 1.7.0 and then 1.7.1.
+Step 0 checks Minecraft's side with `mclink`, without the game: first with 1.6.0 as the control, then with 1.7.0, then
+with 1.7.1, which fixes what the 1.7.0 run found. Run F checks it in the game.
 
 The spike's answer goes here once run F is in.
 
@@ -113,3 +113,74 @@ shift.
 - **A pet's landing must reset its fall distance.**
 - **The script summons inside a skin** where it gives the pavement's y 6.2 (its skin spans 6.125 to 6.25): such a mob
   falls through the skin it's inside. Summons go half a block above the floor, to drop onto it.
+
+### Fixed in 1.7.1
+
+Plan Tasks 10 to 13: thin cells are fences (`CellRule.THIN`); a pet's landing resets its fall distance; step 0's
+summons go half a block above their floors, with a second wandering villager beside the barrier; and a new script,
+`tools/mclink/teleports.txt`, makes five jumps with a pet wolf. The scripts were meant to end with `/save-all flush`,
+but singleplayer has no such command (26.3 registers it on dedicated servers only), and the pause menu doesn't save a
+linked game either. What saves the world is Minecraft's autosave, every 5 minutes, which writes `level.dat` and the
+player's file in `players/data/`. So before Minecraft is stopped, one autosave must pass after the last script.
+
+## Step 0 with CyberCraft Tweaks 1.7.1
+
+Date: 2026-10-08, 22:48. Minecraft stopped after an autosave (22:42:51) that followed the last diagnostic; 1.7.0
+renamed `.jar.disabled`, 1.7.1 installed; `- cybercraft_tweaks 1.7.1` in Minecraft's log, no mixin error. Plan:
+Task 14. Minecraft's only warnings were the two render ones at link-up, `Couldn't acquire next surface texture` and
+`Requested post effect does not exist: minecraft:end_of_frame`, which the 1.7.0 run after a fresh start had too.
+
+### The checks
+
+`exit: 0`, 170 s.
+
+| Check | With 1.7.1 |
+|---|---|
+| Wander | all four mobs strolled, every one of their 52 positions at y 6.0 to 6.375, all four `OnGround` `1b`: the pig moved between 9 of its 13 samples and ended 13.4 blocks from its start; the cow 9 times, 13.0 blocks; the street's villager 4 times, 6.3 blocks; the villager by the barrier 7 times, 7.9 blocks, down the kerb onto the street, back, and north to 1282.5 6.375 1987.7, where the road climbs. None on the barrier's top, none below the road |
+| Tempt | `Test passed. Count: 1`, the cow at 1279.6 6.25 2016.3 beside V |
+| Pet | `Test passed. Count: 1` after the walk (the wolf at 1276.2 6.0 2021.2, the same position to the last digit as with 1.7.0); after the jump north, `Test passed. Count: 1`, the wolf landed at 1278.5 6.25 1997.5 on the pavement, on the ground, 3.6 blocks from V |
+| Chase | `Test passed. Count: 1`, the husk at 1276.5 6.0 2004.7 |
+| Sight | the first scene, V on the road: no arrow, the skeleton strolling on the slope (1292.3 −2.0 2005.8); the second, V on the ledge in view: an arrow, at the ledge's edge (1286.4 4.9 2006.2) |
+| Flyer | `Test passed. Count: 1`, the bee at 1287.5 5.9 2007.9 above the ledge, then 1289.6 −0.6 2007.4 on the slope |
+| Cost | three minute lines: 63,075, 16,728 and 20,768 city answers; 2,080, 83 and 438 shapes read; 214, 276 and 183 sight casts, 0, 0 and 69 of them hitting the city (the skeleton's, with V hidden); 12 shortcut casts (the bee's, none hit); **2.8, 2.1 and 2.7 ms casting a minute** |
+| Clear | the last scene `world: nothing`; the dandelion taken back; the game mode set back to creative, as the session started |
+
+Two places the mobs reached that the earlier runs hadn't shown are real ground, by the dump's cells:
+- **The cow at 1285.25 6.25 2015.2,** east of x 1284: the barrier runs on a diagonal, at x 1284 by z 2006, 1285 by
+  2008 and 1286 by 2015, so the cow stood on the pavement west of it.
+- **The skeleton, in the second scene, at 1283.9 1.38 2005.9,** west of the rock face: a hollow under the ledge and
+  the road, floored at 1.375, which the slope reaches through a passage under the ledge (floors at 0.125 to 0.25, then
+  a rise of 1.125, a mob's highest step).
+
+### The teleports
+
+`tools/mclink/teleports.txt`, 22:53: five jumps of the stand-in V, 22 blocks each way along the street at x 1276.5.
+`exit: 0`, the minute line `5 pets landed on the city's floor`, the last scene `world: nothing`.
+- **Every landing on the road:** 3.6, 2.0, 2.0, 2.2 and 2.8 blocks from V, and all 80 samples (16 a jump, every
+  quarter second) on the ground (`1b`) at the street's floor, 6.0, or the pavement's, 6.25.
+- **`Test passed` 3 times of 5,** against the plan's 5: after jumps 3 and 5 the wolf stood about 3 s beside V, then
+  walked off south, and was 6.0 and 4.4 blocks away when the test ran, 4 s after the jump. That's a stroll: the landing
+  stops the pet's navigation (`CityPetTeleport` calls `getNavigation().stop()`), it stood still first, and a pet within
+  10 blocks of its owner wanders as in vanilla. The test measured the stroll, not the landing.
+
+Diagnostic 5 (`build/step0/diag5.txt`, with the dump placed as step 0 places it): 20 more jumps at the same spot, each
+landing sampled 0.5 s and 2 s after: all 40 samples on the ground at 6.0 or 6.25, every landing within 3 blocks of V
+across, the minute line `20 pets landed on the city's floor`.
+
+So with 1.7.1, 26 landings of 26 were on the road. The 1.7.0 run's wolf (1281.3 3.795 1997.6, `0b`, after it landed
+once) was in a hollow under the pavement there, floored at 3.25 to 4.5 below the road's two skins, at 6.0 and 6.25.
+The deep review's walk rules reach none of it from the road, with 1.7.0's cells or 1.7.1's, so that wolf landed in it
+or fell through the skins; which, and why, stays unexplained. Run F watches pets in the game.
+
+### The restore
+
+`build/step0/restore.txt`: `Replaced 1 slot(s) on ItzBloxy` (the shield copied into the empty off hand; 26.3 names no
+item for a copy), `Replaced 1 slot(s) on ItzBloxy with [Air]` (slot 15 emptied), `Set own game mode to Survival Mode`,
+then `Test passed. Count: 1` (the shield in the off hand) and `Test failed` (slot 15 empty).
+
+### What it means for Part 2
+
+- **Step 0 passes with 1.7.1:** wander, tempt, the pet, chase, sight and the flyer, at 2 to 3 ms of casting a minute.
+  The fences kept every mob off the barrier.
+- **Run F** goes on to the game: the pavement area first, then V's apartment and its building (doorways, stairs,
+  railings), watching pets' landings in particular.

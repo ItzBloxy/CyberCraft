@@ -2841,7 +2841,7 @@ must pass after the last script. So the two scripts lose their `/save-all flush`
 **Files:**
 - Modify: `spikes/block-render/tools/mclink/paths.txt`, `spikes/block-render/tools/mclink/teleports.txt`
 
-- [ ] **Step 1: Edit `tools/mclink/paths.txt` to leave the saving to Minecraft's autosave**
+- [x] **Step 1: Edit `tools/mclink/paths.txt` to leave the saving to Minecraft's autosave**
 
 ```text
 # at the end, and its effects are cleared. Last, the world is saved, so stopping Minecraft can't lose any of this. Start
@@ -2859,7 +2859,7 @@ wait 3
 ```text
 ```
 
-- [ ] **Step 2: Edit `tools/mclink/teleports.txt` to leave the saving to Minecraft's autosave**
+- [x] **Step 2: Edit `tools/mclink/teleports.txt` to leave the saving to Minecraft's autosave**
 
 ```text
 # under the road 4 s after such a jump. The wolf is tagged sp9 and killed at the end; nothing else is summoned; the
@@ -2876,7 +2876,7 @@ wait 3
 ```text
 ```
 
-- [ ] **Step 3: Check that mclink parses step 0's scripts**
+- [x] **Step 3: Check that mclink parses step 0's scripts**
 
 ```bash
 cd /d/Cyberpunk-Minecraft/spikes/block-render && mkdir -p build && for s in paths teleports; do \
@@ -2886,7 +2886,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && mkdir -p build && for s in path
 Expected: `paths-parse.txt: line 160: unknown action: "parse-check-stop here"`, `teleports-parse.txt: line 280: unknown action: "parse-check-stop here"`
 and `exit: 2`.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render/tools/mclink/paths.txt spikes/block-render/tools/mclink/teleports.txt \
@@ -2913,7 +2913,7 @@ Expected within 5 minutes: `level.dat` and the player's `.dat` both written afte
 **Files:**
 - Modify: `docs/spikes/2026-10-08-minecraft-paths-results.md`
 
-- [ ] **Step 1: Wait for Minecraft's autosave, then ask the user to stop Minecraft**
+- [x] **Step 1: Wait for Minecraft's autosave, then ask the user to stop Minecraft**
 
 Task 9's diagnostics were the last scripts, each ending with `world: nothing`. Wait for an autosave as above, then
 the user stops Minecraft from the Modrinth App (this is also Task 9's step 5), and:
@@ -2922,7 +2922,7 @@ tasklist | grep -i -c "javaw.exe"
 ```
 Expected: `0`.
 
-- [ ] **Step 2: Install CyberCraft Tweaks 1.7.1, with the user's leave**
+- [x] **Step 2: Install CyberCraft Tweaks 1.7.1, with the user's leave**
 
 ```bash
 M="/c/Users/BLOXY/AppData/Roaming/ModrinthApp/profiles/CyberCraft/mods"; \
@@ -2933,7 +2933,7 @@ M="/c/Users/BLOXY/AppData/Roaming/ModrinthApp/profiles/CyberCraft/mods"; \
 Expected: `built build/cybercraft-tweaks-1.7.1.jar`, then `cybercraft-tweaks-1.7.1.jar` beside 1.2.0 to 1.7.0, each
 `.jar.disabled`.
 
-- [ ] **Step 3: Ask the user to start Minecraft, and check that the mod loaded**
+- [x] **Step 3: Ask the user to start Minecraft, and check that the mod loaded**
 
 The user starts the instance and says when its title screen shows. Then:
 ```bash
@@ -2943,7 +2943,7 @@ L="/c/Users/BLOXY/AppData/Roaming/ModrinthApp/profiles/CyberCraft/logs/latest.lo
 ```
 Expected: `- cybercraft_tweaks 1.7.1` and `mixin errors: 0`.
 
-- [ ] **Step 4: In Minecraft: run step 0's script with 1.7.1**
+- [x] **Step 4: In Minecraft: run step 0's script with 1.7.1**
 
 The user's off hand is empty (the shield is in slot 15), so the wheat and the dandelion go in.
 ```bash
@@ -2963,7 +2963,7 @@ failed`):
 - **Cost:** the minute lines, with `shapes read`.
 - **The end:** the last scene `world: nothing`, no errors, `exit: 0`.
 
-- [ ] **Step 5: In Minecraft: run the teleports**
+- [x] **Step 5: In Minecraft: run the teleports**
 
 ```bash
 L="/c/Users/BLOXY/AppData/Roaming/ModrinthApp/profiles/CyberCraft/logs/latest.log"; before=$(wc -l < "$L"); \
@@ -2976,7 +2976,7 @@ Expected: `exit: 0` and `5`: after each of the five jumps the wolf is within 4 b
 every one of its 80 samples on the ground (`1b`) at the street's floor (y 6.0 to 6.25), none under the road, and the
 last scene `world: nothing`.
 
-- [ ] **Step 6: In Minecraft: the user's shield back in their off hand, and survival back**
+- [x] **Step 6: In Minecraft: the user's shield back in their off hand, and survival back**
 
 The reverse of Task 8's move, guarded the same way: the shield copied into the off hand only if it's empty, slot 15
 emptied only once the off hand holds it. The user's game mode is survival (their saved player data before step 0, and
@@ -3016,16 +3016,16 @@ Expected: `exit: 0`, `Replaced 1 slot(s) on ItzBloxy` (26.3 names no item for a 
 ItzBloxy with [Air]`, `Set own game mode to Survival Mode`, `Test passed. Count: 1` (the shield in the off hand) and
 `Test failed` (slot 15 empty).
 
-- [ ] **Step 7: Wait for Minecraft's autosave, then ask the user to stop Minecraft**
+- [x] **Step 7: Wait for Minecraft's autosave, then ask the user to stop Minecraft**
 
 As in step 1. Run F, in Part 2, needs the game; Minecraft starts again then.
 
-- [ ] **Step 8: Record the results in `docs/spikes/2026-10-08-minecraft-paths-results.md`**
+- [x] **Step 8: Record the results in `docs/spikes/2026-10-08-minecraft-paths-results.md`**
 
 Step 0 with 1.7.1 beside the earlier runs, the teleports, and the restore: each check's outcome and numbers, the
 minute lines, and what it means for Part 2.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add docs/spikes/2026-10-08-minecraft-paths-results.md docs/superpowers/plans/2026-10-08-minecraft-paths.md \
