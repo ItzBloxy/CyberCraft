@@ -612,7 +612,7 @@ Part 1 is the mod (CyberCraft Tweaks 1.7.0) and step 0; its plan is
 ## Changes while executing Part 1
 
 Step 0's first run with 1.7.0 and four diagnostic scripts after it (the results doc, "Step 0 with CyberCraft Tweaks
-1.7.0: the first run") found three things; Tasks 10 to 13 of the plan fix them in CyberCraft Tweaks 1.7.1 and run
+1.7.0: the first run") found three things; Tasks 10 to 14 of the plan fix them in CyberCraft Tweaks 1.7.1 and run
 step 0 again.
 - **Thin cells are fences** (section 1), the user's choice (2026-10-08). The road's barrier, a skin 1/8 block thick and
   about 1.25 m tall, counted as a full block with a floor on top, and its last half block of skin as a floor cell, so

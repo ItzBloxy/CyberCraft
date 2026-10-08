@@ -7,7 +7,7 @@
 **Goal:** Part 1 of spike 9: CyberCraft Tweaks 1.7.0, with which Minecraft's mobs find their way on Night City's
 ground (wander, go to targets, keep up with their owner as pets, fly around its walls, and don't see through them),
 then step 0 of the spec: the same `mclink` script on spike 1's dumped ground twice, first with 1.6.0 as the control,
-then with 1.7.0. Tasks 10 to 13, added after step 0's first run with 1.7.0, make CyberCraft Tweaks 1.7.1 (thin city
+then with 1.7.0. Tasks 10 to 14, added after step 0's first run with 1.7.0, make CyberCraft Tweaks 1.7.1 (thin city
 cells are fences; a pet's landing resets its fall distance) and run step 0 again with it, with a pet's teleports.
 
 **Architecture:** all of it is on Minecraft's side, in CyberCraft Tweaks (`minecraft/cybercraft-tweaks`):
@@ -64,7 +64,7 @@ results, as earlier spikes' second parts were.
   - Step 0's script parses in `mclink`, and its spots come from the spec's deep review's simulation of spike 1's
     dump: BlockRender's own voxelizer, and the walk rules, sight rays against the dump's triangles ("Found while
     planning Part 1").
-  - Tasks 10 to 12, added while executing, were verified the same way: replayed from this plan's text in a fresh
+  - Tasks 10 to 13, added while executing, were verified the same way: replayed from this plan's text in a fresh
     clone, with 56 unit checks and 12 mixin checks passing, zero warnings, both scripts parsing, and the trees
     identical to the scratch clone's. 18 mutations of `CellRule` (the fence rule's 8, and 10 of Part 1's rules
     again) each failed the check that guards it.
@@ -2002,7 +2002,7 @@ out of reach, and nothing of the street and pavement; 1,597 of the 20,162 cells 
   `minecraft/cybercraft-tweaks/src/main/java/dev/cybercraft/tweaks/paths/CityCells.java`,
   `minecraft/cybercraft-tweaks/src/main/java/dev/cybercraft/tweaks/paths/PathStats.java`
 
-- [ ] **Step 1: Edit `minecraft/cybercraft-tweaks/src/test/java/dev/cybercraft/tweaks/paths/CellRuleTest.java` for fences**
+- [x] **Step 1: Edit `minecraft/cybercraft-tweaks/src/test/java/dev/cybercraft/tweaks/paths/CellRuleTest.java` for fences**
 
 ```java
         check(CellRule.kind(CellRule.classify(edges)) == CellRule.NONE, "walls along the edges leave the middle empty");
@@ -2110,14 +2110,14 @@ out of reach, and nothing of the street and pavement; 1,597 of the 20,162 cells 
         check(!CellRule.stable(fence, -1), "a fence isn't a stroll target");
 ```
 
-- [ ] **Step 2: Run CyberCraft Tweaks' unit tests; they must fail, `classify` taking no cell below yet**
+- [x] **Step 2: Run CyberCraft Tweaks' unit tests; they must fail, `classify` taking no cell below yet**
 
 ```bash
 cd /d/Cyberpunk-Minecraft/minecraft/cybercraft-tweaks && bash test.sh 2>&1 | grep -m 2 "error"; echo "exit: ${PIPESTATUS[0]}"
 ```
 Expected: `method classify in class CellRule cannot be applied to given types` and `exit: 1`.
 
-- [ ] **Step 3: Edit `minecraft/cybercraft-tweaks/src/main/java/dev/cybercraft/tweaks/paths/CellRule.java` for fences**
+- [x] **Step 3: Edit `minecraft/cybercraft-tweaks/src/main/java/dev/cybercraft/tweaks/paths/CellRule.java` for fences**
 
 ```java
  * nothing solid under them; a top in the upper half is {@link #BLOCKED}, a full block the cell above stands on.
@@ -2202,14 +2202,14 @@ Expected: `method classify in class CellRule cannot be applied to given types` a
     /** Whether a mob may stroll to cell {@code here}: a floor itself, or just above a blocked cell, not a thin one. */
 ```
 
-- [ ] **Step 4: Run CyberCraft Tweaks' unit tests; they must pass**
+- [x] **Step 4: Run CyberCraft Tweaks' unit tests; they must pass**
 
 ```bash
 cd /d/Cyberpunk-Minecraft/minecraft/cybercraft-tweaks && bash test.sh 2>&1 | tail -3; echo "exit: ${PIPESTATUS[0]}"
 ```
 Expected: `56 check(s), 0 failure(s)` and `exit: 0`, with no line starting FAIL.
 
-- [ ] **Step 5: Edit `minecraft/cybercraft-tweaks/src/main/java/dev/cybercraft/tweaks/paths/CityCells.java` to read the cell below, and fences**
+- [x] **Step 5: Edit `minecraft/cybercraft-tweaks/src/main/java/dev/cybercraft/tweaks/paths/CityCells.java` to read the cell below, and fences**
 
 ```java
  * <p>A cell's class depends on its shape alone, so it's kept per shape object, weakly: SkyCraft builds new shapes
@@ -2282,7 +2282,7 @@ Expected: `56 check(s), 0 failure(s)` and `exit: 0`, with no line starting FAIL.
         boolean blocked = cell >= 0 && (CellRule.kind(cell) == CellRule.BLOCKED || CellRule.kind(cell) == CellRule.THIN);
 ```
 
-- [ ] **Step 6: Edit `minecraft/cybercraft-tweaks/src/main/java/dev/cybercraft/tweaks/paths/PathStats.java` to count shapes read**
+- [x] **Step 6: Edit `minecraft/cybercraft-tweaks/src/main/java/dev/cybercraft/tweaks/paths/PathStats.java` to count shapes read**
 
 ```java
  * answers, the shapes classified, the sight and shortcut casts with their hits and time, and the pets landed on the
@@ -2329,7 +2329,7 @@ Expected: `56 check(s), 0 failure(s)` and `exit: 0`, with no line starting FAIL.
             answers, shapes, sight, sightHits, shortcuts, shortcutHits, String.format("%.1f", nanos / 1e6), pets);
 ```
 
-- [ ] **Step 7: Build CyberCraft Tweaks, and check the mixins**
+- [x] **Step 7: Build CyberCraft Tweaks, and check the mixins**
 
 ```bash
 cd /d/Cyberpunk-Minecraft/minecraft/cybercraft-tweaks && out=$(bash build.sh 2>&1); echo "$out" | tail -1; \
@@ -2337,7 +2337,7 @@ cd /d/Cyberpunk-Minecraft/minecraft/cybercraft-tweaks && out=$(bash build.sh 2>&
 ```
 Expected: `built build/cybercraft-tweaks-1.7.0.jar against 26.3-`, `warnings: 0` and `12 mixin check(s), 0 problem(s)`.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add minecraft/cybercraft-tweaks/src \
@@ -2356,7 +2356,7 @@ does.
 **Files:**
 - Modify: `minecraft/cybercraft-tweaks/src/main/java/dev/cybercraft/tweaks/mixin/CityPetTeleport.java`
 
-- [ ] **Step 1: Edit `minecraft/cybercraft-tweaks/src/main/java/dev/cybercraft/tweaks/mixin/CityPetTeleport.java` to reset the fall distance**
+- [x] **Step 1: Edit `minecraft/cybercraft-tweaks/src/main/java/dev/cybercraft/tweaks/mixin/CityPetTeleport.java` to reset the fall distance**
 
 ```java
  * check and the landing go to that floor's height; anywhere else vanilla's check and landing stand.
@@ -2374,7 +2374,7 @@ does.
         pet.resetFallDistance();
 ```
 
-- [ ] **Step 2: Build CyberCraft Tweaks, and check the mixins**
+- [x] **Step 2: Build CyberCraft Tweaks, and check the mixins**
 
 ```bash
 cd /d/Cyberpunk-Minecraft/minecraft/cybercraft-tweaks && out=$(bash build.sh 2>&1); echo "$out" | tail -1; \
@@ -2382,7 +2382,7 @@ cd /d/Cyberpunk-Minecraft/minecraft/cybercraft-tweaks && out=$(bash build.sh 2>&
 ```
 Expected: `built build/cybercraft-tweaks-1.7.0.jar against 26.3-`, `warnings: 0` and `12 mixin check(s), 0 problem(s)`.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add minecraft/cybercraft-tweaks/src \
@@ -2408,7 +2408,7 @@ cd /d/Cyberpunk-Minecraft && git add minecraft/cybercraft-tweaks/src \
   `spikes/block-render/tools/mclink/paths.txt`
 - Create: `spikes/block-render/tools/mclink/teleports.txt`
 
-- [ ] **Step 1: Edit `minecraft/cybercraft-tweaks/src/main/resources/fabric.mod.json` for 1.7.1**
+- [x] **Step 1: Edit `minecraft/cybercraft-tweaks/src/main/resources/fabric.mod.json` for 1.7.1**
 
 ```json
   "version": "1.7.0",
@@ -2417,7 +2417,7 @@ cd /d/Cyberpunk-Minecraft && git add minecraft/cybercraft-tweaks/src \
   "version": "1.7.1",
 ```
 
-- [ ] **Step 2: Edit `minecraft/cybercraft-tweaks/README.md` to say what 1.7.1 adds**
+- [x] **Step 2: Edit `minecraft/cybercraft-tweaks/README.md` to say what 1.7.1 adds**
 
 ```markdown
   above stands on.
@@ -2444,7 +2444,7 @@ face; without it, none of that happens but the skeleton's shooting, through the 
 along the same road five times: with the mod, it lands beside V on the street each time, on the ground.
 ```
 
-- [ ] **Step 3: Edit `tools/mclink/paths.txt` to drop summons onto their floors, watch the barrier, and save**
+- [x] **Step 3: Edit `tools/mclink/paths.txt` to drop summons onto their floors, watch the barrier, and save**
 
 ```text
 # husks. Everything summoned is tagged sp9, keeps no loot and drops nothing. Results come from the chat replies in
@@ -2511,7 +2511,7 @@ wait 3
 status
 ```
 
-- [ ] **Step 4: Write `tools/mclink/teleports.txt`**
+- [x] **Step 4: Write `tools/mclink/teleports.txt`**
 
 ```text
 # Spike 9's teleports: a pet following V as V jumps 22 blocks along the street, five times, each landing watched every
@@ -2797,7 +2797,7 @@ status
 quit
 ```
 
-- [ ] **Step 5: Build CyberCraft Tweaks, run its unit tests, and check the mixins**
+- [x] **Step 5: Build CyberCraft Tweaks, run its unit tests, and check the mixins**
 
 ```bash
 cd /d/Cyberpunk-Minecraft/minecraft/cybercraft-tweaks && out=$(bash build.sh 2>&1); echo "$out" | tail -1; \
@@ -2806,7 +2806,7 @@ cd /d/Cyberpunk-Minecraft/minecraft/cybercraft-tweaks && out=$(bash build.sh 2>&
 Expected: `built build/cybercraft-tweaks-1.7.1.jar against 26.3-`, `warnings: 0`, `56 check(s), 0 failure(s)` and
 `12 mixin check(s), 0 problem(s)`.
 
-- [ ] **Step 6: Check that mclink parses step 0's scripts**
+- [x] **Step 6: Check that mclink parses step 0's scripts**
 
 As in Task 7: each with a line `mclink` doesn't know at its end, so nothing runs, even with Minecraft open.
 ```bash
@@ -2817,7 +2817,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && mkdir -p build && for s in path
 Expected: `paths-parse.txt: line 161: unknown action: "parse-check-stop here"`, `teleports-parse.txt: line 282: unknown action: "parse-check-stop here"`
 and `exit: 2`.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add minecraft/cybercraft-tweaks/src minecraft/cybercraft-tweaks/README.md \
@@ -2828,45 +2828,95 @@ cd /d/Cyberpunk-Minecraft && git add minecraft/cybercraft-tweaks/src minecraft/c
 
 ---
 
-### Task 13: In Minecraft: CyberCraft Tweaks 1.7.1, step 0 and the teleports
+### Task 13: Step 0's scripts don't save
+
+Added while executing, at the next task's first step, which saved the world through the link first: singleplayer has
+no `/save-all` (26.3 registers it, with `/save-on`, `/save-off` and `/stop`, on a dedicated server only), and Minecraft
+answered `Unknown or incomplete command`. Nor did the pause menu save the linked game: opened by `mclink`'s `pause` and
+closed by Esc, it left no `Saving and pausing game...` in the log and `level.dat` untouched, though it did in earlier
+sessions' unlinked play. What saves the world is Minecraft's autosave, every 5 minutes, which writes `level.dat` and
+the player's file in `players/data/` (22:32:51 and 22:37:51 that evening): before Minecraft is stopped, one autosave
+must pass after the last script. So the two scripts lose their `/save-all flush`, and their headers say so.
+
+**Files:**
+- Modify: `spikes/block-render/tools/mclink/paths.txt`, `spikes/block-render/tools/mclink/teleports.txt`
+
+- [ ] **Step 1: Edit `tools/mclink/paths.txt` to leave the saving to Minecraft's autosave**
+
+```text
+# at the end, and its effects are cleared. Last, the world is saved, so stopping Minecraft can't lose any of this. Start
+# Minecraft first; this waits for its world. W (26) walks.
+```
+```text
+# at the end, and its effects are cleared. Singleplayer has no /save-all, and a linked game doesn't pause: Minecraft's
+# autosave, every 5 minutes, saves all this, so let one pass before stopping Minecraft. Start Minecraft first; this
+# waits for its world. W (26) walks.
+```
+```text
+type /save-all flush
+wait 3
+```
+```text
+```
+
+- [ ] **Step 2: Edit `tools/mclink/teleports.txt` to leave the saving to Minecraft's autosave**
+
+```text
+# under the road 4 s after such a jump. The wolf is tagged sp9 and killed at the end; nothing else is summoned; the
+# world is saved last. Start Minecraft first; this waits for its world.
+```
+```text
+# under the road 4 s after such a jump. The wolf is tagged sp9 and killed at the end; nothing else is summoned. Let
+# Minecraft's autosave (every 5 minutes) pass before stopping it. Start Minecraft first; this waits for its world.
+```
+```text
+type /save-all flush
+wait 3
+```
+```text
+```
+
+- [ ] **Step 3: Check that mclink parses step 0's scripts**
+
+```bash
+cd /d/Cyberpunk-Minecraft/spikes/block-render && mkdir -p build && for s in paths teleports; do \
+  { cat tools/mclink/$s.txt; echo "parse-check-stop here"; } > build/$s-parse.txt; \
+  ./build/RelWithDebInfo/mclink.exe build/$s-parse.txt; echo "exit: $?"; done
+```
+Expected: `paths-parse.txt: line 160: unknown action: "parse-check-stop here"`, `teleports-parse.txt: line 280: unknown action: "parse-check-stop here"`
+and `exit: 2`.
+
+- [ ] **Step 4: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render/tools/mclink/paths.txt spikes/block-render/tools/mclink/teleports.txt \
+  && git commit -q -m "minecraft-paths: step 0's scripts don't save: singleplayer has no /save-all" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 14: In Minecraft: CyberCraft Tweaks 1.7.1, step 0 and the teleports
 
 Minecraft is still running from Task 9's diagnostics, in its world, its window hidden. The user's player is in
-creative (from the stale save) with the shield in inventory slot 15 (Task 8): both go back at the end.
+creative (from the stale save) with the shield in inventory slot 15 (Task 8): both go back at the end. No command
+saves the world (Task 13): before the user stops Minecraft, which kills it unsaved, an autosave must pass after the
+last script. This waits for one, run in the background for its `sleep` loop, and prints the world files' times:
+```bash
+W="/c/Users/BLOXY/AppData/Roaming/ModrinthApp/profiles/CyberCraft/saves/SkyCraft"; \
+  M=/d/Cyberpunk-Minecraft/spikes/block-render/build/step0/saved-after; touch "$M"; \
+  until [ "$W/level.dat" -nt "$M" ] && [ -n "$(find "$W/players/data" -name "*.dat" -newer "$M")" ]; do sleep 2; done; \
+  date +%H:%M:%S; ls -la --time-style=+%H:%M:%S "$W/level.dat" "$W"/players/data/*.dat
+```
+Expected within 5 minutes: `level.dat` and the player's `.dat` both written after the mark.
 
 **Files:**
 - Modify: `docs/spikes/2026-10-08-minecraft-paths-results.md`
 
-- [ ] **Step 1: Save Minecraft's world, then ask the user to stop Minecraft**
+- [ ] **Step 1: Wait for Minecraft's autosave, then ask the user to stop Minecraft**
 
-Stopping from the Modrinth App kills Minecraft unsaved, so the world is saved first, through the link (`mclink` types
-it), with the city's ground under the player as step 0 places it. Write `spikes/block-render/build/step0/save.txt`
-(scratch, not committed), with the Write tool (the Bash tool collapses backslashes):
-```text
-# Minecraft's world saved through the link, before Minecraft is stopped: stopping it from the Modrinth App kills it
-# unsaved. Linked as step 0 is, on the same dumped ground, so the player stands where step 0 left it.
-status
-wait-world 60
-ground city
-at 1280.5 6.14 2007.5
-look 0 0
-dump E:\Cyberpunk2077\red4ext\plugins\PhysXProbe\dumps\2026-10-01_14-37-07\collision.obj
-link on
-wait-ground 30
-wait 2
-type /save-all flush
-wait 3
-status
-quit
-```
-Then:
-```bash
-L="/c/Users/BLOXY/AppData/Roaming/ModrinthApp/profiles/CyberCraft/logs/latest.log"; before=$(wc -l < "$L"); \
-  cd /d/Cyberpunk-Minecraft/spikes/block-render \
-  && ./build/RelWithDebInfo/mclink.exe build/step0/save.txt > build/step0/save.log 2>&1; echo "exit: $?"; \
-  tail -n +$((before + 1)) "$L" | grep -E "\[CHAT\]" | sed 's/.*\[CHAT\] //'
-```
-Expected: `exit: 0` and `Saved the game`. Then the user stops Minecraft from the Modrinth App (this is also Task 9's
-step 5), and:
+Task 9's diagnostics were the last scripts, each ending with `world: nothing`. Wait for an autosave as above, then
+the user stops Minecraft from the Modrinth App (this is also Task 9's step 5), and:
 ```bash
 tasklist | grep -i -c "javaw.exe"
 ```
@@ -2911,7 +2961,7 @@ failed`):
   of 1276.5 6.0 2000.5, on the street's floor, `OnGround` `1b`.
 - **Sight:** no arrow in the first scene, an arrow in the second.
 - **Cost:** the minute lines, with `shapes read`.
-- **The end:** `Saved the game`, the last scene `world: nothing`, no errors, `exit: 0`.
+- **The end:** the last scene `world: nothing`, no errors, `exit: 0`.
 
 - [ ] **Step 5: In Minecraft: run the teleports**
 
@@ -2923,18 +2973,19 @@ L="/c/Users/BLOXY/AppData/Roaming/ModrinthApp/profiles/CyberCraft/logs/latest.lo
   grep -c "Test passed" build/step0/teleports-minecraft.log
 ```
 Expected: `exit: 0` and `5`: after each of the five jumps the wolf is within 4 blocks of V. And, read from the log,
-every one of its 80 samples on the ground (`1b`) at the street's floor (y 6.0 to 6.25), none under the road, and
-`Saved the game` at the end.
+every one of its 80 samples on the ground (`1b`) at the street's floor (y 6.0 to 6.25), none under the road, and the
+last scene `world: nothing`.
 
-- [ ] **Step 6: In Minecraft: the user's shield back in their off hand, survival back, and the world saved**
+- [ ] **Step 6: In Minecraft: the user's shield back in their off hand, and survival back**
 
 The reverse of Task 8's move, guarded the same way: the shield copied into the off hand only if it's empty, slot 15
 emptied only once the off hand holds it. The user's game mode is survival (their saved player data before step 0, and
-what the control put back). Write `spikes/block-render/build/step0/restore.txt` with the Write tool:
+what the control put back). Write `spikes/block-render/build/step0/restore.txt` (scratch, not committed) with the
+Write tool (the Bash tool collapses backslashes):
 ```text
-# The user's shield back from inventory slot 15 into the off hand after step 0, their game mode back to survival, and
-# the world saved. Guarded: the copy only into an empty off hand, slot 15 emptied only once the off hand holds the
-# shield. Linked as step 0 is, on the same dumped ground.
+# The user's shield back from inventory slot 15 into the off hand after step 0, and their game mode back to survival.
+# Guarded: the copy only into an empty off hand, slot 15 emptied only once the off hand holds the shield. Linked as
+# step 0 is, on the same dumped ground. Minecraft's autosave saves it.
 status
 wait-world 60
 ground city
@@ -2950,8 +3001,7 @@ type /gamemode survival
 wait 1
 type /execute if items entity @p weapon.offhand minecraft:shield
 type /execute if items entity @p container.15 *
-type /save-all flush
-wait 3
+wait 2
 status
 quit
 ```
@@ -2963,12 +3013,12 @@ L="/c/Users/BLOXY/AppData/Roaming/ModrinthApp/profiles/CyberCraft/logs/latest.lo
   tail -n +$((before + 1)) "$L" | grep -E "\[CHAT\]" | sed 's/.*\[CHAT\] //'
 ```
 Expected: `exit: 0`, `Replaced 1 slot(s) on ItzBloxy` (26.3 names no item for a copy), `Replaced 1 slot(s) on
-ItzBloxy with [Air]`, `Set own game mode to Survival Mode`, `Test passed. Count: 1` (the shield in the off hand),
-`Test failed` (slot 15 empty) and `Saved the game`.
+ItzBloxy with [Air]`, `Set own game mode to Survival Mode`, `Test passed. Count: 1` (the shield in the off hand) and
+`Test failed` (slot 15 empty).
 
-- [ ] **Step 7: Ask the user to stop Minecraft**
+- [ ] **Step 7: Wait for Minecraft's autosave, then ask the user to stop Minecraft**
 
-Its world saved in step 6. Run F, in Part 2, needs the game; Minecraft starts again then.
+As in step 1. Run F, in Part 2, needs the game; Minecraft starts again then.
 
 - [ ] **Step 8: Record the results in `docs/spikes/2026-10-08-minecraft-paths-results.md`**
 
@@ -2985,11 +3035,11 @@ cd /d/Cyberpunk-Minecraft && git add docs/spikes/2026-10-08-minecraft-paths-resu
 
 ---
 
-### Task 14: Close Part 1, and plan Part 2
+### Task 15: Close Part 1, and plan Part 2
 
 - [ ] **Step 1: Record "How Part 1 went" at the end of this plan**
 
-What ran as written, what didn't and why, the fixes (Tasks 10 to 12 among them), and the tests' and checks' final
+What ran as written, what didn't and why, the fixes (Tasks 10 to 13 among them), and the tests' and checks' final
 counts.
 
 - [ ] **Step 2: Record the spec's "Changes while executing Part 1"**
