@@ -3,7 +3,8 @@
   "minVersion": "0.8",
   "package": "dev.cybercraft.tweaks.mixin",
   "compatibilityLevel": "JAVA_21",
-  "mixins": ["NoBlastBlocks", "NoDigging", "SetHealth"],
+  "mixins": ["NoBlastBlocks", "NoDigging", "SetHealth", "WalkNodeEvaluatorAccess", "CityWalkNodes", "CityPathCache",
+    "CityNavigation", "CitySurface", "CityGoalUtils"],
   "client": ["KeepDrawOrder", "MarkEmissive", "MarkBlended"],
   "injectors": { "defaultRequire": 1 }
 }
