@@ -108,11 +108,12 @@ type /execute as @e[tag=sp9husk] run data get entity @s Pos
 type /kill @e[tag=sp9]
 wait 3
 # 5. Sight: a skeleton on the rock slope below the road, with its bow and an unbreakable helmet (noon's sun), dropping
-# neither. From V on the road the barrier and the road's edge hide it: it shouldn't shoot. On the ledge behind the
-# barrier, 7.7 blocks from it and in view, V should draw its arrows, which the scenes' world records list.
+# neither, written short (Minecraft's default namespace and count) to fit a 256-character chat line. From V on the road
+# the barrier and the road's edge hide it: it shouldn't shoot. On the ledge behind the barrier, 7.7 blocks from it and
+# in view, V should draw its arrows, which the scenes' world records list.
 at 1280.5 6.14 2007.5
 wait 2
-type /summon minecraft:skeleton 1290.5 -1.25 2007.5 {Tags:["sp9","sp9skel"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty",equipment:{mainhand:{id:"minecraft:bow",count:1},head:{id:"minecraft:iron_helmet",count:1,components:{"minecraft:unbreakable":{}}}},drop_chances:{mainhand:0.0f,head:0.0f}}
+type /summon skeleton 1290.5 -1.25 2007.5 {Tags:["sp9","sp9skel"],PersistenceRequired:1b,DeathLootTable:"empty",equipment:{mainhand:{id:bow},head:{id:iron_helmet,components:{unbreakable:{}}}},drop_chances:{mainhand:0f,head:0f}}
 wait 10
 scene
 at 1286.5 5.5 2007.5
