@@ -107,7 +107,7 @@ BlockRender's C++ tests do.
   `minecraft/cybercraft-tweaks/test.sh`,
   `minecraft/cybercraft-tweaks/src/main/java/dev/cybercraft/tweaks/paths/CellRule.java`
 
-- [ ] **Step 1: Write `minecraft/cybercraft-tweaks/src/test/java/dev/cybercraft/tweaks/paths/CellRuleTest.java`**
+- [x] **Step 1: Write `minecraft/cybercraft-tweaks/src/test/java/dev/cybercraft/tweaks/paths/CellRuleTest.java`**
 
 ```java
 package dev.cybercraft.tweaks.paths;
@@ -256,7 +256,7 @@ public final class CellRuleTest {
 }
 ```
 
-- [ ] **Step 2: Write `minecraft/cybercraft-tweaks/test.sh`**
+- [x] **Step 2: Write `minecraft/cybercraft-tweaks/test.sh`**
 
 ```bash
 #!/usr/bin/env bash
@@ -271,14 +271,14 @@ javac --release 21 -Xlint:all -d build/test src/main/java/dev/cybercraft/tweaks/
 java -cp build/test dev.cybercraft.tweaks.paths.CellRuleTest
 ```
 
-- [ ] **Step 3: Run CyberCraft Tweaks' unit tests; they must fail, with no `CellRule` yet**
+- [x] **Step 3: Run CyberCraft Tweaks' unit tests; they must fail, with no `CellRule` yet**
 
 ```bash
 cd /d/Cyberpunk-Minecraft/minecraft/cybercraft-tweaks && bash test.sh 2>&1 | head -3; echo "exit: ${PIPESTATUS[0]}"
 ```
 Expected: `error: file not found:` naming `CellRule.java`, and `exit: 2`.
 
-- [ ] **Step 4: Write `minecraft/cybercraft-tweaks/src/main/java/dev/cybercraft/tweaks/paths/CellRule.java`**
+- [x] **Step 4: Write `minecraft/cybercraft-tweaks/src/main/java/dev/cybercraft/tweaks/paths/CellRule.java`**
 
 ```java
 package dev.cybercraft.tweaks.paths;
@@ -409,14 +409,14 @@ public final class CellRule {
 }
 ```
 
-- [ ] **Step 5: Run CyberCraft Tweaks' unit tests; they must pass**
+- [x] **Step 5: Run CyberCraft Tweaks' unit tests; they must pass**
 
 ```bash
 cd /d/Cyberpunk-Minecraft/minecraft/cybercraft-tweaks && bash test.sh 2>&1 | tail -3; echo "exit: ${PIPESTATUS[0]}"
 ```
 Expected: `43 check(s), 0 failure(s)` and `exit: 0`, with no line starting FAIL.
 
-- [ ] **Step 6: Build CyberCraft Tweaks**
+- [x] **Step 6: Build CyberCraft Tweaks**
 
 ```bash
 cd /d/Cyberpunk-Minecraft/minecraft/cybercraft-tweaks && out=$(bash build.sh 2>&1); echo "$out" | tail -1; \
@@ -424,7 +424,7 @@ cd /d/Cyberpunk-Minecraft/minecraft/cybercraft-tweaks && out=$(bash build.sh 2>&
 ```
 Expected: `built build/cybercraft-tweaks-1.6.0.jar against 26.3-` and `warnings: 0`.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add minecraft/cybercraft-tweaks/src minecraft/cybercraft-tweaks/test.sh \
@@ -453,7 +453,7 @@ cd /d/Cyberpunk-Minecraft && git add minecraft/cybercraft-tweaks/src minecraft/c
   `minecraft/cybercraft-tweaks/src/main/java/dev/cybercraft/tweaks/paths/PathStats.java`
 - Modify: `minecraft/cybercraft-tweaks/src/main/java/dev/cybercraft/tweaks/CyberCraftTweaks.java`
 
-- [ ] **Step 1: Write `minecraft/cybercraft-tweaks/src/main/java/dev/cybercraft/tweaks/paths/CityCells.java`**
+- [x] **Step 1: Write `minecraft/cybercraft-tweaks/src/main/java/dev/cybercraft/tweaks/paths/CityCells.java`**
 
 ```java
 package dev.cybercraft.tweaks.paths;
@@ -594,7 +594,7 @@ public final class CityCells {
 }
 ```
 
-- [ ] **Step 2: Write `minecraft/cybercraft-tweaks/src/main/java/dev/cybercraft/tweaks/paths/CityRays.java`**
+- [x] **Step 2: Write `minecraft/cybercraft-tweaks/src/main/java/dev/cybercraft/tweaks/paths/CityRays.java`**
 
 ```java
 package dev.cybercraft.tweaks.paths;
@@ -638,7 +638,7 @@ public final class CityRays {
 }
 ```
 
-- [ ] **Step 3: Write `minecraft/cybercraft-tweaks/src/main/java/dev/cybercraft/tweaks/paths/PathStats.java`**
+- [x] **Step 3: Write `minecraft/cybercraft-tweaks/src/main/java/dev/cybercraft/tweaks/paths/PathStats.java`**
 
 ```java
 package dev.cybercraft.tweaks.paths;
@@ -714,7 +714,7 @@ public final class PathStats {
 }
 ```
 
-- [ ] **Step 4: Edit `minecraft/cybercraft-tweaks/src/main/java/dev/cybercraft/tweaks/CyberCraftTweaks.java` to write the minute line**
+- [x] **Step 4: Edit `minecraft/cybercraft-tweaks/src/main/java/dev/cybercraft/tweaks/CyberCraftTweaks.java` to write the minute line**
 
 ```java
 import dev.skycraft.world.SkyDig;
@@ -754,7 +754,7 @@ import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 }
 ```
 
-- [ ] **Step 5: Build CyberCraft Tweaks**
+- [x] **Step 5: Build CyberCraft Tweaks**
 
 ```bash
 cd /d/Cyberpunk-Minecraft/minecraft/cybercraft-tweaks && out=$(bash build.sh 2>&1); echo "$out" | tail -1; \
@@ -764,7 +764,7 @@ cd /d/Cyberpunk-Minecraft/minecraft/cybercraft-tweaks && out=$(bash build.sh 2>&
 Expected: `built build/cybercraft-tweaks-1.6.0.jar against 26.3-`, `warnings: 0`, and
 `dev/cybercraft/tweaks/paths/CellRule.class dev/cybercraft/tweaks/paths/CityCells.class dev/cybercraft/tweaks/paths/CityRays.class dev/cybercraft/tweaks/paths/PathStats.class`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add minecraft/cybercraft-tweaks/src \
@@ -788,7 +788,7 @@ the SkyCraft ones, by name, aren't Minecraft's. With none yet, it counts none.
 **Files:**
 - Create: `minecraft/cybercraft-tweaks/tools/MixinCheck.java`, `minecraft/cybercraft-tweaks/mixins.sh`
 
-- [ ] **Step 1: Write `minecraft/cybercraft-tweaks/tools/MixinCheck.java`**
+- [x] **Step 1: Write `minecraft/cybercraft-tweaks/tools/MixinCheck.java`**
 
 ```java
 import java.io.InputStream;
@@ -1053,7 +1053,7 @@ public final class MixinCheck {
 }
 ```
 
-- [ ] **Step 2: Write `minecraft/cybercraft-tweaks/mixins.sh`**
+- [x] **Step 2: Write `minecraft/cybercraft-tweaks/mixins.sh`**
 
 ```bash
 #!/usr/bin/env bash
@@ -1080,7 +1080,7 @@ done
 java -cp "$asm$(cygpath -w build/mixincheck)" MixinCheck "$(cygpath -w "$minecraft")" "${classes[@]}"
 ```
 
-- [ ] **Step 3: Build CyberCraft Tweaks, and check the mixins**
+- [x] **Step 3: Build CyberCraft Tweaks, and check the mixins**
 
 ```bash
 cd /d/Cyberpunk-Minecraft/minecraft/cybercraft-tweaks && out=$(bash build.sh 2>&1); echo "$out" | tail -1; \
@@ -1088,7 +1088,7 @@ cd /d/Cyberpunk-Minecraft/minecraft/cybercraft-tweaks && out=$(bash build.sh 2>&
 ```
 Expected: `built build/cybercraft-tweaks-1.6.0.jar against 26.3-`, `warnings: 0`, and `0 mixin check(s), 0 problem(s)`.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add minecraft/cybercraft-tweaks/tools minecraft/cybercraft-tweaks/mixins.sh \
@@ -1125,7 +1125,7 @@ false)`: 26.3 is unobfuscated, with no refmap), and asks `CityCells` only where 
   `minecraft/cybercraft-tweaks/src/main/java/dev/cybercraft/tweaks/mixin/CityGoalUtils.java`
 - Modify: `minecraft/cybercraft-tweaks/src/main/resources/cybercraft_tweaks.mixins.json`
 
-- [ ] **Step 1: Write `minecraft/cybercraft-tweaks/src/main/java/dev/cybercraft/tweaks/mixin/WalkNodeEvaluatorAccess.java`**
+- [x] **Step 1: Write `minecraft/cybercraft-tweaks/src/main/java/dev/cybercraft/tweaks/mixin/WalkNodeEvaluatorAccess.java`**
 
 ```java
 package dev.cybercraft.tweaks.mixin;
@@ -1148,7 +1148,7 @@ public interface WalkNodeEvaluatorAccess {
 }
 ```
 
-- [ ] **Step 2: Write `minecraft/cybercraft-tweaks/src/main/java/dev/cybercraft/tweaks/mixin/CityWalkNodes.java`**
+- [x] **Step 2: Write `minecraft/cybercraft-tweaks/src/main/java/dev/cybercraft/tweaks/mixin/CityWalkNodes.java`**
 
 ```java
 package dev.cybercraft.tweaks.mixin;
@@ -1211,7 +1211,7 @@ public abstract class CityWalkNodes {
 }
 ```
 
-- [ ] **Step 3: Write `minecraft/cybercraft-tweaks/src/main/java/dev/cybercraft/tweaks/mixin/CityPathCache.java`**
+- [x] **Step 3: Write `minecraft/cybercraft-tweaks/src/main/java/dev/cybercraft/tweaks/mixin/CityPathCache.java`**
 
 ```java
 package dev.cybercraft.tweaks.mixin;
@@ -1244,7 +1244,7 @@ public abstract class CityPathCache {
 }
 ```
 
-- [ ] **Step 4: Write `minecraft/cybercraft-tweaks/src/main/java/dev/cybercraft/tweaks/mixin/CityNavigation.java`**
+- [x] **Step 4: Write `minecraft/cybercraft-tweaks/src/main/java/dev/cybercraft/tweaks/mixin/CityNavigation.java`**
 
 ```java
 package dev.cybercraft.tweaks.mixin;
@@ -1298,7 +1298,7 @@ public abstract class CityNavigation {
 }
 ```
 
-- [ ] **Step 5: Write `minecraft/cybercraft-tweaks/src/main/java/dev/cybercraft/tweaks/mixin/CitySurface.java`**
+- [x] **Step 5: Write `minecraft/cybercraft-tweaks/src/main/java/dev/cybercraft/tweaks/mixin/CitySurface.java`**
 
 ```java
 package dev.cybercraft.tweaks.mixin;
@@ -1335,7 +1335,7 @@ public abstract class CitySurface {
 }
 ```
 
-- [ ] **Step 6: Write `minecraft/cybercraft-tweaks/src/main/java/dev/cybercraft/tweaks/mixin/CityGoalUtils.java`**
+- [x] **Step 6: Write `minecraft/cybercraft-tweaks/src/main/java/dev/cybercraft/tweaks/mixin/CityGoalUtils.java`**
 
 ```java
 package dev.cybercraft.tweaks.mixin;
@@ -1366,7 +1366,7 @@ public abstract class CityGoalUtils {
 }
 ```
 
-- [ ] **Step 7: Edit `minecraft/cybercraft-tweaks/src/main/resources/cybercraft_tweaks.mixins.json` to list them, for both sides**
+- [x] **Step 7: Edit `minecraft/cybercraft-tweaks/src/main/resources/cybercraft_tweaks.mixins.json` to list them, for both sides**
 
 ```json
   "mixins": ["NoBlastBlocks", "NoDigging", "SetHealth"],
@@ -1376,7 +1376,7 @@ public abstract class CityGoalUtils {
     "CityNavigation", "CitySurface", "CityGoalUtils"],
 ```
 
-- [ ] **Step 8: Build CyberCraft Tweaks, and check the mixins**
+- [x] **Step 8: Build CyberCraft Tweaks, and check the mixins**
 
 ```bash
 cd /d/Cyberpunk-Minecraft/minecraft/cybercraft-tweaks && out=$(bash build.sh 2>&1); echo "$out" | tail -1; \
@@ -1385,7 +1385,7 @@ cd /d/Cyberpunk-Minecraft/minecraft/cybercraft-tweaks && out=$(bash build.sh 2>&
 Expected: `built build/cybercraft-tweaks-1.6.0.jar against 26.3-`, `warnings: 0`, and `10 mixin check(s), 0 problem(s)`,
 with no PROBLEM line.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add minecraft/cybercraft-tweaks/src \
@@ -1409,7 +1409,7 @@ The spec's section 3:
   `minecraft/cybercraft-tweaks/src/main/java/dev/cybercraft/tweaks/mixin/CitySight.java`
 - Modify: `minecraft/cybercraft-tweaks/src/main/resources/cybercraft_tweaks.mixins.json`
 
-- [ ] **Step 1: Write `minecraft/cybercraft-tweaks/src/main/java/dev/cybercraft/tweaks/mixin/CityPetTeleport.java`**
+- [x] **Step 1: Write `minecraft/cybercraft-tweaks/src/main/java/dev/cybercraft/tweaks/mixin/CityPetTeleport.java`**
 
 ```java
 package dev.cybercraft.tweaks.mixin;
@@ -1457,7 +1457,7 @@ public abstract class CityPetTeleport {
 }
 ```
 
-- [ ] **Step 2: Write `minecraft/cybercraft-tweaks/src/main/java/dev/cybercraft/tweaks/mixin/CitySight.java`**
+- [x] **Step 2: Write `minecraft/cybercraft-tweaks/src/main/java/dev/cybercraft/tweaks/mixin/CitySight.java`**
 
 ```java
 package dev.cybercraft.tweaks.mixin;
@@ -1498,7 +1498,7 @@ public abstract class CitySight {
 }
 ```
 
-- [ ] **Step 3: Edit `minecraft/cybercraft-tweaks/src/main/resources/cybercraft_tweaks.mixins.json` to list them**
+- [x] **Step 3: Edit `minecraft/cybercraft-tweaks/src/main/resources/cybercraft_tweaks.mixins.json` to list them**
 
 ```json
     "CityNavigation", "CitySurface", "CityGoalUtils"],
@@ -1507,7 +1507,7 @@ public abstract class CitySight {
     "CityNavigation", "CitySurface", "CityGoalUtils", "CityPetTeleport", "CitySight"],
 ```
 
-- [ ] **Step 4: Build CyberCraft Tweaks, and check the mixins**
+- [x] **Step 4: Build CyberCraft Tweaks, and check the mixins**
 
 ```bash
 cd /d/Cyberpunk-Minecraft/minecraft/cybercraft-tweaks && out=$(bash build.sh 2>&1); echo "$out" | tail -1; \
@@ -1516,7 +1516,7 @@ cd /d/Cyberpunk-Minecraft/minecraft/cybercraft-tweaks && out=$(bash build.sh 2>&
 Expected: `built build/cybercraft-tweaks-1.6.0.jar against 26.3-`, `warnings: 0`, and `12 mixin check(s), 0 problem(s)`,
 with no PROBLEM line.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add minecraft/cybercraft-tweaks/src \
@@ -1534,7 +1534,7 @@ to run `test.sh`, `mixins.sh` and step 0's script.
 **Files:**
 - Modify: `minecraft/cybercraft-tweaks/src/main/resources/fabric.mod.json`, `minecraft/cybercraft-tweaks/README.md`
 
-- [ ] **Step 1: Edit `minecraft/cybercraft-tweaks/src/main/resources/fabric.mod.json` for 1.7.0**
+- [x] **Step 1: Edit `minecraft/cybercraft-tweaks/src/main/resources/fabric.mod.json` for 1.7.0**
 
 ```json
   "version": "1.6.0",
@@ -1547,7 +1547,7 @@ to run `test.sh`, `mixins.sh` and step 0's script.
   "description": "SkyCraft adjusted for Cyberpunk 2077's Night City: nothing digs into the game's ground, so blasts leave no blocks floating above it; V's health share carries into Minecraft's player as build mode starts; and what SkyCraft sends of Minecraft's entities keeps their layers in Minecraft's draw order, with the layers Minecraft draws emissive marked to glow, and those it blends marked blended; and Minecraft's mobs find their way on the city's ground, its walls blocking their sight.",
 ```
 
-- [ ] **Step 2: Edit `minecraft/cybercraft-tweaks/README.md` to say what it does, and how to test it**
+- [x] **Step 2: Edit `minecraft/cybercraft-tweaks/README.md` to say what it does, and how to test it**
 
 ```markdown
 It targets SkyCraft 0.1.2's classes by name, so `fabric.mod.json` asks for exactly that version: Fabric won't start with
@@ -1602,7 +1602,7 @@ a skeleton below the road's edge doesn't shoot until it sees the player, and a b
 face; without it, none of that happens but the skeleton's shooting, through the rock.
 ```
 
-- [ ] **Step 3: Build CyberCraft Tweaks, run its unit tests, and check the mixins**
+- [x] **Step 3: Build CyberCraft Tweaks, run its unit tests, and check the mixins**
 
 ```bash
 cd /d/Cyberpunk-Minecraft/minecraft/cybercraft-tweaks && out=$(bash build.sh 2>&1); echo "$out" | tail -1; \
@@ -1611,7 +1611,7 @@ cd /d/Cyberpunk-Minecraft/minecraft/cybercraft-tweaks && out=$(bash build.sh 2>&
 Expected: `built build/cybercraft-tweaks-1.7.0.jar against 26.3-`, `warnings: 0`, `43 check(s), 0 failure(s)` and
 `12 mixin check(s), 0 problem(s)`.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add minecraft/cybercraft-tweaks/src minecraft/cybercraft-tweaks/README.md \
@@ -1631,7 +1631,7 @@ off hand only if it's empty, notes the game mode in a scoreboard and puts it bac
 **Files:**
 - Create: `spikes/block-render/tools/mclink/paths.txt`
 
-- [ ] **Step 1: Write `tools/mclink/paths.txt`**
+- [x] **Step 1: Write `tools/mclink/paths.txt`**
 
 ```text
 # Spike 9's step 0: Minecraft's mobs finding their way on Night City's ground, against SkyCraft's real mod, without the
@@ -1789,7 +1789,7 @@ status
 quit
 ```
 
-- [ ] **Step 2: Check that mclink parses step 0's script**
+- [x] **Step 2: Check that mclink parses step 0's script**
 
 A copy of the script with a line `mclink` doesn't know at its end: `mclink` reads the whole script before it opens the
 link, so it stops at that line, the last, having parsed every other, and nothing runs, even with Minecraft open.
@@ -1800,7 +1800,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && mkdir -p build \
 ```
 Expected: `line 154: unknown action: "parse-check-stop here"` and `exit: 2`.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render/tools/mclink/paths.txt \
@@ -1826,14 +1826,14 @@ without the game.
 **Files:**
 - Create: `docs/spikes/2026-10-08-minecraft-paths-results.md`
 
-- [ ] **Step 1: Check that the game isn't running**
+- [x] **Step 1: Check that the game isn't running**
 
 ```bash
 tasklist | grep -i -c "cyberpunk2077.exe"
 ```
 Expected: `0`. If it's `1`, ask the user to quit the game: it would hold the mapping.
 
-- [ ] **Step 2: Ask the user about Entity Model Features and Entity Texture Features**
+- [x] **Step 2: Ask the user about Entity Model Features and Entity Texture Features**
 
 The mods folder has them without `.disabled`, though spike 7 left them disabled. They change how entities are drawn,
 not where they walk: ask whether to leave them as they are. Then check that 1.6.0 is the CyberCraft Tweaks installed:
@@ -1842,7 +1842,7 @@ ls "/c/Users/BLOXY/AppData/Roaming/ModrinthApp/profiles/CyberCraft/mods" | grep 
 ```
 Expected: `cybercraft-tweaks-1.6.0.jar`, the earlier versions with `.jar.disabled`, and EMF and ETF as the user chose.
 
-- [ ] **Step 3: Ask the user to start Minecraft**
+- [x] **Step 3: Ask the user to start Minecraft**
 
 With their leave to summon test mobs on the dump's ground around x 1272 to 1296, z 2000 to 2022 in the `SkyCraft`
 world, all killed at the script's end, to switch the game mode to survival and back, and to put wheat, then a
@@ -1854,7 +1854,7 @@ grep -E "SkyCraft:" "/c/Users/BLOXY/AppData/Roaming/ModrinthApp/profiles/CyberCr
 ```
 Expected: `SkyCraft: can't open Skyrim's shared memory yet (Windows error 2: …)`: waiting for a game side.
 
-- [ ] **Step 4: In Minecraft: run step 0's script, the control**
+- [x] **Step 4: In Minecraft: run step 0's script, the control**
 
 ```bash
 L="/c/Users/BLOXY/AppData/Roaming/ModrinthApp/profiles/CyberCraft/logs/latest.log"; before=$(wc -l < "$L"); \
@@ -1878,13 +1878,13 @@ It takes about 4 minutes once Minecraft is in its world, and up to 4 more if it 
 - **The end:** the game mode set back as it was, the last scene with `world: nothing`, no `[CHAT]` line with an error,
   no `WARN` line from a command, and `exit: 0`.
 
-- [ ] **Step 5: Record the control's results in `docs/spikes/2026-10-08-minecraft-paths-results.md`**
+- [x] **Step 5: Record the control's results in `docs/spikes/2026-10-08-minecraft-paths-results.md`**
 
 From `build/step0/control.log` and `build/step0/control-minecraft.log`, as spike 7's results doc does: the versions
 (Minecraft 26.3, Fabric Loader, SkyCraft 0.1.2, CyberCraft Tweaks 1.6.0, the dump), and each check with its outcome and
 numbers: every mob's positions, the tests' replies, the arrows. The spike's answer goes at the top once run F is in.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 With the plan, its steps ticked up to this one: running Tasks 1 to 7 ticked theirs.
 ```bash
