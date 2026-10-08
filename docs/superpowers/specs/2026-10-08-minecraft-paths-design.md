@@ -1,7 +1,11 @@
 # Minecraft's mobs finding their way in Night City: design (spike 9)
 
 Date: 2026-10-08. Status: agreed with the user section by section in the brainstorm. "Found while writing", near the
-end, lists what writing it out added to what was agreed.
+end, lists what writing it out added to what was agreed. Then revised after a deep self-review at the user's request,
+which checked each claim against its source (Minecraft 26.3's bytecode, SkyCraft's source, BlockRender's voxelizer,
+the installed mods and the world's files) and simulated step 0's ground on spike 1's dumps with BlockRender's own
+voxelizer: "Changes from the deep review", at the end, lists what changed and what was checked. The sections above it
+include those changes.
 
 ## Purpose
 
@@ -53,6 +57,9 @@ The user asked for "Spike 9: Minecraft entity pathfinding on Cyberpunk terrain".
 - **The game's moving things:** cars, kinematic doors and NPCs aren't in the city's collision (the exporter keeps only
   static shapes), so mobs walk through them, as they already would. NPCs' stand-ins are entities, and mobs push them.
 - **Water:** Night City's water isn't in the collision. Swimmers are untouched.
+- **Amphibians and striders' strolls:** frogs, turtles and axolotls (`AmphibiousPathNavigation`,
+  `Turtle$TurtlePathNavigation`) and striders (`Strider$StriderPathNavigation`) have their own stable-spot checks, which
+  read Minecraft's blocks. They get the city's path types (a frog's long jumps among them) but not the stroll fix.
 - **Mobs with no pathfinding** (slimes, ghasts, phantoms, a blaze's flight) and **vexes** (no collision, through walls
   by design) stay as they are.
 - **A parrot on V's shoulder:** a tamed parrot riding Minecraft's player isn't drawn in the game ("Pets keep up with
@@ -77,20 +84,25 @@ From its source (session 818fd1fd's clone) and the CyberCraft instance:
   - Its fill info (`groundTop`, `supportsFromBelow`) describes the whole cell, not its middle, so the classifier reads
     the shape itself.
   - The "SkyCraft collision" thread fills it from the collision ring. A region builds its new shapes first, then puts or
-    removes each of its cells. Everything is cleared at a new epoch. Regions stay until then: the exporter forgets
-    regions beyond its area only on its own side.
+    removes each of its cells. Only a `COL_CLEAR` message (a new epoch) empties it; the exporter forgets regions beyond
+    its area only on its own side.
 - **`BlockCollisionsMixin`** adds `shapeAt`'s shape to every block-collision query (`BlockCollisions.computeNext`),
   except for entities on the smooth collider, which is Minecraft's player. So every other entity collides with the
   voxels.
 - **`SkyClip.cast(Vec3, Vec3)`** returns the nearest of the city's triangles the segment hits, or null. It gathers the
   triangles of every region the segment's box (grown by 0.01) touches, skips Skyrim's stair helpers, and uses a
   thread-local list. Arrows and the crosshair use it.
-- **Spawning is off** (`SPAWN_MOBS`, `SPAWN_MONSTERS` and the rest), and **nothing in SkyCraft touches pathfinding.**
+- **Spawning is off** (`SPAWN_MOBS`, `SPAWN_MONSTERS` and the rest), and **nothing in SkyCraft touches pathfinding,**
+  sight or pets.
 
-### The city's ground (spike 5's exporter)
+### The city's ground (spike 5's exporter, `link/Voxels.cpp`)
 
-- **Skins:** triangles voxelized at 1/8 block with SkyCraft's triangle-box test, so a street or a floor is a skin one
-  voxel thick, with nothing solid under it. A wall is a skin too.
+- **Skins:** each triangle fills the 1/8-block sub-voxels it passes through (Akenine-Möller's triangle-box test), so a
+  street, a floor or a wall is a skin a voxel or two thick, with nothing solid under or behind it.
+- **Floors on whole blocks fill both voxels they touch** (Night City's geometry is often on whole metres). Such a street
+  makes the cell below it blocked (its top layer) and leaves its own cell either empty or a thin floor.
+- **Surfaces 50 to 84° from flat** (`|n.y|` from 0.1 to 0.643) are coarsened to whole-block footprints between their
+  lowest and highest layers, so their risers exceed Minecraft's 0.6 step height.
 - **The area:** regions of 8 blocks, 5 out horizontally, 3 below and 2 above (88 m square, 48 m tall), centred on
   Minecraft's player. Static scene-query shapes only.
 - **Seen in spike 7's run A:** a pig at y 6.0 on the street, V's feet on the pavement at 6.14.
@@ -98,56 +110,80 @@ From its source (session 818fd1fd's clone) and the CyberCraft instance:
 ### Minecraft 26.3
 
 From its jar (`26.3-0.19.5.jar`, read with `javap`):
-- **`WalkNodeEvaluator.getPathTypeFromState(BlockGetter, BlockPos)`** (protected static): air is `OPEN`; a block that
-  isn't pathfindable on land is `BLOCKED`; it never answers `WALKABLE`. `PathfindingContext.getPathTypeFromState` calls
-  it directly, or through the server's `PathTypeCache.getOrCompute`: 4,096 slots, one per position's hash, whose
-  `invalidate(pos)` only `ServerLevel`'s block changes call.
+- **`WalkNodeEvaluator.getPathTypeFromState(BlockGetter, BlockPos)`** (protected static): air is `OPEN` before
+  anything else; a block that isn't pathfindable on land is `BLOCKED`; it never answers `WALKABLE`.
+  `PathfindingContext.getPathTypeFromState` calls it directly, or through the server's `PathTypeCache.getOrCompute`:
+  4,096 slots, one per position's hash, whose `invalidate(pos)` only `ServerLevel.sendBlockUpdated` calls.
 - **`WalkNodeEvaluator.getPathTypeStatic(PathfindingContext, MutableBlockPos)`:** a cell that isn't `OPEN` keeps its
   type. An `OPEN` cell above `OPEN`, `WATER`, `LAVA` or `WALKABLE` stays `OPEN`; above anything else (`BLOCKED` among
-  them) it's `WALKABLE`, and then its neighbours' dangers apply. The walk and fly evaluators use it, and so does a pet's
-  teleport, through `getPathTypeStatic(Mob, BlockPos)`.
+  them) it's `WALKABLE`, and then its neighbours' dangers apply. The walk evaluator uses it; so do, through
+  `getPathTypeStatic(Mob, BlockPos)`, a pet's teleport, `GoalUtils.hasMalus`, goats' rams and frogs' and goats' long
+  jumps. **`FlyNodeEvaluator.getPathType`** has its own copy of the rule, with the same outcome for `OPEN`, `WALKABLE`
+  and `BLOCKED`.
 - **`WalkNodeEvaluator.getFloorLevel(BlockGetter, BlockPos)`** (public static): the top of the collision shape of the
   cell below, or that cell's bottom (`y − 1`) if it has none. A node is refused if its floor is more than
-  `getMobJumpHeight()`, max(1.125, the mob's step height), above the last.
-- **`WalkNodeEvaluator.getStart()`:** a mob on the ground starts at floor(y + 0.5). One in the air searches down while
-  the cell is air or pathfindable, as far as the world's bottom, and starts above where it stops.
-- **`PathNavigation.isStableDestination(pos)`:** `getBlockState(pos.below()).isSolidRender()`.
-  **`FlyingPathNavigation`'s:** `getBlockState(pos).entityCanStandOn(…)`.
+  `getMobJumpHeight()`, max(1.125, the mob's step height), above the last. Only `WalkNodeEvaluator`,
+  `AmphibiousNodeEvaluator` and `PathNavigation` call it.
+- **`WalkNodeEvaluator.getStart()`:** a mob on the ground starts at floor(y + 0.5). One in the air searches down from
+  the cell above its feet while the cell below is air or pathfindable, as far as the world's bottom, and starts above
+  where it stops. `canStartAt` refuses an `OPEN` start, but `getStart` then tries the box's corners and falls back to the
+  start anyway, and A* drops from an open node to the ground below it.
+- **`PathNavigation.isStableDestination(pos)`:** `getBlockState(pos.below()).isSolidRender()`. Only
+  `GoalUtils.isNotStable` (from `LandRandomPos` and `DefaultRandomPos`) and goats' `PrepareRamNearestTarget` call it.
+  `FlyingPathNavigation`, a bee's own navigation (`Bee$1`), amphibians', turtles' and striders' override it.
 - **`GroundPathNavigation.createPath(BlockPos, int)`** goes through `findSurfacePosition(LevelChunk, BlockPos, int)`:
   - from an air cell, down while air; a block found means the cell above it;
   - nothing found means up while air, to the top of the world;
   - from a solid block, up while solid.
 
   `createPath(Entity, int)` passes the entity's block position.
-- **`GoalUtils.isSolid(PathfinderMob, BlockPos)`:** the state's `isSolid()`. `LandRandomPos` lifts a candidate out of
-  solid cells with it (`RandomPos.moveUpOutOfSolid`), and `HoverRandomPos` puts one above them (`moveUpToAboveSolid`).
+- **`GoalUtils.isSolid(PathfinderMob, BlockPos)`:** the state's `isSolid()`. `LandRandomPos` checks a candidate's
+  stability (`isNotStable`) **before** lifting it out of solid cells (`movePosUpOutOfSolid`), then refuses it if it has
+  a malus (`hasMalus`). `HoverRandomPos` puts a candidate above solid cells (`moveUpToAboveSolid`).
 - **Strolling:** `WaterAvoidingRandomStrollGoal` picks spots with `LandRandomPos.getPos(mob, 10, 7)`, and
-  `RandomStrollGoal` tries about once every 120 ticks.
+  `RandomStrollGoal` tries about once every 120 ticks. Villagers' brain strolls (`RandomStroll`) use `LandRandomPos`.
+  Flyers wander with `HoverRandomPos` and `AirAndWaterRandomPos` (`WaterAvoidingRandomFlyingGoal`, `BeeWanderGoal`,
+  `RandomStroll.fly`), which never ask for a stable spot.
 - **`PathNavigation.isClearForMovementBetween(Mob, Vec3, Vec3, boolean)`** (protected static): one `Level.clip`
   (`COLLIDER`) to the target at half the mob's height. It's behind `FlyingPathNavigation.canMoveDirectly`.
 - **`LivingEntity.hasLineOfSight(Entity)`** calls `hasLineOfSight(Entity, ClipContext.Block, ClipContext.Fluid,
-  double)`, which clips once, eye to eye, within 128 blocks.
+  double)`, which clips once, eye to eye, within 128 blocks. `Sensing.hasLineOfSight` calls it, and
+  `TargetingConditions.test` calls `Sensing` whenever it checks line of sight; so do the melee, bow, crossbow and
+  ranged attack goals, `SwellGoal`, `TargetGoal`'s keeping of a target, and `NearestItemSensor`.
 - **`MoveControl.tick`** jumps when the wanted y is more than the mob's step height above it and it's within
   max(1, its width) horizontally, or when its own block's collision rises above its feet.
+- **`VoxelShape.collideX`** stops a moving box only at voxels beyond its face in the direction of travel
+  (`findIndex(min + 1e-7)` and below, or `max − 1e-7` and above); voxels already inside the box are ignored.
 - **`TamableAnimal`:**
   - `shouldTryTeleportToOwner`: 12 blocks away (distance² ≥ 144);
   - `teleportToAroundBlockPos`: 10 tries, x and z within ±3 but not both within ±1, y within ±1;
   - `canTeleportTo(pos)`: `getPathTypeStatic` is `WALKABLE`, no leaves below unless it can fly to its owner, and
     `noCollision` for its box moved by (pos − its own block position), so its current fraction of a block carries over;
-  - `maybeTeleportTo` then `snapTo(x + 0.5, y, z + 0.5)`, at the cell's bottom.
+  - `maybeTeleportTo` then `snapTo(x + 0.5, y, z + 0.5)`, at the cell's bottom;
+  - `readAdditionalSaveData` reads `Owner` and makes the animal tame.
 
-  A wolf's `FollowOwnerGoal` starts at 10 blocks.
+  `FollowOwnerGoal` starts at 10 blocks for wolves (stopping at 2) and cats (stopping at 5), at 5 for parrots.
 - **`Zombie`** targets players with `NearestAttackableTargetGoal(…, Player.class, true)`, so only those it sees.
-  `Husk.isSunSensitive` is false.
+  `Husk.isSunSensitive` is false. Pillagers target players they see (and villagers unseen), and shoot with
+  `RangedCrossbowAttackGoal` only when they see their target.
 - **`VoxelShape.max(Axis.Y, a, b)`** is the column's top at z = a, x = b (`AxisCycle`: forward from Y is Z, backward
   X), and −∞ for an empty column.
 
-### The CyberCraft instance
+### The CyberCraft instance and its world
 
 - **Mods:** Fabric API 0.161.0, SkyCraft 0.1.2, CyberCraft Tweaks 1.6.0, Mouse Tweaks, e4mc, Entity Model Features,
-  Entity Texture Features, and a datapack. Nothing that changes pathfinding (no Lithium).
+  Entity Texture Features, and a datapack. Nothing that changes pathfinding (no Lithium); none mixes into sight, pets or
+  navigation.
+- **Fabric API's content registries** mix into two of the same methods, for blocks registered with a path type:
+  - `WalkNodeEvaluator.getPathTypeFromState`, at its `BlockState.getBlock()` calls, which come after air's `OPEN`;
+  - `PathfindingContext.getPathTypeFromState`, which answers a registered block before the cache.
+
+  Neither acts on air or on the city's cells, so the two compose.
 - **EMF and ETF** have no `.disabled` on their jars, though spike 7 left them disabled. Step 0 asks before anything is
   installed.
+- **The `SkyCraft` world's clock is fixed at noon** (`world_clocks.dat`: 6,000 ticks; `advance_time` off), with no rain
+  (`weather.dat`), and `spawn_mobs`, `spawn_monsters` and `advance_weather` off (`game_rules.dat`). At noon a villager
+  without a job site stays idle and strolls, bees are out of their hives, and zombies and skeletons burn.
 
 ### CyberCraft Tweaks today (1.6.0)
 
@@ -161,20 +197,26 @@ From its jar (`26.3-0.19.5.jar`, read with `javap`):
 
 ## 1. The city's cells
 
-**`CityCells`** classifies a block position where Minecraft has air (`isAir`) and SkyCraft has a shape
-(`SkyCollision.shapeAt`). It reads the top of each of the shape's 8 × 8 voxel columns, `max(Axis.Y, z, x)` at the
-column's centre, (i + 0.5) / 8, and goes by the cell's middle: the central 6 × 6 columns (0.125 to 0.875 on x and z),
-where a mob up to 0.75 wide stands at the cell's centre. The cell's top is the highest of those 36, and the cell is:
-- **none:** no column in the middle has anything, for example only a wall's face along the cell's edge. Pathfinding sees
-  air there, as now.
+**`CityCells`** classifies a block position where SkyCraft has a shape (`SkyCollision.shapeAt`). It reads the top of
+each of the shape's 8 × 8 voxel columns, `max(Axis.Y, z, x)` at the column's centre, (i + 0.5) / 8, and goes by the
+cell's middle: the central 6 × 6 columns (0.125 to 0.875 on x and z), where a mob up to 0.75 wide stands at the cell's
+centre. The cell's top is the highest of those 36, and the cell is:
+- **none:** no column in the middle has anything, for example only a wall's face along the cell's edge, or a sliver of
+  rock in a corner. Pathfinding sees air there, as now.
 - **floor:** the top is at most 0.5. The cell itself is walkable, its floor at y + top: a street's skin, a kerb, a
   stair's tread.
 - **blocked:** the top is above 0.5. The cell counts as a full block, and the cell above stands on it, its floor at
   y + top.
 
-Minecraft's own blocks always win: the city answers only where Minecraft's state is air. The answer depends on the
-shape alone, so it's cached per shape object, held weakly so that old shapes go with their regions. SkyCraft builds new
-shape objects whenever a region is sent again, and full cells share `Shapes.block()` (blocked, top 1).
+The answer depends on the shape alone, so it's cached per shape object, held weakly so that old shapes go with their
+regions. SkyCraft builds new shape objects whenever a region is sent again, and full cells share `Shapes.block()`
+(blocked, top 1).
+
+**Minecraft's blocks win.** The city answers only where Minecraft's own answer is open air:
+- for path types, where vanilla answers `OPEN`: air, or a block mobs pass through, such as a flower or a torch placed on
+  a street, which would otherwise hide the floor under it;
+- for everything else (floor heights, stable spots, solid spots, path targets, starts), in a cell whose Minecraft block
+  has no collision.
 
 **A cell's floor height** (`floorAt`), used by floor levels and pets' landings:
 - a floor cell: its y + top;
@@ -183,24 +225,31 @@ shape objects whenever a region is sent again, and full cells share `Shapes.bloc
 
 **Why floor cells.** Vanilla's rule is "air above a solid block", and the city's skins have nothing solid under them.
 Reporting a skin's own cell as walkable is what makes the rest of vanilla work: `getPathTypeStatic` makes the cell above
-a `WALKABLE` cell `OPEN`, so mobs step from floor to floor and jump onto blocked cells as onto blocks.
+a `WALKABLE` cell `OPEN`, so mobs step from floor to floor and jump onto blocked cells as onto blocks. Where a floor
+lies on a whole block, the voxelizer makes the cell below it blocked, and vanilla's own rule makes the cell above
+walkable: on spike 1's raised level, two thirds of the walkable places are of that kind ("Changes from the deep
+review").
 
 **Why the middle.** Night City's walls rarely lie on cell boundaries. If a wall anywhere in a cell blocked it, every
-street would lose a block on each side, and doorways of 1 to 2 m would often close.
+street would lose a block on each side, and doorways of 1 to 2 m would often close. And a cell holding only a sliver
+at its edge or corner would become a foothold no mob at the cell's centre has: on spike 1's raised level, such slivers
+let a whole-cell rule's mobs climb down the rock face beside the road in falls of up to 3 blocks, which the middle rule
+refuses.
 
 **A known look:** mobs may hop onto railings and low walls up to about a block high, as vanilla mobs do onto iron bars
-and glass panes, since a thin top can be stood on.
+and glass panes, since a thin top can be stood on. The raised level's barrier is one.
 
 The rules on the 64 column tops (the middle, the kinds, the top, the floor height) live in a class with no Minecraft
 types, `CellRule`, which `CityCells` calls and the unit tests check.
 
 ## 2. Walkers: wandering and going to targets
 
-Each mixin asks `CityCells` only where Minecraft has air:
+Each mixin asks `CityCells` only where Minecraft's own answer is open air (section 1):
 1. **Path types** (`WalkNodeEvaluator.getPathTypeFromState`): a floor cell answers `WALKABLE`, a blocked cell
-   `BLOCKED`. The walk and fly evaluators read through it, and so does a pet's teleport check.
-2. **Floor heights** (`WalkNodeEvaluator.getFloorLevel`): the cell's `floorAt`, where it has one. Without it a street's
-   skin gives y − 1, and the jump check would refuse steps up onto kerbs and blocked cells.
+   `BLOCKED`. The walk and fly evaluators read through it, and so do a pet's teleport check and `GoalUtils.hasMalus`.
+2. **Floor heights** (`WalkNodeEvaluator.getFloorLevel`): the cell's `floorAt`, where it has one. Without it any node on
+   the city gives y − 1, since Minecraft has air below it, and the jump check would refuse steps up onto kerbs and
+   blocked cells.
 3. **The shared path-type cache** (`PathTypeCache.getOrCompute`): a cell with a city shape skips the cache and is
    answered fresh. An entry made before its region arrived would stay as air otherwise: the cache is cleared only on
    Minecraft's block changes. Cells without a shape cache as now. A city answer is never cached, so when a shape goes,
@@ -211,11 +260,12 @@ Each mixin asks `CityCells` only where Minecraft has air:
    first floor cell (the target becomes it) or blocked cell (the cell above it). A target in a floor cell stays, as one
    in a carpet does, and a target in a blocked cell moves up out of it, as out of a solid block. Chasing, tempting and
    leads then aim at the ground, not the top of the world.
-6. **Solid spots for random positions** (`GoalUtils.isSolid`): a blocked cell is solid, so a candidate inside one is
-   lifted out of it.
+6. **Solid spots for random positions** (`GoalUtils.isSolid`): a blocked cell is solid, so a hovering flyer's spot goes
+   above it, and a walker's candidate inside thick geometry is lifted out of it.
 7. **Airborne starts** (`WalkNodeEvaluator.getStart`): a walker in the air searches down for its start, and that search
-   stops at a city cell: a floor cell is the start, and a blocked cell's start is the cell above. Today a mob that
-   repaths mid-jump starts at the world's bottom and loses its path.
+   stops at the first city cell, floor or blocked, and starts above it, as above a block. Above a floor cell that start
+   is open, which `getStart` falls back to and A* drops from (as for a mob standing on a floor whose top is exactly
+   0.5). Today a mob that repaths mid-jump starts at the world's bottom and loses its path.
 
 Nothing else changes: Minecraft's A*, goals, brains, and `MoveControl`'s jumps and step-ups. A mob on a floor cell aims
 at the next node's integer y. `MoveControl` jumps when that's more than its step height (0.6) above its feet, and when
@@ -223,23 +273,28 @@ it isn't, the real rise is at most that, and a step-up takes it.
 
 ### Wandering
 
-Strolls succeed less often on the city than on blocks. On blocks, a random candidate inside the ground is lifted to the
-surface, so about half of them land. Under a street there's nothing solid, so only candidates in the floor's own cell
-count: about 1 in 15 of them on flat ground (y within ±7), and so about half of a stroll's 10-candidate tries. Step 0
-measures strolls a minute. If wandering looks sluggish, snapping each candidate's column to the nearest floor is the
-fix, and isn't part of this design.
+Strolls succeed less often on the city than on blocks. `LandRandomPos` asks that a random candidate be stable where it
+falls, before lifting it out of anything solid. On flat blocks 8 of its 15 heights are stable (inside the ground, or
+just above it), so a stroll's 10 candidates nearly always find one. On the city only a floor cell, or a cell just above
+a blocked one, is stable, and the cells under a street's skin aren't. Simulated on spike 1's dumps, a stroll found a
+spot 72% of the time on the raised level and 66% on the ramp, so mobs stroll about a third less often. Step 0 measures
+strolls a minute; if wandering looks sluggish, snapping each candidate's column to the nearest floor is the fix, and
+isn't part of this design.
 
 ## 3. Pets, flyers and sight
 
 ### Pets keep up with V
 
-Wolves, cats and parrots follow by path at 10 blocks with nothing beyond section 2. Teleporting at 12 blocks needs one
-mixin on `TamableAnimal`:
+Wolves and cats follow by path at 10 blocks, parrots at 5, with nothing beyond section 2. Teleporting at 12 blocks
+needs one mixin on `TamableAnimal`:
 - **The room check** (`canTeleportTo`) puts the pet's box exactly at the cell's `floorAt`, not moved by whole blocks.
 - **The landing** (`maybeTeleportTo`) snaps it to the same height.
 
-A cell with no `floorAt` keeps vanilla's check and landing. With V on a flat street, the tries at V's own height land
-on the street's floor cells. If none of the 10 tries finds room, the pet tries again the next tick, as vanilla does.
+A cell with no `floorAt` keeps vanilla's check and landing. Vanilla's landing at a cell's bottom would put a pet inside
+a floor cell's skin, and Minecraft's collision ignores voxels already inside a box (`VoxelShape.collideX`), so the pet
+would fall through the street; a third of the walkable places on spike 1's raised level are floor cells. Simulated
+there, one tick's 10 tries found room for 97% of V's positions on the road (95% on the ramp); the pet tries again each
+tick, as vanilla does.
 
 A tamed parrot also rides its owner's shoulder once it's been off for 5 s (`LandOnOwnersShoulderGoal`, while the owner
 isn't flying, in water or spectating). There it's part of Minecraft's player, which the game doesn't draw, so it
@@ -250,9 +305,11 @@ That's left as it is ("Non-goals"), and the tests' flyer is a bee.
 ### Flyers
 
 Allays, bees and parrots:
-- **Walls:** their paths see the city's walls through section 2's path types.
-- **Landing spots** (`FlyingPathNavigation.isStableDestination`): a blocked city cell is one a flyer can stand on.
-- **Hovering** (`HoverRandomPos`, bees and allays): through section 2's `GoalUtils.isSolid`.
+- **Walls:** their paths see the city's walls through section 2's path types (`FlyNodeEvaluator`'s copy of the rule
+  reads the same answers).
+- **Wandering:** their spots come from `HoverRandomPos`, which goes above solid cells (section 2's `GoalUtils.isSolid`),
+  and `AirAndWaterRandomPos`, which refuses spots with a malus (the path types). Neither asks for a stable spot, so the
+  flyers' own `isStableDestination` (`FlyingPathNavigation`'s, a bee's) is left alone.
 - **Shortcuts** (`PathNavigation.isClearForMovementBetween`, behind flyers' `canMoveDirectly`): when vanilla's clip is
   clear, the same segment is cast against the city ("Casting"), and a hit means no shortcut. A flyer then follows its
   path's nodes around the wall.
@@ -261,14 +318,16 @@ Allays, bees and parrots:
 
 `LivingEntity.hasLineOfSight(Entity, ClipContext.Block, ClipContext.Fluid, double)`: when vanilla's clip says clear,
 the same eye-to-eye segment is cast against the city, and a hit means no sight. That covers what's built on it:
-targeting (`TargetingConditions`, `Sensing`), skeletons and pillagers shooting, creepers swelling, and brains'
-visible-entity sensors. Triangles, as arrows use, so a mob's sight matches what V sees.
+targeting (`TargetingConditions`, `Sensing`), keeping a target (`TargetGoal`), skeletons and pillagers shooting,
+creepers swelling, a mob looking at a player, and brains' visible-entity and item sensors. Triangles, as arrows use, so
+a mob's sight follows the city's collision, which is close to what V sees.
 
 ### Casting
 
 Both casts use `SkyClip.cast`, over the segment in pieces of at most 8 blocks, nearest first, stopping at the first
 hit. A region holds 1,000 to 2,500 triangles (spike 5's Task 46), and one box around a long ray would gather tens of
-thousands.
+thousands. If the minute line shows sight costing too much, a walk through the cells' voxels is the cheaper fallback,
+at the voxels' coarseness.
 
 ## 4. Cost and the log
 
@@ -277,7 +336,7 @@ Once a minute in which the mod answered anything from the city, it writes one li
 - **casts:** sight and shortcut casts, the hits among them, and the milliseconds they took;
 - **teleports:** pets landed on the city's floor.
 
-Step 0 and run F read the cost from it.
+The counters are safe to bump from any thread. Step 0 and run F read the cost from the line.
 
 ## 5. Edge cases
 
@@ -288,8 +347,8 @@ Step 0 and run F read the cost from it.
 - **Outside the city:** in a plain Minecraft world, where SkyCraft has received no region, `shapeAt` returns null at
   once, and every read gives vanilla's answer. After the link ends, SkyCraft keeps the city's voxels until its next
   epoch, and mobs keep finding their way on them, as they keep colliding with them.
-- **A Minecraft block on the city:** a block the player places on a street is real, and vanilla answers for its cell and
-  the cell above it.
+- **A Minecraft block on the city:** a block the player places on a street is real, and vanilla answers for its cell.
+  The cell above it stands on it as on any block, unless the city has a floor or a wall there too.
 - **The ground changing under a path:** new shape objects come with each region sent again, so the per-shape cache
   never answers for an old one. A path already made stays until vanilla recomputes it; if the mob meets new geometry,
   vanilla's stuck detection repaths it.
@@ -307,13 +366,14 @@ Step 0 and run F read the cost from it.
 ## Versions and files
 
 - **CyberCraft Tweaks 1.7.0** (`minecraft/cybercraft-tweaks`):
-  - `CellRule` (new, no Minecraft types): the kinds and tops from 36 column tops, a cell's floor height, a segment's
+  - `CellRule` (new, no Minecraft types): the kinds and tops from 64 column tops, a cell's floor height, a segment's
     8-block pieces;
-  - `CityCells` (new): `SkyCollision.shapeAt` to `CellRule`, the per-shape cache, `floorAt`;
+  - `CityCells` (new): `SkyCollision.shapeAt` to `CellRule`, the per-shape cache, `floorAt`, and Minecraft's blocks
+    first;
   - `PathStats` (new): the counters and the minute line;
   - common mixins (new): `CityPathTypes` (`WalkNodeEvaluator`: path types, floor levels, airborne starts),
-    `CityPathCache` (`PathTypeCache`), `CityDestinations` (both `isStableDestination`s, `findSurfacePosition`,
-    `GoalUtils.isSolid`), `CityPetTeleport` (`TamableAnimal`), `CitySight` (`hasLineOfSight`,
+    `CityPathCache` (`PathTypeCache`), `CityDestinations` (`PathNavigation.isStableDestination`,
+    `findSurfacePosition`, `GoalUtils.isSolid`), `CityPetTeleport` (`TamableAnimal`), `CitySight` (`hasLineOfSight`,
     `isClearForMovementBetween`);
   - `fabric.mod.json`: 1.7.0, its description; the README: a section on finding the way;
   - `test.sh` (new) and `src/test/java`: the unit tests, compiled with `javac` and run with plain `java`.
@@ -328,37 +388,45 @@ Each layer can fail, and each new test is broken once to prove it.
 ### Unit tests (`test.sh`, no Minecraft)
 
 A small harness that counts failed checks, as the C++ tests' does, with no JUnit:
-- **`CellRule`'s kinds:** nothing in the middle with walls along the edge columns (none), skins at layers 0 to 3
-  (floor), 4 to 7 (blocked), a floor with a beam above it (blocked), a wall through the middle (blocked), a full cell
-  (blocked, top 1);
+- **`CellRule`'s kinds:** nothing in the middle with walls along the edge columns (none), a sliver in a corner column
+  (none), skins at layers 0 to 3 (floor), 4 to 7 (blocked), a floor with a beam above it (blocked), a wall through the
+  middle (blocked), a full cell (blocked, top 1);
 - **floor heights:** a floor cell, above a blocked cell, above a floor cell, neither;
 - **pieces:** short segments whole, long ones in 8-block pieces that meet end to end, zero length.
 
 ### Step 0: Minecraft's side, with `mclink`, before any game session
 
-The user starts Minecraft, and `mclink` runs `tools/mclink/paths.txt` on spike 1's dumped ground at a fresh spot east
-of spike 7's and 8's (x 880), with spots for each check picked from the dumps while planning (`view_dump.py`).
-Everything summoned is tagged `sp9`, with no loot (`DeathLootTable:"minecraft:empty"`) and `PersistenceRequired`. The
-results come from chat replies in Minecraft's log (`/data get entity … Pos`, `/execute if entity …,distance=..N`) and
-`scene`'s shadow positions:
+The user starts Minecraft, and `mclink` runs `tools/mclink/paths.txt` on spike 1's raised-level dump
+(`2026-10-01_14-37-07`) at a fresh spot east of spike 7's and 8's (x 880). The spots for each check are picked while
+planning with the deep review's simulation (BlockRender's own voxelizer on the dump, and the walk rules), which also
+gives each check's expected numbers. Everything summoned is tagged `sp9`, with no loot
+(`DeathLootTable:"minecraft:empty"`) and `PersistenceRequired`. The results come from chat replies in Minecraft's log
+(`/data get entity … Pos`, `/execute if entity …,distance=..N`) and `scene`'s world records.
+
+The checks run one at a time, each cleared before the next, since wolves attack what hurts their owner, villagers flee
+husks, and pillagers target villagers without needing to see them. The player's off hand, checked empty first, holds the wheat and then the dandelion, and is emptied at the
+end. In survival the player has Resistance at its highest, so nothing hurts it, and a husk's hunger never lands.
 - **Wander:** a pig, a cow and a villager, positions every 5 s for 60 s. Each moves 3 or more blocks and strolls at
-  least twice, stays on the ground (`OnGround:1b`, never below the street), and nobody walks off the raised level's
-  6 to 9 m drop.
-- **Tempt:** Minecraft's player holds wheat, and the cow follows as the stand-in V walks about 10 blocks.
+  least twice, and stays on the ground (`OnGround:1b`) on the raised level: the simulation reaches about 2,200 places
+  within 30 blocks there, none of them on the road 6 to 9 m below.
+- **Tempt:** the cow follows the wheat as the stand-in V walks about 10 blocks along the road.
 - **Pet:** a wolf whose `Owner` is set from the player's UUID (`/data modify … Owner set from entity @p UUID`) follows
-  by path as the stand-in V walks 8 blocks. Then `at` moves V 20 blocks: within 3 s the wolf is within 4 blocks of V, on
-  the ground, its y at a floor and not inside a skin.
-- **Chase and sight:** in survival, a husk in view 10 blocks off reaches the player; a husk behind a wall doesn't come
-  within 10 s.
-- **Flyer:** a bee, tempted by a dandelion in the player's off hand (`TemptGoal` on `BEE_FOOD`), follows the stand-in
-  V over the drop and past a wall without sticking in it.
+  by path as the stand-in V walks 8 blocks. Then `at` moves V 20 blocks along the road: within 3 s the wolf is within 4
+  blocks of V, on the ground, its y at a floor and not inside a skin.
+- **Chase:** in survival, a husk in view 10 blocks off on the road reaches the player.
+- **Sight:** a pillager on the road below the raised level's rock face, out of the player's sight behind the rock,
+  shoots no arrows while the player stays back from the edge; once the stand-in V steps to the edge, in view, it
+  shoots. `scene`'s world records list the arrows.
+- **Flyer:** a bee, tempted by the dandelion (`TemptGoal` on `BEE_FOOD`), follows as `at` takes the stand-in V down to
+  the road below, past the barrier and the rock face, without sticking in either.
 - **Cost:** the mod's minute line.
-- **Clear:** `/kill @e[tag=sp9]`, then `scene`'s world says `nothing`. The player's game mode, health and held item
-  are put back as they were.
+- **Clear:** `/kill @e[tag=sp9]`, then `scene`'s world says `nothing`. The player's game mode, effects and off hand are
+  put back as they were.
 
 It runs **twice**. First with 1.6.0, still installed, as the control: wander, tempt, chase and the wolf's teleport
-should fail, which proves the checks can tell. Then with 1.7.0, everything passing. Installing 1.7.0 needs Minecraft
-stopped and the user's leave; 1.6.0 is renamed `.jar.disabled`.
+should fail, and the pillager should shoot through the rock (its arrows sticking in it), which proves the checks can
+tell. Then with 1.7.0, everything passing. Installing 1.7.0 needs Minecraft stopped and the user's leave; 1.6.0 is
+renamed `.jar.disabled`.
 
 ### Run F, in the game
 
@@ -367,35 +435,38 @@ closed (a Lua file). The row summons, ahead of V:
 - **wanderers:** a pig, a cow, a villager;
 - **a pet:** a wolf, owned by Minecraft's player;
 - **a flyer:** a bee;
-- **a husk;**
+- **a husk,** with Resistance for Minecraft's player;
 - **wheat and a dandelion,** given to the player.
 
 They're tagged `sp7`, so the existing Clear removes them. With the user, at spots they pick (a sidewalk with kerbs,
 stairs, a doorway or an alley, a railing):
 1. The wanderers stroll the sidewalks and streets, step kerbs, and stay out of walls and off drops.
 2. The cow follows the wheat.
-3. The wolf follows, and after V sprints away it lands beside V: the overlay's nearest-mob distance shows it.
+3. The wolf, the only mob left, follows, and after V sprints away it lands beside V: the entities status line's
+   nearest-mob distance shows it.
 4. The bee follows the dandelion without sticking in walls.
 5. With combat off (Minecraft's hits and deaths stay in Minecraft) and Minecraft's player in survival, the husk chases V
-   in view, and doesn't notice V behind a building.
+   in view, and doesn't notice V behind a building it could walk around, until V steps into view.
 6. The frame rate is as before, and Minecraft's minute line stays modest.
 
 Clear ends it, and the results doc gets screenshots, as earlier runs' did.
 
 ## Risks
 
-1. **Skins on a cell boundary:** a surface lying exactly on one may fill the top layer of the cell below and the bottom
-   layer of the cell above. The cell below is then blocked and the cell above a floor 1/8 block up, which is where
-   collision puts a mob anyway.
-2. **Slopes and stairs:** a ramp crosses cells, so its cells come out floor or blocked by where it is in each, and the
-   path climbs in nodes, a step-up or a jump at a time. Night City's stairs (treads about 0.2 m) are step-ups.
+1. **Sloped skins straddle the half:** a gently sloped road's cells come out a floor at y or blocked with the walkable
+   node at y + 1, by a voxel either way; both rise less than a jump, so paths work either way.
+2. **Slopes and stairs:** a ramp crosses cells, so the path climbs in nodes, a step-up or a jump at a time. Night City's
+   stairs (treads about 0.2 m) are step-ups; surfaces steeper than 50° are whole-block risers, as the exporter means.
 3. **A wall just off a cell's middle** isn't seen there, so a mob passing off-centre scrapes it and slides; a gap
    narrower than the middle (0.75 block) is closed.
-4. **Sight's cost:** casts against tens of thousands of triangles for long rays, in 8-block pieces. Step 0 and run F
-   measure it in the minute line.
-5. **Strolls less often** than on blocks ("Wandering").
-6. **`getStart`'s search** is changed for walkers in the air only; a mob on the ground starts as before.
-7. **Cells with a shape skip the shared cache:** a path reads each cell once (the evaluator keeps its own cache for the
+4. **Mobs 0.75 to 1 block wide** (pigs, cows and sheep are 0.9) may path through a gap between 0.75 and their width,
+   which they can't fit; collision stops them, and vanilla's stuck detection repaths.
+5. **Head room:** a floor cell at head height doesn't stop a path, as a carpet there wouldn't in vanilla; collision
+   does. A jump's head room is checked against the real collision (`tryJumpOn`), which sees the city.
+6. **Sight's cost:** casts against tens of thousands of triangles for long rays, in 8-block pieces. Step 0 and run F
+   measure it in the minute line; the voxel walk is the fallback.
+7. **Strolls less often** than on blocks ("Wandering").
+8. **Cells with a shape skip the shared cache:** a path reads each cell once (the evaluator keeps its own cache for the
    path), so the cost is a map lookup and a cached classification per cell.
 
 ## Found while writing
@@ -415,3 +486,77 @@ Clear ends it, and the results doc gets screenshots, as earlier runs' did.
   place, and parrots on V's shoulder became a non-goal.
 - **`CellRule` takes all 64 column tops,** not the middle 36, so the unit tests can check that walls along a cell's
   edge are left out.
+
+## Changes from the deep review
+
+The user asked for a deep self-review of the spec. It traced each claim to its source and simulated step 0's ground.
+
+### What changed
+
+1. **The voxelizer's facts** joined the environment (`link/Voxels.cpp`): a floor on a whole block fills both voxels it
+   touches, and surfaces 50 to 84° from flat are coarsened to whole-block footprints. The spec's first risk ("a surface
+   on a boundary may fill both") is a fact. On the raised level two thirds of the walkable places stand above a blocked
+   cell that way, not on a floor cell, so both of section 1's ways of standing matter.
+2. **Minecraft's blocks win by each read's own terms** (section 1): path types take the city's answer where vanilla
+   answers `OPEN`, the other reads in a cell whose Minecraft block has no collision. The spec said "where Minecraft has
+   air", which would let a flower or a torch on a street hide its floor.
+3. **Airborne starts start above the first city cell** (section 2, item 7), as above a block, instead of starting in a
+   floor cell: `getStart` falls back to an open start and A* drops from it, which also covers a mob standing on a floor
+   whose top is exactly 0.5.
+4. **The flyers' `isStableDestination` hook is gone** (section 3): only `LandRandomPos` and `DefaultRandomPos` ask for
+   stable spots, and flyers wander with `HoverRandomPos` and `AirAndWaterRandomPos`, which use `GoalUtils.isSolid` and
+   the path types. A bee's own navigation overrides that method anyway (`Bee$1`).
+5. **Wandering's odds were wrong:** `LandRandomPos` checks stability before lifting a candidate, so the city's lost
+   candidates are those under a skin. Simulated, a stroll finds a spot 72% and 66% of the time on spike 1's dumps, not
+   about half; vanilla on flat blocks nearly always does.
+6. **The pets' landing fix has a stronger reason:** Minecraft's collision ignores voxels inside a box, so a pet landed
+   inside a skin falls through the street. Parrots follow at 5 blocks, not 10; cats stop at 5.
+7. **Step 0's sight check is a pillager below the rock face,** not a husk behind a wall: the husk couldn't tell blocked
+   sight from no path, since with 1.6.0 it can't come either, and the dumps have no tall wall with a way around. With
+   1.6.0 the pillager shoots through the rock; with 1.7.0 not until V is in view.
+8. **Step 0 is laid out to run clean:** one check at a time, each cleared before the next; the off hand, checked empty,
+   for the wheat and the dandelion; Resistance in survival; the bee following V down by `at`; the spots and expected
+   numbers from the simulation.
+9. **Run F:** the wolf alone for the distance readout, Resistance for the chase, and the husk behind a building it could
+   walk around.
+10. **The environment gained:** the fly evaluator's own copy of the below rule; `getPathTypeStatic`'s other users;
+    `isStableDestination`'s two callers and its overrides; Fabric API's two content-registry mixins and why they
+    compose; the world's clock fixed at noon; `Owner` making an animal tame; `sendBlockUpdated` as the cache's only
+    invalidation; collision ignoring voxels inside a box.
+11. **Non-goals gained** amphibians' and striders' strolls. **Risks gained** mobs 0.75 to 1 block wide, head room under
+    a floor cell, and sight's fallback; the boundary risk became the sloped-skin one.
+
+### What was checked
+
+- **Minecraft 26.3, with `javap`:** `getPathTypeFromState`'s returns (air first, `BLOCKED` for unpathfindable, never
+  `WALKABLE`), `getPathTypeStatic`'s switch (`OPEN`, `WATER`, `LAVA` and `WALKABLE` below give `OPEN`),
+  `FlyNodeEvaluator.getPathType`, `getFloorLevel`, `getMobJumpHeight` (max(1.125, step)), `getStart` and
+  `canStartAt`, `findSurfacePosition` in full, `isStableDestination` and every caller and override of it,
+  `LandRandomPos`'s order, the flyers' wander goals' helpers, `GoalUtils.isSolid`, `PathTypeCache` (4,096 slots,
+  `compute` through `getPathTypeFromState`, `invalidate` only from `ServerLevel.sendBlockUpdated`),
+  `isClearForMovementBetween`, `hasLineOfSight` (128 blocks) and its callers, `TargetingConditions.test`,
+  `Sensing.hasLineOfSight`, `MoveControl.tick`, `VoxelShape.collideX` and `max(Axis, double, double)`,
+  `TamableAnimal`'s teleport (10 tries, distance² 144, the box moved by whole blocks, `snapTo` at the cell's bottom)
+  and `Owner`, the wolf's, cat's and parrot's `FollowOwnerGoal`, `Zombie`'s target goal, `Husk.isSunSensitive`, the
+  parrot's shoulder rules, and every class in the jar naming the hooked methods: all pathfinding and AI.
+- **SkyCraft 0.1.2's source:** `SkyCollision`'s cell layout, `shapeAt`, regions swapped a cell at a time, emptied only
+  by `COL_CLEAR`; `BlockCollisionsMixin`; `SkyClip.cast`; nothing touching pathfinding, sight or pets.
+- **BlockRender:** `link/Voxels.cpp` (skins, whole-block floors, steep coarsening), the exporter's area and filing, and
+  the entities status line's "the nearest mob … m away" (from Minecraft's feet).
+- **The instance:** every mod's mixins (Fabric API's 44 modules, Mouse Tweaks, e4mc, EMF, ETF); only Fabric's content
+  registries touch these methods, and not for air. The world's `world_clocks.dat`, `weather.dat` and `game_rules.dat`.
+- **Step 0's ground, simulated:** a scratch tool, `voxdump`, loads a dump as `mclink`'s `dump` places it, files its
+  triangles as the exporter does, and runs BlockRender's `VoxelizeRegion` unchanged; a Python model applies `CellRule`,
+  the path types, floor levels, jump limits, falls of up to 3 blocks, `LandRandomPos`'s order and the teleport's tries
+  and room. From the stand-in V, within 30 blocks:
+
+  | dump | reachable places | their floors | on a floor cell | strolls found | teleports found |
+  |---|---|---|---|---|---|
+  | raised level (`14-37-07`) | 2,182 | 5.25 to 8.38 | 737 | 72% | 97% |
+  | ramp (`14-46-55`) | 1,846 | 1.50 to 7.88 | 1,275 | 66% | 95% |
+  | `2026-10-08_01-44-52` | 45 | 6.12 to 7.12 | 44 | 97%, most out of reach | not run |
+
+  The third is a dump from early on 2026-10-08 (179,645 triangles, V 132 m up), where V stands on a strip two or three
+  blocks wide between a tall structure and a gap. A whole-cell rule reached 3,697 places on the raised level, its extra
+  ground mostly through corner and edge slivers down the rock face, and some the same places a cell higher on the
+  sloped road. The scratch tools are in this session's scratchpad (`voxdump/`, `sim/`) for planning.
