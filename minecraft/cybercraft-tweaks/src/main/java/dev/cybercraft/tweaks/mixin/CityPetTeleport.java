@@ -18,7 +18,9 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * whole blocks, so its current fraction of a block carries over, and lands it at the cell's bottom: on the city that's
  * inside a floor's skin, and Minecraft's collision ignores voxels already inside a box, so the pet would fall through
  * the street. Where the city gives the cell a floor ({@link CityCells#floorAt}), the walkable check stays, and the room
- * check and the landing go to that floor's height; anywhere else vanilla's check and landing stand.
+ * check and the landing go to that floor's height; anywhere else vanilla's check and landing stand. A pet landed so has
+ * its fall distance reset: one teleported while falling (as the world loads, before the city's ground arrives) would
+ * otherwise take that whole fall's damage as it lands, as a test wolf did in spike 9's step 0.
  */
 @Mixin(value = TamableAnimal.class, remap = false)
 public abstract class CityPetTeleport {
@@ -36,6 +38,7 @@ public abstract class CityPetTeleport {
             return;
         }
         pet.snapTo(x + 0.5, floor, z + 0.5, pet.getYRot(), pet.getXRot());
+        pet.resetFallDistance();
         pet.getNavigation().stop();
         PathStats.petLanded();
         info.setReturnValue(true);
