@@ -23,26 +23,27 @@ import net.minecraft.world.phys.shapes.VoxelShape;
  * block mobs pass through, such as a flower or a torch on a street); the other reads count the city only in a cell
  * whose Minecraft block has no collision.
  *
- * <p>A cell's class depends on its shape alone, so it's kept per shape object, weakly: SkyCraft builds new shapes
- * whenever a region is sent again, and the old ones go with their region. {@code VoxelShape} keeps
- * {@code Object.equals}, so the map goes by identity.
+ * <p>A cell's class depends on its shape and the shape of the cell below it (a thin cell's columns can be covered from
+ * below), so what's kept is each shape's 64 column tops, per shape object, weakly: SkyCraft builds new shapes whenever
+ * a region is sent again, and the old ones go with their region. {@code VoxelShape} keeps {@code Object.equals}, so
+ * the map goes by identity.
  */
 public final class CityCells {
     /** What an airborne start's search meets in a city cell: a block, so the start goes above it. */
     public static final BlockState STOP = Blocks.STONE.defaultBlockState();
 
-    private static final Map<VoxelShape, Integer> CLASSES = Collections.synchronizedMap(new WeakHashMap<>());
+    private static final Map<VoxelShape, int[]> TOPS = Collections.synchronizedMap(new WeakHashMap<>());
 
     private CityCells() {
     }
 
-    /** The city's cell at {@code pos}, packed as {@link CellRule#classify} packs it, or -1 where SkyCraft has none. */
-    public static int cell(BlockPos pos) {
+    /** The 64 column tops of SkyCraft's shape at {@code pos}, as {@link CellRule#classify} takes them, or null. */
+    private static int[] tops(BlockPos pos) {
         VoxelShape shape = SkyCollision.shapeAt(pos);
         if (shape == null) {
-            return -1;
+            return null;
         }
-        Integer known = CLASSES.get(shape);
+        int[] known = TOPS.get(shape);
         if (known != null) {
             return known;
         }
@@ -54,10 +55,15 @@ public final class CityCells {
                 tops[z * 8 + x] = top == Double.NEGATIVE_INFINITY ? 0 : (int) Math.round(top * 8.0);
             }
         }
-        int cell = CellRule.classify(tops);
-        CLASSES.put(shape, cell);
-        PathStats.classified();
-        return cell;
+        TOPS.put(shape, tops);
+        PathStats.shapeRead();
+        return tops;
+    }
+
+    /** The city's cell at {@code pos}, packed as {@link CellRule#classify} packs it, or -1 where SkyCraft has none. */
+    public static int cell(BlockPos pos) {
+        int[] tops = tops(pos);
+        return tops == null ? -1 : CellRule.classify(tops, tops(pos.below()));
     }
 
     /** The city's cell at {@code pos} where Minecraft's own block there has no collision, or -1. */
@@ -66,7 +72,7 @@ public final class CityCells {
         return cell >= 0 && level.getBlockState(pos).getCollisionShape(level, pos).isEmpty() ? cell : -1;
     }
 
-    /** The path type for a cell vanilla calls {@code OPEN}: {@code WALKABLE} for a floor, {@code BLOCKED}, or null. */
+    /** The path type for a cell vanilla calls {@code OPEN}: {@code WALKABLE} for a floor, else {@code BLOCKED}, or null. */
     public static PathType pathType(BlockPos pos) {
         int cell = cell(pos);
         if (cell < 0 || CellRule.kind(cell) == CellRule.NONE) {
@@ -94,10 +100,10 @@ public final class CityCells {
         return stable;
     }
 
-    /** Whether this cell is a blocked city cell: solid, for random positions. */
+    /** Whether this cell is a blocked or thin city cell: solid, for random positions. */
     public static boolean blockedAt(BlockGetter level, BlockPos pos) {
         int cell = open(level, pos);
-        boolean blocked = cell >= 0 && CellRule.kind(cell) == CellRule.BLOCKED;
+        boolean blocked = cell >= 0 && (CellRule.kind(cell) == CellRule.BLOCKED || CellRule.kind(cell) == CellRule.THIN);
         if (blocked) {
             PathStats.answered();
         }

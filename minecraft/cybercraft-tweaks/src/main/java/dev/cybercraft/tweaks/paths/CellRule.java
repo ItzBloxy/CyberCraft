@@ -11,6 +11,11 @@ import java.util.function.IntUnaryOperator;
  * obstacle there. Its top is the highest of those columns. Nothing in the middle is {@link #NONE}; a top in the lower
  * half is a {@link #FLOOR}, walkable itself (a street's skin, a kerb, a stair's tread), since the city's skins have
  * nothing solid under them; a top in the upper half is {@link #BLOCKED}, a full block the cell above stands on.
+ *
+ * <p>A cell whose middle is mostly open is a {@link #THIN} one, a fence: a railing, a barrier, a pole, a ledge's last
+ * sliver over a drop. A middle column counts as covered if the cell has anything in it, or the cell below reaches into
+ * its upper half there, so a kerb's cell, half pavement and half the street's top below, isn't one. Spike 9's step 0
+ * saw mobs walk onto the road's thin barrier, which as a full block had a floor on top, and fall off its far side.
  */
 public final class CellRule {
     /** Nothing in the cell's middle: pathfinding sees air, as without the city. */
@@ -19,6 +24,11 @@ public final class CellRule {
     public static final int FLOOR = 1;
     /** Something in the middle in the upper half: a full block, which the cell above stands on. */
     public static final int BLOCKED = 2;
+    /** Fewer than half the middle's columns covered: a fence, impassable, its top half a block higher than it is. */
+    public static final int THIN = 3;
+
+    /** How much higher than its top a fence's top counts, as a Minecraft fence's 1.5-block collision does. */
+    public static final double FENCE_RISE = 0.5;
 
     /** The surface search's kinds of cell: air, a city floor, something solid, or another block (a flower). */
     public static final int SEARCH_AIR = 0;
@@ -31,21 +41,25 @@ public final class CellRule {
 
     /**
      * A cell's kind and top, packed as {@code kind | top << 2} with the top in eighths of a block, from its 64 columns'
-     * tops: index {@code z * 8 + x}, each 0 for an empty column, or 1 to 8 for one whose highest voxel is in layer 0 to
-     * 7. Only the middle 6 × 6 columns count.
+     * tops and those of the cell below ({@code null} for none): index {@code z * 8 + x}, each 0 for an empty column, or
+     * 1 to 8 for one whose highest voxel is in layer 0 to 7. Only the middle 6 × 6 columns count.
      */
-    public static int classify(int[] tops) {
-        int top = 0;
+    public static int classify(int[] tops, int[] below) {
+        int top = 0, covered = 0;
         for (int z = 1; z < 7; z++) {
             for (int x = 1; x < 7; x++) {
-                top = Math.max(top, tops[z * 8 + x]);
+                int i = z * 8 + x;
+                top = Math.max(top, tops[i]);
+                if (tops[i] > 0 || below != null && below[i] > 4) {
+                    covered++;
+                }
             }
         }
-        int kind = top == 0 ? NONE : top <= 4 ? FLOOR : BLOCKED;
+        int kind = top == 0 ? NONE : covered < 18 ? THIN : top <= 4 ? FLOOR : BLOCKED;
         return kind | top << 2;
     }
 
-    /** A packed cell's kind: {@link #NONE}, {@link #FLOOR} or {@link #BLOCKED}. */
+    /** A packed cell's kind: {@link #NONE}, {@link #FLOOR}, {@link #BLOCKED} or {@link #THIN}. */
     public static int kind(int cell) {
         return cell & 3;
     }
@@ -56,21 +70,21 @@ public final class CellRule {
     }
 
     /**
-     * Where a mob in cell {@code y} stands: on a floor in the cell itself, or on the top of a floor or blocked cell
-     * below; {@code NaN} if neither. Each of {@code here} and {@code below} is a packed cell, or -1 where the city
-     * doesn't count (no shape, or Minecraft's own block there).
+     * Where a mob in cell {@code y} stands: on a floor in the cell itself, or on the top of a floor, blocked or thin
+     * cell below, a thin one's {@link #FENCE_RISE} higher; {@code NaN} if neither. Each of {@code here} and
+     * {@code below} is a packed cell, or -1 where the city doesn't count (no shape, or Minecraft's own block there).
      */
     public static double floorAt(int y, int here, int below) {
         if (here >= 0 && kind(here) == FLOOR) {
             return y + top(here);
         }
         if (below >= 0 && kind(below) != NONE) {
-            return y - 1 + top(below);
+            return y - 1 + top(below) + (kind(below) == THIN ? FENCE_RISE : 0.0);
         }
         return Double.NaN;
     }
 
-    /** Whether a mob may stroll to cell {@code here}: a floor itself, or just above a blocked cell. */
+    /** Whether a mob may stroll to cell {@code here}: a floor itself, or just above a blocked cell, not a thin one. */
     public static boolean stable(int here, int below) {
         return here >= 0 && kind(here) == FLOOR || below >= 0 && kind(below) == BLOCKED;
     }

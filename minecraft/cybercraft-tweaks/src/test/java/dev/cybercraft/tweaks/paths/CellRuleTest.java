@@ -45,30 +45,82 @@ public final class CellRuleTest {
             edges[i * 8] = 8;       // x 0
             edges[i * 8 + 7] = 8;   // x 7
         }
-        check(CellRule.kind(CellRule.classify(edges)) == CellRule.NONE, "walls along the edges leave the middle empty");
+        check(CellRule.kind(CellRule.classify(edges, null)) == CellRule.NONE, "walls along the edges leave the middle empty");
         int[] corner = new int[64];
         corner[63] = 6;
-        check(CellRule.classify(corner) == packed(CellRule.NONE, 0), "a sliver in a corner column is no foothold");
+        check(CellRule.classify(corner, null) == packed(CellRule.NONE, 0), "a sliver in a corner column is no foothold");
         for (int layer = 0; layer < 4; layer++) {
-            int cell = CellRule.classify(all(layer + 1));
+            int cell = CellRule.classify(all(layer + 1), null);
             check(CellRule.kind(cell) == CellRule.FLOOR && near(CellRule.top(cell), (layer + 1) / 8.0),
                 "a skin at layer " + layer + " is a floor at its top");
         }
         for (int layer = 4; layer < 8; layer++) {
-            int cell = CellRule.classify(all(layer + 1));
+            int cell = CellRule.classify(all(layer + 1), null);
             check(CellRule.kind(cell) == CellRule.BLOCKED && near(CellRule.top(cell), (layer + 1) / 8.0),
                 "a skin at layer " + layer + " is blocked at its top");
         }
         int[] beam = all(2);
         beam[3 * 8 + 4] = 7;
-        check(CellRule.classify(beam) == packed(CellRule.BLOCKED, 7), "a floor with a beam above it is blocked");
+        check(CellRule.classify(beam, null) == packed(CellRule.BLOCKED, 7), "a floor with a beam above it is blocked");
+        check(CellRule.classify(all(8), null) == packed(CellRule.BLOCKED, 8), "a full cell is blocked, its top 1");
+        check(CellRule.classify(new int[64], null) == packed(CellRule.NONE, 0), "an empty cell is none");
+        check(CellRule.classify(new int[64], all(8)) == packed(CellRule.NONE, 0), "an empty cell on a full one is none");
+        thin();
+    }
+
+    /** Fences: a cell whose middle is mostly open, counting the cell below's upper half as covering a column. */
+    private static void thin() {
         int[] wall = new int[64];
         for (int z = 0; z < 8; z++) {
             wall[z * 8 + 3] = 8;
         }
-        check(CellRule.classify(wall) == packed(CellRule.BLOCKED, 8), "a wall through the middle is blocked");
-        check(CellRule.classify(all(8)) == packed(CellRule.BLOCKED, 8), "a full cell is blocked, its top 1");
-        check(CellRule.classify(new int[64]) == packed(CellRule.NONE, 0), "an empty cell is none");
+        check(CellRule.classify(wall, null) == packed(CellRule.THIN, 8), "a wall through the middle is a fence");
+        int[] railing = new int[64];
+        for (int z = 0; z < 8; z++) {
+            railing[z * 8 + 3] = 4;
+        }
+        check(CellRule.classify(railing, null) == packed(CellRule.THIN, 4),
+            "a railing's last half block of skin is a fence, not a floor");
+        int[] ledge = new int[64];
+        for (int z = 0; z < 8; z++) {
+            for (int x = 0; x < 3; x++) {
+                ledge[z * 8 + x] = 2;
+            }
+        }
+        check(CellRule.classify(ledge, null) == packed(CellRule.THIN, 2), "a floor's last sliver over a drop is a fence");
+        int[] floorOnHalf = new int[64];
+        int[] streetBelow = new int[64];
+        for (int z = 0; z < 8; z++) {
+            for (int x = 0; x < 8; x++) {
+                if (x < 3) {
+                    floorOnHalf[z * 8 + x] = 2;
+                } else {
+                    streetBelow[z * 8 + x] = 8;
+                }
+            }
+        }
+        check(CellRule.classify(floorOnHalf, streetBelow) == packed(CellRule.FLOOR, 2),
+            "a kerb's cell, part pavement and part the street's top below, is a floor");
+        int[] lowBelow = new int[64];
+        for (int i = 0; i < 64; i++) {
+            lowBelow[i] = streetBelow[i] > 0 ? 4 : 0;
+        }
+        check(CellRule.classify(floorOnHalf, lowBelow) == packed(CellRule.THIN, 2),
+            "the cell below's lower half covers nothing");
+        int[] poleOnStreet = new int[64];
+        poleOnStreet[3 * 8 + 3] = 8;
+        check(CellRule.classify(poleOnStreet, all(8)) == packed(CellRule.BLOCKED, 8),
+            "a pole standing on the street's top is a block");
+        check(CellRule.classify(poleOnStreet, null) == packed(CellRule.THIN, 8), "a pole above nothing is a fence");
+        int[] eighteen = new int[64];
+        for (int z = 1; z < 4; z++) {
+            for (int x = 1; x < 7; x++) {
+                eighteen[z * 8 + x] = 2;
+            }
+        }
+        check(CellRule.kind(CellRule.classify(eighteen, null)) == CellRule.FLOOR, "half the middle covered is a floor");
+        eighteen[3 * 8 + 6] = 0;
+        check(CellRule.kind(CellRule.classify(eighteen, null)) == CellRule.THIN, "one column short of half is a fence");
     }
 
     private static void floors() {
@@ -82,8 +134,13 @@ public final class CellRuleTest {
         check(Double.isNaN(CellRule.floorAt(6, none, none)), "nothing here or below: no floor");
         check(Double.isNaN(CellRule.floorAt(6, -1, -1)), "no city here or below: no floor");
         check(Double.isNaN(CellRule.floorAt(6, blocked, -1)), "inside a blocked cell: no floor");
+        int fence = packed(CellRule.THIN, 8);
+        check(near(CellRule.floorAt(7, none, fence), 7.5), "above a fence, half a block over its top");
+        check(Double.isNaN(CellRule.floorAt(6, fence, -1)), "inside a fence: no floor");
         check(CellRule.stable(floor, -1), "a floor cell is a stroll target");
         check(CellRule.stable(none, blocked), "just above a blocked cell is a stroll target");
+        check(!CellRule.stable(none, fence), "above a fence isn't a stroll target");
+        check(!CellRule.stable(fence, -1), "a fence isn't a stroll target");
         check(!CellRule.stable(none, floor), "above a floor cell isn't a stroll target");
         check(!CellRule.stable(none, none), "in the air isn't a stroll target");
         check(!CellRule.stable(-1, -1), "no city isn't a stroll target");
