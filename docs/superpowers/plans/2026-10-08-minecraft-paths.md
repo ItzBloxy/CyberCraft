@@ -1900,7 +1900,7 @@ cd /d/Cyberpunk-Minecraft && git add docs/spikes/2026-10-08-minecraft-paths-resu
 **Files:**
 - Modify: `docs/spikes/2026-10-08-minecraft-paths-results.md`
 
-- [ ] **Step 1: Ask the user to stop Minecraft**
+- [x] **Step 1: Ask the user to stop Minecraft**
 
 Its window is hidden while `mclink` drives it, so the user stops it from the Modrinth App. Then:
 ```bash
@@ -1908,7 +1908,7 @@ tasklist | grep -i -c "javaw.exe"
 ```
 Expected: `0`, or the user says the Java processes left are their own (a Gradle daemon, an IDE).
 
-- [ ] **Step 2: Install CyberCraft Tweaks 1.7.0, with the user's leave**
+- [x] **Step 2: Install CyberCraft Tweaks 1.7.0, with the user's leave**
 
 1.6.0 goes `.jar.disabled`, as each earlier version did:
 ```bash
@@ -1920,7 +1920,7 @@ M="/c/Users/BLOXY/AppData/Roaming/ModrinthApp/profiles/CyberCraft/mods"; \
 Expected: `built build/cybercraft-tweaks-1.7.0.jar`, then `cybercraft-tweaks-1.7.0.jar` beside 1.2.0 to 1.6.0, each
 `.jar.disabled`.
 
-- [ ] **Step 3: Ask the user to start Minecraft, and check that the mod loaded**
+- [x] **Step 3: Ask the user to start Minecraft, and check that the mod loaded**
 
 The user starts the instance and says when its title screen shows. Then:
 ```bash
@@ -1931,7 +1931,7 @@ L="/c/Users/BLOXY/AppData/Roaming/ModrinthApp/profiles/CyberCraft/logs/latest.lo
 Expected: `- cybercraft_tweaks 1.7.0` and `mixin errors: 0`. The mixins on Minecraft's pathfinding apply when their
 classes first load, in the world: the next step checks the log again.
 
-- [ ] **Step 4: In Minecraft: run step 0's script with 1.7.0**
+- [x] **Step 4: In Minecraft: run step 0's script with 1.7.0**
 
 ```bash
 L="/c/Users/BLOXY/AppData/Roaming/ModrinthApp/profiles/CyberCraft/logs/latest.log"; before=$(wc -l < "$L"); \
@@ -1959,13 +1959,13 @@ Give the command 9 minutes. Expected, with 1.7.0, against the spec's "Step 0" an
 
 Run F, in Part 2, needs the game; Minecraft starts again then.
 
-- [ ] **Step 6: Record step 0's results in `docs/spikes/2026-10-08-minecraft-paths-results.md`**
+- [x] **Step 6: Record step 0's results in `docs/spikes/2026-10-08-minecraft-paths-results.md`**
 
 Beside the control's, from `build/step0/paths.log` and `build/step0/paths-minecraft.log`: each check with 1.7.0, its
 outcome and numbers (the strolls a minute, how far each mob went, how long the cow, the wolf, the husk and the bee
 took, the arrows), the minute lines, and what it means for Part 2.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add docs/spikes/2026-10-08-minecraft-paths-results.md docs/superpowers/plans/2026-10-08-minecraft-paths.md \
