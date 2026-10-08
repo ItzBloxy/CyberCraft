@@ -43,6 +43,27 @@ What SkyCraft sends of Minecraft's entities keeps Minecraft's draw order, its gl
   the rest as before. `eyes` and `banner_pattern` stay solid: every eyes texture is opaque or clear, and banner
   patterns lie on cloth the game lights.
 
+Minecraft's mobs find their way on Night City's ground (from 1.7.0). SkyCraft's copy of the city isn't blocks: its
+collision mixin adds the city's voxels to every collision query, so mobs stand on the streets, but Minecraft 26.3's
+pathfinding decides where a mob can walk from block states, and under the city there's only air. Spike 7's mobs never
+moved, and a chase aimed at the top of the world. With the mod, where Minecraft has nothing of its own, the city's cells
+answer pathfinding's questions (`dev.cybercraft.tweaks.paths`):
+- **A cell goes by its middle** (`CellRule`, `CityCells`): the central 6 × 6 of its 8 × 8 voxel columns, where a mob up
+  to 0.75 wide stands at its centre. Nothing there is air, as before; a top in the lower half is a floor, walkable
+  itself, since the city's skins have nothing solid under them; a top in the upper half is a full block, which the cell
+  above stands on.
+- **Walking** (`CityWalkNodes`, `CityPathCache`, `CityNavigation`, `CitySurface`, `CityGoalUtils`): the walk
+  evaluator's path types, floor heights and airborne starts; the shared path-type cache skipped for the city's cells;
+  strolls ending on the city's floors; paths aimed at its ground, not the top of the world; and its blocked cells solid
+  to random positions.
+- **Pets keep up** (`CityPetTeleport`): a pet teleporting to its owner lands on the city's floor, not inside it, which
+  it would fall through.
+- **Walls block sight and flyers' shortcuts** (`CitySight`, `CityNavigation`): a mob's line of sight and a flyer's
+  straight-line shortcut also cast against the city's triangles (`CityRays`), as arrows do.
+
+Each minute it did any of this, Minecraft's log gets one line: the city's answers, the shapes classified, the casts with
+their hits and time, and the pets landed (`PathStats`).
+
 It targets SkyCraft 0.1.2's classes by name, so `fabric.mod.json` asks for exactly that version: Fabric won't start with
 another SkyCraft until this mod is checked against it.
 
@@ -60,6 +81,15 @@ bash build.sh
 Needs a JDK 21 or later on `PATH`. No Gradle and nothing downloaded: it compiles against the jars the Modrinth App
 already keeps for the instance (Minecraft 26.3, Fabric Loader, the mixin library, Fabric API and SkyCraft), and packs
 `build/cybercraft-tweaks-<version>.jar`.
+
+```bash
+bash test.sh
+bash mixins.sh
+```
+
+`test.sh` runs the unit tests of the pathfinding's rules (`CellRule`), with plain `java` and no Minecraft. `mixins.sh`
+checks the mixins on Minecraft's own classes against Minecraft 26.3's jar, as Mixin would when Minecraft loads them, so
+a wrong target fails there rather than at Minecraft's start; it reads the classes `build.sh` compiles.
 
 ## Install
 
@@ -80,3 +110,7 @@ draws the slime's outer layer, the allay, the vex, the breeze's wind and eyes an
 piglin, opaque, as a model.
 `spikes/block-render/tools/mclink/entities.txt` prints each scene's batches in the order they come: with the mod, a
 villager's body comes before its biome's clothes, those before its profession's, and those before its level's badge.
+`spikes/block-render/tools/mclink/paths.txt` puts mobs on spike 1's dumped ground: with the mod, a pig, a cow and a
+villager stroll the road, a cow follows wheat, a wolf follows its owner and teleports to them, a husk chases the player,
+a skeleton below the road's edge doesn't shoot until it sees the player, and a bee follows a dandelion down the rock
+face; without it, none of that happens but the skeleton's shooting, through the rock.
