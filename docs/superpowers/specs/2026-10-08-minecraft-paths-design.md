@@ -4,8 +4,8 @@ Date: 2026-10-08. Status: agreed with the user section by section in the brainst
 end, lists what writing it out added to what was agreed. Then revised after a deep self-review at the user's request,
 which checked each claim against its source (Minecraft 26.3's bytecode, SkyCraft's source, BlockRender's voxelizer,
 the installed mods and the world's files) and simulated step 0's ground on spike 1's dumps with BlockRender's own
-voxelizer: "Changes from the deep review", at the end, lists what changed and what was checked. The sections above it
-include those changes.
+voxelizer: "Changes from the deep review", at the end, lists what changed and what was checked. Planning Part 1 (the
+mod and step 0) settled more: "Changes while planning Part 1". The sections above them include those changes.
 
 ## Purpose
 
@@ -360,23 +360,27 @@ The counters are safe to bump from any thread. Step 0 and run F read the cost fr
   such a mob may try a gap it can't fit; collision stops it, and vanilla's stuck detection repaths.
 - **Versions:** every injection is required (`defaultRequire: 1`), so a Minecraft or SkyCraft update that moves a
   target fails at Minecraft's start, its log naming it. `fabric.mod.json` already pins SkyCraft 0.1.2; the mod's new
-  calls into it are `SkyCollision.shapeAt` and `SkyClip.cast`.
+  calls into it are `SkyCollision.shapeAt` and `SkyCollision.active`, and `SkyClip.cast`.
 - **Hostiles ignore creative players,** as vanilla does, so the chase tests run in survival.
 
 ## Versions and files
 
 - **CyberCraft Tweaks 1.7.0** (`minecraft/cybercraft-tweaks`):
-  - `CellRule` (new, no Minecraft types): the kinds and tops from 64 column tops, a cell's floor height, a segment's
-    8-block pieces;
-  - `CityCells` (new): `SkyCollision.shapeAt` to `CellRule`, the per-shape cache, `floorAt`, and Minecraft's blocks
-    first;
-  - `PathStats` (new): the counters and the minute line;
-  - common mixins (new): `CityPathTypes` (`WalkNodeEvaluator`: path types, floor levels, airborne starts),
-    `CityPathCache` (`PathTypeCache`), `CityDestinations` (`PathNavigation.isStableDestination`,
-    `findSurfacePosition`, `GoalUtils.isSolid`), `CityPetTeleport` (`TamableAnimal`), `CitySight` (`hasLineOfSight`,
-    `isClearForMovementBetween`);
+  - `paths/CellRule` (new, no Minecraft types): the kinds and tops from 64 column tops, a cell's floor height, stroll
+    targets, the surface search, a segment's 8-block pieces;
+  - `paths/CityCells` (new): `SkyCollision.shapeAt` to `CellRule`, the per-shape cache, `floorAt`, and Minecraft's
+    blocks first;
+  - `paths/CityRays` (new): the casts against the city's triangles, in pieces;
+  - `paths/PathStats` (new): the counters and the minute line, which `CyberCraftTweaks` writes from the server's tick;
+  - common mixins (new), one per Minecraft class: `CityWalkNodes` (`WalkNodeEvaluator`: path types, floor levels,
+    airborne starts), `WalkNodeEvaluatorAccess` (an invoker for `getPathTypeFromState`), `CityPathCache`
+    (`PathTypeCache`), `CityNavigation` (`PathNavigation`: stroll targets, flyers' shortcuts), `CitySurface`
+    (`GroundPathNavigation.findSurfacePosition`), `CityGoalUtils` (`GoalUtils.isSolid`), `CityPetTeleport`
+    (`TamableAnimal`), `CitySight` (`LivingEntity.hasLineOfSight`);
   - `fabric.mod.json`: 1.7.0, its description; the README: a section on finding the way;
-  - `test.sh` (new) and `src/test/java`: the unit tests, compiled with `javac` and run with plain `java`.
+  - `test.sh` (new) and `src/test/java`: the unit tests, compiled with `javac` and run with plain `java`;
+  - `mixins.sh` and `tools/MixinCheck.java` (new): the mixins on Minecraft's classes checked against 26.3's jar, as
+    Mixin would at load.
 - **`mclink`:** `tools/mclink/paths.txt`, step 0's script.
 - **The overlay** (`blockrender_hud/init.lua`): a **Paths** Spawn row.
 - **BlockRender's C++** and **SkyCraft** stay as they are.
@@ -392,40 +396,48 @@ A small harness that counts failed checks, as the C++ tests' does, with no JUnit
   (none), skins at layers 0 to 3 (floor), 4 to 7 (blocked), a floor with a beam above it (blocked), a wall through the
   middle (blocked), a full cell (blocked, top 1);
 - **floor heights:** a floor cell, above a blocked cell, above a floor cell, neither;
+- **stroll targets:** a floor cell, above a blocked cell, but not above a floor cell or in the air;
+- **the surface search:** vanilla's columns (onto the block below, up out of something solid, above the world when
+  there's nothing, a flower staying), and the city's (into a floor cell below, staying in one, up out of a blocked
+  cell);
 - **pieces:** short segments whole, long ones in 8-block pieces that meet end to end, zero length.
+
+The mixins' targets are checked without Minecraft too (`mixins.sh`), each check broken once.
 
 ### Step 0: Minecraft's side, with `mclink`, before any game session
 
 The user starts Minecraft, and `mclink` runs `tools/mclink/paths.txt` on spike 1's raised-level dump
-(`2026-10-01_14-37-07`) at a fresh spot east of spike 7's and 8's (x 880). The spots for each check are picked while
-planning with the deep review's simulation (BlockRender's own voxelizer on the dump, and the walk rules), which also
-gives each check's expected numbers. Everything summoned is tagged `sp9`, with no loot
-(`DeathLootTable:"minecraft:empty"`) and `PersistenceRequired`. The results come from chat replies in Minecraft's log
-(`/data get entity … Pos`, `/execute if entity …,distance=..N`) and `scene`'s world records.
+(`2026-10-01_14-37-07`), placed around 1280.5 6.14 2007.5, 400 blocks east of spike 7's spot. The deep review's
+simulation (BlockRender's own voxelizer on the dump, the walk rules, and sight rays against its triangles) picked each
+check's spots and gives its expected numbers: a road along z, its street at 6.0 and its pavement at 6.2, a barrier at
+x 1284 (top 7.5), a ledge behind it at 5.5, then a 6 m drop onto a rock slope falling east from −0.5. Everything
+summoned is tagged `sp9`, with no loot (`DeathLootTable:"minecraft:empty"`), `PersistenceRequired`, and nothing it
+carries dropping. The results come from chat replies in Minecraft's log (`/data get entity … Pos`, `/execute if
+entity …,distance=..N`) and `scene`'s world records.
 
 The checks run one at a time, each cleared before the next, since wolves attack what hurts their owner, villagers flee
-husks, and pillagers target villagers without needing to see them. The player's off hand, checked empty first, holds
-the wheat and then the dandelion, and is emptied at the end. In survival the player has Resistance at its highest, so
+husks, and skeletons flee wolves. The player's off hand is filled only if it's empty, with the wheat and then the
+dandelion, and only those are cleared from it at the end. In survival the player has Resistance at its highest, so
 nothing hurts it, and a husk's hunger never lands.
-- **Wander:** a pig, a cow and a villager, positions every 5 s for 60 s. Each moves 3 or more blocks and strolls at
-  least twice, and stays on the ground (`OnGround:1b`) on the raised level: the simulation reaches about 2,200 places
-  within 30 blocks there, none of them on the road 6 to 9 m below.
-- **Tempt:** the cow follows the wheat as the stand-in V walks about 10 blocks along the road.
+- **Wander:** a pig, a cow and a villager on the street, positions every 5 s for 60 s. Each moves 3 or more blocks and
+  strolls at least twice, and stays on the ground (`OnGround:1b`) on the road: the simulation reaches about 2,200
+  places within 30 blocks there, none of them on the levels below it.
+- **Tempt:** the cow follows the wheat as the stand-in V walks about 10 blocks south along the pavement.
 - **Pet:** a wolf whose `Owner` is set from the player's UUID (`/data modify … Owner set from entity @p UUID`) follows
-  by path as the stand-in V walks 8 blocks. Then `at` moves V 20 blocks along the road: within 3 s the wolf is within 4
-  blocks of V, on the ground, its y at a floor and not inside a skin.
-- **Chase:** in survival, a husk in view 10 blocks off on the road reaches the player.
-- **Sight:** a pillager on the road below the raised level's rock face, out of the player's sight behind the rock,
-  shoots no arrows while the player stays back from the edge; once the stand-in V steps to the edge, in view, it
-  shoots. `scene`'s world records list the arrows.
-- **Flyer:** a bee, tempted by the dandelion (`TemptGoal` on `BEE_FOOD`), follows as `at` takes the stand-in V down to
-  the road below, past the barrier and the rock face, without sticking in either.
+  by path as the stand-in V walks about 15 blocks south, past the 10 a wolf waits for. Then `at` moves V 21 blocks back
+  north along the street: the wolf lands within 4 blocks of V, on the ground, at the street's floor and not inside it.
+- **Chase:** in survival, a husk in view 10 blocks off on the street reaches the player.
+- **Sight:** a skeleton on the rock slope, with a bow and an unbreakable helmet (noon's sun) given in its `equipment`,
+  shoots no arrows while V is on the road, which hides it; once `at` takes V onto the ledge behind the barrier, 7.7
+  blocks from it and in view, it shoots. `scene`'s world records list the arrows.
+- **Flyer:** a bee, tempted by the dandelion (`TemptGoal` on `BEE_FOOD`), follows as `at` takes the stand-in V onto the
+  ledge and then down onto the rock slope, past the barrier and the rock face, without sticking in either.
 - **Cost:** the mod's minute line.
-- **Clear:** `/kill @e[tag=sp9]`, then `scene`'s world says `nothing`. The player's game mode, effects and off hand are
-  put back as they were.
+- **Clear:** `/kill @e[tag=sp9]` and any arrow, then `scene`'s world says `nothing`. The player's game mode (noted in a
+  scoreboard at the start) is put back, and its effects cleared.
 
 It runs **twice**. First with 1.6.0, still installed, as the control: wander, tempt, chase and the wolf's teleport
-should fail, and the pillager should shoot through the rock (its arrows sticking in it), which proves the checks can
+should fail, and the skeleton should shoot through the rock (its arrows sticking in it), which proves the checks can
 tell. Then with 1.7.0, everything passing. Installing 1.7.0 needs Minecraft stopped and the user's leave; 1.6.0 is
 renamed `.jar.disabled`.
 
@@ -561,3 +573,28 @@ The user asked for a deep self-review of the spec. It traced each claim to its s
   blocks wide between a tall structure and a gap. A whole-cell rule reached 3,697 places on the raised level, its extra
   ground mostly through corner and edge slivers down the rock face, and some the same places a cell higher on the
   sloped road. The scratch tools are in this session's scratchpad (`voxdump/`, `sim/`) for planning.
+
+  The third dump turned out to be V in her apartment, from the user's playtest of the campaign.
+
+## Changes while planning Part 1
+
+Part 1 is the mod (CyberCraft Tweaks 1.7.0) and step 0; its plan is
+`docs/superpowers/plans/2026-10-08-minecraft-paths.md`, whose "Found while planning Part 1" has the detail.
+- **Mixins go one per Minecraft class:** a mixin's handlers apply to every class it targets, so the five groups became
+  eight classes (`CityWalkNodes`, `WalkNodeEvaluatorAccess`, `CityPathCache`, `CityNavigation`, `CitySurface`,
+  `CityGoalUtils`, `CityPetTeleport`, `CitySight`), each with `remap = false`: 26.3 is unobfuscated, and the mod ships
+  no refmap. The casts moved from `CityCells` to their own class, `CityRays`.
+- **The mixins' targets are checked before Minecraft starts** (`mixins.sh`, `tools/MixinCheck.java`): `javac` checks
+  none of it, Mixin's annotation processor checks targets only when it remaps, and a wrong target with
+  `defaultRequire: 1` would crash Minecraft at load.
+- **Step 0's sight check is a skeleton,** not a pillager: a pillager's crossbow reaches 8 blocks, and the rock slope is
+  9 to 16 blocks from V on the road; a skeleton's bow reaches 15. A summon with NBT skips `finalizeSpawn`, so its bow
+  comes in its `equipment`, with an unbreakable helmet against noon's sun and `drop_chances` of 0.
+- **Step 0's spots and moves** come from the simulation: the walks go south along the road, the wolf's jump 21 blocks
+  back north, the bee over the barrier onto the ledge and then down onto the slope, each hop within its 10-block tempt
+  range; V walks about 15 blocks for the wolf, which follows only from 10.
+- **The off hand is used only if it's empty** (`execute unless items`), and the game mode is noted in a scoreboard and
+  put back, rather than "checked first" and "put back as it was" by hand.
+- **The unit tests also cover stroll targets and the surface search,** which `CellRule` holds.
+- **`PathStats`'s line is written from the server's tick** (Fabric API's `ServerTickEvents`, already on the build's
+  classpath).
