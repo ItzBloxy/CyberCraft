@@ -9,8 +9,9 @@
 # drop onto it: a mob summoned inside the city's 1/8-block skin falls through it. Results come from the chat replies in
 # Minecraft's log: positions (/data get), "Test passed" or "Test failed" (/execute if entity), and the scenes' world
 # records (arrows). The player's off hand is used only if it's empty; its game mode is noted at the start and put back
-# at the end, and its effects are cleared. Last, the world is saved, so stopping Minecraft can't lose any of this. Start
-# Minecraft first; this waits for its world. W (26) walks.
+# at the end, and its effects are cleared. Singleplayer has no /save-all, and a linked game doesn't pause: Minecraft's
+# autosave, every 5 minutes, saves all this, so let one pass before stopping Minecraft. Start Minecraft first; this
+# waits for its world. W (26) walks.
 status
 wait-world 180
 ground city
@@ -154,7 +155,5 @@ type /scoreboard objectives remove sp9mode
 at 1280.5 6.14 2007.5
 wait 7
 scene
-type /save-all flush
-wait 3
 status
 quit
