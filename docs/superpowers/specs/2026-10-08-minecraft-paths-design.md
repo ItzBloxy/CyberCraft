@@ -625,7 +625,10 @@ step 0 again.
   the world loaded before the city's ground came, was teleported to its owner while falling, and died of the fall.
 - **Step 0's script:** summons go half a block above their floors (a mob summoned inside a skin falls through it: the
   pavement's skin spans 6.125 to 6.25, and the first runs summoned at 6.2); a second wandering villager starts on the
-  pavement beside the barrier; the wander heights go to 7.0, where the road climbs; and the world is saved
-  (`/save-all flush`) at the end, since stopping Minecraft from the Modrinth App kills it unsaved.
+  pavement beside the barrier; and the wander heights go to 7.0, where the road climbs.
+- **Minecraft's autosave saves the world:** stopping Minecraft from the Modrinth App kills it unsaved, so the control's
+  test wolf had stayed in the autosave the next session loaded. Singleplayer has no `/save-all` (a dedicated server's
+  command in 26.3), and the pause menu doesn't save a linked game, so before Minecraft is stopped an autosave (every 5
+  minutes) must pass after the last script; `level.dat`'s time shows it.
 - **Diagnostics place the dump where step 0 does:** `mclink`'s `dump` goes around the stand-in V's feet as it runs, so
   a script must stand V at 1280.5 6.14 2007.5 first. The four diagnostics hadn't, and built shifted copies of the city.
