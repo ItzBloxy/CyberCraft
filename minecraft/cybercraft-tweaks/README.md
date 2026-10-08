@@ -51,13 +51,17 @@ answer pathfinding's questions (`dev.cybercraft.tweaks.paths`):
 - **A cell goes by its middle** (`CellRule`, `CityCells`): the central 6 × 6 of its 8 × 8 voxel columns, where a mob up
   to 0.75 wide stands at its centre. Nothing there is air, as before; a top in the lower half is a floor, walkable
   itself, since the city's skins have nothing solid under them; a top in the upper half is a full block, which the cell
-  above stands on.
+  above stands on. A cell whose middle is mostly open, counting the cell below's upper half as covering a column, is a
+  fence (from 1.7.1): a railing, a barrier, a pole, a ledge's last sliver over a drop. Mobs don't path through it or
+  onto it, since its top counts half a block higher than it is, as a Minecraft fence's does; spike 9's step 0 saw them
+  walk onto a road's barrier and fall off its far side.
 - **Walking** (`CityWalkNodes`, `CityPathCache`, `CityNavigation`, `CitySurface`, `CityGoalUtils`): the walk
   evaluator's path types, floor heights and airborne starts; the shared path-type cache skipped for the city's cells;
   strolls ending on the city's floors; paths aimed at its ground, not the top of the world; and its blocked cells solid
   to random positions.
 - **Pets keep up** (`CityPetTeleport`): a pet teleporting to its owner lands on the city's floor, not inside it, which
-  it would fall through.
+  it would fall through, and with its fall distance reset (from 1.7.1), or one teleported while falling would take the
+  whole fall's damage as it lands.
 - **Walls block sight and flyers' shortcuts** (`CitySight`, `CityNavigation`): a mob's line of sight and a flyer's
   straight-line shortcut also cast against the city's triangles (`CityRays`), as arrows do.
 
@@ -114,3 +118,5 @@ villager's body comes before its biome's clothes, those before its profession's,
 villager stroll the road, a cow follows wheat, a wolf follows its owner and teleports to them, a husk chases the player,
 a skeleton below the road's edge doesn't shoot until it sees the player, and a bee follows a dandelion down the rock
 face; without it, none of that happens but the skeleton's shooting, through the rock.
+`spikes/block-render/tools/mclink/teleports.txt` makes a pet wolf follow its owner as the stand-in V jumps 22 blocks
+along the same road five times: with the mod, it lands beside V on the street each time, on the ground.

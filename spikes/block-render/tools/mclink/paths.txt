@@ -5,10 +5,12 @@
 # east from -0.5 to about -6. The deep review's simulation of this ground picked each spot.
 #
 # The checks run one at a time, each cleared before the next: wolves attack what hurts their owner, villagers flee
-# husks. Everything summoned is tagged sp9, keeps no loot and drops nothing. Results come from the chat replies in
+# husks. Everything summoned is tagged sp9, keeps no loot and drops nothing, and goes half a block above its floor, to
+# drop onto it: a mob summoned inside the city's 1/8-block skin falls through it. Results come from the chat replies in
 # Minecraft's log: positions (/data get), "Test passed" or "Test failed" (/execute if entity), and the scenes' world
 # records (arrows). The player's off hand is used only if it's empty; its game mode is noted at the start and put back
-# at the end, and its effects are cleared. Start Minecraft first; this waits for its world. W (26) walks.
+# at the end, and its effects are cleared. Last, the world is saved, so stopping Minecraft can't lose any of this. Start
+# Minecraft first; this waits for its world. W (26) walks.
 status
 wait-world 180
 ground city
@@ -23,11 +25,13 @@ type /execute store success score #survival sp9mode if entity @p[gamemode=surviv
 type /execute store success score #adventure sp9mode if entity @p[gamemode=adventure]
 type /gamemode creative
 scene
-# 1. Wander: a pig, a cow and a villager on the street west of V, their positions every 5 s for 60 s. Each should
-# stroll at least twice and move 3 blocks or more, and stay on the road, at y 6.0 to 7.5.
-type /summon minecraft:pig 1272.5 6.0 2007.5 {Tags:["sp9","sp9w"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty"}
-type /summon minecraft:cow 1272.5 6.0 2012.5 {Tags:["sp9","sp9w"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty"}
-type /summon minecraft:villager 1272.5 6.0 2002.5 {Tags:["sp9","sp9w"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty"}
+# 1. Wander: a pig, a cow and a villager on the street west of V, and a villager on the pavement beside the barrier,
+# their positions every 5 s for 60 s. Each should stroll at least twice and move 3 blocks or more, and stay on the road,
+# at y 6.0 to 7.0 (it climbs to 7.0 at its north end): none on the barrier's top (7.5), a fence, nor below the road.
+type /summon minecraft:pig 1272.5 6.5 2007.5 {Tags:["sp9","sp9w"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty"}
+type /summon minecraft:cow 1272.5 6.5 2012.5 {Tags:["sp9","sp9w"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty"}
+type /summon minecraft:villager 1272.5 6.5 2002.5 {Tags:["sp9","sp9w"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty"}
+type /summon minecraft:villager 1281.5 6.75 1995.5 {Tags:["sp9","sp9w"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty"}
 wait 1
 type /execute as @e[tag=sp9w] run data get entity @s Pos
 wait 5
@@ -59,7 +63,7 @@ type /kill @e[tag=sp9]
 wait 3
 # 2. Tempt: a cow beside V, wheat in the player's off hand (only if it's empty), and the stand-in V walks south about 10
 # blocks along the pavement. The cow should follow to within 4 blocks.
-type /summon minecraft:cow 1278.5 6.2 2009.5 {Tags:["sp9","sp9cow"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty"}
+type /summon minecraft:cow 1278.5 6.75 2009.5 {Tags:["sp9","sp9cow"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty"}
 type /execute unless items entity @p weapon.offhand * run item replace entity @p weapon.offhand with minecraft:wheat
 wait 2
 build on
@@ -77,7 +81,7 @@ wait 3
 # teleports at: it should land beside V, on the street's floor (y 6.0) and on the ground.
 at 1276.5 6.0 2007.5
 wait 2
-type /summon minecraft:wolf 1274.5 6.0 2007.5 {Tags:["sp9","sp9wolf"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty"}
+type /summon minecraft:wolf 1274.5 6.5 2007.5 {Tags:["sp9","sp9wolf"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty"}
 type /data modify entity @e[tag=sp9wolf,limit=1] Owner set from entity @p UUID
 wait 2
 build on
@@ -101,7 +105,7 @@ at 1276.5 6.0 2007.5
 wait 2
 type /effect give @p minecraft:resistance 300 4 true
 type /gamemode survival
-type /summon minecraft:husk 1276.5 6.0 2017.5 {Tags:["sp9","sp9husk"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty"}
+type /summon minecraft:husk 1276.5 6.5 2017.5 {Tags:["sp9","sp9husk"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty"}
 wait 10
 type /execute if entity @e[tag=sp9husk,distance=..2]
 type /execute as @e[tag=sp9husk] run data get entity @s Pos
@@ -113,7 +117,7 @@ wait 3
 # in view, V should draw its arrows, which the scenes' world records list.
 at 1280.5 6.14 2007.5
 wait 2
-type /summon skeleton 1290.5 -1.25 2007.5 {Tags:["sp9","sp9skel"],PersistenceRequired:1b,DeathLootTable:"empty",equipment:{mainhand:{id:bow},head:{id:iron_helmet,components:{unbreakable:{}}}},drop_chances:{mainhand:0f,head:0f}}
+type /summon skeleton 1290.5 -0.75 2007.5 {Tags:["sp9","sp9skel"],PersistenceRequired:1b,DeathLootTable:"empty",equipment:{mainhand:{id:bow},head:{id:iron_helmet,components:{unbreakable:{}}}},drop_chances:{mainhand:0f,head:0f}}
 wait 10
 scene
 at 1286.5 5.5 2007.5
@@ -150,5 +154,7 @@ type /scoreboard objectives remove sp9mode
 at 1280.5 6.14 2007.5
 wait 7
 scene
+type /save-all flush
+wait 3
 status
 quit

@@ -1,0 +1,281 @@
+# Spike 9's teleports: a pet following V as V jumps 22 blocks along the street, five times, each landing watched every
+# quarter second for 4 s (Pos, OnGround), on spike 1's raised-level dump placed as step 0 places it (around 1280.5 6.14
+# 2007.5: a dump goes around the stand-in V's feet as it's loaded). Step 0's first run with 1.7.0 once found its wolf
+# under the road 4 s after such a jump. The wolf is tagged sp9 and killed at the end; nothing else is summoned; the
+# world is saved last. Start Minecraft first; this waits for its world.
+status
+wait-world 180
+ground city
+at 1280.5 6.14 2007.5
+look 0 0
+dump E:\Cyberpunk2077\red4ext\plugins\PhysXProbe\dumps\2026-10-01_14-37-07\collision.obj
+link on
+wait-ground 30
+wait 2
+at 1276.5 6.0 2022.5
+wait 2
+type /summon minecraft:wolf 1274.5 6.5 2022.5 {Tags:["sp9","sp9wolf"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty"}
+type /data modify entity @e[tag=sp9wolf,limit=1] Owner set from entity @p UUID
+wait 3
+at 1276.5 6.0 2000.5
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute if entity @e[tag=sp9wolf,distance=..4]
+wait 2
+at 1276.5 6.0 2022.5
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute if entity @e[tag=sp9wolf,distance=..4]
+wait 2
+at 1276.5 6.0 2000.5
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute if entity @e[tag=sp9wolf,distance=..4]
+wait 2
+at 1276.5 6.0 2022.5
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute if entity @e[tag=sp9wolf,distance=..4]
+wait 2
+at 1276.5 6.0 2000.5
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute if entity @e[tag=sp9wolf,distance=..4]
+wait 2
+type /kill @e[tag=sp9]
+wait 3
+scene
+type /save-all flush
+wait 3
+status
+quit
