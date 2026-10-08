@@ -126,8 +126,8 @@ From its jar (`26.3-0.19.5.jar`, read with `javap`):
   `AmphibiousNodeEvaluator` and `PathNavigation` call it.
 - **`WalkNodeEvaluator.getStart()`:** a mob on the ground starts at floor(y + 0.5). One in the air searches down from
   the cell above its feet while the cell below is air or pathfindable, as far as the world's bottom, and starts above
-  where it stops. `canStartAt` refuses an `OPEN` start, but `getStart` then tries the box's corners and falls back to the
-  start anyway, and A* drops from an open node to the ground below it.
+  where it stops. `canStartAt` refuses an `OPEN` start, but `getStart` then tries the box's corners and falls back to
+  the start anyway, and A* drops from an open node to the ground below it.
 - **`PathNavigation.isStableDestination(pos)`:** `getBlockState(pos.below()).isSolidRender()`. Only
   `GoalUtils.isNotStable` (from `LandRandomPos` and `DefaultRandomPos`) and goats' `PrepareRamNearestTarget` call it.
   `FlyingPathNavigation`, a bee's own navigation (`Bee$1`), amphibians', turtles' and striders' override it.
@@ -404,8 +404,9 @@ gives each check's expected numbers. Everything summoned is tagged `sp9`, with n
 (`/data get entity … Pos`, `/execute if entity …,distance=..N`) and `scene`'s world records.
 
 The checks run one at a time, each cleared before the next, since wolves attack what hurts their owner, villagers flee
-husks, and pillagers target villagers without needing to see them. The player's off hand, checked empty first, holds the wheat and then the dandelion, and is emptied at the
-end. In survival the player has Resistance at its highest, so nothing hurts it, and a husk's hunger never lands.
+husks, and pillagers target villagers without needing to see them. The player's off hand, checked empty first, holds
+the wheat and then the dandelion, and is emptied at the end. In survival the player has Resistance at its highest, so
+nothing hurts it, and a husk's hunger never lands.
 - **Wander:** a pig, a cow and a villager, positions every 5 s for 60 s. Each moves 3 or more blocks and strolls at
   least twice, and stays on the ground (`OnGround:1b`) on the raised level: the simulation reaches about 2,200 places
   within 30 blocks there, none of them on the road 6 to 9 m below.
