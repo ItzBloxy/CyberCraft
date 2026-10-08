@@ -207,10 +207,15 @@ centre. The cell's top is the highest of those 36, and the cell is:
   stair's tread.
 - **blocked:** the top is above 0.5. The cell counts as a full block, and the cell above stands on it, its floor at
   y + top.
+- **fence** (from 1.7.1, "Changes while executing Part 1"): fewer than half (18) of the middle's 36 columns are
+  covered, a column counting as covered if the cell has anything in it or the cell below reaches into its upper half
+  there: a railing, a barrier, a pole, a floor's last sliver over a drop. It's impassable, solid for random positions
+  and never a stroll target, and the cell above stands half a block above its top, as on a Minecraft fence, so no mob
+  jumps onto it. A kerb's cell, part pavement and part the street's top in the cell below, stays a floor.
 
-The answer depends on the shape alone, so it's cached per shape object, held weakly so that old shapes go with their
-regions. SkyCraft builds new shape objects whenever a region is sent again, and full cells share `Shapes.block()`
-(blocked, top 1).
+The answer depends on the shape and the one below it, so each shape's 64 column tops are cached per shape object, held
+weakly so that old shapes go with their regions. SkyCraft builds new shape objects whenever a region is sent again, and
+full cells share `Shapes.block()` (blocked, top 1).
 
 **Minecraft's blocks win.** The city answers only where Minecraft's own answer is open air:
 - for path types, where vanilla answers `OPEN`: air, or a block mobs pass through, such as a flower or a torch placed on
@@ -220,7 +225,7 @@ regions. SkyCraft builds new shape objects whenever a region is sent again, and 
 
 **A cell's floor height** (`floorAt`), used by floor levels and pets' landings:
 - a floor cell: its y + top;
-- a cell above a blocked or floor city cell: that cell's y + top;
+- a cell above a blocked or floor city cell: that cell's y + top; above a fence, half a block higher;
 - otherwise none, and vanilla's answer stands.
 
 **Why floor cells.** Vanilla's rule is "air above a solid block", and the city's skins have nothing solid under them.
@@ -236,8 +241,9 @@ at its edge or corner would become a foothold no mob at the cell's centre has: o
 let a whole-cell rule's mobs climb down the rock face beside the road in falls of up to 3 blocks, which the middle rule
 refuses.
 
-**A known look:** mobs may hop onto railings and low walls up to about a block high, as vanilla mobs do onto iron bars
-and glass panes, since a thin top can be stood on. The raised level's barrier is one.
+**A known look, until 1.7.1:** mobs could hop onto railings and low walls up to about a block high, as vanilla mobs do
+onto iron bars and glass panes, since a thin top could be stood on. The raised level's barrier is one; step 0 saw mobs
+walk along it and drop off its far side, and from 1.7.1 such cells are fences. Wide wall tops stay walkable.
 
 The rules on the 64 column tops (the middle, the kinds, the top, the floor height) live in a class with no Minecraft
 types, `CellRule`, which `CityCells` calls and the unit tests check.
@@ -288,7 +294,8 @@ isn't part of this design.
 Wolves and cats follow by path at 10 blocks, parrots at 5, with nothing beyond section 2. Teleporting at 12 blocks
 needs one mixin on `TamableAnimal`:
 - **The room check** (`canTeleportTo`) puts the pet's box exactly at the cell's `floorAt`, not moved by whole blocks.
-- **The landing** (`maybeTeleportTo`) snaps it to the same height.
+- **The landing** (`maybeTeleportTo`) snaps it to the same height, and resets its fall distance (from 1.7.1): a pet
+  teleported while falling would otherwise take the whole fall's damage as it lands.
 
 A cell with no `floorAt` keeps vanilla's check and landing. Vanilla's landing at a cell's bottom would put a pet inside
 a floor cell's skin, and Minecraft's collision ignores voxels already inside a box (`VoxelShape.collideX`), so the pet
@@ -393,10 +400,11 @@ Each layer can fail, and each new test is broken once to prove it.
 
 A small harness that counts failed checks, as the C++ tests' does, with no JUnit:
 - **`CellRule`'s kinds:** nothing in the middle with walls along the edge columns (none), a sliver in a corner column
-  (none), skins at layers 0 to 3 (floor), 4 to 7 (blocked), a floor with a beam above it (blocked), a wall through the
-  middle (blocked), a full cell (blocked, top 1);
-- **floor heights:** a floor cell, above a blocked cell, above a floor cell, neither;
-- **stroll targets:** a floor cell, above a blocked cell, but not above a floor cell or in the air;
+  (none), skins at layers 0 to 3 (floor), 4 to 7 (blocked), a floor with a beam above it (blocked), a full cell
+  (blocked, top 1); fences: a wall through the middle, a railing's last half block, a floor's last sliver, a pole above
+  nothing, the 18-column boundary, and not a kerb's cell or a pole on the street's top;
+- **floor heights:** a floor cell, above a blocked cell, above a floor cell, above a fence, neither;
+- **stroll targets:** a floor cell, above a blocked cell, but not above a floor cell or a fence, or in the air;
 - **the surface search:** vanilla's columns (onto the block below, up out of something solid, above the world when
   there's nothing, a flower staying), and the city's (into a floor cell below, staying in one, up out of a blocked
   cell);
@@ -439,7 +447,9 @@ nothing hurts it, and a husk's hunger never lands.
 It runs **twice**. First with 1.6.0, still installed, as the control: wander, tempt, chase and the wolf's teleport
 should fail, and the skeleton should shoot through the rock (its arrows sticking in it), which proves the checks can
 tell. Then with 1.7.0, everything passing. Installing 1.7.0 needs Minecraft stopped and the user's leave; 1.6.0 is
-renamed `.jar.disabled`.
+renamed `.jar.disabled`. The run with 1.7.0 found what 1.7.1 fixes ("Changes while executing Part 1"), so step 0 runs a
+third time, with 1.7.1, beside `tools/mclink/teleports.txt`: a pet wolf following the stand-in V through five 22-block
+jumps along the street, each landing sampled every quarter second.
 
 ### Run F, in the game
 
@@ -598,3 +608,24 @@ Part 1 is the mod (CyberCraft Tweaks 1.7.0) and step 0; its plan is
 - **The unit tests also cover stroll targets and the surface search,** which `CellRule` holds.
 - **`PathStats`'s line is written from the server's tick** (Fabric API's `ServerTickEvents`, already on the build's
   classpath).
+
+## Changes while executing Part 1
+
+Step 0's first run with 1.7.0 and four diagnostic scripts after it (the results doc, "Step 0 with CyberCraft Tweaks
+1.7.0: the first run") found three things; Tasks 10 to 13 of the plan fix them in CyberCraft Tweaks 1.7.1 and run
+step 0 again.
+- **Thin cells are fences** (section 1), the user's choice (2026-10-08). The road's barrier, a skin 1/8 block thick and
+  about 1.25 m tall, counted as a full block with a floor on top, and its last half block of skin as a floor cell, so
+  mobs walked onto it and off its far side, onto the ledge behind it and down the rock face. The other choice was
+  section 1's known look, mobs on railings as on iron bars. On the deep review's simulation of the dump, the fence
+  rule takes the barrier's top (64 places) and the ledge behind it (54) out of reach, keeps the street, the pavement
+  and the kerbs, and leaves a stroll's odds of a target at 0.73. A class now needs the cell below, so `CityCells`
+  caches each shape's column tops instead of its class.
+- **A pet's landing resets its fall distance** (section 3): the control's test wolf, left in a stale autosave, fell as
+  the world loaded before the city's ground came, was teleported to its owner while falling, and died of the fall.
+- **Step 0's script:** summons go half a block above their floors (a mob summoned inside a skin falls through it: the
+  pavement's skin spans 6.125 to 6.25, and the first runs summoned at 6.2); a second wandering villager starts on the
+  pavement beside the barrier; the wander heights go to 7.0, where the road climbs; and the world is saved
+  (`/save-all flush`) at the end, since stopping Minecraft from the Modrinth App kills it unsaved.
+- **Diagnostics place the dump where step 0 does:** `mclink`'s `dump` goes around the stand-in V's feet as it runs, so
+  a script must stand V at 1280.5 6.14 2007.5 first. The four diagnostics hadn't, and built shifted copies of the city.

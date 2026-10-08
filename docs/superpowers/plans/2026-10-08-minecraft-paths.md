@@ -7,7 +7,8 @@
 **Goal:** Part 1 of spike 9: CyberCraft Tweaks 1.7.0, with which Minecraft's mobs find their way on Night City's
 ground (wander, go to targets, keep up with their owner as pets, fly around its walls, and don't see through them),
 then step 0 of the spec: the same `mclink` script on spike 1's dumped ground twice, first with 1.6.0 as the control,
-then with 1.7.0.
+then with 1.7.0. Tasks 10 to 13, added after step 0's first run with 1.7.0, make CyberCraft Tweaks 1.7.1 (thin city
+cells are fences; a pet's landing resets its fall distance) and run step 0 again with it, with a pet's teleports.
 
 **Architecture:** all of it is on Minecraft's side, in CyberCraft Tweaks (`minecraft/cybercraft-tweaks`):
 - **`dev.cybercraft.tweaks.paths`,** plain classes:
@@ -63,6 +64,10 @@ results, as earlier spikes' second parts were.
   - Step 0's script parses in `mclink`, and its spots come from the spec's deep review's simulation of spike 1's
     dump: BlockRender's own voxelizer, and the walk rules, sight rays against the dump's triangles ("Found while
     planning Part 1").
+  - Tasks 10 to 12, added while executing, were verified the same way: replayed from this plan's text in a fresh
+    clone, with 56 unit checks and 12 mixin checks passing, zero warnings, both scripts parsing, and the trees
+    identical to the scratch clone's. 18 mutations of `CellRule` (the fence rule's 8, and 10 of Part 1's rules
+    again) each failed the check that guards it.
 - **Minecraft:** stopped for an install (its jars are locked while it runs); started by the user for step 0. The game
   stays closed throughout: `mclink` takes its place on the link.
 
@@ -1975,15 +1980,1021 @@ cd /d/Cyberpunk-Minecraft && git add docs/spikes/2026-10-08-minecraft-paths-resu
 
 ---
 
-### Task 10: Close Part 1, and plan Part 2
+### Task 10: Thin city cells are fences
+
+Added while executing Part 1, after step 0's first run with 1.7.0 and its diagnostics (Task 9; the results doc has
+them). Mobs walked onto the road's barrier, a skin 1/8 block thick and about 1.25 m tall, whose cells counted as a full
+block with a floor on top (its last half block of skin was even a floor cell), and off its far side onto the ledge
+behind and the levels below. The user chose to make such cells fences (2026-10-08). `CellRule` gains a fourth kind,
+`THIN`: a cell whose middle has fewer than half (18) of its 36 columns covered, a column counting as covered if the
+cell has anything in it or the cell below reaches into its upper half there (a kerb's cell, part pavement and part
+the street's top below, stays a floor). A fence is impassable (`BLOCKED`), solid to random positions, never a stroll
+target, and the cell above it stands half a block higher than its top (`FENCE_RISE`), as on a Minecraft fence's
+1.5-block collision, so the jump check refuses it. `CityCells` keeps each shape's 64 column tops instead of its class,
+since a class now takes the cell below too; `PathStats` counts shapes read.
+
+On the deep review's simulation of the dump, the rule takes the barrier's top (64 places) and the ledge behind it (54)
+out of reach, and nothing of the street and pavement; 1,597 of the 20,162 cells near V are fences.
+
+**Files:**
+- Modify: `minecraft/cybercraft-tweaks/src/test/java/dev/cybercraft/tweaks/paths/CellRuleTest.java`,
+  `minecraft/cybercraft-tweaks/src/main/java/dev/cybercraft/tweaks/paths/CellRule.java`,
+  `minecraft/cybercraft-tweaks/src/main/java/dev/cybercraft/tweaks/paths/CityCells.java`,
+  `minecraft/cybercraft-tweaks/src/main/java/dev/cybercraft/tweaks/paths/PathStats.java`
+
+- [ ] **Step 1: Edit `minecraft/cybercraft-tweaks/src/test/java/dev/cybercraft/tweaks/paths/CellRuleTest.java` for fences**
+
+```java
+        check(CellRule.kind(CellRule.classify(edges)) == CellRule.NONE, "walls along the edges leave the middle empty");
+        int[] corner = new int[64];
+        corner[63] = 6;
+        check(CellRule.classify(corner) == packed(CellRule.NONE, 0), "a sliver in a corner column is no foothold");
+        for (int layer = 0; layer < 4; layer++) {
+            int cell = CellRule.classify(all(layer + 1));
+```
+```java
+        check(CellRule.kind(CellRule.classify(edges, null)) == CellRule.NONE, "walls along the edges leave the middle empty");
+        int[] corner = new int[64];
+        corner[63] = 6;
+        check(CellRule.classify(corner, null) == packed(CellRule.NONE, 0), "a sliver in a corner column is no foothold");
+        for (int layer = 0; layer < 4; layer++) {
+            int cell = CellRule.classify(all(layer + 1), null);
+```
+```java
+            int cell = CellRule.classify(all(layer + 1));
+```
+```java
+            int cell = CellRule.classify(all(layer + 1), null);
+```
+```java
+        check(CellRule.classify(beam) == packed(CellRule.BLOCKED, 7), "a floor with a beam above it is blocked");
+```
+```java
+        check(CellRule.classify(beam, null) == packed(CellRule.BLOCKED, 7), "a floor with a beam above it is blocked");
+        check(CellRule.classify(all(8), null) == packed(CellRule.BLOCKED, 8), "a full cell is blocked, its top 1");
+        check(CellRule.classify(new int[64], null) == packed(CellRule.NONE, 0), "an empty cell is none");
+        check(CellRule.classify(new int[64], all(8)) == packed(CellRule.NONE, 0), "an empty cell on a full one is none");
+        thin();
+    }
+
+    /** Fences: a cell whose middle is mostly open, counting the cell below's upper half as covering a column. */
+    private static void thin() {
+```
+```java
+        check(CellRule.classify(wall) == packed(CellRule.BLOCKED, 8), "a wall through the middle is blocked");
+        check(CellRule.classify(all(8)) == packed(CellRule.BLOCKED, 8), "a full cell is blocked, its top 1");
+        check(CellRule.classify(new int[64]) == packed(CellRule.NONE, 0), "an empty cell is none");
+```
+```java
+        check(CellRule.classify(wall, null) == packed(CellRule.THIN, 8), "a wall through the middle is a fence");
+        int[] railing = new int[64];
+        for (int z = 0; z < 8; z++) {
+            railing[z * 8 + 3] = 4;
+        }
+        check(CellRule.classify(railing, null) == packed(CellRule.THIN, 4),
+            "a railing's last half block of skin is a fence, not a floor");
+        int[] ledge = new int[64];
+        for (int z = 0; z < 8; z++) {
+            for (int x = 0; x < 3; x++) {
+                ledge[z * 8 + x] = 2;
+            }
+        }
+        check(CellRule.classify(ledge, null) == packed(CellRule.THIN, 2), "a floor's last sliver over a drop is a fence");
+        int[] floorOnHalf = new int[64];
+        int[] streetBelow = new int[64];
+        for (int z = 0; z < 8; z++) {
+            for (int x = 0; x < 8; x++) {
+                if (x < 3) {
+                    floorOnHalf[z * 8 + x] = 2;
+                } else {
+                    streetBelow[z * 8 + x] = 8;
+                }
+            }
+        }
+        check(CellRule.classify(floorOnHalf, streetBelow) == packed(CellRule.FLOOR, 2),
+            "a kerb's cell, part pavement and part the street's top below, is a floor");
+        int[] lowBelow = new int[64];
+        for (int i = 0; i < 64; i++) {
+            lowBelow[i] = streetBelow[i] > 0 ? 4 : 0;
+        }
+        check(CellRule.classify(floorOnHalf, lowBelow) == packed(CellRule.THIN, 2),
+            "the cell below's lower half covers nothing");
+        int[] poleOnStreet = new int[64];
+        poleOnStreet[3 * 8 + 3] = 8;
+        check(CellRule.classify(poleOnStreet, all(8)) == packed(CellRule.BLOCKED, 8),
+            "a pole standing on the street's top is a block");
+        check(CellRule.classify(poleOnStreet, null) == packed(CellRule.THIN, 8), "a pole above nothing is a fence");
+        int[] eighteen = new int[64];
+        for (int z = 1; z < 4; z++) {
+            for (int x = 1; x < 7; x++) {
+                eighteen[z * 8 + x] = 2;
+            }
+        }
+        check(CellRule.kind(CellRule.classify(eighteen, null)) == CellRule.FLOOR, "half the middle covered is a floor");
+        eighteen[3 * 8 + 6] = 0;
+        check(CellRule.kind(CellRule.classify(eighteen, null)) == CellRule.THIN, "one column short of half is a fence");
+```
+```java
+        check(Double.isNaN(CellRule.floorAt(6, blocked, -1)), "inside a blocked cell: no floor");
+        check(CellRule.stable(floor, -1), "a floor cell is a stroll target");
+        check(CellRule.stable(none, blocked), "just above a blocked cell is a stroll target");
+```
+```java
+        check(Double.isNaN(CellRule.floorAt(6, blocked, -1)), "inside a blocked cell: no floor");
+        int fence = packed(CellRule.THIN, 8);
+        check(near(CellRule.floorAt(7, none, fence), 7.5), "above a fence, half a block over its top");
+        check(Double.isNaN(CellRule.floorAt(6, fence, -1)), "inside a fence: no floor");
+        check(CellRule.stable(floor, -1), "a floor cell is a stroll target");
+        check(CellRule.stable(none, blocked), "just above a blocked cell is a stroll target");
+        check(!CellRule.stable(none, fence), "above a fence isn't a stroll target");
+        check(!CellRule.stable(fence, -1), "a fence isn't a stroll target");
+```
+
+- [ ] **Step 2: Run CyberCraft Tweaks' unit tests; they must fail, `classify` taking no cell below yet**
+
+```bash
+cd /d/Cyberpunk-Minecraft/minecraft/cybercraft-tweaks && bash test.sh 2>&1 | grep -m 2 "error"; echo "exit: ${PIPESTATUS[0]}"
+```
+Expected: `method classify in class CellRule cannot be applied to given types` and `exit: 1`.
+
+- [ ] **Step 3: Edit `minecraft/cybercraft-tweaks/src/main/java/dev/cybercraft/tweaks/paths/CellRule.java` for fences**
+
+```java
+ * nothing solid under them; a top in the upper half is {@link #BLOCKED}, a full block the cell above stands on.
+```
+```java
+ * nothing solid under them; a top in the upper half is {@link #BLOCKED}, a full block the cell above stands on.
+ *
+ * <p>A cell whose middle is mostly open is a {@link #THIN} one, a fence: a railing, a barrier, a pole, a ledge's last
+ * sliver over a drop. A middle column counts as covered if the cell has anything in it, or the cell below reaches into
+ * its upper half there, so a kerb's cell, half pavement and half the street's top below, isn't one. Spike 9's step 0
+ * saw mobs walk onto the road's thin barrier, which as a full block had a floor on top, and fall off its far side.
+```
+```java
+    public static final int BLOCKED = 2;
+```
+```java
+    public static final int BLOCKED = 2;
+    /** Fewer than half the middle's columns covered: a fence, impassable, its top half a block higher than it is. */
+    public static final int THIN = 3;
+
+    /** How much higher than its top a fence's top counts, as a Minecraft fence's 1.5-block collision does. */
+    public static final double FENCE_RISE = 0.5;
+```
+```java
+     * tops: index {@code z * 8 + x}, each 0 for an empty column, or 1 to 8 for one whose highest voxel is in layer 0 to
+     * 7. Only the middle 6 × 6 columns count.
+     */
+    public static int classify(int[] tops) {
+        int top = 0;
+        for (int z = 1; z < 7; z++) {
+            for (int x = 1; x < 7; x++) {
+                top = Math.max(top, tops[z * 8 + x]);
+            }
+        }
+        int kind = top == 0 ? NONE : top <= 4 ? FLOOR : BLOCKED;
+        return kind | top << 2;
+    }
+
+    /** A packed cell's kind: {@link #NONE}, {@link #FLOOR} or {@link #BLOCKED}. */
+```
+```java
+     * tops and those of the cell below ({@code null} for none): index {@code z * 8 + x}, each 0 for an empty column, or
+     * 1 to 8 for one whose highest voxel is in layer 0 to 7. Only the middle 6 × 6 columns count.
+     */
+    public static int classify(int[] tops, int[] below) {
+        int top = 0, covered = 0;
+        for (int z = 1; z < 7; z++) {
+            for (int x = 1; x < 7; x++) {
+                int i = z * 8 + x;
+                top = Math.max(top, tops[i]);
+                if (tops[i] > 0 || below != null && below[i] > 4) {
+                    covered++;
+                }
+            }
+        }
+        int kind = top == 0 ? NONE : covered < 18 ? THIN : top <= 4 ? FLOOR : BLOCKED;
+        return kind | top << 2;
+    }
+
+    /** A packed cell's kind: {@link #NONE}, {@link #FLOOR}, {@link #BLOCKED} or {@link #THIN}. */
+```
+```java
+     * Where a mob in cell {@code y} stands: on a floor in the cell itself, or on the top of a floor or blocked cell
+     * below; {@code NaN} if neither. Each of {@code here} and {@code below} is a packed cell, or -1 where the city
+     * doesn't count (no shape, or Minecraft's own block there).
+```
+```java
+     * Where a mob in cell {@code y} stands: on a floor in the cell itself, or on the top of a floor, blocked or thin
+     * cell below, a thin one's {@link #FENCE_RISE} higher; {@code NaN} if neither. Each of {@code here} and
+     * {@code below} is a packed cell, or -1 where the city doesn't count (no shape, or Minecraft's own block there).
+```
+```java
+            return y - 1 + top(below);
+```
+```java
+            return y - 1 + top(below) + (kind(below) == THIN ? FENCE_RISE : 0.0);
+```
+```java
+    /** Whether a mob may stroll to cell {@code here}: a floor itself, or just above a blocked cell. */
+```
+```java
+    /** Whether a mob may stroll to cell {@code here}: a floor itself, or just above a blocked cell, not a thin one. */
+```
+
+- [ ] **Step 4: Run CyberCraft Tweaks' unit tests; they must pass**
+
+```bash
+cd /d/Cyberpunk-Minecraft/minecraft/cybercraft-tweaks && bash test.sh 2>&1 | tail -3; echo "exit: ${PIPESTATUS[0]}"
+```
+Expected: `56 check(s), 0 failure(s)` and `exit: 0`, with no line starting FAIL.
+
+- [ ] **Step 5: Edit `minecraft/cybercraft-tweaks/src/main/java/dev/cybercraft/tweaks/paths/CityCells.java` to read the cell below, and fences**
+
+```java
+ * <p>A cell's class depends on its shape alone, so it's kept per shape object, weakly: SkyCraft builds new shapes
+ * whenever a region is sent again, and the old ones go with their region. {@code VoxelShape} keeps
+ * {@code Object.equals}, so the map goes by identity.
+```
+```java
+ * <p>A cell's class depends on its shape and the shape of the cell below it (a thin cell's columns can be covered from
+ * below), so what's kept is each shape's 64 column tops, per shape object, weakly: SkyCraft builds new shapes whenever
+ * a region is sent again, and the old ones go with their region. {@code VoxelShape} keeps {@code Object.equals}, so
+ * the map goes by identity.
+```
+```java
+    private static final Map<VoxelShape, Integer> CLASSES = Collections.synchronizedMap(new WeakHashMap<>());
+```
+```java
+    private static final Map<VoxelShape, int[]> TOPS = Collections.synchronizedMap(new WeakHashMap<>());
+```
+```java
+    /** The city's cell at {@code pos}, packed as {@link CellRule#classify} packs it, or -1 where SkyCraft has none. */
+    public static int cell(BlockPos pos) {
+        VoxelShape shape = SkyCollision.shapeAt(pos);
+        if (shape == null) {
+            return -1;
+        }
+        Integer known = CLASSES.get(shape);
+```
+```java
+    /** The 64 column tops of SkyCraft's shape at {@code pos}, as {@link CellRule#classify} takes them, or null. */
+    private static int[] tops(BlockPos pos) {
+        VoxelShape shape = SkyCollision.shapeAt(pos);
+        if (shape == null) {
+            return null;
+        }
+        int[] known = TOPS.get(shape);
+```
+```java
+        int cell = CellRule.classify(tops);
+        CLASSES.put(shape, cell);
+        PathStats.classified();
+        return cell;
+```
+```java
+        TOPS.put(shape, tops);
+        PathStats.shapeRead();
+        return tops;
+    }
+
+    /** The city's cell at {@code pos}, packed as {@link CellRule#classify} packs it, or -1 where SkyCraft has none. */
+    public static int cell(BlockPos pos) {
+        int[] tops = tops(pos);
+        return tops == null ? -1 : CellRule.classify(tops, tops(pos.below()));
+```
+```java
+    /** The path type for a cell vanilla calls {@code OPEN}: {@code WALKABLE} for a floor, {@code BLOCKED}, or null. */
+```
+```java
+    /** The path type for a cell vanilla calls {@code OPEN}: {@code WALKABLE} for a floor, else {@code BLOCKED}, or null. */
+```
+```java
+    /** Whether this cell is a blocked city cell: solid, for random positions. */
+    public static boolean blockedAt(BlockGetter level, BlockPos pos) {
+        int cell = open(level, pos);
+        boolean blocked = cell >= 0 && CellRule.kind(cell) == CellRule.BLOCKED;
+```
+```java
+    /** Whether this cell is a blocked or thin city cell: solid, for random positions. */
+    public static boolean blockedAt(BlockGetter level, BlockPos pos) {
+        int cell = open(level, pos);
+        boolean blocked = cell >= 0 && (CellRule.kind(cell) == CellRule.BLOCKED || CellRule.kind(cell) == CellRule.THIN);
+```
+
+- [ ] **Step 6: Edit `minecraft/cybercraft-tweaks/src/main/java/dev/cybercraft/tweaks/paths/PathStats.java` to count shapes read**
+
+```java
+ * answers, the shapes classified, the sight and shortcut casts with their hits and time, and the pets landed on the
+```
+```java
+ * answers, the shapes read, the sight and shortcut casts with their hits and time, and the pets landed on the
+```
+```java
+    private static final AtomicLong CLASSIFIED = new AtomicLong();
+```
+```java
+    private static final AtomicLong SHAPES = new AtomicLong();
+```
+```java
+    public static void classified() {
+        CLASSIFIED.incrementAndGet();
+```
+```java
+    public static void shapeRead() {
+        SHAPES.incrementAndGet();
+```
+```java
+        long answers = ANSWERS.getAndSet(0), classified = CLASSIFIED.getAndSet(0);
+        long sight = SIGHT_CASTS.getAndSet(0), sightHits = SIGHT_HITS.getAndSet(0);
+        long shortcuts = SHORTCUT_CASTS.getAndSet(0), shortcutHits = SHORTCUT_HITS.getAndSet(0);
+        long nanos = CAST_NANOS.getAndSet(0), pets = PETS.getAndSet(0);
+        if (answers + classified + sight + shortcuts + pets == 0) {
+            return;
+        }
+        CyberCraftTweaks.LOG.info("CyberCraft Tweaks: paths in the last minute: {} city answers, {} shapes classified; "
+            + "{} sight casts ({} hit), {} shortcut casts ({} hit), {} ms casting; {} pets landed on the city's floor",
+            answers, classified, sight, sightHits, shortcuts, shortcutHits, String.format("%.1f", nanos / 1e6), pets);
+```
+```java
+        long answers = ANSWERS.getAndSet(0), shapes = SHAPES.getAndSet(0);
+        long sight = SIGHT_CASTS.getAndSet(0), sightHits = SIGHT_HITS.getAndSet(0);
+        long shortcuts = SHORTCUT_CASTS.getAndSet(0), shortcutHits = SHORTCUT_HITS.getAndSet(0);
+        long nanos = CAST_NANOS.getAndSet(0), pets = PETS.getAndSet(0);
+        if (answers + shapes + sight + shortcuts + pets == 0) {
+            return;
+        }
+        CyberCraftTweaks.LOG.info("CyberCraft Tweaks: paths in the last minute: {} city answers, {} shapes read; "
+            + "{} sight casts ({} hit), {} shortcut casts ({} hit), {} ms casting; {} pets landed on the city's floor",
+            answers, shapes, sight, sightHits, shortcuts, shortcutHits, String.format("%.1f", nanos / 1e6), pets);
+```
+
+- [ ] **Step 7: Build CyberCraft Tweaks, and check the mixins**
+
+```bash
+cd /d/Cyberpunk-Minecraft/minecraft/cybercraft-tweaks && out=$(bash build.sh 2>&1); echo "$out" | tail -1; \
+  echo "warnings: $(echo "$out" | grep -c -i warning)"; bash mixins.sh 2>&1 | tail -1
+```
+Expected: `built build/cybercraft-tweaks-1.7.0.jar against 26.3-`, `warnings: 0` and `12 mixin check(s), 0 problem(s)`.
+
+- [ ] **Step 8: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add minecraft/cybercraft-tweaks/src \
+  && git commit -q -m "minecraft-paths: thin city cells are fences: mobs don't path through them or onto them" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 11: A pet's landing resets its fall distance
+
+Also added while executing: a pet teleported to its owner while falling kept its fall distance, and took that whole
+fall's damage as it landed (the control's test wolf, Task 9). `Entity.snapTo` doesn't reset it; `resetFallDistance`
+does.
+
+**Files:**
+- Modify: `minecraft/cybercraft-tweaks/src/main/java/dev/cybercraft/tweaks/mixin/CityPetTeleport.java`
+
+- [ ] **Step 1: Edit `minecraft/cybercraft-tweaks/src/main/java/dev/cybercraft/tweaks/mixin/CityPetTeleport.java` to reset the fall distance**
+
+```java
+ * check and the landing go to that floor's height; anywhere else vanilla's check and landing stand.
+```
+```java
+ * check and the landing go to that floor's height; anywhere else vanilla's check and landing stand. A pet landed so has
+ * its fall distance reset: one teleported while falling (as the world loads, before the city's ground arrives) would
+ * otherwise take that whole fall's damage as it lands, as a test wolf did in spike 9's step 0.
+```
+```java
+        pet.snapTo(x + 0.5, floor, z + 0.5, pet.getYRot(), pet.getXRot());
+```
+```java
+        pet.snapTo(x + 0.5, floor, z + 0.5, pet.getYRot(), pet.getXRot());
+        pet.resetFallDistance();
+```
+
+- [ ] **Step 2: Build CyberCraft Tweaks, and check the mixins**
+
+```bash
+cd /d/Cyberpunk-Minecraft/minecraft/cybercraft-tweaks && out=$(bash build.sh 2>&1); echo "$out" | tail -1; \
+  echo "warnings: $(echo "$out" | grep -c -i warning)"; bash mixins.sh 2>&1 | tail -1
+```
+Expected: `built build/cybercraft-tweaks-1.7.0.jar against 26.3-`, `warnings: 0` and `12 mixin check(s), 0 problem(s)`.
+
+- [ ] **Step 3: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add minecraft/cybercraft-tweaks/src \
+  && git commit -q -m "minecraft-paths: a pet's landing on the city's floor resets its fall distance" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 12: CyberCraft Tweaks 1.7.1, and step 0's scripts
+
+- **1.7.1**, and the README says what's new.
+- **Step 0's script:** every summon goes half a block above its floor, to drop onto it (one inside the city's skin
+  falls through it: the pavement's skin spans 6.125 to 6.25, and the first runs summoned at 6.2); a second wandering
+  villager starts on the pavement beside the barrier; the wander check's heights go to 7.0, where the road climbs at
+  its north end; and the world is saved last (`/save-all flush`).
+- **`tools/mclink/teleports.txt`:** a wolf following the stand-in V as it jumps 22 blocks along the street, five times,
+  each landing watched every quarter second, with the dump placed as step 0 places it (a dump goes around V's feet as
+  `dump` runs, which diagnostics 1 to 4 forgot).
+
+**Files:**
+- Modify: `minecraft/cybercraft-tweaks/src/main/resources/fabric.mod.json`, `minecraft/cybercraft-tweaks/README.md`,
+  `spikes/block-render/tools/mclink/paths.txt`
+- Create: `spikes/block-render/tools/mclink/teleports.txt`
+
+- [ ] **Step 1: Edit `minecraft/cybercraft-tweaks/src/main/resources/fabric.mod.json` for 1.7.1**
+
+```json
+  "version": "1.7.0",
+```
+```json
+  "version": "1.7.1",
+```
+
+- [ ] **Step 2: Edit `minecraft/cybercraft-tweaks/README.md` to say what 1.7.1 adds**
+
+```markdown
+  above stands on.
+```
+```markdown
+  above stands on. A cell whose middle is mostly open, counting the cell below's upper half as covering a column, is a
+  fence (from 1.7.1): a railing, a barrier, a pole, a ledge's last sliver over a drop. Mobs don't path through it or
+  onto it, since its top counts half a block higher than it is, as a Minecraft fence's does; spike 9's step 0 saw them
+  walk onto a road's barrier and fall off its far side.
+```
+```markdown
+  it would fall through.
+```
+```markdown
+  it would fall through, and with its fall distance reset (from 1.7.1), or one teleported while falling would take the
+  whole fall's damage as it lands.
+```
+```markdown
+face; without it, none of that happens but the skeleton's shooting, through the rock.
+```
+```markdown
+face; without it, none of that happens but the skeleton's shooting, through the rock.
+`spikes/block-render/tools/mclink/teleports.txt` makes a pet wolf follow its owner as the stand-in V jumps 22 blocks
+along the same road five times: with the mod, it lands beside V on the street each time, on the ground.
+```
+
+- [ ] **Step 3: Edit `tools/mclink/paths.txt` to drop summons onto their floors, watch the barrier, and save**
+
+```text
+# husks. Everything summoned is tagged sp9, keeps no loot and drops nothing. Results come from the chat replies in
+# Minecraft's log: positions (/data get), "Test passed" or "Test failed" (/execute if entity), and the scenes' world
+# records (arrows). The player's off hand is used only if it's empty; its game mode is noted at the start and put back
+# at the end, and its effects are cleared. Start Minecraft first; this waits for its world. W (26) walks.
+```
+```text
+# husks. Everything summoned is tagged sp9, keeps no loot and drops nothing, and goes half a block above its floor, to
+# drop onto it: a mob summoned inside the city's 1/8-block skin falls through it. Results come from the chat replies in
+# Minecraft's log: positions (/data get), "Test passed" or "Test failed" (/execute if entity), and the scenes' world
+# records (arrows). The player's off hand is used only if it's empty; its game mode is noted at the start and put back
+# at the end, and its effects are cleared. Last, the world is saved, so stopping Minecraft can't lose any of this. Start
+# Minecraft first; this waits for its world. W (26) walks.
+```
+```text
+# 1. Wander: a pig, a cow and a villager on the street west of V, their positions every 5 s for 60 s. Each should
+# stroll at least twice and move 3 blocks or more, and stay on the road, at y 6.0 to 7.5.
+type /summon minecraft:pig 1272.5 6.0 2007.5 {Tags:["sp9","sp9w"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty"}
+type /summon minecraft:cow 1272.5 6.0 2012.5 {Tags:["sp9","sp9w"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty"}
+type /summon minecraft:villager 1272.5 6.0 2002.5 {Tags:["sp9","sp9w"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty"}
+```
+```text
+# 1. Wander: a pig, a cow and a villager on the street west of V, and a villager on the pavement beside the barrier,
+# their positions every 5 s for 60 s. Each should stroll at least twice and move 3 blocks or more, and stay on the road,
+# at y 6.0 to 7.0 (it climbs to 7.0 at its north end): none on the barrier's top (7.5), a fence, nor below the road.
+type /summon minecraft:pig 1272.5 6.5 2007.5 {Tags:["sp9","sp9w"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty"}
+type /summon minecraft:cow 1272.5 6.5 2012.5 {Tags:["sp9","sp9w"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty"}
+type /summon minecraft:villager 1272.5 6.5 2002.5 {Tags:["sp9","sp9w"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty"}
+type /summon minecraft:villager 1281.5 6.75 1995.5 {Tags:["sp9","sp9w"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty"}
+```
+```text
+type /summon minecraft:cow 1278.5 6.2 2009.5 {Tags:["sp9","sp9cow"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty"}
+```
+```text
+type /summon minecraft:cow 1278.5 6.75 2009.5 {Tags:["sp9","sp9cow"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty"}
+```
+```text
+type /summon minecraft:wolf 1274.5 6.0 2007.5 {Tags:["sp9","sp9wolf"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty"}
+```
+```text
+type /summon minecraft:wolf 1274.5 6.5 2007.5 {Tags:["sp9","sp9wolf"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty"}
+```
+```text
+type /summon minecraft:husk 1276.5 6.0 2017.5 {Tags:["sp9","sp9husk"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty"}
+```
+```text
+type /summon minecraft:husk 1276.5 6.5 2017.5 {Tags:["sp9","sp9husk"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty"}
+```
+```text
+type /summon skeleton 1290.5 -1.25 2007.5 {Tags:["sp9","sp9skel"],PersistenceRequired:1b,DeathLootTable:"empty",equipment:{mainhand:{id:bow},head:{id:iron_helmet,components:{unbreakable:{}}}},drop_chances:{mainhand:0f,head:0f}}
+```
+```text
+type /summon skeleton 1290.5 -0.75 2007.5 {Tags:["sp9","sp9skel"],PersistenceRequired:1b,DeathLootTable:"empty",equipment:{mainhand:{id:bow},head:{id:iron_helmet,components:{unbreakable:{}}}},drop_chances:{mainhand:0f,head:0f}}
+```
+```text
+scene
+status
+```
+```text
+scene
+type /save-all flush
+wait 3
+status
+```
+
+- [ ] **Step 4: Write `tools/mclink/teleports.txt`**
+
+```text
+# Spike 9's teleports: a pet following V as V jumps 22 blocks along the street, five times, each landing watched every
+# quarter second for 4 s (Pos, OnGround), on spike 1's raised-level dump placed as step 0 places it (around 1280.5 6.14
+# 2007.5: a dump goes around the stand-in V's feet as it's loaded). Step 0's first run with 1.7.0 once found its wolf
+# under the road 4 s after such a jump. The wolf is tagged sp9 and killed at the end; nothing else is summoned; the
+# world is saved last. Start Minecraft first; this waits for its world.
+status
+wait-world 180
+ground city
+at 1280.5 6.14 2007.5
+look 0 0
+dump E:\Cyberpunk2077\red4ext\plugins\PhysXProbe\dumps\2026-10-01_14-37-07\collision.obj
+link on
+wait-ground 30
+wait 2
+at 1276.5 6.0 2022.5
+wait 2
+type /summon minecraft:wolf 1274.5 6.5 2022.5 {Tags:["sp9","sp9wolf"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty"}
+type /data modify entity @e[tag=sp9wolf,limit=1] Owner set from entity @p UUID
+wait 3
+at 1276.5 6.0 2000.5
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute if entity @e[tag=sp9wolf,distance=..4]
+wait 2
+at 1276.5 6.0 2022.5
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute if entity @e[tag=sp9wolf,distance=..4]
+wait 2
+at 1276.5 6.0 2000.5
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute if entity @e[tag=sp9wolf,distance=..4]
+wait 2
+at 1276.5 6.0 2022.5
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute if entity @e[tag=sp9wolf,distance=..4]
+wait 2
+at 1276.5 6.0 2000.5
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute as @e[tag=sp9wolf] run data get entity @s Pos
+type /execute as @e[tag=sp9wolf] run data get entity @s OnGround
+wait 0.1
+type /execute if entity @e[tag=sp9wolf,distance=..4]
+wait 2
+type /kill @e[tag=sp9]
+wait 3
+scene
+type /save-all flush
+wait 3
+status
+quit
+```
+
+- [ ] **Step 5: Build CyberCraft Tweaks, run its unit tests, and check the mixins**
+
+```bash
+cd /d/Cyberpunk-Minecraft/minecraft/cybercraft-tweaks && out=$(bash build.sh 2>&1); echo "$out" | tail -1; \
+  echo "warnings: $(echo "$out" | grep -c -i warning)"; bash test.sh 2>&1 | tail -1; bash mixins.sh 2>&1 | tail -1
+```
+Expected: `built build/cybercraft-tweaks-1.7.1.jar against 26.3-`, `warnings: 0`, `56 check(s), 0 failure(s)` and
+`12 mixin check(s), 0 problem(s)`.
+
+- [ ] **Step 6: Check that mclink parses step 0's scripts**
+
+As in Task 7: each with a line `mclink` doesn't know at its end, so nothing runs, even with Minecraft open.
+```bash
+cd /d/Cyberpunk-Minecraft/spikes/block-render && mkdir -p build && for s in paths teleports; do \
+  { cat tools/mclink/$s.txt; echo "parse-check-stop here"; } > build/$s-parse.txt; \
+  ./build/RelWithDebInfo/mclink.exe build/$s-parse.txt; echo "exit: $?"; done
+```
+Expected: `paths-parse.txt: line 161: unknown action: "parse-check-stop here"`, `teleports-parse.txt: line 282: unknown action: "parse-check-stop here"`
+and `exit: 2`.
+
+- [ ] **Step 7: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add minecraft/cybercraft-tweaks/src minecraft/cybercraft-tweaks/README.md \
+       spikes/block-render/tools/mclink/paths.txt spikes/block-render/tools/mclink/teleports.txt \
+  && git commit -q -m "minecraft-paths: CyberCraft Tweaks 1.7.1, and step 0's summons dropped onto their floors" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 13: In Minecraft: CyberCraft Tweaks 1.7.1, step 0 and the teleports
+
+Minecraft is still running from Task 9's diagnostics, in its world, its window hidden. The user's player is in
+creative (from the stale save) with the shield in inventory slot 15 (Task 8): both go back at the end.
+
+**Files:**
+- Modify: `docs/spikes/2026-10-08-minecraft-paths-results.md`
+
+- [ ] **Step 1: Save Minecraft's world, then ask the user to stop Minecraft**
+
+Stopping from the Modrinth App kills Minecraft unsaved, so the world is saved first, through the link (`mclink` types
+it), with the city's ground under the player as step 0 places it. Write `spikes/block-render/build/step0/save.txt`
+(scratch, not committed), with the Write tool (the Bash tool collapses backslashes):
+```text
+# Minecraft's world saved through the link, before Minecraft is stopped: stopping it from the Modrinth App kills it
+# unsaved. Linked as step 0 is, on the same dumped ground, so the player stands where step 0 left it.
+status
+wait-world 60
+ground city
+at 1280.5 6.14 2007.5
+look 0 0
+dump E:\Cyberpunk2077\red4ext\plugins\PhysXProbe\dumps\2026-10-01_14-37-07\collision.obj
+link on
+wait-ground 30
+wait 2
+type /save-all flush
+wait 3
+status
+quit
+```
+Then:
+```bash
+L="/c/Users/BLOXY/AppData/Roaming/ModrinthApp/profiles/CyberCraft/logs/latest.log"; before=$(wc -l < "$L"); \
+  cd /d/Cyberpunk-Minecraft/spikes/block-render \
+  && ./build/RelWithDebInfo/mclink.exe build/step0/save.txt > build/step0/save.log 2>&1; echo "exit: $?"; \
+  tail -n +$((before + 1)) "$L" | grep -E "\[CHAT\]" | sed 's/.*\[CHAT\] //'
+```
+Expected: `exit: 0` and `Saved the game`. Then the user stops Minecraft from the Modrinth App (this is also Task 9's
+step 5), and:
+```bash
+tasklist | grep -i -c "javaw.exe"
+```
+Expected: `0`.
+
+- [ ] **Step 2: Install CyberCraft Tweaks 1.7.1, with the user's leave**
+
+```bash
+M="/c/Users/BLOXY/AppData/Roaming/ModrinthApp/profiles/CyberCraft/mods"; \
+  cd /d/Cyberpunk-Minecraft/minecraft/cybercraft-tweaks && bash build.sh 2>&1 | tail -1 \
+  && mv "$M/cybercraft-tweaks-1.7.0.jar" "$M/cybercraft-tweaks-1.7.0.jar.disabled" \
+  && cp build/cybercraft-tweaks-1.7.1.jar "$M/" && ls "$M" | grep cybercraft
+```
+Expected: `built build/cybercraft-tweaks-1.7.1.jar`, then `cybercraft-tweaks-1.7.1.jar` beside 1.2.0 to 1.7.0, each
+`.jar.disabled`.
+
+- [ ] **Step 3: Ask the user to start Minecraft, and check that the mod loaded**
+
+The user starts the instance and says when its title screen shows. Then:
+```bash
+L="/c/Users/BLOXY/AppData/Roaming/ModrinthApp/profiles/CyberCraft/logs/latest.log"; \
+  grep -E "cybercraft_tweaks [0-9.]+" "$L" | head -1; \
+  echo "mixin errors: $(grep -c -E "Mixin.*(rror|ailed)|InvalidInjection|MixinApplyError|cybercraft_tweaks.*(rror|xception)" "$L")"
+```
+Expected: `- cybercraft_tweaks 1.7.1` and `mixin errors: 0`.
+
+- [ ] **Step 4: In Minecraft: run step 0's script with 1.7.1**
+
+The user's off hand is empty (the shield is in slot 15), so the wheat and the dandelion go in.
+```bash
+L="/c/Users/BLOXY/AppData/Roaming/ModrinthApp/profiles/CyberCraft/logs/latest.log"; before=$(wc -l < "$L"); \
+  cd /d/Cyberpunk-Minecraft/spikes/block-render && mkdir -p build/step0 \
+  && ./build/RelWithDebInfo/mclink.exe tools/mclink/paths.txt > build/step0/paths-1.7.1.log 2>&1; echo "exit: $?"; \
+  tail -n +$((before + 1)) "$L" | grep -E "\[CHAT\]|SkyCraft: |CyberCraft Tweaks: |WARN|rror|xception" > build/step0/paths-1.7.1-minecraft.log
+```
+Give the command 9 minutes. Expected, against Task 9's run (26.3 words the tests `Test passed. Count: 1` and `Test
+failed`):
+- **Linking:** as before, and no error or exception from a mixin in Minecraft's log.
+- **Wander:** 13 positions for each of the four mobs, each moving 3 blocks or more and strolling at least twice, every
+  y 6.0 to 7.0: none at 7.5 on the barrier's top, none below the road; the four `OnGround` lines `1b`.
+- **Tempt, pet, chase, flyer:** `Test passed. Count: 1` each (the pet twice), the wolf's last position within 4 blocks
+  of 1276.5 6.0 2000.5, on the street's floor, `OnGround` `1b`.
+- **Sight:** no arrow in the first scene, an arrow in the second.
+- **Cost:** the minute lines, with `shapes read`.
+- **The end:** `Saved the game`, the last scene `world: nothing`, no errors, `exit: 0`.
+
+- [ ] **Step 5: In Minecraft: run the teleports**
+
+```bash
+L="/c/Users/BLOXY/AppData/Roaming/ModrinthApp/profiles/CyberCraft/logs/latest.log"; before=$(wc -l < "$L"); \
+  cd /d/Cyberpunk-Minecraft/spikes/block-render \
+  && ./build/RelWithDebInfo/mclink.exe tools/mclink/teleports.txt > build/step0/teleports.log 2>&1; echo "exit: $?"; \
+  tail -n +$((before + 1)) "$L" | grep -E "\[CHAT\]|CyberCraft Tweaks: |WARN" > build/step0/teleports-minecraft.log; \
+  grep -c "Test passed" build/step0/teleports-minecraft.log
+```
+Expected: `exit: 0` and `5`: after each of the five jumps the wolf is within 4 blocks of V. And, read from the log,
+every one of its 80 samples on the ground (`1b`) at the street's floor (y 6.0 to 6.25), none under the road, and
+`Saved the game` at the end.
+
+- [ ] **Step 6: In Minecraft: the user's shield back in their off hand, survival back, and the world saved**
+
+The reverse of Task 8's move, guarded the same way: the shield copied into the off hand only if it's empty, slot 15
+emptied only once the off hand holds it. The user's game mode is survival (their saved player data before step 0, and
+what the control put back). Write `spikes/block-render/build/step0/restore.txt` with the Write tool:
+```text
+# The user's shield back from inventory slot 15 into the off hand after step 0, their game mode back to survival, and
+# the world saved. Guarded: the copy only into an empty off hand, slot 15 emptied only once the off hand holds the
+# shield. Linked as step 0 is, on the same dumped ground.
+status
+wait-world 60
+ground city
+at 1280.5 6.14 2007.5
+look 0 0
+dump E:\Cyberpunk2077\red4ext\plugins\PhysXProbe\dumps\2026-10-01_14-37-07\collision.obj
+link on
+wait-ground 30
+wait 2
+type /execute unless items entity @p weapon.offhand * run item replace entity @p weapon.offhand from entity @p container.15
+type /execute if items entity @p weapon.offhand minecraft:shield run item replace entity @p container.15 with minecraft:air
+type /gamemode survival
+wait 1
+type /execute if items entity @p weapon.offhand minecraft:shield
+type /execute if items entity @p container.15 *
+type /save-all flush
+wait 3
+status
+quit
+```
+Then:
+```bash
+L="/c/Users/BLOXY/AppData/Roaming/ModrinthApp/profiles/CyberCraft/logs/latest.log"; before=$(wc -l < "$L"); \
+  cd /d/Cyberpunk-Minecraft/spikes/block-render \
+  && ./build/RelWithDebInfo/mclink.exe build/step0/restore.txt > build/step0/restore.log 2>&1; echo "exit: $?"; \
+  tail -n +$((before + 1)) "$L" | grep -E "\[CHAT\]" | sed 's/.*\[CHAT\] //'
+```
+Expected: `exit: 0`, `Replaced 1 slot(s) on ItzBloxy` (26.3 names no item for a copy), `Replaced 1 slot(s) on
+ItzBloxy with [Air]`, `Set own game mode to Survival Mode`, `Test passed. Count: 1` (the shield in the off hand),
+`Test failed` (slot 15 empty) and `Saved the game`.
+
+- [ ] **Step 7: Ask the user to stop Minecraft**
+
+Its world saved in step 6. Run F, in Part 2, needs the game; Minecraft starts again then.
+
+- [ ] **Step 8: Record the results in `docs/spikes/2026-10-08-minecraft-paths-results.md`**
+
+Step 0 with 1.7.1 beside the earlier runs, the teleports, and the restore: each check's outcome and numbers, the
+minute lines, and what it means for Part 2.
+
+- [ ] **Step 9: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add docs/spikes/2026-10-08-minecraft-paths-results.md docs/superpowers/plans/2026-10-08-minecraft-paths.md \
+  && git commit -q -m "minecraft-paths: step 0 with CyberCraft Tweaks 1.7.1, and the teleports" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 14: Close Part 1, and plan Part 2
 
 - [ ] **Step 1: Record "How Part 1 went" at the end of this plan**
 
-What ran as written, what didn't and why, the fixes, and the tests' and checks' final counts.
+What ran as written, what didn't and why, the fixes (Tasks 10 to 12 among them), and the tests' and checks' final
+counts.
 
 - [ ] **Step 2: Record the spec's "Changes while executing Part 1"**
 
-Only if executing changed the design.
+Beyond what this part's fix tasks already recorded there.
 
 - [ ] **Step 3: Plan Part 2 with superpowers:writing-plans**
 
