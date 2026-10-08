@@ -114,3 +114,23 @@ records results by hand is titled "Record …".
 
 The module's offline compile itself is `spikes/block-render/tools/check_reds.py`, with Codeware's scripts as an extra
 folder for the parts that need Codeware.
+
+**Spike 9's versions** (Minecraft's mobs finding their way, Part 1) added `run_plan_s9.py`, `mutate_s9p1.py`,
+`mutate_s9p2.py` and `paths-sim/`, and used `planlib.py`, `gen_plan.py`, `pairs.py`, `tick_steps.py`,
+`trees_match.py` and `rewrap.py` as they are here. That session's scratchpad held the scratch clones, `verify/` (tags
+`s9-t0` to `s9-t7`) and `verify2/` (`s9-t9` to `s9-t13`), beside `plans/`, `sim/` and `voxdump/`: adapt before reuse.
+- **`run_plan_s9.py`** knows CyberCraft Tweaks' steps: "Build CyberCraft Tweaks", "Run CyberCraft Tweaks' unit
+  tests", "Check the mixins" and "Check that mclink parses" run their bash block, and every quoted text of the
+  Expected paragraph must be in what it printed (a replay copies the real repo's `mclink.exe` into the clone first).
+  Steps titled "Check that the game isn't running", "Ask the user", "In Minecraft", "Install" or "Record" stop the run.
+  A commit's `git add` may be continued over lines. `replay|execute <plan> <repo> [first] [last] [first step]`.
+- **`mutate_s9p1.py`, `mutate_s9p2.py`:** `CellRule`'s mutations, Part 1's 12 and the fence rule's 18, each naming the
+  unit check that must fail: `mutate_s9p2.py <clone>/minecraft/cybercraft-tweaks`.
+- **`paths-sim/`:** the city simulated as the mod sees it. `voxdump` (`voxdump.cpp`, built with its `CMakeLists.txt`
+  and VS's cmake) places a dump's static triangles around a stand-in V's feet as `mclink`'s `dump` does, voxelizes them
+  with BlockRender's own `VoxelizeRegion`, and writes SkyCraft's `ColBlock`s: `voxdump <collision.obj> <feet x y z>
+  <radius> <below> <above> <out.bin>`; step 0's ground was `2026-10-01_14-37-07` at 1280.5 6.14 2007.5, 40 32 16.
+  `analyze.py` applies 1.7.0's cell rule and 26.3's walk rules to the cells, floods what a mob reaches from V, and
+  estimates a stroll's odds (it needs `uv run --no-project --with pillow --with numpy`); `fences.py` does the same with
+  1.7.1's fences. The others probe one question each: sight rays (`sight.py`), pets' landings (`teleport.py`), the
+  road and its hollows (`road.py`, `hollow_s9.py`, `gaps_s9.py`, `probe_s9r3.py`, `probe_s9r4.py`).

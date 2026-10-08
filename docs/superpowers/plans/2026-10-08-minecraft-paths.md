@@ -1960,7 +1960,7 @@ Give the command 9 minutes. Expected, with 1.7.0, against the spec's "Step 0" an
   (and hits, while the skeleton was hidden) and a pet landed; the casting time a few milliseconds a minute.
 - **The end:** as in the control: the game mode back, `world: nothing`, no errors, `exit: 0`.
 
-- [ ] **Step 5: Ask the user to stop Minecraft**
+- [x] **Step 5: Ask the user to stop Minecraft**
 
 Run F, in Part 2, needs the game; Minecraft starts again then.
 
@@ -3037,12 +3037,12 @@ cd /d/Cyberpunk-Minecraft && git add docs/spikes/2026-10-08-minecraft-paths-resu
 
 ### Task 15: Close Part 1, and plan Part 2
 
-- [ ] **Step 1: Record "How Part 1 went" at the end of this plan**
+- [x] **Step 1: Record "How Part 1 went" at the end of this plan**
 
 What ran as written, what didn't and why, the fixes (Tasks 10 to 13 among them), and the tests' and checks' final
 counts.
 
-- [ ] **Step 2: Record the spec's "Changes while executing Part 1"**
+- [x] **Step 2: Record the spec's "Changes while executing Part 1"**
 
 Beyond what this part's fix tasks already recorded there.
 
@@ -3095,3 +3095,47 @@ cd /d/Cyberpunk-Minecraft && git add docs/superpowers \
   checks would then fail, and say so.
 - **The game mode is noted and put back** with a scoreboard (`/execute store success score … if entity
   @p[gamemode=…]`), since the script needs creative and then survival.
+
+## How Part 1 went
+
+Part 1 ran from 14:58 on 2026-10-08, when it was planned, to 23:23 the same day. The results:
+[2026-10-08-minecraft-paths-results.md](../../spikes/2026-10-08-minecraft-paths-results.md), step 0's control, its
+first run with 1.7.0, and its run with 1.7.1.
+- **As written:** `run_plan_s9.py` executed Tasks 1 to 7 (`c5c6412` to `0097e05`) and the fixes' Tasks 10 to 13
+  (`7a69f51` to `625546e`), checking every expected result, and each commit holds exactly the code tested in the
+  scratch clones (`verify/`, tags `s9-t1` to `s9-t7`; `verify2/`, `s9-t10` to `s9-t13`). Every build had no warning;
+  the unit checks went from 43 to 56, the mixin checks stayed 12.
+- **What changed:**
+  - **Task 7's skeleton summon was 298 characters,** past the 256 of Minecraft's chat line, which `mclink`'s typer
+    refuses only as it types, so the parse check passed it. Fixed outside the tasks, `5ff4610`: Task 7 shows the script
+    as it first ran.
+  - **Task 8 found a shield in the user's off hand,** so the guarded wheat never went in. With the user's leave, a
+    guarded `mclink` script moved it to inventory slot 15 (Minecraft's window stays hidden once linked), and the
+    control ran again (15:16); Task 14 put it back.
+  - **Task 9 loaded a stale autosave:** stopping Minecraft from the Modrinth App kills it unsaved, so the control's
+    test wolf, the player's creative mode and its wheat came back. Step 0 with 1.7.0 passed tempt, the pet's follow,
+    chase, sight and the flyer, but mobs walked onto the road's thin barrier and off its far side. Four diagnostic
+    scripts followed, with the user's leave; each placed its dump around a moved V, so their cities were shifted.
+  - **Tasks 10 to 14 were added:** thin cells as fences (the user's choice), a pet's landing resetting its fall
+    distance, summons dropped onto their floors, the teleports script, CyberCraft Tweaks 1.7.1 (Tasks 10 to 12), and
+    step 0 again (Task 14). Task 14's first step found that singleplayer has no `/save-all` and that the pause menu
+    doesn't save a linked game: Task 13 took the saving out of the scripts, and Minecraft's own autosave, every 5
+    minutes, was waited for before each stop. The close became Task 15.
+- **Step 0 with 1.7.1 (Task 14) passed:** wander (four mobs, none on the barrier or below the road), tempt, the pet
+  twice, chase, sight (69 sight casts hitting the city in the skeleton's minute) and the flyer, at 2.1 to 2.8 ms of
+  casting a minute. The teleports script's own test passed 3 times of 5: after two landings beside V the wolf strolled
+  off, as a pet within 10 blocks of its owner does, before the test 4 s later. With a fifth diagnostic's 20 jumps,
+  26 landings of 26 were on the road, on the ground.
+- **Not as expected:**
+  - **the barrier runs on a diagonal** (x 1284 at z 2006 to 1286 at z 2015), not along x 1284;
+  - **the dump has hollows** under the pavement (floors at 3.25 to 4.5) and under the ledge (1.375), which the
+    skeleton reached from the slope; no path reaches the pavement's from the road;
+  - **the 1.7.0 run's wolf ended in the pavement's hollow** after a landing, and how stays unexplained; 1.7.1 never
+    repeated it.
+- **Tooling:** `run_plan_s9.py` now reads a commit's `git add` continued over lines; spike 9's tools and the city
+  simulation are in `tools/plans/` (its README's "Spike 9's versions").
+- **For Part 2:**
+  - CyberCraft Tweaks 1.7.1 is installed in the CyberCraft instance; the overlay's Paths row and run F remain;
+  - a pet's check should read its landing right after V moves, not seconds later, when a stroll may have taken it;
+  - watch pets' landings in the game, where the city has more levels and hollows than step 0's road;
+  - before Minecraft is stopped, wait for an autosave after the last change.

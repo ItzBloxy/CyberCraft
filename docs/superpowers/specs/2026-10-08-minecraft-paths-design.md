@@ -453,7 +453,7 @@ jumps along the street, each landing sampled every quarter second.
 
 ### Run F, in the game
 
-After spike 8's run E. CyberCraft Tweaks 1.7.0 installed, and the overlay's Paths row deployed while the game is
+After spike 8's run E. CyberCraft Tweaks 1.7.1 installed, and the overlay's Paths row deployed while the game is
 closed (a Lua file). The row summons, ahead of V:
 - **wanderers:** a pig, a cow, a villager;
 - **a pet:** a wolf, owned by Minecraft's player;
@@ -632,3 +632,6 @@ step 0 again.
   minutes) must pass after the last script; `level.dat`'s time shows it.
 - **Diagnostics place the dump where step 0 does:** `mclink`'s `dump` goes around the stand-in V's feet as it runs, so
   a script must stand V at 1280.5 6.14 2007.5 first. The four diagnostics hadn't, and built shifted copies of the city.
+- **A pet's check reads its landing, not where it is later:** a pet that lands near its owner strolls, as in vanilla,
+  so the teleports script's test 4 s after a jump failed twice of five for a stroll, while all 26 landings of 1.7.1's
+  runs were on the road. Run F's pet check reads the nearest-mob distance right after V moves.
