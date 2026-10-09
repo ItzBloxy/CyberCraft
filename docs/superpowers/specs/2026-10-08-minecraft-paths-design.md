@@ -478,7 +478,7 @@ stairs:
 4. The bee follows the dandelion without sticking in walls, through the doorway too.
 5. With combat off (Minecraft's hits and deaths stay in Minecraft) and Minecraft's player in survival, the husk chases V
    in view at spot B; in the apartment, summoned in the corridor behind the room's wall, it doesn't notice V until V
-   steps into the doorway, then comes round through the door.
+   steps out of the door into the corridor, then comes to V.
 6. The frame rate is as before, and Minecraft's minute line stays modest.
 
 Clear ends each check, and the results doc gets screenshots, as earlier runs' did.
@@ -679,3 +679,13 @@ part of run F, and spot B first. "Run F, in the game" above holds the result.
   on mouse buttons 5 and 4), and an unheld item tempts nothing.
 - **Pets' landings are read at once,** and tested within 4.5 blocks, since a teleport lands up to 3 blocks off on each
   axis.
+
+## Changes while executing Part 2
+
+- **SkyCraft lifts Minecraft's player onto a doorway's header** (plan Task 18): after every teleport it puts the player
+  on the highest surface within 2.5 blocks above its feet (`SkyClient.liftOutOfGeometry`, `TriCollider.floor` over every
+  triangle), meant for feet a sliver inside the ground. V's front door's header is 2.26 blocks above its threshold, so
+  the rehearsal's stand-in V in the doorway put the player on the door frame, out of the husk's reach. BlockRender
+  teleports the player to V whenever V moves 0.1 m, so in the game too a V stopped under anything that low lifts it;
+  walking through lifts it for a moment. Outside spike 9's mod: run F's "in the husk's view" moved to the corridor
+  just outside the door, and run F doesn't stop V in the doorway.
