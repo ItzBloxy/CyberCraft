@@ -30,8 +30,10 @@ with 1.7.1, which fixes what the 1.7.0 run found. Run F checks it in the game.
   at most 41.5 ms a minute, on Minecraft's server thread.
 
 **Left for later, none of them spike 9's mod:**
-- **a tamed wolf's look:** its collar's layer over its body fights at the same depth at some angles and distances
-  (spike 7's drawing; its spec's risk 16);
+- **mobs' textures drawn wrong** at some angles and distances, which the user calls critical: on every mob, they
+  said after run F. The cause is unsettled; the handoff (`docs/superpowers/handoffs/2026-10-09-entity-texture-bug.md`) lists what
+  changed since spike 7 passed (Entity Model and Entity Texture Features enabled, mobs walking) and how to tell the
+  causes apart;
 - **a save loaded in a running game** moves the city into another PhysX scene (scene 6 of 12), and BlockRender's
   exporter reads scene 0 only: no city, and no build mode, until the game restarts. It should read the scene holding
   V's controller;
@@ -305,9 +307,10 @@ away](2026-10-08-minecraft-paths-results/run-f-spot-b-sidewalk.jpg)
 
 **The wolf looks wrong at some angles and distances** (the user: "the wolf looks very cursed … at certain
 angles/distances"): patches of its skin come and go, as the screenshots show. A tamed wolf is drawn as its body and a
-collar layer over the same model, and spike 7's spec named this risk ("a layer drawn over its own body at the same
-depth … run D looks for flicker"): two surfaces at one depth, fighting. That's spike 7's drawing, not spike 9's paths;
-it's left for later.
+collar layer over the same model, and spike 7's spec named a risk that fits ("a layer drawn over its own body at the
+same depth … run D looks for flicker"); but after run F the user said it hits all mobs, which that alone doesn't
+explain. It's spike 7's drawing, not spike 9's paths, and its cause is unsettled: the handoff
+(`docs/superpowers/handoffs/2026-10-09-entity-texture-bug.md`) has the evidence and the tests.
 
 ### In V's apartment
 
@@ -345,8 +348,8 @@ model: minecraft:builtin/entity` at each start.
   frames, and don't see V through them; the frame rate doesn't change, and the casts cost at most 41.5 ms a minute,
   on Minecraft's server thread.
 - **Left for later, none of them spike 9's mod:**
-  - **the wolf's look:** its collar's layer over its body fights at the same depth (spike 7's drawing, its spec's risk
-    16);
+  - **mobs' textures drawn wrong** at some angles and distances, on every mob by the user's account: spike 7's
+    drawing, its cause unsettled (the handoff `docs/superpowers/handoffs/2026-10-09-entity-texture-bug.md`);
   - **a save loaded in a running game** moves the city into another PhysX scene, which BlockRender's exporter doesn't
     follow (spike 5's exporter reads scene 0): it should pick the scene holding V's controller;
   - **SkyCraft lifts Minecraft's player onto a doorway's header** when V stands under one within 2.5 blocks of her
