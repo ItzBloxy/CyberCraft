@@ -388,8 +388,10 @@ The counters are safe to bump from any thread. Step 0 and run F read the cost fr
   - `test.sh` (new) and `src/test/java`: the unit tests, compiled with `javac` and run with plain `java`;
   - `mixins.sh` and `tools/MixinCheck.java` (new): the mixins on Minecraft's classes checked against 26.3's jar, as
     Mixin would at load.
-- **`mclink`:** `tools/mclink/paths.txt`, step 0's script.
-- **The overlay** (`blockrender_hud/init.lua`): a **Paths** Spawn row.
+- **`mclink`:** `tools/mclink/paths.txt`, step 0's script; `teleports.txt`, a pet's landings (Part 1); and
+  `pathsrow.txt`, the overlay's Paths rows typed into Minecraft on run F's ground (Part 2).
+- **The overlay** (`blockrender_hud/init.lua`): the **Paths** rows, Spawn rows of the mobs and of the wheat and the
+  dandelion, and the way to run F's spots.
 - **BlockRender's C++** and **SkyCraft** stay as they are.
 
 ## Testing
@@ -453,26 +455,33 @@ jumps along the street, each landing sampled every quarter second.
 
 ### Run F, in the game
 
-After spike 8's run E. CyberCraft Tweaks 1.7.1 installed, and the overlay's Paths row deployed while the game is
-closed (a Lua file). The row summons, ahead of V:
-- **wanderers:** a pig, a cow, a villager;
-- **a pet:** a wolf, owned by Minecraft's player;
-- **a flyer:** a bee;
-- **a husk,** with Resistance for Minecraft's player;
-- **wheat and a dandelion,** given to the player.
+After spike 8's run E. CyberCraft Tweaks 1.7.1 installed, and the overlay's Paths rows deployed while the game is
+closed (a Lua file). The rows summon, ahead of V, each half a block above V's feet so that it drops onto the floor:
+- **wanderers:** a pig, a cow and a villager, 4 blocks ahead;
+- **a pet:** a wolf, 2 ahead and to the left, owned by Minecraft's player;
+- **a flyer:** a bee, 2 ahead and to the right, a block up;
+- **a husk,** 7 ahead, with Resistance for Minecraft's player;
+- **wheat and a dandelion,** into the user's slots 8 and 9, picked in build mode: a tempted mob looks at both hands,
+  and the off hand keeps its shield.
 
-They're tagged `sp7`, so the existing Clear removes them. With the user, at spots they pick (a sidewalk with kerbs,
-stairs, a doorway or an alley, a railing):
-1. The wanderers stroll the sidewalks and streets, step kerbs, and stay out of walls and off drops.
-2. The cow follows the wheat.
-3. The wolf, the only mob left, follows, and after V sprints away it lands beside V: the entities status line's
-   nearest-mob distance shows it.
-4. The bee follows the dandelion without sticking in walls.
+They're tagged `sp7`, so the existing Clear removes them. The overlay also shows the way to run F's spots: each one's
+distance, heading and height from V. First `mclink` types the rows' commands into Minecraft on the two places' dumps,
+placed where the game puts them, and rehearses the checks but the tempt and the bee's follow
+(`tools/mclink/pathsrow.txt`). Then, with the user, at spot B (spike 1's raised-level dump, V on the pavement facing
+south), then in V's apartment in Megabuilding H10, through its front door into the building's corridor and down its
+stairs:
+1. The wanderers stroll the sidewalks and streets, step kerbs, and stay out of walls and off drops; in the apartment,
+   among the furniture, and out of the door if they go.
+2. The cow follows the wheat: along the pavement, then through the apartment's door and down the stairs.
+3. The wolf, the only mob left, follows, through the door and down the stairs too, and after V sprints away it lands
+   beside V: the entities status line's nearest-mob distance shows it, read at once.
+4. The bee follows the dandelion without sticking in walls, through the doorway too.
 5. With combat off (Minecraft's hits and deaths stay in Minecraft) and Minecraft's player in survival, the husk chases V
-   in view, and doesn't notice V behind a building it could walk around, until V steps into view.
+   in view at spot B; in the apartment, summoned in the corridor behind the room's wall, it doesn't notice V until V
+   steps into the doorway, then comes round through the door.
 6. The frame rate is as before, and Minecraft's minute line stays modest.
 
-Clear ends it, and the results doc gets screenshots, as earlier runs' did.
+Clear ends each check, and the results doc gets screenshots, as earlier runs' did.
 
 ## Risks
 
@@ -491,6 +500,13 @@ Clear ends it, and the results doc gets screenshots, as earlier runs' did.
 7. **Strolls less often** than on blocks ("Wandering").
 8. **Cells with a shape skip the shared cache:** a path reads each cell once (the evaluator keeps its own cache for the
    path), so the cost is a map lookup and a cached classification per cell.
+9. **The game's grid isn't step 0's:** a cell can come out a fence or not a fraction of a block over, so where the game
+   puts spot B, mobs can climb the barrier's wide north end and go down the rock face behind it, which step 0's
+   placement didn't let them ("Changes while planning Part 2").
+10. **Furnished rooms split into pockets:** the voxelizer's whole-block footprints for steep surfaces make furniture's
+    sloped faces blocks, which can close the gaps between pieces and a room's ways out, as in the room of the dump
+    first taken for V's apartment; and a doorway about 2 m high closes to mobs two cells tall where the floor's skin
+    rounds up and the lintel's down.
 
 ## Found while writing
 
@@ -584,7 +600,8 @@ The user asked for a deep self-review of the spec. It traced each claim to its s
   ground mostly through corner and edge slivers down the rock face, and some the same places a cell higher on the
   sloped road. The scratch tools are in this session's scratchpad (`voxdump/`, `sim/`) for planning.
 
-  The third dump turned out to be V in her apartment, from the user's playtest of the campaign.
+  The user took the third dump while playtesting the campaign. It isn't V's apartment, which is in Megabuilding H10
+  ("Changes while planning Part 2").
 
 ## Changes while planning Part 1
 
@@ -635,3 +652,30 @@ step 0 again.
 - **A pet's check reads its landing, not where it is later:** a pet that lands near its owner strolls, as in vanilla,
   so the teleports script's test 4 s after a jump failed twice of five for a stroll, while all 26 landings of 1.7.1's
   runs were on the road. Run F's pet check reads the nearest-mob distance right after V moves.
+
+## Changes while planning Part 2
+
+Part 2 is the overlay's Paths rows, an `mclink` rehearsal, run F and the spike's close; its plan is Tasks 16 to 21 of
+`docs/superpowers/plans/2026-10-08-minecraft-paths.md`, whose "Found while planning Part 2" has the detail. The user
+chose (2026-10-09) slots 8 and 9 for the wheat and the dandelion, a simulation of V's apartment before planning its
+part of run F, and spot B first. "Run F, in the game" above holds the result.
+- **Run F's ground, simulated where the game puts it:** step 0 placed spot B's dump a fraction of a block off the
+  game's grid. Where the game puts it, the road is the same, but the barrier's wide north end is a wall top, 2 blocks
+  wide and 1.25 above the pavement, that a mob can step onto and drop off behind, down the rock face in drops of 3 or
+  less: section 1's "wide wall tops stay walkable", now risk 9.
+- **V's apartment is in Megabuilding H10:** the dump taken for it (`2026-10-08_01-44-52`) was a furnished room
+  elsewhere, where furniture's whole blocks split the floor into pockets: risk 10. The probe's F10 dumps find nothing
+  away from the map's origin, since they pass no PhysX origin; its request file's `origin -1024 1024 0`, with V in her
+  main room, dumped the apartment (`2026-10-09_12-22-29`). Its room opens through a front door a block wide onto the
+  building's corridor, and five storeys 4 blocks apart are joined by stairs, so run F can try the doorways and stairs
+  the brainstorm asked for.
+- **The husk's sight check moved indoors:** spot B has nothing tall that hides V and has a way around. In the apartment
+  the husk is summoned in the corridor behind the room's wall, and should reach V through the door only once V is in
+  the doorway. At spot B the husk chases in view.
+- **The rows' places:** wanderers 4 ahead, the wolf and the bee 2 ahead to either side, the husk 7, so none lands on
+  another Spawn row's things; each summon half a block above V's feet; and a readout of the way to run F's spots.
+- **An `mclink` rehearsal before the game:** the rows' exact commands on both places' dumps, placed as the game places
+  them. The tempt and the bee's follow are left to run F: `mclink` can't pick the hotbar slot (the user's 8 and 9 are
+  on mouse buttons 5 and 4), and an unheld item tempts nothing.
+- **Pets' landings are read at once,** and tested within 4.5 blocks, since a teleport lands up to 3 blocks off on each
+  axis.

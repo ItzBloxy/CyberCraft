@@ -1,4 +1,4 @@
-# Minecraft's Mobs Finding Their Way Implementation Plan, Part 1 (CyberCraft Tweaks 1.7.0, and step 0)
+# Minecraft's Mobs Finding Their Way Implementation Plan, Parts 1 and 2 (CyberCraft Tweaks 1.7.0 and 1.7.1, step 0, run F)
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 >
@@ -9,6 +9,9 @@ ground (wander, go to targets, keep up with their owner as pets, fly around its 
 then step 0 of the spec: the same `mclink` script on spike 1's dumped ground twice, first with 1.6.0 as the control,
 then with 1.7.0. Tasks 10 to 14, added after step 0's first run with 1.7.0, make CyberCraft Tweaks 1.7.1 (thin city
 cells are fences; a pet's landing resets its fall distance) and run step 0 again with it, with a pet's teleports.
+Part 2, Tasks 16 to 21, gives the overlay its Paths rows and the way to run F's spots, types the rows' commands into
+Minecraft with `mclink` on run F's own ground, then has run F in the game, at spot B and in V's apartment, and
+closes the spike.
 
 **Architecture:** all of it is on Minecraft's side, in CyberCraft Tweaks (`minecraft/cybercraft-tweaks`):
 - **`dev.cybercraft.tweaks.paths`,** plain classes:
@@ -39,8 +42,9 @@ Nothing changes in the game or in BlockRender, and nothing is deployed to the ga
 
 **Spec:** [docs/superpowers/specs/2026-10-08-minecraft-paths-design.md](../specs/2026-10-08-minecraft-paths-design.md)
 
-**Part 2** (the overlay's Paths row, run F in the game, and closing the spike) is planned after step 0, from its
-results, as earlier spikes' second parts were.
+**Part 2** (the overlay's Paths rows, run F in the game, and closing the spike) was planned after step 0, from its
+results and a simulation of run F's ground: it's Tasks 16 to 21, after Task 15, with its own "Before you start" and
+file map.
 
 ---
 
@@ -3046,20 +3050,968 @@ counts.
 
 Beyond what this part's fix tasks already recorded there.
 
-- [ ] **Step 3: Plan Part 2 with superpowers:writing-plans**
+- [x] **Step 3: Plan Part 2 with superpowers:writing-plans**
 
 From step 0's results: the overlay's Paths Spawn row (`spikes/block-render/tools/blockrender_hud/init.lua`), deployed
 with the game closed; run F in the game, at the pavement area by spike 3's corner (step 0's ground) and then V's
 apartment and its building's corridors (doorways, stairs, railings); and closing the spike. Verified as this part was,
 and appended to this plan.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add docs/superpowers \
   && git commit -q -m "minecraft-paths plan: how Part 1 went, and Part 2 planned" \
        -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
 ```
+
+---
+
+## Part 2: the overlay's Paths rows, run F, and the spike's close
+
+Part 2 takes spike 9 into the game (the spec's "Run F, in the game"). The overlay gets the Paths rows, which summon the
+spec's test mobs ahead of V and fill slots 8 and 9 with what they follow, and a readout of the way to run F's spots; an
+`mclink` script types the rows' commands into the user's Minecraft on run F's own ground first; then run F, with the
+user, at spot B and in V's apartment; then the spike closes. It was planned after step 0 (Tasks 8 to 14), from its
+results and a simulation of run F's ground (below). The spec's "Changes while planning Part 2" lists what planning
+settled in the design, and "Found while planning Part 2", at the end of this plan, what it settled in the plan.
+- **Task 16:** the overlay's Paths rows, its food row, and run F's spots, checked offline by running the overlay
+  under Lua.
+- **Task 17:** `tools/mclink/pathsrow.txt`, the rows' commands exactly as the overlay types them, on spot B's and the
+  apartment's dumps placed where the game itself puts that ground.
+- **Task 18:** that script in Minecraft, with the user, before the game.
+- **Tasks 19 and 20:** run F in the game: at spot B, then in V's apartment, in Megabuilding H10.
+- **Task 21:** the spike's close.
+
+Nothing changes in CyberCraft Tweaks (1.7.1 stays installed), BlockRender's C++, `mclink`'s code or SkyCraft.
+
+### What step 0 and planning found
+
+From the results ("Step 0 with CyberCraft Tweaks 1.7.1") and the simulation of run F's ground, what Part 2 builds on:
+- **Step 0 passed with 1.7.1:** wander, tempt, the pet twice, chase, sight and the flyer, at 2 to 3 ms of casting a
+  minute, and 26 pets' landings of 26 on the road.
+- **Summons go half a block up:** a mob summoned inside the city's 1/8-block skin falls through it, and V's feet can be
+  inside one. The overlay's summons go at `~ ~0.5 ~`, the bee's at `~ ~1 ~`.
+- **The user's choices** (2026-10-09): the wheat in slot 8 and the dandelion in slot 9, in place of the TNT and the
+  flint and steel, which the "Your slots" row gives back; a simulation of V's apartment before planning its part of run
+  F; and spot B first, then the apartment, though the apartment turned out to be 1.4 km from spot B and the save
+  starts there.
+- **The game doesn't put spot B where step 0 did.** BlockRender gives Minecraft the city where it is: V's feet at spot
+  B were Minecraft −189.898 74.432 −616.754, while step 0's dump went around 1280.5 6.14 2007.5, 0.398, 0.708 and
+  0.254 of a block off the game's grid. Voxelized where the game puts it, the road is as in step 0 (the street at
+  74.25, the pavement at 74.5), but the barrier's wide north end (x −188 to −187, z −638 to −634, solid up to 75.75)
+  is a wall top, not a fence: a mob steps onto it from the pavement's raised edge (1.125, its highest step) and drops
+  2.6 blocks off its far side onto the ledge, then down the rock face in drops of 3 or less. Within 30 blocks of V
+  that's 1,500 places below the road, which step 0's placement had none of. It's the spec's "wide wall tops stay
+  walkable" and vanilla's 3-block drops, not a fault; run F's wanderers start south of V, 20 blocks from it, and the
+  runs record any mob that takes it.
+- **The dump called V's apartment wasn't:** `2026-10-08_01-44-52` (world −484 389, 132 m up) is a furnished room
+  elsewhere, whose furniture's sloped faces become whole blocks (the voxelizer's 50 to 84° coarsening), splitting its
+  floor into pockets that no mob two cells tall leaves. V's apartment is in Megabuilding H10 (world −1383 1272 123).
+  The probe's F10 dumps find nothing there, since they don't pass the PhysX origin and away from the map's origin read
+  the wrong place; with the user's V in its main room, a dump through the probe's request file, `origin -1024 1024 0`,
+  read it (`2026-10-09_12-22-29`, 140,451 triangles, its coordinate check passed).
+- **V's apartment, simulated where the game puts it:** V's room (75 places, a stroll finding a spot 89% of the time, a
+  pet's landing having room 91% of the time in one tick) opens through its front door, a block wide at x −1389, z
+  −1272, with a threshold at 123.375, onto the building's corridor (x −1395 to −1390). Through it a mob reaches 5,204
+  places on five storeys 4 blocks apart (floors 111.125 to 127.125), joined by a stairwell at x −1403: six treads of
+  about 0.65 block down, from z −1284 to −1290, and six up, from z −1293 to −1287. So the doorways and stairs the user
+  asked run F for are there.
+- **The husk's sight check needs a wall with a way around it:** spot B's road has nothing tall to hide V that the husk
+  could walk around (its best cover is the barrier, from a ledge that has no way back up), so the hidden half is in V's
+  apartment. V 3 blocks in from the front door, facing heading 300, has the husk summoned 7 ahead in the corridor,
+  behind the room's wall: hidden from V's eye from each of the 81 pairs of neighbouring places, with a way around
+  through the door 9 steps long; from the doorway, V is in its view.
+- **How tall a mob is to a path:** 26.3 sizes a node by floor(height + 1) cells (`NodeEvaluator.prepare`): the pig and
+  the wolf one, the cow, the villager and the husk two.
+- **`mclink` can't pick the hotbar slot:** the user's slots 8 and 9 are on mouse buttons 5 and 4, and `mclink` clicks
+  left, middle and right only. Unheld, the wheat and the dandelion tempt nothing (`TemptGoal` looks at both hands), so
+  Task 18 checks that they go in, and leaves the tempt and the bee's follow to run F.
+
+## Before you start (Part 2)
+
+- **Part 1's "Before you start" holds,** its shell, Edit steps and commits included.
+- **Already verified:** all of Part 2's files have been written and checked once already, in a scratch clone.
+  - Tasks 16 and 17 were then replayed in a fresh clone by `tools/plans/run_plan_s9.py`, which applied every file step
+    exactly as written and checked every expected result: the overlay's syntax, its requests and spots run offline
+    under Lua 5.4, the script's parse, and that the script types each of the overlay's commands. The replayed
+    `spikes/block-render` trees are identical to the scratch clone's, task by task.
+  - Each new check was broken once, by a change to the code it guards, and failed as it should ("Found while planning
+    Part 2").
+  - The spots and every expected position come from the simulation of the two dumps where the game puts them
+    (`tools/plans/paths-sim/`, "Found while planning Part 2").
+- **What only Minecraft and the game can test:** the rows' commands against Minecraft 26.3 and SkyCraft's real mod
+  (Task 18), and everything in run F (Tasks 19 and 20).
+- **The user:**
+  - **does everything in Minecraft, the Modrinth App and the game,** as in Part 1: never drive their mouse or keyboard;
+    ask, then wait for them to say they're done;
+  - **approves Task 18's script:** it summons test mobs at spot B's and the apartment's Minecraft places in the
+    `SkyCraft` world, all killed as it goes, puts the wheat and the dandelion in slots 8 and 9 and then 64 TNT and a
+    flint and steel back, gives Resistance and clears it, and notes the game mode and puts it back;
+  - **approves the overlay's deploy,** with the game closed (Task 19).
+- **Saving:** Minecraft's autosave, every 5 minutes, is what saves its world; after the last change, wait for one
+  before the user stops Minecraft (Part 1's Task 14 has the wait).
+- **During run F the agent reads, and asks:** it sends BlockRender read-only `mc` requests (positions, `/execute if`
+  tests) through the plugin's own request file, and reads Minecraft's log, BlockRender's status and the overlay's
+  frame times. Everything the user does goes through the overlay's buttons and the game.
+
+## File map (Part 2)
+
+| File | Task | What |
+|---|---|---|
+| `spikes/block-render/tools/blockrender_hud/init.lua` | 16 | the Paths rows, the food row, run F's spots |
+| `spikes/block-render/tools/mclink/pathsrow.txt` | 17 | the rows' commands on run F's ground, as the game places it |
+| `docs/spikes/2026-10-08-minecraft-paths-results.md` | 18 to 21 | the runs, and the spike's answer |
+| `tools/plans/fun_check.lua`, `tools/plans/run_plan_s9.py`, `tools/plans/paths-sim/` | planning | a stand-in V for the overlay offline; Part 2's step kinds; the simulation's new scripts |
+
+---
+
+### Task 16: The overlay's Paths rows, and the way to run F's spots
+
+The Fun header gets two rows and a readout (the spec's "Run F, in the game"):
+- **Paths, ahead:** Pig, Cow and Villager, 4 blocks ahead (2 to the left, ahead, 2 to the right); Wolf, 2 ahead and 2
+  to the left, its `Owner` then set from the player's UUID, which tames it; Bee, 2 ahead and 2 to the right, a block
+  up; and Husk, Resistance at its highest for 300 s first, then the husk 7 ahead. Each mob goes half a block above the
+  player's feet and is tagged `sp7`, as the Mobs row's are, so Clear removes it. The Pig's and the Villager's labels
+  end `##paths`: ImGui takes buttons with the same label in one window for one button, and the Mobs row has a Pig and a
+  Villager.
+- **Paths' food:** Wheat (8) and Dandelion (9), into the user's slots 8 and 9; "Your slots" gives the TNT and the flint
+  and steel back.
+- **Run F's spots:** each spot's distance from V, the heading to walk it, how far up or down, and the heading to face
+  there: spot B, V's room, the husk's two spots, and the stairs.
+
+Each has its own place among the Spawn rows': the wolf and the bee 2 ahead, the wanderers 4, the husk 7, where no other
+row puts anything.
+
+**Files:**
+- Modify: `spikes/block-render/tools/blockrender_hud/init.lua`
+
+- [ ] **Step 1: Edit `tools/blockrender_hud/init.lua`**
+
+```lua
+-- spawn ahead and clear again, typed into Minecraft's chat) and "Full status" (every status line, and the frame time).
+```
+```lua
+-- spawn ahead and clear again, typed into Minecraft's chat; and the way to spike 9's run F's spots) and "Full status"
+-- (every status line, and the frame time).
+```
+```lua
+-- lands on another: the dropped items and the sand 3 blocks ahead, the potion and the campfire 3 ahead to either side,
+-- the mobs 5, the firework 6, the block entities 8 and the herd 11 and 13. The mobs have no loot and the sand vanishes
+```
+```lua
+-- lands on another: the Paths row's wolf and bee 2 blocks ahead to either side, the dropped items and the sand 3
+-- ahead, the potion and the campfire 3 ahead to either side, the Paths row's wanderers 4, the mobs 5, the firework 6,
+-- the Paths row's husk 7, the block entities 8 and the herd 11 and 13. The mobs have no loot and the sand vanishes
+```
+```lua
+    } },
+    -- Strict: no block updates, so neither half of the bed breaks the other with a drop.
+```
+```lua
+    } },
+    -- Spike 9's run F: Minecraft's mobs finding their way on the city's ground. Each goes half a block above the player's
+    -- feet, which can be inside the city's 1/8-block skin, and drops onto the floor: one summoned inside the skin would
+    -- fall through it. The pig, the cow and the villager wander; the wolf is the player's, its Owner set from the
+    -- player's UUID; the bee, a block up, follows a dandelion; and the husk chases the player in survival, Resistance at
+    -- its highest first so that nothing hurts. "##paths" keeps the Pig and the Villager apart from the Mobs row's, which
+    -- ImGui would otherwise take for the same buttons.
+    { label = "Paths, ahead:", buttons = {
+        { label = "Pig##paths", commands = { mob("^2 ^ ^4", "pig", nil, "~ ~0.5 ~") } },
+        { label = "Cow", commands = { mob("^ ^ ^4", "cow", nil, "~ ~0.5 ~") } },
+        { label = "Villager##paths", commands = { mob("^-2 ^ ^4", "villager", nil, "~ ~0.5 ~") } },
+        { label = "Wolf", commands = { mob("^2 ^ ^2", "wolf", nil, "~ ~0.5 ~"),
+            "/data modify entity @e[type=minecraft:wolf,tag=sp7,limit=1,sort=nearest] Owner set from entity @s UUID" } },
+        { label = "Bee", commands = { mob("^-2 ^ ^2", "bee", nil, "~ ~1 ~") } },
+        { label = "Husk", commands = { "/effect give @s minecraft:resistance 300 4 true", mob("^ ^ ^7", "husk", nil, "~ ~0.5 ~") } },
+    } },
+    -- What the cow and the bee follow, in the user's slots 8 and 9 in place of the TNT and the flint and steel, which
+    -- "Your slots" gives back: a tempted mob looks at both hands, and the off hand keeps its shield. The slot is picked in
+    -- build mode.
+    { label = "Paths' food:", buttons = {
+        { label = "Wheat (8)", commands = { "/item replace entity @s hotbar.7 with minecraft:wheat" } },
+        { label = "Dandelion (9)", commands = { "/item replace entity @s hotbar.8 with minecraft:dandelion" } },
+    } },
+    -- Strict: no block updates, so neither half of the bed breaks the other with a drop.
+```
+```lua
+    } },
+}
+
+-- Requests not yet sent, oldest first. BlockRender reads blockrender.request in this folder once a second, once its line
+```
+```lua
+    } },
+}
+
+-- Run F's spots (spike 9's Part 2), where its checks stand V, picked on a simulation of the city's dumps there: the
+-- world position the V line shows (z up), and the heading to face. The Fun header shows how far each one is, the
+-- heading to walk it, and how far up or down. V's room is in Megabuilding H10, 2 blocks in from its front door; the
+-- husk can't see V hidden 1 block further in, but can from the doorway; the stairs go down to the storey below.
+local spots = {
+    { name = "Spot B", x = -189.90, y = 616.75, z = 74.43, face = 180 },
+    { name = "V's room", x = -1385.5, y = 1271.5, z = 123.06, face = 90 },
+    { name = "Hidden from the husk", x = -1384.5, y = 1271.5, z = 123.06, face = 300 },
+    { name = "In the husk's view", x = -1388.5, y = 1271.5, z = 123.3, face = 300 },
+    { name = "The stairs", x = -1402.5, y = 1283.5, z = 123.06, face = 0 },
+}
+local spotLines = nil    -- each spot's distance, heading and height from V, from onUpdate
+
+-- Requests not yet sent, oldest first. BlockRender reads blockrender.request in this folder once a second, once its line
+```
+```lua
+        player = nil
+```
+```lua
+        player = nil
+        spotLines = nil
+```
+```lua
+    player = text
+```
+```lua
+    player = text
+    spotLines = {}
+    for _, spot in ipairs(spots) do
+        local dx, dy, dz = spot.x - p.x, spot.y - p.y, spot.z - p.z
+        table.insert(spotLines, string.format("%s: %.1f m, heading %d, %.1f m %s; face %d there", spot.name,
+            math.sqrt(dx * dx + dy * dy), math.floor(math.deg(atan2(dx, dy)) % 360 + 0.5) % 360, math.abs(dz),
+            dz < 0 and "down" or "up", spot.face))
+    end
+```
+```lua
+                    end
+                end
+            end
+        end
+
+        if ImGui.CollapsingHeader("Full status") then
+```
+```lua
+                    end
+                end
+            end
+            if spotLines ~= nil then
+                ImGui.Text("Run F's spots:")
+                for _, line in ipairs(spotLines) do
+                    ImGui.Text("    " .. line)
+                end
+            end
+        end
+
+        if ImGui.CollapsingHeader("Full status") then
+```
+
+- [ ] **Step 2: Check the overlay's syntax**
+
+```bash
+luac -p /d/Cyberpunk-Minecraft/spikes/block-render/tools/blockrender_hud/init.lua && echo "syntax ok"
+```
+Expected: `syntax ok`.
+
+- [ ] **Step 3: Run the overlay offline: the Paths rows' requests**
+
+`tools/plans/fun_check.lua` runs the overlay under Lua 5.4 with CET's functions stubbed, clicks the buttons it's given,
+one a frame, and plays BlockRender's side of `blockrender.request`, printing each request in turn.
+```bash
+cd /d/Cyberpunk-Minecraft/spikes/block-render && mkdir -p build/fun && cd build/fun \
+  && lua /d/Cyberpunk-Minecraft/tools/plans/fun_check.lua ../../tools/blockrender_hud/init.lua click "Pig##paths" Cow \
+       "Villager##paths" Wolf Bee Husk "Wheat (8)" "Dandelion (9)" | tr -d '\r' | tee requests.txt \
+  && awk '/^request: mc /{n = length($0) - 12; if (n > m) m = n} END {print "longest command:", m}' requests.txt
+```
+Expected, one request a command, in order, the longest within Minecraft's 256-character chat line:
+- `request: mc /execute rotated ~ 0 positioned ^2 ^ ^4 run summon minecraft:pig ~ ~0.5 ~ {Tags:["sp7"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty"}`
+- `request: mc /execute rotated ~ 0 positioned ^ ^ ^4 run summon minecraft:cow ~ ~0.5 ~ {Tags:["sp7"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty"}`
+- `request: mc /execute rotated ~ 0 positioned ^-2 ^ ^4 run summon minecraft:villager ~ ~0.5 ~ {Tags:["sp7"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty"}`
+- `request: mc /execute rotated ~ 0 positioned ^2 ^ ^2 run summon minecraft:wolf ~ ~0.5 ~ {Tags:["sp7"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty"}`
+- `request: mc /data modify entity @e[type=minecraft:wolf,tag=sp7,limit=1,sort=nearest] Owner set from entity @s UUID`
+- `request: mc /execute rotated ~ 0 positioned ^-2 ^ ^2 run summon minecraft:bee ~ ~1 ~ {Tags:["sp7"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty"}`
+- `request: mc /effect give @s minecraft:resistance 300 4 true`
+- `request: mc /execute rotated ~ 0 positioned ^ ^ ^7 run summon minecraft:husk ~ ~0.5 ~ {Tags:["sp7"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty"}`
+- `request: mc /item replace entity @s hotbar.7 with minecraft:wheat`
+- `request: mc /item replace entity @s hotbar.8 with minecraft:dandelion`
+- `longest command: 150`
+
+- [ ] **Step 4: Run the overlay offline: run F's spots**
+
+`FUN_V` stands V where the apartment's dump found her (`2026-10-09_12-22-29`: her feet, in the game's world
+coordinates, and her facing), and `show` prints what the overlay shows, the Fun header open.
+```bash
+cd /d/Cyberpunk-Minecraft/spikes/block-render && mkdir -p build/fun && cd build/fun \
+  && FUN_V="-1383.343 1271.700 123.065 -0.944 -0.330" lua /d/Cyberpunk-Minecraft/tools/plans/fun_check.lua \
+       ../../tools/blockrender_hud/init.lua show | tr -d '\r' | grep -E "^text: (V:|Run F|    )"
+```
+Expected, V 1.4 km from spot B and beside the others:
+- `V: x -1383.34  y 1271.70  z 123.06, heading 251 (0 north, 90 east)`
+- `Spot B: 1361.3 m, heading 119, 48.6 m down; face 180 there`
+- `V's room: 2.2 m, heading 265, 0.0 m down; face 90 there`
+- `Hidden from the husk: 1.2 m, heading 260, 0.0 m down; face 300 there`
+- `In the husk's view: 5.2 m, heading 268, 0.2 m up; face 300 there`
+- `The stairs: 22.5 m, heading 302, 0.0 m down; face 0 there`
+
+- [ ] **Step 5: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render/tools/blockrender_hud/init.lua \
+  && git commit -q -m "minecraft-paths: the overlay's Paths rows, and the way to run F's spots" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 17: An `mclink` script of the Paths rows, on run F's ground
+
+`tools/mclink/pathsrow.txt` types the Paths rows' commands, and Clear, Survival and "Your slots"' slots 8 and 9,
+exactly as the overlay types them, into the user's Minecraft, without the game, on run F's ground where the game itself
+puts it: spot B's dump around V's own feet there, then the apartment's around hers (a dump goes around the stand-in V's
+feet as `dump` runs). It checks each command against Minecraft 26.3 and SkyCraft's real mod before run F, and rehearses
+run F's checks but the tempt and the bee's follow, which need the slot held ("What step 0 and planning found"). Each
+check runs alone, cleared before the next. The player's game mode is noted in a scoreboard and put back, the
+Resistance cleared, and slots 8 and 9 left as "Your slots" fills them.
+
+**Files:**
+- Create: `spikes/block-render/tools/mclink/pathsrow.txt`
+
+- [ ] **Step 1: Write `tools/mclink/pathsrow.txt`**
+
+```text
+# Spike 9's Part 2: the overlay's Paths rows, typed as its buttons type them, against SkyCraft's real mod, without
+# the game, on run F's ground where the game itself puts it: spot B (spike 1's raised-level dump, 2026-10-01_14-37-07)
+# around V's own feet there, Minecraft -189.898 74.432 -616.754, then V's apartment in Megabuilding H10
+# (2026-10-09_12-22-29) around -1383.343 123.065 -1271.700. Step 0 placed spot B's dump at 1280.5 6.14 2007.5, a
+# fraction of a block off the game's grid, so its cells weren't quite these
+# (docs/superpowers/plans/2026-10-08-minecraft-paths.md, "Part 2").
+#
+# Each check runs alone and is cleared before the next, with the overlay's Clear. Results come from the chat replies
+# in Minecraft's log: positions (/data get), "Test passed" or "Test failed" (/execute if entity). The player's game
+# mode is noted at the start and put back at the end; its slots 8 and 9 get the wheat and the dandelion, and then the
+# TNT and the flint and steel the overlay's "Your slots" gives; the husk's Resistance is cleared. Unselected, the wheat
+# and the dandelion tempt nothing (the user picks the slot in build mode in run F), so the tempt and the bee's follow
+# are left to run F. Start Minecraft first; this waits for its world. W (26) walks.
+status
+wait-world 180
+ground city
+at -189.898 74.432 -616.754
+look 0 0
+dump E:\Cyberpunk2077\red4ext\plugins\PhysXProbe\dumps\2026-10-01_14-37-07\collision.obj
+link on
+wait-ground 30
+wait 2
+type /scoreboard objectives add sp9mode dummy
+type /execute store success score #creative sp9mode if entity @s[gamemode=creative]
+type /execute store success score #adventure sp9mode if entity @s[gamemode=adventure]
+type /gamemode survival
+scene
+# Spot B, V on the pavement facing south (heading 180), the barrier 3.5 blocks east (left).
+# 1. Wander: the pig, the cow and the villager 4 blocks south of V, their positions every 5 s for 60 s. Each should
+# stroll at least twice and move 3 blocks or more, and stay on the road: the street at 74.25 and the pavement at 74.5,
+# none past the barrier nor below the road.
+type /execute rotated ~ 0 positioned ^2 ^ ^4 run summon minecraft:pig ~ ~0.5 ~ {Tags:["sp7"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty"}
+type /execute rotated ~ 0 positioned ^ ^ ^4 run summon minecraft:cow ~ ~0.5 ~ {Tags:["sp7"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty"}
+type /execute rotated ~ 0 positioned ^-2 ^ ^4 run summon minecraft:villager ~ ~0.5 ~ {Tags:["sp7"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty"}
+wait 1
+type /execute as @e[tag=sp7] run data get entity @s Pos
+wait 5
+type /execute as @e[tag=sp7] run data get entity @s Pos
+wait 5
+type /execute as @e[tag=sp7] run data get entity @s Pos
+wait 5
+type /execute as @e[tag=sp7] run data get entity @s Pos
+wait 5
+type /execute as @e[tag=sp7] run data get entity @s Pos
+wait 5
+type /execute as @e[tag=sp7] run data get entity @s Pos
+wait 5
+type /execute as @e[tag=sp7] run data get entity @s Pos
+wait 5
+type /execute as @e[tag=sp7] run data get entity @s Pos
+wait 5
+type /execute as @e[tag=sp7] run data get entity @s Pos
+wait 5
+type /execute as @e[tag=sp7] run data get entity @s Pos
+wait 5
+type /execute as @e[tag=sp7] run data get entity @s Pos
+wait 5
+type /execute as @e[tag=sp7] run data get entity @s Pos
+wait 5
+type /execute as @e[tag=sp7] run data get entity @s Pos
+type /execute as @e[tag=sp7] run data get entity @s OnGround
+type /execute at @e[tag=sp7b] run setblock ~ ~ ~ minecraft:air strict
+type /kill @e[tag=sp7]
+type /kill @e[tag=sp7b]
+wait 3
+# 2. Pet: the wolf 2 ahead and 2 to the left of V on the street, its owner the player. V walks about 15 blocks south,
+# past the 10 a wolf waits for: it should follow by path to within 4 blocks. Then V jumps 22 blocks north, past the 12
+# a pet teleports at: it should land beside V at once, on the road's floor and on the ground.
+at -193.5 74.3 -616.5
+wait 2
+type /execute rotated ~ 0 positioned ^2 ^ ^2 run summon minecraft:wolf ~ ~0.5 ~ {Tags:["sp7"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty"}
+type /data modify entity @e[type=minecraft:wolf,tag=sp7,limit=1,sort=nearest] Owner set from entity @s UUID
+wait 2
+build on
+down 26
+track 3.5
+up 26
+wait 4
+type /execute if entity @e[type=minecraft:wolf,tag=sp7,distance=..4]
+type /execute as @e[tag=sp7] run data get entity @s Pos
+build off
+at -193.5 74.3 -623.5
+wait 0.5
+type /execute as @e[tag=sp7] run data get entity @s Pos
+type /execute as @e[tag=sp7] run data get entity @s OnGround
+type /execute if entity @e[type=minecraft:wolf,tag=sp7,distance=..4.5]
+wait 1.5
+type /execute as @e[tag=sp7] run data get entity @s Pos
+type /execute at @e[tag=sp7b] run setblock ~ ~ ~ minecraft:air strict
+type /kill @e[tag=sp7]
+type /kill @e[tag=sp7b]
+wait 3
+# 3. Chase: the husk 7 blocks south of V on the pavement, in view, Resistance first. It should reach the player.
+at -189.898 74.432 -616.754
+wait 2
+type /effect give @s minecraft:resistance 300 4 true
+type /execute rotated ~ 0 positioned ^ ^ ^7 run summon minecraft:husk ~ ~0.5 ~ {Tags:["sp7"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty"}
+wait 10
+type /execute if entity @e[type=minecraft:husk,tag=sp7,distance=..2]
+type /execute as @e[tag=sp7] run data get entity @s Pos
+type /execute at @e[tag=sp7b] run setblock ~ ~ ~ minecraft:air strict
+type /kill @e[tag=sp7]
+type /kill @e[tag=sp7b]
+wait 3
+# 4. Flyer: the dandelion into slot 9, and the bee 2 ahead and 2 to the right of V, a block up. With the dandelion not
+# held, it wanders: in the air above the road, not inside the city's cells.
+type /item replace entity @s hotbar.8 with minecraft:dandelion
+type /execute rotated ~ 0 positioned ^-2 ^ ^2 run summon minecraft:bee ~ ~1 ~ {Tags:["sp7"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty"}
+wait 1
+type /execute as @e[tag=sp7] run data get entity @s Pos
+wait 5
+type /execute as @e[tag=sp7] run data get entity @s Pos
+wait 5
+type /execute as @e[tag=sp7] run data get entity @s Pos
+type /execute at @e[tag=sp7b] run setblock ~ ~ ~ minecraft:air strict
+type /kill @e[tag=sp7]
+type /kill @e[tag=sp7b]
+wait 3
+# V's apartment: spot B's city goes, and the apartment's comes around V's feet when it was dumped. Run F's checks
+# there start in V's room 2 blocks in from its front door (a doorway a block wide at x -1389, onto the building's
+# corridor), V facing into the room (heading 90). The building's storeys are 4 blocks apart, with stairs between them.
+type /item replace entity @s hotbar.7 with minecraft:wheat
+ground floor
+at -1383.343 123.065 -1271.700
+dump E:\Cyberpunk2077\red4ext\plugins\PhysXProbe\dumps\2026-10-09_12-22-29\collision.obj
+ground city
+wait-ground 30
+at -1385.5 123.06 -1271.5
+look 270 0
+wait-ground 30
+wait 2
+# 5. Wander in V's room: the pig, the cow and the villager 4 blocks east of V, their positions every 5 s for 60 s.
+# Each should stroll at least twice, among the furniture and not through it, on the room's floor at 123.125 (up to
+# about 124 on raised parts); any of them may go out of the front door into the corridor, and down or up the stairs:
+# floors 4 blocks apart, at 111.125 to 127.125.
+type /execute rotated ~ 0 positioned ^2 ^ ^4 run summon minecraft:pig ~ ~0.5 ~ {Tags:["sp7"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty"}
+type /execute rotated ~ 0 positioned ^ ^ ^4 run summon minecraft:cow ~ ~0.5 ~ {Tags:["sp7"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty"}
+type /execute rotated ~ 0 positioned ^-2 ^ ^4 run summon minecraft:villager ~ ~0.5 ~ {Tags:["sp7"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty"}
+wait 1
+type /execute as @e[tag=sp7] run data get entity @s Pos
+wait 5
+type /execute as @e[tag=sp7] run data get entity @s Pos
+wait 5
+type /execute as @e[tag=sp7] run data get entity @s Pos
+wait 5
+type /execute as @e[tag=sp7] run data get entity @s Pos
+wait 5
+type /execute as @e[tag=sp7] run data get entity @s Pos
+wait 5
+type /execute as @e[tag=sp7] run data get entity @s Pos
+wait 5
+type /execute as @e[tag=sp7] run data get entity @s Pos
+wait 5
+type /execute as @e[tag=sp7] run data get entity @s Pos
+wait 5
+type /execute as @e[tag=sp7] run data get entity @s Pos
+wait 5
+type /execute as @e[tag=sp7] run data get entity @s Pos
+wait 5
+type /execute as @e[tag=sp7] run data get entity @s Pos
+wait 5
+type /execute as @e[tag=sp7] run data get entity @s Pos
+wait 5
+type /execute as @e[tag=sp7] run data get entity @s Pos
+type /execute as @e[tag=sp7] run data get entity @s OnGround
+type /execute at @e[tag=sp7b] run setblock ~ ~ ~ minecraft:air strict
+type /kill @e[tag=sp7]
+type /kill @e[tag=sp7b]
+wait 3
+# 6. Pet: the wolf beside V in the room, then V jumps 19 blocks out along the building's corridor, and then 18 blocks
+# across and 4 down, to the storey below: each time the wolf should land beside V at once, on V's storey's floor
+# (123.125, then 119.125; or on the far side of a wall, within 3 blocks across, as a vanilla pet may).
+type /execute rotated ~ 0 positioned ^2 ^ ^2 run summon minecraft:wolf ~ ~0.5 ~ {Tags:["sp7"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty"}
+type /data modify entity @e[type=minecraft:wolf,tag=sp7,limit=1,sort=nearest] Owner set from entity @s UUID
+wait 3
+at -1400.5 123.06 -1259.5
+wait 0.5
+type /execute as @e[tag=sp7] run data get entity @s Pos
+type /execute as @e[tag=sp7] run data get entity @s OnGround
+type /execute if entity @e[type=minecraft:wolf,tag=sp7,distance=..4.5]
+wait 1.5
+type /execute as @e[tag=sp7] run data get entity @s Pos
+at -1385.5 119.06 -1289.5
+wait 0.5
+type /execute as @e[tag=sp7] run data get entity @s Pos
+type /execute as @e[tag=sp7] run data get entity @s OnGround
+type /execute if entity @e[type=minecraft:wolf,tag=sp7,distance=..4.5]
+wait 1.5
+type /execute as @e[tag=sp7] run data get entity @s Pos
+type /execute at @e[tag=sp7b] run setblock ~ ~ ~ minecraft:air strict
+type /kill @e[tag=sp7]
+type /kill @e[tag=sp7b]
+wait 3
+# 7. Sight: V in the room 3 blocks in from the front door, facing heading 300, the husk 7 ahead in the corridor, the
+# room's wall between them, and its way around through the door 9 steps long. For 4 s it shouldn't come (unless a
+# stroll brings V into its view); once V steps into the doorway, in its view, it should reach the player.
+at -1384.5 123.06 -1271.5
+look 120 0
+wait 2
+type /effect give @s minecraft:resistance 300 4 true
+type /execute rotated ~ 0 positioned ^ ^ ^7 run summon minecraft:husk ~ ~0.5 ~ {Tags:["sp7"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty"}
+wait 4
+type /execute if entity @e[type=minecraft:husk,tag=sp7,distance=..3]
+type /execute as @e[tag=sp7] run data get entity @s Pos
+at -1388.5 123.3 -1271.5
+wait 8
+type /execute if entity @e[type=minecraft:husk,tag=sp7,distance=..2]
+type /execute as @e[tag=sp7] run data get entity @s Pos
+# The clear: everything tagged, the Resistance, slots 8 and 9 as "Your slots" fills them, the game mode as it was.
+# A killed mob's puffs last up to 5 s: the last scene, 7 s on, should say nothing is left.
+type /execute at @e[tag=sp7b] run setblock ~ ~ ~ minecraft:air strict
+type /kill @e[tag=sp7]
+type /kill @e[tag=sp7b]
+type /effect clear @s minecraft:resistance
+type /item replace entity @s hotbar.7 with minecraft:tnt 64
+type /item replace entity @s hotbar.8 with minecraft:flint_and_steel
+type /execute if score #creative sp9mode matches 1 run gamemode creative
+type /execute if score #adventure sp9mode matches 1 run gamemode adventure
+type /scoreboard objectives remove sp9mode
+wait 7
+scene
+status
+quit
+```
+
+- [ ] **Step 2: Check that mclink parses the script**
+
+A copy with a line `mclink` doesn't know at its end: `mclink` reads the whole script before it opens the link, so it
+stops at that line, having parsed every other, and nothing runs, even with Minecraft open.
+```bash
+cd /d/Cyberpunk-Minecraft/spikes/block-render && mkdir -p build \
+  && { cat tools/mclink/pathsrow.txt; echo "parse-check-stop here"; } > build/pathsrow-parse.txt \
+  && ./build/RelWithDebInfo/mclink.exe build/pathsrow-parse.txt; echo "exit: $?"
+```
+Expected: `line 224: unknown action: "parse-check-stop here"` and `exit: 2`.
+
+- [ ] **Step 3: Check that the script types the overlay's commands**
+
+The overlay run offline, clicking every button the script stands in for, and each request it writes looked for in the
+script as a whole `type` line.
+```bash
+cd /d/Cyberpunk-Minecraft/spikes/block-render && mkdir -p build/fun && cd build/fun \
+  && lua /d/Cyberpunk-Minecraft/tools/plans/fun_check.lua ../../tools/blockrender_hud/init.lua click "Pig##paths" Cow \
+       "Villager##paths" Wolf Bee Husk "Wheat (8)" "Dandelion (9)" Clear Survival "TNT (8)" "Flint and steel (9)" \
+  | tr -d '\r' | sed -n 's/^request: mc //p' > commands.txt && tr -d '\r' < ../../tools/mclink/pathsrow.txt > script.txt \
+  && typed=0 && while IFS= read -r command; do \
+       if grep -q -x -F "type $command" script.txt; then typed=$((typed + 1)); else echo "not typed: $command"; fi; \
+     done < commands.txt; echo "the script types $typed of the overlay's $(wc -l < commands.txt) commands"
+```
+Expected: `the script types 16 of the overlay's 16 commands`.
+
+- [ ] **Step 4: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render/tools/mclink/pathsrow.txt \
+  && git commit -q -m "minecraft-paths: an mclink script of the Paths rows, on run F's ground" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 18: In Minecraft: the Paths rows at spot B and in V's apartment
+
+Task 17's script, with the user, against SkyCraft's mod and CyberCraft Tweaks 1.7.1 in the `CyberCraft` instance,
+without the game.
+- **What Minecraft logs:** as in Part 1: `/data get`'s `… has the following entity data: …`, `/execute if`'s `Test
+  passed. Count: 1` or `Test failed`, `Replaced 1 slot(s) on ItzBloxy with [Wheat]` for `item replace`, `Summoned new
+  …`, the minute lines (`CyberCraft Tweaks: paths`), and any command's error. Clear's first command finds no marker
+  each time and answers `No entity was found`; that's expected.
+- **If a check misbehaves,** let the script finish (it clears what it makes as it goes), then find the cause with
+  superpowers:systematic-debugging before going on. A command that needs changing changes in the overlay and the
+  script together, as a new task.
+
+**Files:**
+- Modify: `docs/spikes/2026-10-08-minecraft-paths-results.md`
+
+- [ ] **Step 1: Check that the game isn't running**
+
+```bash
+tasklist | grep -i -c "cyberpunk2077.exe"
+```
+Expected: `0`. If it's `1`, ask the user to quit the game: it would hold the mapping.
+
+- [ ] **Step 2: Ask the user for their leave, and to start Minecraft**
+
+Ask for their leave for what the script does ("Before you start (Part 2)"), naming slots 8 and 9: their TNT and flint
+and steel are replaced, and come back as 64 TNT and a flint and steel. Then the user starts the `CyberCraft` instance
+from the Modrinth App and says when its title screen shows. Then:
+```bash
+L="/c/Users/BLOXY/AppData/Roaming/ModrinthApp/profiles/CyberCraft/logs/latest.log"; \
+  grep -E "cybercraft_tweaks [0-9.]+" "$L" | head -1; \
+  echo "mixin errors: $(grep -c -E "Mixin.*(rror|ailed)|InvalidInjection|MixinApplyError|cybercraft_tweaks.*(rror|xception)" "$L")"
+```
+Expected: `- cybercraft_tweaks 1.7.1` and `mixin errors: 0`.
+
+- [ ] **Step 3: In Minecraft: run the Paths rows' script**
+
+```bash
+L="/c/Users/BLOXY/AppData/Roaming/ModrinthApp/profiles/CyberCraft/logs/latest.log"; before=$(wc -l < "$L"); \
+  cd /d/Cyberpunk-Minecraft/spikes/block-render && mkdir -p build/pathsrow \
+  && ./build/RelWithDebInfo/mclink.exe tools/mclink/pathsrow.txt > build/pathsrow/pathsrow.log 2>&1; echo "exit: $?"; \
+  tail -n +$((before + 1)) "$L" | grep -E "\[CHAT\]|SkyCraft: |CyberCraft Tweaks: |WARN|rror|xception" > build/pathsrow/minecraft.log
+```
+It takes about 5 minutes once Minecraft is in its world, and up to 3 more if it opens the world first: give the command
+9 minutes. Expected, from the simulation of the two dumps where the game puts them:
+- **Linking:** `Minecraft is there (process …)`, `the city around region … is all in the ring` for spot B, and again
+  after the switch to the apartment's dump; no error or exception from a mixin.
+- **Spot B, wander:** 13 positions each for the pig, the cow and the villager, summoned at about −187.9, −189.9 and
+  −191.9 by 74.9 by −612.8, and dropping onto the pavement's 74.5 (the villager the street's 74.25): each moves 3 blocks
+  or more and strolls at least twice; every y 74.25 to 75.0, the road's (73 or less is the ledge or the slope behind
+  the barrier, 75.75 its north end's top); the three `OnGround` `1b`. If one climbs the barrier's wide north end (x −188 to −187, z −638 to −634) and drops off
+  its far side, that's the route "What step 0 and planning found" describes: record it.
+- **Spot B, pet:** `Test passed. Count: 1` after the walk; after the jump north, `Test passed. Count: 1` with the wolf
+  within 3 blocks across of V (−193.5 −623.5), at y 74.25 or 74.5 and `1b`, and still near V at 2 s.
+- **Spot B, chase:** `Test passed. Count: 1`.
+- **Spot B, flyer:** `Replaced 1 slot(s) on ItzBloxy with [Dandelion]`; the bee's three positions in the air over the
+  road, from about 75 up.
+- **The apartment, wander:** `Replaced 1 slot(s) on ItzBloxy with [Wheat]`; 13 positions each, summoned at about
+  −1381.5 by 123.6 by −1273.5, −1271.5 and −1269.5: each strolls, among the furniture and not through it, on the room's
+  floor (122.5 to 124.25), or out of the front door into the corridor (x −1395 to −1390, 123.125), or on another storey
+  (111.125, 115.125, 119.125 or 127.125) if it took the stairs; the three `1b`.
+- **The apartment, pet:** after each jump `Test passed. Count: 1`, the wolf within 3 blocks across of V and `1b`: at
+  123.125 by −1400.5 −1259.5, then at 119.125 by −1385.5 −1289.5, the storey below.
+- **The apartment, sight:** after 4 s `Test failed`, the husk still about 7 blocks off in the corridor, near −1390.6
+  123.6 −1275.0 or a stroll from there (if it passed, its position says what brought V into its view); after V steps
+  into the doorway, `Test passed. Count: 1`.
+- **Cost:** minute lines with city answers, shapes read, sight casts with hits (the husk's 4 s), a few milliseconds of
+  casting a minute, and `pets landed on the city's floor` counting the three jumps.
+- **The end:** `Removed effect Resistance`, `Replaced 1 slot(s) on ItzBloxy with [TNT]` and `… with [Flint and Steel]`,
+  the game mode as it was (no reply if it's still survival), the last scene `world: nothing`, no error but Clear's `No
+  entity was found`, and `exit: 0`.
+
+- [ ] **Step 4: Ask the user to stop Minecraft, after an autosave**
+
+The last change was the script's end. Wait for Minecraft's autosave, run in the background for its `sleep` loop:
+```bash
+W="/c/Users/BLOXY/AppData/Roaming/ModrinthApp/profiles/CyberCraft/saves/SkyCraft"; \
+  M=/d/Cyberpunk-Minecraft/spikes/block-render/build/pathsrow/saved-after; touch "$M"; \
+  until [ "$W/level.dat" -nt "$M" ] && [ -n "$(find "$W/players/data" -name "*.dat" -newer "$M")" ]; do sleep 2; done; \
+  date +%H:%M:%S; ls -la --time-style=+%H:%M:%S "$W/level.dat" "$W"/players/data/*.dat
+```
+Expected within 5 minutes: `level.dat` and the player's `.dat` both written after the mark. Then the user stops
+Minecraft from the Modrinth App, and:
+```bash
+tasklist | grep -i -c "javaw.exe"
+```
+Expected: `0`.
+
+- [ ] **Step 5: Record the run in `docs/spikes/2026-10-08-minecraft-paths-results.md`**
+
+A "The Paths rows with `mclink`" section after step 0's: the versions, the two dumps and where they went, and each
+check with its numbers (every mob's positions, the tests' replies, the minute lines), against the simulation's, and
+anything that surprised.
+
+- [ ] **Step 6: Commit**
+
+With the plan, its steps ticked up to this one.
+```bash
+cd /d/Cyberpunk-Minecraft && git add docs/spikes/2026-10-08-minecraft-paths-results.md docs/superpowers/plans/2026-10-08-minecraft-paths.md \
+  && git commit -q -m "minecraft-paths: the Paths rows with mclink, before run F" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 19: In the game: run F at spot B
+
+Run F of the spec, with the user, its first half: spot B, on BlockRender 0.23.0 (unchanged), linked to SkyCraft's
+Minecraft in the `CyberCraft` instance with CyberCraft Tweaks 1.7.1. Combat off (the overlay's Combat button: Minecraft's
+hits stay in Minecraft), Minecraft's player in survival. DRED stays on.
+
+**Before the user looks,** name what can't be seen, so it isn't taken for a fault:
+- the cells the mobs walk on are the city's collision voxels, up to 1/8 block above the surface drawn, so a mob's feet
+  may hover a little or sink a little;
+- the city's collision has no cars, NPCs or kinematic doors: mobs walk through them, as they always did;
+- a wall top 2 blocks wide is walkable, as on a Minecraft wall: the barrier's north end is one (Minecraft block −188 75
+  −636), with drops of 3 blocks or less down the rock face behind it;
+- the minute line and every reply are in Minecraft's log, which the agent reads.
+
+**The order matters:** Clear before each check, as Task 18 did, and before V leaves a spot, since mobs left where the
+city's ground goes fall. If the game freezes, read the logs and the newest folder in
+`%LOCALAPPDATA%\REDEngine\ReportQueue`, and force-close it only when the user asks. If a check fails, stop and find the
+cause with superpowers:systematic-debugging before going on. Fixes become new tasks.
+
+These commands come back, here and in Task 20:
+- **Send BlockRender a request,** atomically, from the plugin's own folder: it runs one within a second. Replace the
+  command; send the next only once the file has gone.
+  ```bash
+  P=/e/Cyberpunk2077/red4ext/plugins/BlockRender; printf '%s\n' "mc /execute as @e[tag=sp7] run data get entity @s Pos" > "$P/request.tmp" && mv "$P/request.tmp" "$P/blockrender.request"
+  ```
+- **Positions every 5 s for 60 s,** run in the background for its `sleep` loop:
+  ```bash
+  P=/e/Cyberpunk2077/red4ext/plugins/BlockRender; for i in $(seq 1 13); do \
+    while [ -e "$P/blockrender.request" ]; do sleep 0.2; done; \
+    printf '%s\n' "mc /execute as @e[tag=sp7] run data get entity @s Pos" > "$P/request.tmp" && mv "$P/request.tmp" "$P/blockrender.request"; \
+    sleep 5; done; echo polled
+  ```
+- **The wolf's and V's positions in turn,** one a second for 30 s, in the background, to catch a landing:
+  ```bash
+  P=/e/Cyberpunk2077/red4ext/plugins/BlockRender; for i in $(seq 1 15); do \n    for c in "mc /execute as @e[tag=sp7] run data get entity @s Pos" "mc /data get entity @p Pos"; do \n      while [ -e "$P/blockrender.request" ]; do sleep 0.2; done; \n      printf '%s
+' "$c" > "$P/request.tmp" && mv "$P/request.tmp" "$P/blockrender.request"; sleep 1; done; done; echo polled
+  ```
+- **Minecraft's chat and minute lines since a mark** (note `wc -l < "$L"` as the mark first):
+  ```bash
+  L="/c/Users/BLOXY/AppData/Roaming/ModrinthApp/profiles/CyberCraft/logs/latest.log"; tail -n +$((mark + 1)) "$L" | grep -E "\[CHAT\]|CyberCraft Tweaks: |WARN"
+  ```
+- **CET's frame time,** five readings 2 s apart, in the background:
+  ```bash
+  H=/e/Cyberpunk2077/bin/x64/plugins/cyber_engine_tweaks/mods/blockrender_hud; for i in 1 2 3 4 5; do cat "$H/frames.txt"; sleep 2; done
+  ```
+- **The status, and BlockRender's log:**
+  ```bash
+  cat /e/Cyberpunk2077/bin/x64/plugins/cyber_engine_tweaks/mods/blockrender_hud/status.txt; \
+    L=$(ls -t /e/Cyberpunk2077/red4ext/logs | grep -i blockrender | head -1); tail -20 "/e/Cyberpunk2077/red4ext/logs/$L"
+  ```
+
+**Files:**
+- Modify: `docs/spikes/2026-10-08-minecraft-paths-results.md`
+
+- [ ] **Step 1: Deploy the overlay, with the user's leave (the game must not be running)**
+
+```bash
+tasklist | grep -i -c "cyberpunk2077.exe"
+```
+Expected: `0`. If it's `1`, ask the user to quit the game first. Then:
+```bash
+H=/e/Cyberpunk2077/bin/x64/plugins/cyber_engine_tweaks/mods/blockrender_hud; \
+  cp /d/Cyberpunk-Minecraft/spikes/block-render/tools/blockrender_hud/init.lua "$H/init.lua" \
+  && cmp /d/Cyberpunk-Minecraft/spikes/block-render/tools/blockrender_hud/init.lua "$H/init.lua" && echo installed
+```
+Expected: `installed`.
+
+- [ ] **Step 2: In the game: start, load and link**
+
+Ask the user to start the `CyberCraft` instance, then the game, to load their save (V in her apartment), and to click
+Link. Then:
+```bash
+L=$(ls -t /e/Cyberpunk2077/red4ext/logs | grep -i blockrender | head -1); grep -E "loaded|link on|ERROR|error" "/e/Cyberpunk2077/red4ext/logs/$L" | head -5; \
+  grep -E "^(combat|entities)=" /e/Cyberpunk2077/bin/x64/plugins/cyber_engine_tweaks/mods/blockrender_hud/status.txt | cut -c1-120; \
+  grep -E "cybercraft_tweaks [0-9.]+" "/c/Users/BLOXY/AppData/Roaming/ModrinthApp/profiles/CyberCraft/logs/latest.log" | head -1
+```
+Expected: `BlockRender 0.23.0 loaded (game 2.3.1)`, `link on: Minecraft's player follows V; drawing is gbuffer`, no error
+lines, `combat=off: Minecraft's hits are logged, not applied`, `entities=on`, and `- cybercraft_tweaks 1.7.1`. Ask the
+user to open the overlay's Fun header: under the rows, "Run F's spots" with five lines, "V's room" a few metres away.
+Then name what can't be seen ("Before the user looks", above).
+
+- [ ] **Step 3: In the game: go to spot B**
+
+Ask the user to take V to spot B by the overlay's "Spot B" line (about 1.4 km at heading 119 from the apartment, 49 m
+down): Downtown's raised sidewalk, a concrete barrier about 3.5 m east of V, a drop of 6 m beyond it, the road to the
+west. There, V stands at Minecraft block −190 74 −617 (the overlay's "Minecraft block" line; "Spot B" under 1 m),
+facing heading 180, south along the sidewalk; a block about 2 m square stands on the sidewalk 11 m ahead, at Minecraft
+−190 −606. Then read the status's `ground=` line until it says the city around V is known (`… regions known, 0
+batches to read`), and take the frame time with nothing summoned, as the baseline.
+
+- [ ] **Step 4: In the game: spot B's wanderers (check 1)**
+
+Ask the user to click Clear, then the Paths row's Pig, Cow and Villager, and to watch for a minute, V standing still.
+Note the log's mark, then run the 60 s positions in the background, and the frame time after it. Expected, as in Task
+18: each strolls at least twice and moves 3 blocks or more, every y 74.25 to 75.0, the road's; to the user,
+they wander the sidewalk and the street, step down and up the kerb, and stay out of the barrier and the block ahead.
+If one goes to the barrier's north end, 20 blocks north, and over it, record it: the route the simulation found. Then
+send `mc /execute as @e[tag=sp7] run data get entity @s OnGround`: three `1b`.
+
+- [ ] **Step 5: In the game: spot B's cow and the wheat (check 2)**
+
+Ask the user to click Clear, then Cow and Wheat (8); then F8 (build mode), mouse button 5 (slot 8, the wheat in
+Minecraft's hand), F8 again; then to walk V about 10 m south, passing the block ahead on its street side, and stop.
+Then send `mc /execute if entity @e[type=minecraft:cow,tag=sp7,distance=..4]` and the positions. Expected: `Test
+passed. Count: 1`, the cow beside V, having followed down the kerb if V took the street.
+
+- [ ] **Step 6: In the game: spot B's wolf (check 3)**
+
+Ask the user to click Clear, then Wolf (two requests: the wolf, then its owner). Start the wolf's and V's positions in
+turn in the background, then ask the user to walk V about 15 m south on the street side, past the 10 m a wolf waits for,
+and stop; then to sprint about 25 m north along the street, past the 12 m a pet teleports at, stop, and read the
+overlay's Entities line at once: "the nearest mob … m away". Expected: the wolf follows the walk to within 4 blocks
+(`mc /execute if entity @e[type=minecraft:wolf,tag=sp7,distance=..4]` after it); during the sprint, within a second of
+V passing 12 m, a jump in its positions to within 3 blocks across of V, at y 74.25 or 74.5, never below the road; the
+nearest mob under about 4.5 m when V stops; and the next minute line counting `1 pets landed` or more. A wolf that
+strolls off a few seconds after landing is vanilla's ("How Part 1 went").
+
+- [ ] **Step 7: In the game: spot B's bee and the dandelion (check 4)**
+
+Ask the user to click Clear, then Dandelion (9); F8, mouse button 4 (slot 9), F8; then Bee; then to walk V about 10 m
+south along the sidewalk and then about 15 m west across the street, and stop. Then send `mc /execute if entity
+@e[type=minecraft:bee,tag=sp7,distance=..4]` and the positions. Expected: `Test passed. Count: 1`; to the user, the bee
+follows around the block and over the kerb without sticking against the barrier or the block.
+
+- [ ] **Step 8: In the game: spot B's husk (check 5, in view)**
+
+Ask the user to click Clear, then Survival (the Mode row) and Husk (two requests: Resistance, then the husk 7 m ahead),
+and to stand still, facing heading 180 again. After 10 s send `mc /execute if entity
+@e[type=minecraft:husk,tag=sp7,distance=..2]`. Expected: `Test passed. Count: 1`: the husk walked to V and swings at
+her; nothing hurts V (combat off) or Minecraft's player (Resistance). The hidden half of check 5 is in V's apartment
+(Task 20).
+
+- [ ] **Step 9: In the game: spot B's cost (check 6)**
+
+Ask the user to click Clear, then Pig, Cow, Villager, Wolf and Bee at once, and to stand for 30 s; take the frame time
+meanwhile, and read the minute lines since the step 4 mark. Expected: the frame time within the baseline's spread; the
+minute lines' casting a few milliseconds a minute, as in step 0. Then ask the user to click Clear.
+
+- [ ] **Step 10: Record spot B's run in `docs/spikes/2026-10-08-minecraft-paths-results.md`**
+
+A "Run F" section: the versions; at spot B each check with its outcome and numbers (positions, tests, the wolf's
+landing and distance, frame times, minute lines), the user's observations, and screenshots if the user takes some, as
+earlier runs' results have.
+
+- [ ] **Step 11: Commit**
+
+With the plan, its steps ticked up to this one. The user can drive V back to the apartment meanwhile.
+```bash
+cd /d/Cyberpunk-Minecraft && git add docs/spikes/2026-10-08-minecraft-paths-results.md docs/superpowers/plans/2026-10-08-minecraft-paths.md \
+  && git commit -q -m "minecraft-paths: run F at spot B" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 20: In the game: run F in V's apartment
+
+Run F's second half, in the same game session, in V's apartment in Megabuilding H10 and its building: the doorway, the
+corridor and the stairs. The commands Task 19 names come back. Expected results come from the simulation of the
+apartment's dump (`2026-10-09_12-22-29`, "What step 0 and planning found"); the city around V in the game reaches
+further than the dump (88 m square against 64), so mobs may go beyond what it shows.
+
+**Files:**
+- Modify: `docs/spikes/2026-10-08-minecraft-paths-results.md`
+
+- [ ] **Step 1: In the game: go to V's room**
+
+With everything cleared at spot B, ask the user to take V back by the overlay's "V's room" line, and stand at
+Minecraft block −1386 123 −1272, 2 blocks in from the front door, facing heading 90, into the room. Read the status's
+`ground=` line until the city around V is known.
+
+- [ ] **Step 2: In the game: the room's wanderers (check 1)**
+
+Ask the user to click Pig, Cow and Villager, and to watch for a minute; run the 60 s positions in the background, then
+the `OnGround` request. Expected: each strolls at least twice, among the furniture and not through it, at y 122.5 to
+124.25 in the room; any may go out of the door into the corridor (123.125) and down or up the stairs (119.125,
+127.125); none inside a wall or the furniture, none falling between storeys; three `1b`. Then Clear.
+
+- [ ] **Step 3: In the game: the cow through the doorway and down the stairs (check 2)**
+
+Ask the user to click Cow and Wheat (8), and select slot 8 (F8, mouse button 5, F8); then to walk V out of the front
+door, along the corridor to the stairs (the overlay's "The stairs" line, Minecraft block −1403 123 −1284), down them to
+the storey below, and stop. Expected: the cow follows through the doorway (a block wide, over its raised threshold),
+along the corridor and down the stairs: `mc /execute if entity @e[type=minecraft:cow,tag=sp7,distance=..4]` passes, its
+position at about 119.125. Then Clear.
+
+- [ ] **Step 4: In the game: the wolf through the doorway, down the stairs, and its landing (check 3)**
+
+Ask the user to go back to V's room (the "V's room" line), click Wolf, and walk V out of the door, along the corridor
+and down the stairs to the storey below, then sprint along that storey's corridor about 25 m and stop, reading the
+Entities line's nearest mob at once. Start the wolf's and V's positions in turn in the background before the sprint.
+Expected: the wolf follows by path through the door and down the stairs; during the sprint it lands within 3 blocks
+across of V on V's storey (119.125), not on a storey above or below, never falling; the nearest mob under about 4.5 m
+when V stops; a minute line counting the landing. Then Clear.
+
+- [ ] **Step 5: In the game: the bee through the doorway (check 4)**
+
+Ask the user to go back to V's room, click Dandelion (9), select slot 9 (F8, mouse button 4, F8), click Bee, and walk
+V out of the door, along the corridor and down the stairs. Expected: the bee follows through the doorway and down the
+stairwell without sticking against a wall, the door's frame or the stairs: `mc /execute if entity
+@e[type=minecraft:bee,tag=sp7,distance=..4]` passes when V stops. Then Clear.
+
+- [ ] **Step 6: In the game: the husk behind the wall (check 5, hidden, then in view)**
+
+Ask the user to go back to the room, click Survival, and stand at "Hidden from the husk" (Minecraft block −1385 123
+−1272, 3 blocks in from the door), facing heading 300, toward the wall beside the door; then to click Husk, which puts
+the husk 7 m ahead, in the corridor behind the wall, and to stay there. Note the log's mark. After about 5 s send
+`mc /execute if entity @e[type=minecraft:husk,tag=sp7,distance=..3]` and the positions; then ask the user to step into
+the doorway ("In the husk's view", Minecraft block −1389 123 −1272) and stand, and after 10 s send the same test with
+`distance=..2`. Expected: first `Test failed`, the husk still in the corridor about 7 blocks off (unless a stroll took
+it into the doorway's view, which its position shows), and the minute line's sight casts with hits while V was
+hidden; then `Test passed. Count: 1`: once V was in view, it came round through the door. Then Clear.
+
+- [ ] **Step 7: In the game: the apartment's cost (check 6)**
+
+As at spot B: Pig, Cow, Villager, Wolf and Bee at once in V's room for 30 s, the frame time meanwhile, and the minute
+lines. Expected: the frame time within the baseline's spread, a few milliseconds of casting a minute. Then Clear.
+
+- [ ] **Step 8: In the game: the end**
+
+Ask the user to click TNT (8) and Flint and steel (9) ("Your slots") to have them back, then to quit the game. Wait for
+Minecraft's autosave as Task 18's step 4 does (mark `build/pathsrow/saved-after-run-f`), then ask the user to stop
+Minecraft. Then read BlockRender's log for errors and Minecraft's for every minute line of the session:
+```bash
+L=$(ls -t /e/Cyberpunk2077/red4ext/logs | grep -i blockrender | head -1); grep -c -E "ERROR|error" "/e/Cyberpunk2077/red4ext/logs/$L"; \
+  grep -E "CyberCraft Tweaks: paths" "/c/Users/BLOXY/AppData/Roaming/ModrinthApp/profiles/CyberCraft/logs/latest.log"
+```
+Expected: `0` errors, and the minute lines.
+
+- [ ] **Step 9: Record the apartment's run in `docs/spikes/2026-10-08-minecraft-paths-results.md`**
+
+In "Run F", after spot B: each check with its outcome and numbers, the user's observations, the screenshots, and what
+the runs mean for the spike's answer.
+
+- [ ] **Step 10: Commit**
+
+With the plan, its steps ticked up to this one.
+```bash
+cd /d/Cyberpunk-Minecraft && git add docs/spikes/2026-10-08-minecraft-paths-results.md docs/superpowers/plans/2026-10-08-minecraft-paths.md \
+  && git commit -q -m "minecraft-paths: run F in V's apartment" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+---
+
+### Task 21: Close the spike
+
+- [ ] **Step 1: Record the spike's answer at the top of the results**
+
+In place of "The spike's answer goes here once run F is in": the spec's question, answered from step 0 and run F, with
+what's left for later.
+
+- [ ] **Step 2: Record "How Part 2 went" at the end of this plan**
+
+After "Found while planning Part 2": what ran as written, what changed and why, and what Task 18 and run F found.
+
+- [ ] **Step 3: Record the spec's "Changes while executing Part 2"**
+
+Anything Task 18 or run F changed in the design, or left for later.
+
+- [ ] **Step 4: Commit**
+
+```bash
+cd /d/Cyberpunk-Minecraft && git add docs \
+  && git commit -q -m "minecraft-paths: the spike's answer, and how Part 2 went" \
+       -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
+```
+
+- [ ] **Step 5: Ask the user how to finish the branch**
+
+With superpowers:finishing-a-development-branch. The user has chosen a local fast-forward merge of the spike's branch
+into `main` every time so far; ask again. The time-of-day sync the user asked for during spike 7 comes next.
 
 ---
 
@@ -3139,3 +4091,45 @@ first run with 1.7.0, and its run with 1.7.1.
   - a pet's check should read its landing right after V moves, not seconds later, when a stroll may have taken it;
   - watch pets' landings in the game, where the city has more levels and hollows than step 0's road;
   - before Minecraft is stopped, wait for an autosave after the last change.
+
+## Found while planning Part 2
+
+The spec's "Changes while planning Part 2" lists what planning settled in the design. In the plan itself:
+- **The simulation, where the game puts the ground:** `voxdump` placed each dump around V's own feet in Minecraft's
+  axes, (x, z, −y) of the world, so its cells are the game's. `tools/plans/paths-sim/` gained `simlib.py` (the walk
+  rules with 1.7.1's cells, as `fences.py` had them) and the scripts that answered run F's questions:
+  - maps of a level: `areamap.py`, `ascii.py` and `ascii2.py`, `voxmap.py` and `voxmap2.py`;
+  - `components.py`, the areas a level splits into, and `areas.py`, an area's places and its stroll and landing odds;
+  - `summons.py`, where the Paths rows' summons land from a spot facing a heading;
+  - `raylib.py`, `hidden.py`, `hidden7.py` and `robust.py`: the husk's hiding places, V's eye hidden from the husk's by
+    the dump's triangles as `SkyClip.cast` casts, with a way around, graded over the places around both;
+  - `jumps.py`, a pet's landing odds at the jump targets.
+- **The spots:**
+  - spot B, V's own dumped feet, facing heading 180: the summons go south, away from the barrier's north end;
+  - V's room, 2 blocks in from the front door, facing heading 90, where every summon lands in the room;
+  - hidden from the husk, 3 blocks in, facing heading 300, and the doorway, in its view;
+  - the stairs' top, on V's storey.
+- **A landing's test is 4.5 blocks:** a pet teleports to a cell up to 3 blocks off on each axis, as far as 4.24 blocks
+  away, so a test of 4 would fail about one landing in ten for nothing. The walks' tests keep step 0's 4.
+- **The husk goes 7 blocks ahead,** not 8, where the block entities' sign goes.
+- **ImGui's IDs:** a Paths row Pig or Villager labelled as the Mobs row's are would be the same button to ImGui;
+  `##paths` keeps them apart, and is the label `fun_check.lua` clicks.
+- **The slot is picked in build mode:** mouse buttons 5 and 4, the user's slots 8 and 9, go to Minecraft in build
+  mode (`BuildMode`: the mouse buttons, side buttons included, the wheel and the keys 1 to 9); out of it, the slot
+  stays.
+- **The probe's origin:** F10 dumps pass no PhysX origin, and away from the map's origin find nothing; `dump.request`'s
+  `origin <x> <y> <z>` passes one: the 1,024 m grid point nearest V on x and y, −1024 1024 0 at world −1383 1272.
+- **Read from Minecraft 26.3's jar:** `TemptGoal.shouldFollow` looks at the main hand, then the off hand, and its
+  targeting ignores line of sight; the `cow_food` tag is wheat and `bee_food` has the dandelion; a zombie targets players
+  it sees (`NearestAttackableTargetGoal(…, Player.class, true)`), forgets one unseen for 60 ticks
+  (`TargetGoal.unseenMemoryTicks`), and its attack goal (`ZombieAttackGoal(…, 1.0, false)`) repaths only while it sees
+  its target; `NodeEvaluator.prepare` sizes a node floor(width + 1) by floor(height + 1).
+- **The plan's tools:** `fun_check.lua` takes `FUN_V` for a V standing in the game; `run_plan_s9.py` knows Part 2's
+  steps ("Check the overlay's syntax", "Run the overlay offline", "Check that the script types the overlay's commands";
+  "Deploy" and "In the game" by hand).
+- **The mutations:** 17, each failing the step that guards it (`tools/plans/mutate_s9_overlay.py`): in Task 16's requests, the
+  cow summoned at the feet, the wheat and the dandelion a slot off, any wolf owned, Resistance short of its highest,
+  the husk on the sign's place, the bee half a block up, the Pig's label the Mobs row's, and the wolf on the right;
+  in its spots, the heading from east, up and down swapped, the distance across the height, V's room at Minecraft's
+  z, and the spots' lines not under their heading; in Task 17, an action `mclink` doesn't know, the script's
+  dandelion a slot off, and the script without Survival.
