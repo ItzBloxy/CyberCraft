@@ -193,7 +193,8 @@ type /kill @e[tag=sp7b]
 wait 3
 # 7. Sight: V in the room 3 blocks in from the front door, facing heading 300, the husk 7 ahead in the corridor, the
 # room's wall between them, and its way around through the door 9 steps long. For 4 s it shouldn't come (unless a
-# stroll brings V into its view); once V steps into the doorway, in its view, it should reach the player.
+# stroll brings V into its view); once V steps out of the door into the corridor, in its view, it should reach the
+# player. Not in the doorway: SkyCraft lifts Minecraft's player onto its header, 2.26 blocks up, after a teleport.
 at -1384.5 123.06 -1271.5
 look 120 0
 wait 2
@@ -202,7 +203,7 @@ type /execute rotated ~ 0 positioned ^ ^ ^7 run summon minecraft:husk ~ ~0.5 ~ {
 wait 4
 type /execute if entity @e[type=minecraft:husk,tag=sp7,distance=..3]
 type /execute as @e[tag=sp7] run data get entity @s Pos
-at -1388.5 123.3 -1271.5
+at -1389.5 123.06 -1271.5
 wait 8
 type /execute if entity @e[type=minecraft:husk,tag=sp7,distance=..2]
 type /execute as @e[tag=sp7] run data get entity @s Pos

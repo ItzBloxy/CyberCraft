@@ -220,12 +220,13 @@ local fun = {
 -- Run F's spots (spike 9's Part 2), where its checks stand V, picked on a simulation of the city's dumps there: the
 -- world position the V line shows (z up), and the heading to face. The Fun header shows how far each one is, the
 -- heading to walk it, and how far up or down. V's room is in Megabuilding H10, 2 blocks in from its front door; the
--- husk can't see V hidden 1 block further in, but can from the doorway; the stairs go down to the storey below.
+-- husk can't see V hidden 1 block further in, but can once V is out of the door in the corridor (not in the doorway,
+-- whose header SkyCraft lifts Minecraft's player onto after a teleport); the stairs go down to the storey below.
 local spots = {
     { name = "Spot B", x = -189.90, y = 616.75, z = 74.43, face = 180 },
     { name = "V's room", x = -1385.5, y = 1271.5, z = 123.06, face = 90 },
     { name = "Hidden from the husk", x = -1384.5, y = 1271.5, z = 123.06, face = 300 },
-    { name = "In the husk's view", x = -1388.5, y = 1271.5, z = 123.3, face = 300 },
+    { name = "In the husk's view", x = -1389.5, y = 1271.5, z = 123.06, face = 345 },
     { name = "The stairs", x = -1402.5, y = 1283.5, z = 123.06, face = 0 },
 }
 local spotLines = nil    -- each spot's distance, heading and height from V, from onUpdate

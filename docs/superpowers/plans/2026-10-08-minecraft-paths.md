@@ -3159,8 +3159,8 @@ From the results ("Step 0 with CyberCraft Tweaks 1.7.1") and the simulation of r
 
 | File | Task | What |
 |---|---|---|
-| `spikes/block-render/tools/blockrender_hud/init.lua` | 16 | the Paths rows, the food row, run F's spots |
-| `spikes/block-render/tools/mclink/pathsrow.txt` | 17 | the rows' commands on run F's ground, as the game places it |
+| `spikes/block-render/tools/blockrender_hud/init.lua` | 16, 18 | the Paths rows, the food row, run F's spots |
+| `spikes/block-render/tools/mclink/pathsrow.txt` | 17, 18 | the rows' commands on run F's ground, as the game places it |
 | `docs/spikes/2026-10-08-minecraft-paths-results.md` | 18 to 21 | the runs, and the spike's answer |
 | `tools/plans/fun_check.lua`, `tools/plans/run_plan_s9.py`, `tools/plans/paths-sim/` | planning | a stand-in V for the overlay offline; Part 2's step kinds; the simulation's new scripts |
 
@@ -3186,7 +3186,7 @@ row puts anything.
 **Files:**
 - Modify: `spikes/block-render/tools/blockrender_hud/init.lua`
 
-- [ ] **Step 1: Edit `tools/blockrender_hud/init.lua`**
+- [x] **Step 1: Edit `tools/blockrender_hud/init.lua`**
 
 ```lua
 -- spawn ahead and clear again, typed into Minecraft's chat) and "Full status" (every status line, and the frame time).
@@ -3302,14 +3302,14 @@ local spotLines = nil    -- each spot's distance, heading and height from V, fro
         if ImGui.CollapsingHeader("Full status") then
 ```
 
-- [ ] **Step 2: Check the overlay's syntax**
+- [x] **Step 2: Check the overlay's syntax**
 
 ```bash
 luac -p /d/Cyberpunk-Minecraft/spikes/block-render/tools/blockrender_hud/init.lua && echo "syntax ok"
 ```
 Expected: `syntax ok`.
 
-- [ ] **Step 3: Run the overlay offline: the Paths rows' requests**
+- [x] **Step 3: Run the overlay offline: the Paths rows' requests**
 
 `tools/plans/fun_check.lua` runs the overlay under Lua 5.4 with CET's functions stubbed, clicks the buttons it's given,
 one a frame, and plays BlockRender's side of `blockrender.request`, printing each request in turn.
@@ -3332,7 +3332,7 @@ Expected, one request a command, in order, the longest within Minecraft's 256-ch
 - `request: mc /item replace entity @s hotbar.8 with minecraft:dandelion`
 - `longest command: 150`
 
-- [ ] **Step 4: Run the overlay offline: run F's spots**
+- [x] **Step 4: Run the overlay offline: run F's spots**
 
 `FUN_V` stands V where the apartment's dump found her (`2026-10-09_12-22-29`: her feet, in the game's world
 coordinates, and her facing), and `show` prints what the overlay shows, the Fun header open.
@@ -3349,7 +3349,7 @@ Expected, V 1.4 km from spot B and beside the others:
 - `In the husk's view: 5.2 m, heading 268, 0.2 m up; face 300 there`
 - `The stairs: 22.5 m, heading 302, 0.0 m down; face 0 there`
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render/tools/blockrender_hud/init.lua \
@@ -3372,7 +3372,7 @@ Resistance cleared, and slots 8 and 9 left as "Your slots" fills them.
 **Files:**
 - Create: `spikes/block-render/tools/mclink/pathsrow.txt`
 
-- [ ] **Step 1: Write `tools/mclink/pathsrow.txt`**
+- [x] **Step 1: Write `tools/mclink/pathsrow.txt`**
 
 ```text
 # Spike 9's Part 2: the overlay's Paths rows, typed as its buttons type them, against SkyCraft's real mod, without
@@ -3600,7 +3600,7 @@ status
 quit
 ```
 
-- [ ] **Step 2: Check that mclink parses the script**
+- [x] **Step 2: Check that mclink parses the script**
 
 A copy with a line `mclink` doesn't know at its end: `mclink` reads the whole script before it opens the link, so it
 stops at that line, having parsed every other, and nothing runs, even with Minecraft open.
@@ -3611,7 +3611,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && mkdir -p build \
 ```
 Expected: `line 224: unknown action: "parse-check-stop here"` and `exit: 2`.
 
-- [ ] **Step 3: Check that the script types the overlay's commands**
+- [x] **Step 3: Check that the script types the overlay's commands**
 
 The overlay run offline, clicking every button the script stands in for, and each request it writes looked for in the
 script as a whole `type` line.
@@ -3626,7 +3626,7 @@ cd /d/Cyberpunk-Minecraft/spikes/block-render && mkdir -p build/fun && cd build/
 ```
 Expected: `the script types 16 of the overlay's 16 commands`.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add spikes/block-render/tools/mclink/pathsrow.txt \
@@ -3649,16 +3649,17 @@ without the game.
   script together, as a new task.
 
 **Files:**
-- Modify: `docs/spikes/2026-10-08-minecraft-paths-results.md`
+- Modify: `docs/spikes/2026-10-08-minecraft-paths-results.md`, and (steps 5 to 10, added after the run)
+  `spikes/block-render/tools/blockrender_hud/init.lua` and `spikes/block-render/tools/mclink/pathsrow.txt`
 
-- [ ] **Step 1: Check that the game isn't running**
+- [x] **Step 1: Check that the game isn't running**
 
 ```bash
 tasklist | grep -i -c "cyberpunk2077.exe"
 ```
 Expected: `0`. If it's `1`, ask the user to quit the game: it would hold the mapping.
 
-- [ ] **Step 2: Ask the user for their leave, and to start Minecraft**
+- [x] **Step 2: Ask the user for their leave, and to start Minecraft**
 
 Ask for their leave for what the script does ("Before you start (Part 2)"), naming slots 8 and 9: their TNT and flint
 and steel are replaced, and come back as 64 TNT and a flint and steel. Then the user starts the `CyberCraft` instance
@@ -3670,7 +3671,7 @@ L="/c/Users/BLOXY/AppData/Roaming/ModrinthApp/profiles/CyberCraft/logs/latest.lo
 ```
 Expected: `- cybercraft_tweaks 1.7.1` and `mixin errors: 0`.
 
-- [ ] **Step 3: In Minecraft: run the Paths rows' script**
+- [x] **Step 3: In Minecraft: run the Paths rows' script**
 
 ```bash
 L="/c/Users/BLOXY/AppData/Roaming/ModrinthApp/profiles/CyberCraft/logs/latest.log"; before=$(wc -l < "$L"); \
@@ -3707,7 +3708,7 @@ It takes about 5 minutes once Minecraft is in its world, and up to 3 more if it 
   the game mode as it was (no reply if it's still survival), the last scene `world: nothing`, no error but Clear's `No
   entity was found`, and `exit: 0`.
 
-- [ ] **Step 4: Ask the user to stop Minecraft, after an autosave**
+- [x] **Step 4: Ask the user to stop Minecraft, after an autosave**
 
 The last change was the script's end. Wait for Minecraft's autosave, run in the background for its `sleep` loop:
 ```bash
@@ -3723,18 +3724,108 @@ tasklist | grep -i -c "javaw.exe"
 ```
 Expected: `0`.
 
-- [ ] **Step 5: Record the run in `docs/spikes/2026-10-08-minecraft-paths-results.md`**
+- [x] **Step 5: Edit `tools/blockrender_hud/init.lua`: the husk's view outside the front door**
+
+Added after the run (2026-10-09). All its checks passed but the sight check's last: once the stand-in V stepped into
+the doorway, `SkyCraft: lifted player 2,275 blocks out of the ground`, and the husk didn't come (`Test failed`, 4.7
+blocks off). After every teleport SkyCraft lifts Minecraft's player onto the highest surface within 2.5 blocks above its
+feet (`SkyClient.liftOutOfGeometry`, `TriCollider.floor` over every triangle, walls and ceilings included), for feet a
+sliver inside the ground; the doorway's outer cell has its header 2.26 blocks above the threshold, so the player went
+onto the door frame, out of the husk's reach. Recomputed on the dump the same way, the lift is 2.275 there and 0.000 to
+0.023 at every other spot the script stood V, and on the walk to the stairs and down them nowhere but that cell. In the
+game BlockRender teleports Minecraft's player to V whenever V moves 0.1 m (10 a second at most), so V stopped in the
+doorway would do the same. The husk's view moves to the corridor just outside the door (Minecraft block −1390 123
+−1272): in view from the husk's eye at all 9 points around it, a lift of 0.017, and the husk's walk 4 steps.
+
+```lua
+-- husk can't see V hidden 1 block further in, but can from the doorway; the stairs go down to the storey below.
+```
+```lua
+-- husk can't see V hidden 1 block further in, but can once V is out of the door in the corridor (not in the doorway,
+-- whose header SkyCraft lifts Minecraft's player onto after a teleport); the stairs go down to the storey below.
+```
+```lua
+    { name = "In the husk's view", x = -1388.5, y = 1271.5, z = 123.3, face = 300 },
+```
+```lua
+    { name = "In the husk's view", x = -1389.5, y = 1271.5, z = 123.06, face = 345 },
+```
+
+- [x] **Step 6: Check the overlay's syntax**
+
+```bash
+luac -p /d/Cyberpunk-Minecraft/spikes/block-render/tools/blockrender_hud/init.lua && echo "syntax ok"
+```
+Expected: `syntax ok`.
+
+- [x] **Step 7: Run the overlay offline: run F's spots**
+
+As Task 16's step 4.
+```bash
+cd /d/Cyberpunk-Minecraft/spikes/block-render && mkdir -p build/fun && cd build/fun \
+  && FUN_V="-1383.343 1271.700 123.065 -0.944 -0.330" lua /d/Cyberpunk-Minecraft/tools/plans/fun_check.lua \
+       ../../tools/blockrender_hud/init.lua show | tr -d '\r' | grep -E "^text: (V:|Run F|    )"
+```
+Expected, the husk's view now 6.2 m off:
+- `Spot B: 1361.3 m, heading 119, 48.6 m down; face 180 there`
+- `V's room: 2.2 m, heading 265, 0.0 m down; face 90 there`
+- `Hidden from the husk: 1.2 m, heading 260, 0.0 m down; face 300 there`
+- `In the husk's view: 6.2 m, heading 268, 0.0 m down; face 345 there`
+- `The stairs: 22.5 m, heading 302, 0.0 m down; face 0 there`
+
+- [x] **Step 8: Edit `tools/mclink/pathsrow.txt`: the husk's view outside the front door**
+
+```text
+# stroll brings V into its view); once V steps into the doorway, in its view, it should reach the player.
+```
+```text
+# stroll brings V into its view); once V steps out of the door into the corridor, in its view, it should reach the
+# player. Not in the doorway: SkyCraft lifts Minecraft's player onto its header, 2.26 blocks up, after a teleport.
+```
+```text
+at -1388.5 123.3 -1271.5
+```
+```text
+at -1389.5 123.06 -1271.5
+```
+
+- [x] **Step 9: Check that mclink parses the script**
+
+```bash
+cd /d/Cyberpunk-Minecraft/spikes/block-render && mkdir -p build \
+  && { cat tools/mclink/pathsrow.txt; echo "parse-check-stop here"; } > build/pathsrow-parse.txt \
+  && ./build/RelWithDebInfo/mclink.exe build/pathsrow-parse.txt; echo "exit: $?"
+```
+Expected: `line 225: unknown action: "parse-check-stop here"` and `exit: 2`.
+
+- [x] **Step 10: Check that the script types the overlay's commands**
+
+As Task 17's step 3.
+```bash
+cd /d/Cyberpunk-Minecraft/spikes/block-render && mkdir -p build/fun && cd build/fun \
+  && lua /d/Cyberpunk-Minecraft/tools/plans/fun_check.lua ../../tools/blockrender_hud/init.lua click "Pig##paths" Cow \
+       "Villager##paths" Wolf Bee Husk "Wheat (8)" "Dandelion (9)" Clear Survival "TNT (8)" "Flint and steel (9)" \
+  | tr -d '\r' | sed -n 's/^request: mc //p' > commands.txt && tr -d '\r' < ../../tools/mclink/pathsrow.txt > script.txt \
+  && typed=0 && while IFS= read -r command; do \
+       if grep -q -x -F "type $command" script.txt; then typed=$((typed + 1)); else echo "not typed: $command"; fi; \
+     done < commands.txt; echo "the script types $typed of the overlay's $(wc -l < commands.txt) commands"
+```
+Expected: `the script types 16 of the overlay's 16 commands`. The rehearsal isn't run again for this: run F's apartment
+half steps into the corridor in the game, and spot B's chase in view passed here.
+
+- [x] **Step 11: Record the run in `docs/spikes/2026-10-08-minecraft-paths-results.md`**
 
 A "The Paths rows with `mclink`" section after step 0's: the versions, the two dumps and where they went, and each
 check with its numbers (every mob's positions, the tests' replies, the minute lines), against the simulation's, and
-anything that surprised.
+anything that surprised: the doorway's lift among them, and its fix.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 12: Commit**
 
 With the plan, its steps ticked up to this one.
 ```bash
-cd /d/Cyberpunk-Minecraft && git add docs/spikes/2026-10-08-minecraft-paths-results.md docs/superpowers/plans/2026-10-08-minecraft-paths.md \
-  && git commit -q -m "minecraft-paths: the Paths rows with mclink, before run F" \
+cd /d/Cyberpunk-Minecraft && git add spikes/block-render/tools/blockrender_hud/init.lua spikes/block-render/tools/mclink/pathsrow.txt \
+  docs/spikes/2026-10-08-minecraft-paths-results.md docs/superpowers/plans/2026-10-08-minecraft-paths.md \
+  && git commit -q -m "minecraft-paths: the Paths rows with mclink, before run F, and the husk's view outside the door" \
        -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
 ```
 
@@ -3752,6 +3843,9 @@ hits stay in Minecraft), Minecraft's player in survival. DRED stays on.
 - the city's collision has no cars, NPCs or kinematic doors: mobs walk through them, as they always did;
 - a wall top 2 blocks wide is walkable, as on a Minecraft wall: the barrier's north end is one (Minecraft block −188 75
   −636), with drops of 3 blocks or less down the rock face behind it;
+- under anything within 2.5 blocks above V's feet, as V's front door's header is, SkyCraft lifts Minecraft's player on
+  top of it after a teleport (Task 18's step 5): walking V through the doorway lifts it for a moment; don't stop V
+  there;
 - the minute line and every reply are in Minecraft's log, which the agent reads.
 
 **The order matters:** Clear before each check, as Task 18 did, and before V leaves a spot, since mobs left where the
@@ -3947,11 +4041,11 @@ stairwell without sticking against a wall, the door's frame or the stairs: `mc /
 Ask the user to go back to the room, click Survival, and stand at "Hidden from the husk" (Minecraft block −1385 123
 −1272, 3 blocks in from the door), facing heading 300, toward the wall beside the door; then to click Husk, which puts
 the husk 7 m ahead, in the corridor behind the wall, and to stay there. Note the log's mark. After about 5 s send
-`mc /execute if entity @e[type=minecraft:husk,tag=sp7,distance=..3]` and the positions; then ask the user to step into
-the doorway ("In the husk's view", Minecraft block −1389 123 −1272) and stand, and after 10 s send the same test with
-`distance=..2`. Expected: first `Test failed`, the husk still in the corridor about 7 blocks off (unless a stroll took
+`mc /execute if entity @e[type=minecraft:husk,tag=sp7,distance=..3]` and the positions; then ask the user to walk V out
+of the door into the corridor ("In the husk's view", Minecraft block −1390 123 −1272, just outside it, not in the
+doorway) and stand, and after 10 s send the same test with `distance=..2`. Expected: first `Test failed`, the husk still in the corridor about 7 blocks off (unless a stroll took
 it into the doorway's view, which its position shows), and the minute line's sight casts with hits while V was
-hidden; then `Test passed. Count: 1`: once V was in view, it came round through the door. Then Clear.
+hidden; then `Test passed. Count: 1`: once V was in view, it came along the corridor. Then Clear.
 
 - [ ] **Step 7: In the game: the apartment's cost (check 6)**
 

@@ -184,3 +184,58 @@ then `Test passed. Count: 1` (the shield in the off hand) and `Test failed` (slo
   The fences kept every mob off the barrier.
 - **Run F** goes on to the game: the pavement area first, then V's apartment and its building (doorways, stairs,
   railings), watching pets' landings in particular.
+
+## The Paths rows with `mclink`
+
+Date: 2026-10-09, 14:42. Plan: Task 18. The overlay's Paths rows' commands, exactly as its buttons type them
+(`tools/mclink/pathsrow.txt`, checked against the overlay offline), typed into the user's Minecraft with `mclink`,
+without the game, on run F's two places' dumps placed where the game itself puts that ground, not where step 0 did:
+- **spot B,** spike 1's raised-level dump (`2026-10-01_14-37-07`) around V's own feet there, Minecraft −189.898 74.432
+  −616.754 (step 0's went around 1280.5 6.14 2007.5, a fraction of a block off the game's grid);
+- **V's apartment** in Megabuilding H10 (`2026-10-09_12-22-29`, dumped this session through the probe's request file
+  with the PhysX origin, `origin -1024 1024 0`, the user's V in her main room), around −1383.343 123.065 −1271.700.
+
+Minecraft 26.3, Fabric Loader 0.19.5, SkyCraft 0.1.2, CyberCraft Tweaks 1.7.1 (`- cybercraft_tweaks 1.7.1`, no mixin
+error), `mclink` from BlockRender's build. `exit: 0`, 225 s; the last scene `world: nothing`. Clear's first command
+found no marker each time (`No entity was found`), as expected; Minecraft's only warnings were link-up's two render
+ones.
+
+| Check | With 1.7.1, where the game puts the ground |
+|---|---|
+| Spot B, wander | 13 positions each: the pig strolled 8 times and went 12.2 blocks, the cow 8 times, 8.7, the villager 10 times, 7.2; every y 74.25 to 74.5, the street and the pavement; the cow and the pig went right up to the barrier (x −186.5) and none over it, none to its wide north end; all three `1b` |
+| Spot B, pet | `Test passed. Count: 1` after V's walk of about 15 blocks (the wolf at −193.0 74.25 −602.9); after V's jump 22 blocks north, the wolf at −194.5 74.25 −625.5, 2.2 blocks from V, `1b`, `Test passed. Count: 1`, and there still 2 s later |
+| Spot B, chase | `Test passed. Count: 1` |
+| Spot B, flyer | `Replaced 1 slot(s) on ItzBloxy with [Dandelion]`; the bee in the air, 74.25 to 75.8, wandering east over the barrier (it flies); 107 shortcut casts that minute, 99 of them hitting the city |
+| Apartment, wander | `Replaced 1 slot(s) on ItzBloxy with [Wheat]`; the pig strolled 7 times (5.8 blocks), the cow 5 (6.6), the villager 9 (11.8), among the furniture at 123.125 to 123.625; the villager went out of the front door into the corridor (−1393.3 123.125 −1270.5) and came back; the cow ended on the door's threshold (123.375), the pig beside it; all three `1b` |
+| Apartment, pet | after V's jump 19 blocks along the corridor, the wolf at −1403.5 123.125 −1261.5, 3.6 blocks from V; after the jump to the storey below, at −1387.5 119.125 −1288.5, 2.2 blocks from V, on that storey's floor; `1b` and `Test passed. Count: 1` both times |
+| Apartment, sight | V hidden 3 blocks in from the door: after 4 s `Test failed`, the husk where it was summoned in the corridor (−1390.6 123.1 −1275.0); that minute's line counts 120 sight casts, 56 hitting the city. Then the stand-in V stepped into the doorway: `SkyCraft: lifted player 2,275 blocks out of the ground`, and after 8 s `Test failed`, the husk 4.7 blocks off |
+| Cost | four minute lines: 65,167, 7,508, 49,155 and 17,015 city answers; 0.9, 2.5, 2.1 and 1.4 ms casting a minute; `pets landed` counting the three jumps |
+| The end | `Removed effect Resistance from ItzBloxy`, `Replaced 1 slot(s) on ItzBloxy with [TNT]` and `… with [Flint and Steel]`, the game mode left survival, `Removed objective [sp9mode]` |
+
+So the rows' commands all work in 26.3, and on run F's own ground everything checked held but the sight check's last
+step.
+
+### The doorway lifts Minecraft's player
+
+The sight check's last step didn't test the mod. After every teleport, SkyCraft lifts Minecraft's player onto the
+highest surface within 2.5 blocks above its feet (`SkyClient.liftOutOfGeometry`, through `TriCollider.floor` over every
+triangle, walls and ceilings included), meant for feet a sliver inside the ground. The front door's outer cell has its
+header 2.26 blocks above the threshold, so the player went on top of the door frame (Minecraft's feet ended at
+−1388.99 127.08 −1271.54), out of the husk's reach. Recomputed on the dump as SkyCraft does it, the lift is 2.275 there,
+and 0.000 to 0.023 at every other spot the script stood V; on the walk from V's room to the stairs and down them, no
+other cell lifts. In the game BlockRender teleports Minecraft's player to V whenever V moves 0.1 m, 10 a second at
+most, so V stopped in that doorway would do the same; walking through it lifts the player for a moment.
+
+The fix (plan Task 18, steps 5 to 10): run F's "In the husk's view" moves out of the doorway to the corridor just
+outside it, Minecraft block −1390 123 −1272, in the overlay and the script: seen from the husk's eye from all 9 points
+around it, a lift of 0.017, and a walk of 4 steps for the husk. The user chose not to run the rehearsal again for it
+(the in-view chase passed at spot B, and run F steps into the corridor in the game). Run F's notes say not to stop V in
+the doorway.
+
+### What it means for run F
+
+- **Spot B where the game puts it** behaves as step 0's ground did: mobs on the road, off the barrier.
+- **V's apartment works:** mobs stroll among its furniture, pass its front door, and pets land beside V on V's own
+  storey, the one below included.
+- **Doorways about 2.3 m high or lower** lift Minecraft's player onto their headers while V stands in them: a SkyCraft
+  matter, outside spike 9's mod, which run F avoids and records.
