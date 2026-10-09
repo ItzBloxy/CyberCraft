@@ -149,4 +149,6 @@ folder for the parts that need Codeware.
   the world): level maps (`areamap.py`, `ascii.py`, `ascii2.py`, `voxmap.py`, `voxmap2.py`), the areas a level
   splits into (`components.py`) and an area's odds (`areas.py`), where the Paths rows' summons land (`summons.py`),
   the husk's hiding places (`raylib.py`, `hidden.py`, `hidden7.py`, `robust.py`), and pets' jump targets (`jumps.py`,
-  on V's apartment's dump), each reading its arguments from `sys.argv` near its top.
+  on V's apartment's dump), each reading its arguments from `sys.argv` near its top. Run F added SkyCraft's
+  lift after a teleport, recomputed on a dump's triangles: `viewspot.py` (its `ground()`, and places in the husk's
+  view), `liftcheck.py` (the lift at given feet) and `liftpath.py` (along a walk).

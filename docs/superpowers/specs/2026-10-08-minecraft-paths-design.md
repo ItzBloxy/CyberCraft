@@ -689,3 +689,14 @@ part of run F, and spot B first. "Run F, in the game" above holds the result.
   teleports the player to V whenever V moves 0.1 m, so in the game too a V stopped under anything that low lifts it;
   walking through lifts it for a moment. Outside spike 9's mod: run F's "in the husk's view" moved to the corridor
   just outside the door, and run F doesn't stop V in the doorway.
+- **Run F answered the spike's question yes** (the results' answer): nothing in the design changed. What it found
+  outside the mod, for later:
+  - **risk 4 came true at V's front door:** a cow, 0.9 wide, couldn't pass a doorway the city's voxels leave 0.875
+    open above its threshold, though its path planned through the cell's middle; the 0.6-wide villager, wolf and husk
+    passed;
+  - **a save loaded in a running game** moved the city into PhysX scene 6 of 12, and BlockRender's exporter, which
+    reads scene 0, sent no city until the game restarted ("Environment", spike 1's scene 0 holds at a fresh start);
+  - **a tamed wolf's collar layer** fights its body at the same depth at some angles and distances: spike 7's risk 16,
+    in its drawing.
+- **Sight in the game is checked from the summon on:** the hidden husk's check records its and V's positions every
+  second, so a stroll that brings V into its view shows; a test seconds late can't tell.

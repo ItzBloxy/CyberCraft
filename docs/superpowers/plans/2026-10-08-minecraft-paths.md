@@ -4081,20 +4081,20 @@ cd /d/Cyberpunk-Minecraft && git add docs/spikes/2026-10-08-minecraft-paths-resu
 
 ### Task 21: Close the spike
 
-- [ ] **Step 1: Record the spike's answer at the top of the results**
+- [x] **Step 1: Record the spike's answer at the top of the results**
 
 In place of "The spike's answer goes here once run F is in": the spec's question, answered from step 0 and run F, with
 what's left for later.
 
-- [ ] **Step 2: Record "How Part 2 went" at the end of this plan**
+- [x] **Step 2: Record "How Part 2 went" at the end of this plan**
 
 After "Found while planning Part 2": what ran as written, what changed and why, and what Task 18 and run F found.
 
-- [ ] **Step 3: Record the spec's "Changes while executing Part 2"**
+- [x] **Step 3: Record the spec's "Changes while executing Part 2"**
 
 Anything Task 18 or run F changed in the design, or left for later.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 cd /d/Cyberpunk-Minecraft && git add docs \
@@ -4227,3 +4227,42 @@ The spec's "Changes while planning Part 2" lists what planning settled in the de
   in its spots, the heading from east, up and down swapped, the distance across the height, V's room at Minecraft's
   z, and the spots' lines not under their heading; in Task 17, an action `mclink` doesn't know, the script's
   dandelion a slot off, and the script without Survival.
+
+## How Part 2 went
+
+Part 2 was planned and executed on 2026-10-09: planned by 0ef7294 (its tools ae068c0), run F from 15:48 to 17:05. The
+results: [2026-10-08-minecraft-paths-results.md](../../spikes/2026-10-08-minecraft-paths-results.md), the answer at its
+top, "The Paths rows with `mclink`" and "Run F".
+- **As written:** `run_plan_s9.py` executed Tasks 16 and 17 (106de64, ac398c4) and Task 18's fix steps, checking every
+  expected result, and each commit's `spikes/block-render` tree is the one tested in the scratch clone (`verify/`, tags
+  `s9-t16` to `s9-t18`).
+- **What changed:**
+  - **Task 18's sight check stood the stand-in V in the doorway,** where SkyCraft lifts Minecraft's player onto the
+    door's header after a teleport (2.275 blocks, from `SkyClient.liftOutOfGeometry`), out of the husk's reach. Steps
+    5 to 10 were added to Task 18: run F's "In the husk's view" moved to the corridor just outside the door, in the
+    overlay and the script. The user chose not to run the rehearsal again for it: a two-line fix for an edge case,
+    checked offline.
+  - **Task 19's deploy came with the game running:** the user had started both games and linked before it, so the
+    overlay was copied in (their choice) and loaded with CET's "Reload All Mods".
+  - **Task 20 needed both games restarted:** the user returned to the apartment by loading a save, which moved the
+    city into PhysX scene 6, and BlockRender's exporter, reading scene 0, found no V's controller and sent no city.
+    After the restart, Minecraft's Options screen, left open, held SkyCraft from opening the world until the user closed
+    it.
+  - **Task 20's first hidden-husk try didn't count** (V off the spot, the test late); the second recorded the husk's
+    and V's positions every second from the summon, and passed.
+  - **The cost check at spot B had four mobs,** the wolf's click not taking; the apartment's had all five.
+  - **The user's slots 8 and 9** kept the wheat and the dandelion at the end; "Your slots" gives the TNT and the flint
+    and steel back.
+- **Run F passed** every check in the game but the apartment's tempt: at spot B, wander (the villager once on the
+  barrier's walkable north end and back), tempt, the pet (21 landings), the flyer, the chase and the cost; in V's
+  apartment, wander, the pet through the door and down the stairs (14 landings), the flyer, sight hidden and then in
+  view, and the cost. There the cow couldn't pass V's front door: 0.9 wide against the voxels' 0.875, its path planned
+  through the cell's middle (the spec's risk 4).
+- **Not as expected:** the tamed wolf's look (its collar layer fighting its body at the same depth, spike 7's risk 16),
+  and the save-load scene, both outside spike 9; and the user saw the paths themselves work: "the pathfinding and
+  teleporting works perfectly".
+- **Tooling:** `fun_check.lua`'s `FUN_V`; `run_plan_s9.py`'s Part 2 steps; `mutate_s9_overlay.py` (17 mutations, all
+  caught); and the simulation's run F scripts (`tools/plans/paths-sim/`), SkyCraft's lift among them
+  (`viewspot.py`'s `ground()`, `liftcheck.py`, `liftpath.py`).
+- **For later,** after the spike: the wolf's look, the exporter's scene after a save load, SkyCraft's lift onto
+  headers, and mobs 0.9 wide at narrow doorways; then the time-of-day sync the user asked for during spike 7.

@@ -6,7 +6,39 @@ owner as pets, fly around the city's walls, and not see V through them, from Cyb
 Step 0 checks Minecraft's side with `mclink`, without the game: first with 1.6.0 as the control, then with 1.7.0, then
 with 1.7.1, which fixes what the 1.7.0 run found. Run F checks it in the game.
 
-The spike's answer goes here once run F is in.
+## The answer
+
+> Can Minecraft's mobs find their way over Night City's ground as they do over blocks: wander, go to what they're
+> after, keep up with V as pets, and fly around its walls, without seeing V through them?
+
+**Yes,** with CyberCraft Tweaks 1.7.1, in Minecraft against the city's dumps (step 0, then the Paths rows with
+`mclink`) and in the game (run F, at spot B and in V's apartment in Megabuilding H10):
+- **They wander** the city's streets, pavements and rooms, among its furniture, stepping its kerbs and stairs, out of
+  its walls and off its drops. Railings and the road's barrier are fences, so no mob walks onto them; a wall top 2
+  blocks wide stays walkable, as a Minecraft wall's is.
+- **They go to what they're after:** a cow followed the wheat 50 m across a street, a bee the dandelion through a
+  doorway and down a stairwell, and a husk chased V.
+- **Pets keep up:** a wolf followed V by path out of her front door, along the corridor and down the stairs, and
+  whenever V outran it, landed beside her on her own storey, on the floor: 26 landings of 26 in step 0, 3 in the
+  rehearsal, 21 at spot B and 14 in the apartment, never below a road or on a wrong storey.
+- **Flyers go around walls:** the bee flew over the road's barrier (the rehearsal) and around door frames, its straight-line shortcuts cut
+  short by the city's walls (536 of one minute's 566 in V's room).
+- **Walls block sight:** a husk in the corridor behind V's wall, with a way round through the door, didn't come for V
+  in 38 s (86 sight casts, all 86 hitting the city), and reached her within 4 s of her stepping into view; step 0's
+  skeleton didn't shoot V behind the road's edge until V stood in view.
+- **Cost:** the frame rate didn't change (65 fps in the apartment with five mobs about, as with none); the casts took
+  at most 41.5 ms a minute, on Minecraft's server thread.
+
+**Left for later, none of them spike 9's mod:**
+- **a tamed wolf's look:** its collar's layer over its body fights at the same depth at some angles and distances
+  (spike 7's drawing; its spec's risk 16);
+- **a save loaded in a running game** moves the city into another PhysX scene (scene 6 of 12), and BlockRender's
+  exporter reads scene 0 only: no city, and no build mode, until the game restarts. It should read the scene holding
+  V's controller;
+- **SkyCraft lifts Minecraft's player onto a doorway's header** when V stands under one within 2.5 blocks of her feet
+  (`SkyClient.liftOutOfGeometry`), out of mobs' reach;
+- **mobs 0.9 wide (cows, pigs) don't fit a doorway** the city's voxels leave 0.875 open, though their paths plan
+  through it (the spec's risk 4, the 1/8-block voxels' coarseness).
 
 ## Step 0's control: CyberCraft Tweaks 1.6.0
 
