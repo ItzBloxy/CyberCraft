@@ -9,7 +9,8 @@
 -- Three folded sections hold the rest: "More controls" (the drawing mode, Minecraft's HUD, commands typed into
 -- Minecraft, the drive log, the ground and its shapes, the NPCs' list, V's punch, V hidden or seen in build mode, and a
 -- blast ahead of V), "Fun" (Minecraft's game mode, items for the hotbar and the hand, armor, a heal, and things to
--- spawn ahead and clear again, typed into Minecraft's chat) and "Full status" (every status line, and the frame time).
+-- spawn ahead and clear again, typed into Minecraft's chat; and the way to spike 9's run F's spots) and "Full status"
+-- (every status line, and the frame time).
 -- Delete this folder to remove it.
 local status = nil       -- status.txt's lines, except the structures
 local structures = {}    -- { name, min = { x, y, z }, max = { x, y, z } }, in world coordinates
@@ -74,8 +75,9 @@ end
 
 -- Spike 7's Spawn rows: Minecraft's things ahead of its player, level, each tagged sp7, and each block placed with a
 -- marker tagged sp7b, so Clear removes them all and spares the NPCs' stand-ins. Each kind has its own place, so none
--- lands on another: the dropped items and the sand 3 blocks ahead, the potion and the campfire 3 ahead to either side,
--- the mobs 5, the firework 6, the block entities 8 and the herd 11 and 13. The mobs have no loot and the sand vanishes
+-- lands on another: the Paths row's wolf and bee 2 blocks ahead to either side, the dropped items and the sand 3
+-- ahead, the potion and the campfire 3 ahead to either side, the Paths row's wanderers 4, the mobs 5, the firework 6,
+-- the Paths row's husk 7, the block entities 8 and the herd 11 and 13. The mobs have no loot and the sand vanishes
 -- where it lands, so nothing is left behind. A TNT's blast breaks the placed blocks and drops them, so Clear comes
 -- before any TNT.
 local function ahead(where)
@@ -186,12 +188,47 @@ local fun = {
             ahead("^1 ^ ^3") .. 'summon minecraft:item ~ ~1 ~ {Item:{id:"minecraft:grass_block",count:1},PickupDelay:32767,Tags:["sp7"]}',
         } },
     } },
+    -- Spike 9's run F: Minecraft's mobs finding their way on the city's ground. Each goes half a block above the player's
+    -- feet, which can be inside the city's 1/8-block skin, and drops onto the floor: one summoned inside the skin would
+    -- fall through it. The pig, the cow and the villager wander; the wolf is the player's, its Owner set from the
+    -- player's UUID; the bee, a block up, follows a dandelion; and the husk chases the player in survival, Resistance at
+    -- its highest first so that nothing hurts. "##paths" keeps the Pig and the Villager apart from the Mobs row's, which
+    -- ImGui would otherwise take for the same buttons.
+    { label = "Paths, ahead:", buttons = {
+        { label = "Pig##paths", commands = { mob("^2 ^ ^4", "pig", nil, "~ ~0.5 ~") } },
+        { label = "Cow", commands = { mob("^ ^ ^4", "cow", nil, "~ ~0.5 ~") } },
+        { label = "Villager##paths", commands = { mob("^-2 ^ ^4", "villager", nil, "~ ~0.5 ~") } },
+        { label = "Wolf", commands = { mob("^2 ^ ^2", "wolf", nil, "~ ~0.5 ~"),
+            "/data modify entity @e[type=minecraft:wolf,tag=sp7,limit=1,sort=nearest] Owner set from entity @s UUID" } },
+        { label = "Bee", commands = { mob("^-2 ^ ^2", "bee", nil, "~ ~1 ~") } },
+        { label = "Husk", commands = { "/effect give @s minecraft:resistance 300 4 true", mob("^ ^ ^7", "husk", nil, "~ ~0.5 ~") } },
+    } },
+    -- What the cow and the bee follow, in the user's slots 8 and 9 in place of the TNT and the flint and steel, which
+    -- "Your slots" gives back: a tempted mob looks at both hands, and the off hand keeps its shield. The slot is picked in
+    -- build mode.
+    { label = "Paths' food:", buttons = {
+        { label = "Wheat (8)", commands = { "/item replace entity @s hotbar.7 with minecraft:wheat" } },
+        { label = "Dandelion (9)", commands = { "/item replace entity @s hotbar.8 with minecraft:dandelion" } },
+    } },
     -- Strict: no block updates, so neither half of the bed breaks the other with a drop.
     { label = "Spawned:", buttons = {
         { label = "Clear", commands = { "/execute at @e[tag=sp7b] run setblock ~ ~ ~ minecraft:air strict",
             "/kill @e[tag=sp7]", "/kill @e[tag=sp7b]" } },
     } },
 }
+
+-- Run F's spots (spike 9's Part 2), where its checks stand V, picked on a simulation of the city's dumps there: the
+-- world position the V line shows (z up), and the heading to face. The Fun header shows how far each one is, the
+-- heading to walk it, and how far up or down. V's room is in Megabuilding H10, 2 blocks in from its front door; the
+-- husk can't see V hidden 1 block further in, but can from the doorway; the stairs go down to the storey below.
+local spots = {
+    { name = "Spot B", x = -189.90, y = 616.75, z = 74.43, face = 180 },
+    { name = "V's room", x = -1385.5, y = 1271.5, z = 123.06, face = 90 },
+    { name = "Hidden from the husk", x = -1384.5, y = 1271.5, z = 123.06, face = 300 },
+    { name = "In the husk's view", x = -1388.5, y = 1271.5, z = 123.3, face = 300 },
+    { name = "The stairs", x = -1402.5, y = 1283.5, z = 123.06, face = 0 },
+}
+local spotLines = nil    -- each spot's distance, heading and height from V, from onUpdate
 
 -- Requests not yet sent, oldest first. BlockRender reads blockrender.request in this folder once a second, once its line
 -- is whole, and deletes it: the next is written only once it's gone, so no click overwrites one not yet read.
@@ -417,6 +454,7 @@ registerForEvent("onUpdate", function(delta)
     local v = Game.GetPlayer()
     if v == nil then
         player = nil
+        spotLines = nil
         return
     end
     local p = v:GetWorldPosition()
@@ -436,6 +474,13 @@ registerForEvent("onUpdate", function(delta)
         text = text .. string.format("; nearest structure: %s, %.2f m away", nearestName, nearest)
     end
     player = text
+    spotLines = {}
+    for _, spot in ipairs(spots) do
+        local dx, dy, dz = spot.x - p.x, spot.y - p.y, spot.z - p.z
+        table.insert(spotLines, string.format("%s: %.1f m, heading %d, %.1f m %s; face %d there", spot.name,
+            math.sqrt(dx * dx + dy * dy), math.floor(math.deg(atan2(dx, dy)) % 360 + 0.5) % 360, math.abs(dz),
+            dz < 0 and "down" or "up", spot.face))
+    end
 end)
 
 registerForEvent("onDraw", function()
@@ -596,6 +641,12 @@ registerForEvent("onDraw", function()
                             request("mc " .. command)
                         end
                     end
+                end
+            end
+            if spotLines ~= nil then
+                ImGui.Text("Run F's spots:")
+                for _, line in ipairs(spotLines) do
+                    ImGui.Text("    " .. line)
                 end
             end
         end
