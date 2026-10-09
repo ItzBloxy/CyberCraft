@@ -239,3 +239,40 @@ the doorway.
   storey, the one below included.
 - **Doorways about 2.3 m high or lower** lift Minecraft's player onto their headers while V stands in them: a SkyCraft
   matter, outside spike 9's mod, which run F avoids and records.
+
+## Run F
+
+Date: 2026-10-09, from 15:48. Plan: Tasks 19 and 20. With the user, in the game: Cyberpunk 2077 2.31 with BlockRender
+0.23.0 (unchanged by spike 9, `loaded`, no error in its log), linked to the `CyberCraft` instance (Minecraft 26.3,
+SkyCraft 0.1.2, CyberCraft Tweaks 1.7.1, no mixin error), combat off, Minecraft's player in survival. The overlay with
+the Paths rows was copied in while the game ran (the user's choice; CET's "Reload All Mods" loaded it), `cmp` matching
+the repo's. The agent read positions and tests through BlockRender's `mc` requests and Minecraft's log, and frame
+times from the overlay's `frames.txt`; the user played, clicked and watched.
+
+### At spot B
+
+V at Minecraft −189.895 74.432 −616.670 (spike 1's dump had her at −189.898 74.432 −616.754), the city around V known
+(1,128 regions, no batch waiting). With nothing summoned, CET's frame time was 16.4 to 16.7 ms on average (60 fps),
+18.5 to 20.0 ms at worst.
+
+| Check | Run F at spot B |
+|---|---|
+| 1. Wander | the pig, the cow and the villager, 13 positions each over 60 s: they strolled 7, 9 and 12 times, as far as 13.4, 10.0 and 18.8 blocks, on the street (74.25) and the pavement (74.5), over the kerb both ways, all three `1b`. Once (15:58:09) the villager stood on the barrier's wide north end, at −187.5 **75.75** −633.7, the wall top the simulation found walkable; 5 s later it was back on the pavement on the road's side (−188.5 74.5 −629.5), not over the far side |
+| 2. Tempt | Minecraft's player holding the wheat (`{count: 1, id: "minecraft:wheat"}`, slot 8 picked with mouse button 5 in build mode): V walked about 50 m, across the street and north, and the cow kept up: `Test passed. Count: 1`, the cow 2.1 blocks from V |
+| 3. Pet | the wolf followed V's walk by path, and teleported whenever V sprinted ahead: the three minutes to 16:06:22 count **21 pets landed on the city's floor** (9, 11 and 1), each landing within a second beside V (V at −184.3 −598.8 at 16:04:30, the wolf at −182.5 −601.4 a second later; V at −183.1 −563.5, the wolf 1.9 blocks off). Every one of its 45 positions was on a road's surface, 72.0 as the road slopes south to 75.9 by the barrier, where V herself stood higher still (76.5 to 77.7); never below the road. At the end `Test passed. Count: 1` within 4.5 blocks, `1b`. The user: "the pathfinding and teleporting works perfectly" |
+| 4. Flyer | Minecraft's player holding the dandelion (slot 9, mouse button 4): the bee followed, `Test passed. Count: 1`, 1.5 blocks from V; that minute, 286 shortcut casts, 5 of them hitting the city |
+| 5. Chase, in view | survival, Resistance, the husk 7 m ahead: `Test passed. Count: 1`, the husk 1.5 blocks from V; nothing hurt (combat off) |
+| 6. Cost | the pig, the cow, the villager and the bee at once for 30 s (the wolf's click didn't take): CET's frame time 16.3 to 17.9 ms on average (56 to 61 fps), 18.5 to 20.0 ms at worst, as with nothing summoned. Every minute line at spot B, 15:57 to 16:16: 0.0 to 4.9 ms of casting a minute (the most in the husk's minute, 851 sight casts), up to 124,540 city answers and 2,971 shapes read |
+
+![The sidewalk at spot B, the overlay showing V's position, the Paths rows and run F's spots, the nearest mob 8.8 m
+away](2026-10-08-minecraft-paths-results/run-f-spot-b-sidewalk.jpg)
+
+![The wolf following V on the street](2026-10-08-minecraft-paths-results/run-f-spot-b-wolf-street.jpg)
+
+![The wolf beside V on the pavement, its skin patched at this distance](2026-10-08-minecraft-paths-results/run-f-spot-b-wolf-near.jpg)
+
+**The wolf looks wrong at some angles and distances** (the user: "the wolf looks very cursed … at certain
+angles/distances"): patches of its skin come and go, as the screenshots show. A tamed wolf is drawn as its body and a
+collar layer over the same model, and spike 7's spec named this risk ("a layer drawn over its own body at the same
+depth … run D looks for flicker"): two surfaces at one depth, fighting. That's spike 7's drawing, not spike 9's paths;
+it's left for later.

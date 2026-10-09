@@ -3888,7 +3888,7 @@ These commands come back, here and in Task 20:
 **Files:**
 - Modify: `docs/spikes/2026-10-08-minecraft-paths-results.md`
 
-- [ ] **Step 1: Deploy the overlay, with the user's leave (the game must not be running)**
+- [x] **Step 1: Deploy the overlay, with the user's leave (the game must not be running)**
 
 ```bash
 tasklist | grep -i -c "cyberpunk2077.exe"
@@ -3901,7 +3901,7 @@ H=/e/Cyberpunk2077/bin/x64/plugins/cyber_engine_tweaks/mods/blockrender_hud; \
 ```
 Expected: `installed`.
 
-- [ ] **Step 2: In the game: start, load and link**
+- [x] **Step 2: In the game: start, load and link**
 
 Ask the user to start the `CyberCraft` instance, then the game, to load their save (V in her apartment), and to click
 Link. Then:
@@ -3915,7 +3915,7 @@ lines, `combat=off: Minecraft's hits are logged, not applied`, `entities=on`, an
 user to open the overlay's Fun header: under the rows, "Run F's spots" with five lines, "V's room" a few metres away.
 Then name what can't be seen ("Before the user looks", above).
 
-- [ ] **Step 3: In the game: go to spot B**
+- [x] **Step 3: In the game: go to spot B**
 
 Ask the user to take V to spot B by the overlay's "Spot B" line (about 1.4 km at heading 119 from the apartment, 49 m
 down): Downtown's raised sidewalk, a concrete barrier about 3.5 m east of V, a drop of 6 m beyond it, the road to the
@@ -3924,7 +3924,7 @@ facing heading 180, south along the sidewalk; a block about 2 m square stands on
 −190 −606. Then read the status's `ground=` line until it says the city around V is known (`… regions known, 0
 batches to read`), and take the frame time with nothing summoned, as the baseline.
 
-- [ ] **Step 4: In the game: spot B's wanderers (check 1)**
+- [x] **Step 4: In the game: spot B's wanderers (check 1)**
 
 Ask the user to click Clear, then the Paths row's Pig, Cow and Villager, and to watch for a minute, V standing still.
 Note the log's mark, then run the 60 s positions in the background, and the frame time after it. Expected, as in Task
@@ -3933,14 +3933,14 @@ they wander the sidewalk and the street, step down and up the kerb, and stay out
 If one goes to the barrier's north end, 20 blocks north, and over it, record it: the route the simulation found. Then
 send `mc /execute as @e[tag=sp7] run data get entity @s OnGround`: three `1b`.
 
-- [ ] **Step 5: In the game: spot B's cow and the wheat (check 2)**
+- [x] **Step 5: In the game: spot B's cow and the wheat (check 2)**
 
 Ask the user to click Clear, then Cow and Wheat (8); then F8 (build mode), mouse button 5 (slot 8, the wheat in
 Minecraft's hand), F8 again; then to walk V about 10 m south, passing the block ahead on its street side, and stop.
 Then send `mc /execute if entity @e[type=minecraft:cow,tag=sp7,distance=..4]` and the positions. Expected: `Test
 passed. Count: 1`, the cow beside V, having followed down the kerb if V took the street.
 
-- [ ] **Step 6: In the game: spot B's wolf (check 3)**
+- [x] **Step 6: In the game: spot B's wolf (check 3)**
 
 Ask the user to click Clear, then Wolf (two requests: the wolf, then its owner). Start the wolf's and V's positions in
 turn in the background, then ask the user to walk V about 15 m south on the street side, past the 10 m a wolf waits for,
@@ -3951,14 +3951,14 @@ V passing 12 m, a jump in its positions to within 3 blocks across of V, at y 74.
 nearest mob under about 4.5 m when V stops; and the next minute line counting `1 pets landed` or more. A wolf that
 strolls off a few seconds after landing is vanilla's ("How Part 1 went").
 
-- [ ] **Step 7: In the game: spot B's bee and the dandelion (check 4)**
+- [x] **Step 7: In the game: spot B's bee and the dandelion (check 4)**
 
 Ask the user to click Clear, then Dandelion (9); F8, mouse button 4 (slot 9), F8; then Bee; then to walk V about 10 m
 south along the sidewalk and then about 15 m west across the street, and stop. Then send `mc /execute if entity
 @e[type=minecraft:bee,tag=sp7,distance=..4]` and the positions. Expected: `Test passed. Count: 1`; to the user, the bee
 follows around the block and over the kerb without sticking against the barrier or the block.
 
-- [ ] **Step 8: In the game: spot B's husk (check 5, in view)**
+- [x] **Step 8: In the game: spot B's husk (check 5, in view)**
 
 Ask the user to click Clear, then Survival (the Mode row) and Husk (two requests: Resistance, then the husk 7 m ahead),
 and to stand still, facing heading 180 again. After 10 s send `mc /execute if entity
@@ -3966,19 +3966,19 @@ and to stand still, facing heading 180 again. After 10 s send `mc /execute if en
 her; nothing hurts V (combat off) or Minecraft's player (Resistance). The hidden half of check 5 is in V's apartment
 (Task 20).
 
-- [ ] **Step 9: In the game: spot B's cost (check 6)**
+- [x] **Step 9: In the game: spot B's cost (check 6)**
 
 Ask the user to click Clear, then Pig, Cow, Villager, Wolf and Bee at once, and to stand for 30 s; take the frame time
 meanwhile, and read the minute lines since the step 4 mark. Expected: the frame time within the baseline's spread; the
 minute lines' casting a few milliseconds a minute, as in step 0. Then ask the user to click Clear.
 
-- [ ] **Step 10: Record spot B's run in `docs/spikes/2026-10-08-minecraft-paths-results.md`**
+- [x] **Step 10: Record spot B's run in `docs/spikes/2026-10-08-minecraft-paths-results.md`**
 
 A "Run F" section: the versions; at spot B each check with its outcome and numbers (positions, tests, the wolf's
 landing and distance, frame times, minute lines), the user's observations, and screenshots if the user takes some, as
 earlier runs' results have.
 
-- [ ] **Step 11: Commit**
+- [x] **Step 11: Commit**
 
 With the plan, its steps ticked up to this one. The user can drive V back to the apartment meanwhile.
 ```bash
