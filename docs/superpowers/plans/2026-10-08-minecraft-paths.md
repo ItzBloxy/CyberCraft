@@ -3999,20 +3999,20 @@ further than the dump (88 m square against 64), so mobs may go beyond what it sh
 **Files:**
 - Modify: `docs/spikes/2026-10-08-minecraft-paths-results.md`
 
-- [ ] **Step 1: In the game: go to V's room**
+- [x] **Step 1: In the game: go to V's room**
 
 With everything cleared at spot B, ask the user to take V back by the overlay's "V's room" line, and stand at
 Minecraft block −1386 123 −1272, 2 blocks in from the front door, facing heading 90, into the room. Read the status's
 `ground=` line until the city around V is known.
 
-- [ ] **Step 2: In the game: the room's wanderers (check 1)**
+- [x] **Step 2: In the game: the room's wanderers (check 1)**
 
 Ask the user to click Pig, Cow and Villager, and to watch for a minute; run the 60 s positions in the background, then
 the `OnGround` request. Expected: each strolls at least twice, among the furniture and not through it, at y 122.5 to
 124.25 in the room; any may go out of the door into the corridor (123.125) and down or up the stairs (119.125,
 127.125); none inside a wall or the furniture, none falling between storeys; three `1b`. Then Clear.
 
-- [ ] **Step 3: In the game: the cow through the doorway and down the stairs (check 2)**
+- [x] **Step 3: In the game: the cow through the doorway and down the stairs (check 2)**
 
 Ask the user to click Cow and Wheat (8), and select slot 8 (F8, mouse button 5, F8); then to walk V out of the front
 door, along the corridor to the stairs (the overlay's "The stairs" line, Minecraft block −1403 123 −1284), down them to
@@ -4020,7 +4020,7 @@ the storey below, and stop. Expected: the cow follows through the doorway (a blo
 along the corridor and down the stairs: `mc /execute if entity @e[type=minecraft:cow,tag=sp7,distance=..4]` passes, its
 position at about 119.125. Then Clear.
 
-- [ ] **Step 4: In the game: the wolf through the doorway, down the stairs, and its landing (check 3)**
+- [x] **Step 4: In the game: the wolf through the doorway, down the stairs, and its landing (check 3)**
 
 Ask the user to go back to V's room (the "V's room" line), click Wolf, and walk V out of the door, along the corridor
 and down the stairs to the storey below, then sprint along that storey's corridor about 25 m and stop, reading the
@@ -4029,14 +4029,14 @@ Expected: the wolf follows by path through the door and down the stairs; during 
 across of V on V's storey (119.125), not on a storey above or below, never falling; the nearest mob under about 4.5 m
 when V stops; a minute line counting the landing. Then Clear.
 
-- [ ] **Step 5: In the game: the bee through the doorway (check 4)**
+- [x] **Step 5: In the game: the bee through the doorway (check 4)**
 
 Ask the user to go back to V's room, click Dandelion (9), select slot 9 (F8, mouse button 4, F8), click Bee, and walk
 V out of the door, along the corridor and down the stairs. Expected: the bee follows through the doorway and down the
 stairwell without sticking against a wall, the door's frame or the stairs: `mc /execute if entity
 @e[type=minecraft:bee,tag=sp7,distance=..4]` passes when V stops. Then Clear.
 
-- [ ] **Step 6: In the game: the husk behind the wall (check 5, hidden, then in view)**
+- [x] **Step 6: In the game: the husk behind the wall (check 5, hidden, then in view)**
 
 Ask the user to go back to the room, click Survival, and stand at "Hidden from the husk" (Minecraft block −1385 123
 −1272, 3 blocks in from the door), facing heading 300, toward the wall beside the door; then to click Husk, which puts
@@ -4047,12 +4047,12 @@ doorway) and stand, and after 10 s send the same test with `distance=..2`. Expec
 it into the doorway's view, which its position shows), and the minute line's sight casts with hits while V was
 hidden; then `Test passed. Count: 1`: once V was in view, it came along the corridor. Then Clear.
 
-- [ ] **Step 7: In the game: the apartment's cost (check 6)**
+- [x] **Step 7: In the game: the apartment's cost (check 6)**
 
 As at spot B: Pig, Cow, Villager, Wolf and Bee at once in V's room for 30 s, the frame time meanwhile, and the minute
 lines. Expected: the frame time within the baseline's spread, a few milliseconds of casting a minute. Then Clear.
 
-- [ ] **Step 8: In the game: the end**
+- [x] **Step 8: In the game: the end**
 
 Ask the user to click TNT (8) and Flint and steel (9) ("Your slots") to have them back, then to quit the game. Wait for
 Minecraft's autosave as Task 18's step 4 does (mark `build/pathsrow/saved-after-run-f`), then ask the user to stop
@@ -4063,12 +4063,12 @@ L=$(ls -t /e/Cyberpunk2077/red4ext/logs | grep -i blockrender | head -1); grep -
 ```
 Expected: `0` errors, and the minute lines.
 
-- [ ] **Step 9: Record the apartment's run in `docs/spikes/2026-10-08-minecraft-paths-results.md`**
+- [x] **Step 9: Record the apartment's run in `docs/spikes/2026-10-08-minecraft-paths-results.md`**
 
 In "Run F", after spot B: each check with its outcome and numbers, the user's observations, the screenshots, and what
 the runs mean for the spike's answer.
 
-- [ ] **Step 10: Commit**
+- [x] **Step 10: Commit**
 
 With the plan, its steps ticked up to this one.
 ```bash

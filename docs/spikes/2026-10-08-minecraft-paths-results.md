@@ -276,3 +276,48 @@ angles/distances"): patches of its skin come and go, as the screenshots show. A 
 collar layer over the same model, and spike 7's spec named this risk ("a layer drawn over its own body at the same
 depth … run D looks for flicker"): two surfaces at one depth, fighting. That's spike 7's drawing, not spike 9's paths;
 it's left for later.
+
+### In V's apartment
+
+**Two restarts first.** The user went back to the apartment by loading a save in the running game, and BlockRender then
+read no city there: `nothing can be read now: V's controller isn't found` (7,244 searches), still holding spot B's
+PhysX origin, and build mode stopped working, Minecraft's player having no ground. A probe dump (`origin -1024 1024
+0`, 16:21) found why: after the load, the city's shapes were in **PhysX scene 6** of 12, and BlockRender's exporter reads
+scene 0 only (spike 1's "the city's physics world is scene 0", true at a fresh start: this session's start read the
+apartment's city at 15:49). Relinking doesn't change the scene read. The user restarted both games; with a fresh
+start, Link gave `864 regions known, 0 batches to read; PhysX's origin (-1024, 1024, 0)`. Then SkyCraft waited on
+Minecraft's Options screen, left open (`waiting on screen …OptionsScreen before opening the mirror world`), until the
+user closed it.
+
+V at Minecraft −1385.48 123.065 −1271.53, the room's spot, the city known (1,176 regions); SkyCraft's lift there 0.006.
+With nothing summoned, CET's frame time 15.4 ms on average (65 fps), 16.5 to 19.1 ms at worst.
+
+| Check | Run F in V's apartment |
+|---|---|
+| 1. Wander | the pig, the cow and the villager in V's room, 13 positions each: they strolled 10, 3 and 10 times, as far as 10.5, 6.4 and 8.3 blocks, among the furniture at 123.0 to 123.75, none through it and, this time, none out of the room (the cow sat on the door's threshold a while, as in Task 18); all three `1b` |
+| 2. Tempt | the user, with the wheat held, walked out of the door, along the corridor and down the stairs: **the cow didn't fit through the door** ("the cow is too wide to fit in the door"). The city's voxels leave the doorway's outer cell 1.375 blocks open up to 124.0 but only 0.875 above it; a cow is 0.9 wide and 1.4 tall, so its body, from the threshold at 123.375, can't pass. Pathfinding checks the cell's middle, so it planned the way through, and collision stopped it, as the spec's risk 4 says ("mobs 0.75 to 1 block wide may path through a gap between 0.75 and their width"); the cow went back into the room (−1381.5 123.4 −1277.2). A pig (0.9) wouldn't fit either; Task 18's villager (0.6) did |
+| 3. Pet | the wolf (0.6 wide) followed V out of the door (on its threshold, 123.38, at 16:45:10), along the corridor, down the stairs (121.52 and 120.30 on the treads) to the storey below, and teleported beside V each time V sprinted ahead: 14 pets landed (11 and 3 in the minute lines), every one of its 60 positions on a floor or a tread, 119.125 to 124.25, none on a wrong storey; `Test passed. Count: 1` within 4.5 blocks, `1b`. The user: "the dog be teleporting and pathfinding correctly" |
+| 4. Flyer | with the dandelion held, the bee followed through the doorway and down the stairwell: `Test passed. Count: 1`, 1.6 blocks from V on the storey below; that minute, 210 shortcut casts, 76 of them hitting the city. The user: "it appears to pathfind around door frames, walls and down stairs" |
+| 5. Sight, hidden then in view | a first try didn't count: V was 1.6 blocks off the hiding spot and moving, and the test came 22 s late. The second, every second recorded: V on the hiding spot (−1384.5 123.06 −1271.6) for 47 s; the husk landed in the corridor where the simulation put it (−1390.56 123.12 −1275.14), stood 9 s, then strolled away from V, to 14.5 blocks off; that minute, **86 sight casts, 86 of them hitting the city**. V stepped out into the corridor at 16:56:25 to 27, and the husk turned at once (16:56:26) and was 0.4 blocks from V at 16:56:29: `Test passed. Count: 1` |
+| 6. Cost | the pig, the cow, the villager, the wolf and the bee in V's room for 30 s: CET's frame time 15.3 to 15.5 ms on average (65 fps), 19.3 to 20.8 ms at worst, as with nothing summoned. Every minute line in the apartment, 16:40 to 17:05: 0.4 to 41.5 ms of casting a minute (the most with the bee in the room: 1,008 sight casts and 566 shortcut casts, 536 of them hitting walls), up to 109,779 city answers and 3,670 shapes read |
+
+After the checks the user tried game modes and summoned a few villagers and a pig; Clear at 17:05:22 left nothing,
+the game mode survival. Slots 8 and 9 kept the wheat and the dandelion ("Your slots" gives the TNT and the flint and
+steel back). No error in BlockRender's logs; Minecraft's only warnings its link-up's render ones and a `Missing block
+model: minecraft:builtin/entity` at each start.
+
+### What run F means
+
+- **Yes, in the game:** mobs wander Night City's streets, pavements and rooms on the city's ground, step its kerbs and
+  stairs, follow food, keep up with V as pets (teleporting beside V on V's own storey), fly around its walls and door
+  frames, and don't see V through them; the frame rate doesn't change, and the casts cost at most 41.5 ms a minute,
+  on Minecraft's server thread.
+- **Left for later, none of them spike 9's mod:**
+  - **the wolf's look:** its collar's layer over its body fights at the same depth (spike 7's drawing, its spec's risk
+    16);
+  - **a save loaded in a running game** moves the city into another PhysX scene, which BlockRender's exporter doesn't
+    follow (spike 5's exporter reads scene 0): it should pick the scene holding V's controller;
+  - **SkyCraft lifts Minecraft's player onto a doorway's header** when V stands under one within 2.5 blocks of her
+    feet (Task 18);
+  - **mobs 0.9 wide don't fit a doorway** the voxels leave 0.875 open (the spec's risk 4, the 1/8-block voxels'
+    coarseness).
