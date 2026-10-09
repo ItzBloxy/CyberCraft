@@ -29,11 +29,13 @@ with 1.7.1, which fixes what the 1.7.0 run found. Run F checks it in the game.
 - **Cost:** the frame rate didn't change (65 fps in the apartment with five mobs about, as with none); the casts took
   at most 41.5 ms a minute, on Minecraft's server thread.
 
+**Solved since:** **mobs' textures drawn wrong** at some angles and distances, which the user called critical (on every
+mob, they said after run F), was the user's VanillaTweaks resource pack (`VanillaTweaks_r318972_MC26.3.x.zip`),
+loaded in every Minecraft session of spike 9. The user deleted it on 2026-10-09, and entities draw right again. It was
+neither spike 7's drawing nor the user's mods (Entity Model, Texture and Sound Features are enabled again); the
+handoff (`docs/superpowers/handoffs/2026-10-09-entity-texture-bug.md`) has the details.
+
 **Left for later, none of them spike 9's mod:**
-- **mobs' textures drawn wrong** at some angles and distances, which the user calls critical: on every mob, they
-  said after run F. The cause is unsettled; the handoff (`docs/superpowers/handoffs/2026-10-09-entity-texture-bug.md`) lists what
-  changed since spike 7 passed (Entity Model and Entity Texture Features enabled, mobs walking) and how to tell the
-  causes apart;
 - **a save loaded in a running game** moves the city into another PhysX scene (scene 6 of 12), and BlockRender's
   exporter reads scene 0 only: no city, and no build mode, until the game restarts. It should read the scene holding
   V's controller;
@@ -309,8 +311,9 @@ away](2026-10-08-minecraft-paths-results/run-f-spot-b-sidewalk.jpg)
 angles/distances"): patches of its skin come and go, as the screenshots show. A tamed wolf is drawn as its body and a
 collar layer over the same model, and spike 7's spec named a risk that fits ("a layer drawn over its own body at the
 same depth … run D looks for flicker"); but after run F the user said it hits all mobs, which that alone doesn't
-explain. It's spike 7's drawing, not spike 9's paths, and its cause is unsettled: the handoff
-(`docs/superpowers/handoffs/2026-10-09-entity-texture-bug.md`) has the evidence and the tests.
+explain. **Solved after the spike (2026-10-09):** the cause was the user's VanillaTweaks resource pack, loaded in every
+Minecraft session of spike 9, not the collar layer, spike 7's drawing or the user's mods; with the pack deleted, the
+mobs draw right. The handoff (`docs/superpowers/handoffs/2026-10-09-entity-texture-bug.md`) has the details.
 
 ### In V's apartment
 
@@ -347,9 +350,10 @@ model: minecraft:builtin/entity` at each start.
   stairs, follow food, keep up with V as pets (teleporting beside V on V's own storey), fly around its walls and door
   frames, and don't see V through them; the frame rate doesn't change, and the casts cost at most 41.5 ms a minute,
   on Minecraft's server thread.
+- **Solved since:** mobs' textures drawn wrong at some angles and distances, on every mob by the user's account: the
+  user's VanillaTweaks resource pack, deleted 2026-10-09 (the handoff
+  `docs/superpowers/handoffs/2026-10-09-entity-texture-bug.md`).
 - **Left for later, none of them spike 9's mod:**
-  - **mobs' textures drawn wrong** at some angles and distances, on every mob by the user's account: spike 7's
-    drawing, its cause unsettled (the handoff `docs/superpowers/handoffs/2026-10-09-entity-texture-bug.md`);
   - **a save loaded in a running game** moves the city into another PhysX scene, which BlockRender's exporter doesn't
     follow (spike 5's exporter reads scene 0): it should pick the scene holding V's controller;
   - **SkyCraft lifts Minecraft's player onto a doorway's header** when V stands under one within 2.5 blocks of her

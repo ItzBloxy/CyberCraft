@@ -4259,11 +4259,13 @@ top, "The Paths rows with `mclink`" and "Run F".
   view, and the cost. There the cow couldn't pass V's front door: 0.9 wide against the voxels' 0.875, its path planned
   through the cell's middle (the spec's risk 4).
 - **Not as expected:** mobs' textures drawn wrong at some angles and distances, on every mob by the user's account
-  (its cause unsettled: `docs/superpowers/handoffs/2026-10-09-entity-texture-bug.md`), and the save-load scene, both outside
+  (solved on 2026-10-09: the user's VanillaTweaks resource pack, see
+  `docs/superpowers/handoffs/2026-10-09-entity-texture-bug.md`), and the save-load scene, both outside
   spike 9; and the user saw the paths themselves work: "the pathfinding and
   teleporting works perfectly".
 - **Tooling:** `fun_check.lua`'s `FUN_V`; `run_plan_s9.py`'s Part 2 steps; `mutate_s9_overlay.py` (17 mutations, all
   caught); and the simulation's run F scripts (`tools/plans/paths-sim/`), SkyCraft's lift among them
   (`viewspot.py`'s `ground()`, `liftcheck.py`, `liftpath.py`).
-- **For later,** after the spike: mobs' textures (the user calls it critical), the exporter's scene after a save load, SkyCraft's lift onto
-  headers, and mobs 0.9 wide at narrow doorways; then the time-of-day sync the user asked for during spike 7.
+- **For later,** after the spike: the exporter's scene after a save load, SkyCraft's lift onto headers, and mobs 0.9
+  wide at narrow doorways; then the time-of-day sync the user asked for during spike 7. (Mobs' textures, which the
+  user called critical, were since found to be their VanillaTweaks resource pack, deleted on 2026-10-09.)

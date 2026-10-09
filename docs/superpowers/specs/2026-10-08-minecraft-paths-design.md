@@ -696,7 +696,8 @@ part of run F, and spot B first. "Run F, in the game" above holds the result.
     passed;
   - **a save loaded in a running game** moved the city into PhysX scene 6 of 12, and BlockRender's exporter, which
     reads scene 0, sent no city until the game restarted ("Environment", spike 1's scene 0 holds at a fresh start);
-  - **mobs' textures are drawn wrong** at some angles and distances, on every mob by the user's account: spike 7's
-    drawing, its cause unsettled (`docs/superpowers/handoffs/2026-10-09-entity-texture-bug.md`).
+  - **mobs' textures are drawn wrong** at some angles and distances, on every mob by the user's account: solved on
+    2026-10-09, the user's VanillaTweaks resource pack, loaded in every Minecraft session of spike 9, not spike 7's
+    drawing or the user's mods (`docs/superpowers/handoffs/2026-10-09-entity-texture-bug.md`).
 - **Sight in the game is checked from the summon on:** the hidden husk's check records its and V's positions every
   second, so a stroll that brings V into its view shows; a test seconds late can't tell.

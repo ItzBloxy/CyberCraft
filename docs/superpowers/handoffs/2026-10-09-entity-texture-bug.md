@@ -3,6 +3,28 @@
 Written 2026-10-09, at the end of spike 9 (Minecraft's mobs finding their way), which found it during run F. The user
 asked for this handoff and calls it **critical: it affects all mobs.** Read this first.
 
+## Resolved (2026-10-09)
+
+**The cause was a resource pack: the user's VanillaTweaks pack, `VanillaTweaks_r318972_MC26.3.x.zip`.** The user found
+it and deleted the pack, and entities draw right again. Nothing in BlockRender, SkyCraft or CyberCraft Tweaks changed.
+None of the mods was the cause either: Entity Model Features, Entity Texture Features and Entity Sound Features are
+enabled again.
+- **Minecraft's logs agree.** Each session's `Reloading ResourceManager` line lists the packs it loaded. VanillaTweaks
+  `r318972` was in every session from 2026-10-08 01:07 to 2026-10-09 18:03, which covers all of spike 9, and in two on
+  2026-10-07 (18:04 and 18:20, `mclink` runs only). It was not in spike 7's run D (2026-10-07 21:23 and 22:28) or spike
+  8's session (23:07). This handoff missed it: "What changed since spike 7" below lists mods, not resource packs.
+- **What the pack held,** from a listing taken during the debugging session (the pack itself is gone):
+  - GUI sprites and containers, mostly;
+  - overrides of the text shaders (`rendertype_text*.vsh`, `text.vsh`);
+  - the enchantment glint textures;
+  - fire and soul fire block textures with new animations (`.mcmeta`);
+  - item models: buckets, the shield, the totem and others.
+
+  Which of these broke the drawing, and how, wasn't looked into.
+- **The hypotheses below** (EMF and ETF, motion vectors, layers at the same depth, texture bookkeeping) are superseded.
+  Before the pack was found, the debugging session had seen every batch name its right texture and size, and
+  `set gbmotion 0` (no motion vectors of BlockRender's own) make no difference.
+
 ## Start here
 
 - **Repo and branch:** `D:\Cyberpunk-Minecraft`, `main` at `a84f683` (spike 9 merged). Make a branch for the fix,
@@ -12,13 +34,13 @@ asked for this handoff and calls it **critical: it affects all mobs.** Read this
   screenshots: `docs/spikes/2026-10-08-minecraft-paths-results/run-f-spot-b-wolf-street.jpg` (the wolf on the street,
   5.8 m off) and `run-f-spot-b-wolf-near.jpg` (3.1 m off): a white blocky body with red and dark patches in places a
   wolf has none; `run-f-spot-b-sidewalk.jpg` has the overlay. Pathfinding and teleporting were fine; this is drawing.
-- **Nothing is settled about the cause.** Spike 9's results record it under the wolf alone as "its collar's layer over
-  its body fights at the same depth (spike 7's risk 16)": a guess from one mob, which "all mobs" contradicts. Start
-  from the evidence below, not from that.
+- **The cause is settled:** the VanillaTweaks resource pack ("Resolved" above). As first written: spike 9's results
+  recorded it under the wolf alone as "its collar's layer over its body fights at the same depth (spike 7's risk 16)",
+  a guess from one mob, which "all mobs" contradicted.
 - **Process:** superpowers:systematic-debugging, root cause before any fix. If the fix turns out to be a design change
   (new shader paths, motion vectors per entity), brainstorm it first (superpowers:brainstorming), then a spec and a plan
   as the spikes have them. Inline, no sub-agents.
-- **A first message to start the next session with:**
+- **A first message to start the next session with** (no longer needed: resolved):
   > Read docs/superpowers/handoffs/2026-10-09-entity-texture-bug.md and let's debug the entity texture bug.
 
 ## Ask the user first
