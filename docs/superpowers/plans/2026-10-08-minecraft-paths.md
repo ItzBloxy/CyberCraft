@@ -4102,7 +4102,7 @@ cd /d/Cyberpunk-Minecraft && git add docs \
        -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1
 ```
 
-- [ ] **Step 5: Ask the user how to finish the branch**
+- [x] **Step 5: Ask the user how to finish the branch**
 
 With superpowers:finishing-a-development-branch. The user has chosen a local fast-forward merge of the spike's branch
 into `main` every time so far; ask again. The time-of-day sync the user asked for during spike 7 comes next.
