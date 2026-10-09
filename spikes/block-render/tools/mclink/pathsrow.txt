@@ -1,0 +1,223 @@
+# Spike 9's Part 2: the overlay's Paths rows, typed as its buttons type them, against SkyCraft's real mod, without
+# the game, on run F's ground where the game itself puts it: spot B (spike 1's raised-level dump, 2026-10-01_14-37-07)
+# around V's own feet there, Minecraft -189.898 74.432 -616.754, then V's apartment in Megabuilding H10
+# (2026-10-09_12-22-29) around -1383.343 123.065 -1271.700. Step 0 placed spot B's dump at 1280.5 6.14 2007.5, a
+# fraction of a block off the game's grid, so its cells weren't quite these
+# (docs/superpowers/plans/2026-10-08-minecraft-paths.md, "Part 2").
+#
+# Each check runs alone and is cleared before the next, with the overlay's Clear. Results come from the chat replies
+# in Minecraft's log: positions (/data get), "Test passed" or "Test failed" (/execute if entity). The player's game
+# mode is noted at the start and put back at the end; its slots 8 and 9 get the wheat and the dandelion, and then the
+# TNT and the flint and steel the overlay's "Your slots" gives; the husk's Resistance is cleared. Unselected, the wheat
+# and the dandelion tempt nothing (the user picks the slot in build mode in run F), so the tempt and the bee's follow
+# are left to run F. Start Minecraft first; this waits for its world. W (26) walks.
+status
+wait-world 180
+ground city
+at -189.898 74.432 -616.754
+look 0 0
+dump E:\Cyberpunk2077\red4ext\plugins\PhysXProbe\dumps\2026-10-01_14-37-07\collision.obj
+link on
+wait-ground 30
+wait 2
+type /scoreboard objectives add sp9mode dummy
+type /execute store success score #creative sp9mode if entity @s[gamemode=creative]
+type /execute store success score #adventure sp9mode if entity @s[gamemode=adventure]
+type /gamemode survival
+scene
+# Spot B, V on the pavement facing south (heading 180), the barrier 3.5 blocks east (left).
+# 1. Wander: the pig, the cow and the villager 4 blocks south of V, their positions every 5 s for 60 s. Each should
+# stroll at least twice and move 3 blocks or more, and stay on the road: the street at 74.25 and the pavement at 74.5,
+# none past the barrier nor below the road.
+type /execute rotated ~ 0 positioned ^2 ^ ^4 run summon minecraft:pig ~ ~0.5 ~ {Tags:["sp7"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty"}
+type /execute rotated ~ 0 positioned ^ ^ ^4 run summon minecraft:cow ~ ~0.5 ~ {Tags:["sp7"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty"}
+type /execute rotated ~ 0 positioned ^-2 ^ ^4 run summon minecraft:villager ~ ~0.5 ~ {Tags:["sp7"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty"}
+wait 1
+type /execute as @e[tag=sp7] run data get entity @s Pos
+wait 5
+type /execute as @e[tag=sp7] run data get entity @s Pos
+wait 5
+type /execute as @e[tag=sp7] run data get entity @s Pos
+wait 5
+type /execute as @e[tag=sp7] run data get entity @s Pos
+wait 5
+type /execute as @e[tag=sp7] run data get entity @s Pos
+wait 5
+type /execute as @e[tag=sp7] run data get entity @s Pos
+wait 5
+type /execute as @e[tag=sp7] run data get entity @s Pos
+wait 5
+type /execute as @e[tag=sp7] run data get entity @s Pos
+wait 5
+type /execute as @e[tag=sp7] run data get entity @s Pos
+wait 5
+type /execute as @e[tag=sp7] run data get entity @s Pos
+wait 5
+type /execute as @e[tag=sp7] run data get entity @s Pos
+wait 5
+type /execute as @e[tag=sp7] run data get entity @s Pos
+wait 5
+type /execute as @e[tag=sp7] run data get entity @s Pos
+type /execute as @e[tag=sp7] run data get entity @s OnGround
+type /execute at @e[tag=sp7b] run setblock ~ ~ ~ minecraft:air strict
+type /kill @e[tag=sp7]
+type /kill @e[tag=sp7b]
+wait 3
+# 2. Pet: the wolf 2 ahead and 2 to the left of V on the street, its owner the player. V walks about 15 blocks south,
+# past the 10 a wolf waits for: it should follow by path to within 4 blocks. Then V jumps 22 blocks north, past the 12
+# a pet teleports at: it should land beside V at once, on the road's floor and on the ground.
+at -193.5 74.3 -616.5
+wait 2
+type /execute rotated ~ 0 positioned ^2 ^ ^2 run summon minecraft:wolf ~ ~0.5 ~ {Tags:["sp7"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty"}
+type /data modify entity @e[type=minecraft:wolf,tag=sp7,limit=1,sort=nearest] Owner set from entity @s UUID
+wait 2
+build on
+down 26
+track 3.5
+up 26
+wait 4
+type /execute if entity @e[type=minecraft:wolf,tag=sp7,distance=..4]
+type /execute as @e[tag=sp7] run data get entity @s Pos
+build off
+at -193.5 74.3 -623.5
+wait 0.5
+type /execute as @e[tag=sp7] run data get entity @s Pos
+type /execute as @e[tag=sp7] run data get entity @s OnGround
+type /execute if entity @e[type=minecraft:wolf,tag=sp7,distance=..4.5]
+wait 1.5
+type /execute as @e[tag=sp7] run data get entity @s Pos
+type /execute at @e[tag=sp7b] run setblock ~ ~ ~ minecraft:air strict
+type /kill @e[tag=sp7]
+type /kill @e[tag=sp7b]
+wait 3
+# 3. Chase: the husk 7 blocks south of V on the pavement, in view, Resistance first. It should reach the player.
+at -189.898 74.432 -616.754
+wait 2
+type /effect give @s minecraft:resistance 300 4 true
+type /execute rotated ~ 0 positioned ^ ^ ^7 run summon minecraft:husk ~ ~0.5 ~ {Tags:["sp7"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty"}
+wait 10
+type /execute if entity @e[type=minecraft:husk,tag=sp7,distance=..2]
+type /execute as @e[tag=sp7] run data get entity @s Pos
+type /execute at @e[tag=sp7b] run setblock ~ ~ ~ minecraft:air strict
+type /kill @e[tag=sp7]
+type /kill @e[tag=sp7b]
+wait 3
+# 4. Flyer: the dandelion into slot 9, and the bee 2 ahead and 2 to the right of V, a block up. With the dandelion not
+# held, it wanders: in the air above the road, not inside the city's cells.
+type /item replace entity @s hotbar.8 with minecraft:dandelion
+type /execute rotated ~ 0 positioned ^-2 ^ ^2 run summon minecraft:bee ~ ~1 ~ {Tags:["sp7"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty"}
+wait 1
+type /execute as @e[tag=sp7] run data get entity @s Pos
+wait 5
+type /execute as @e[tag=sp7] run data get entity @s Pos
+wait 5
+type /execute as @e[tag=sp7] run data get entity @s Pos
+type /execute at @e[tag=sp7b] run setblock ~ ~ ~ minecraft:air strict
+type /kill @e[tag=sp7]
+type /kill @e[tag=sp7b]
+wait 3
+# V's apartment: spot B's city goes, and the apartment's comes around V's feet when it was dumped. Run F's checks
+# there start in V's room 2 blocks in from its front door (a doorway a block wide at x -1389, onto the building's
+# corridor), V facing into the room (heading 90). The building's storeys are 4 blocks apart, with stairs between them.
+type /item replace entity @s hotbar.7 with minecraft:wheat
+ground floor
+at -1383.343 123.065 -1271.700
+dump E:\Cyberpunk2077\red4ext\plugins\PhysXProbe\dumps\2026-10-09_12-22-29\collision.obj
+ground city
+wait-ground 30
+at -1385.5 123.06 -1271.5
+look 270 0
+wait-ground 30
+wait 2
+# 5. Wander in V's room: the pig, the cow and the villager 4 blocks east of V, their positions every 5 s for 60 s.
+# Each should stroll at least twice, among the furniture and not through it, on the room's floor at 123.125 (up to
+# about 124 on raised parts); any of them may go out of the front door into the corridor, and down or up the stairs:
+# floors 4 blocks apart, at 111.125 to 127.125.
+type /execute rotated ~ 0 positioned ^2 ^ ^4 run summon minecraft:pig ~ ~0.5 ~ {Tags:["sp7"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty"}
+type /execute rotated ~ 0 positioned ^ ^ ^4 run summon minecraft:cow ~ ~0.5 ~ {Tags:["sp7"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty"}
+type /execute rotated ~ 0 positioned ^-2 ^ ^4 run summon minecraft:villager ~ ~0.5 ~ {Tags:["sp7"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty"}
+wait 1
+type /execute as @e[tag=sp7] run data get entity @s Pos
+wait 5
+type /execute as @e[tag=sp7] run data get entity @s Pos
+wait 5
+type /execute as @e[tag=sp7] run data get entity @s Pos
+wait 5
+type /execute as @e[tag=sp7] run data get entity @s Pos
+wait 5
+type /execute as @e[tag=sp7] run data get entity @s Pos
+wait 5
+type /execute as @e[tag=sp7] run data get entity @s Pos
+wait 5
+type /execute as @e[tag=sp7] run data get entity @s Pos
+wait 5
+type /execute as @e[tag=sp7] run data get entity @s Pos
+wait 5
+type /execute as @e[tag=sp7] run data get entity @s Pos
+wait 5
+type /execute as @e[tag=sp7] run data get entity @s Pos
+wait 5
+type /execute as @e[tag=sp7] run data get entity @s Pos
+wait 5
+type /execute as @e[tag=sp7] run data get entity @s Pos
+wait 5
+type /execute as @e[tag=sp7] run data get entity @s Pos
+type /execute as @e[tag=sp7] run data get entity @s OnGround
+type /execute at @e[tag=sp7b] run setblock ~ ~ ~ minecraft:air strict
+type /kill @e[tag=sp7]
+type /kill @e[tag=sp7b]
+wait 3
+# 6. Pet: the wolf beside V in the room, then V jumps 19 blocks out along the building's corridor, and then 18 blocks
+# across and 4 down, to the storey below: each time the wolf should land beside V at once, on V's storey's floor
+# (123.125, then 119.125; or on the far side of a wall, within 3 blocks across, as a vanilla pet may).
+type /execute rotated ~ 0 positioned ^2 ^ ^2 run summon minecraft:wolf ~ ~0.5 ~ {Tags:["sp7"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty"}
+type /data modify entity @e[type=minecraft:wolf,tag=sp7,limit=1,sort=nearest] Owner set from entity @s UUID
+wait 3
+at -1400.5 123.06 -1259.5
+wait 0.5
+type /execute as @e[tag=sp7] run data get entity @s Pos
+type /execute as @e[tag=sp7] run data get entity @s OnGround
+type /execute if entity @e[type=minecraft:wolf,tag=sp7,distance=..4.5]
+wait 1.5
+type /execute as @e[tag=sp7] run data get entity @s Pos
+at -1385.5 119.06 -1289.5
+wait 0.5
+type /execute as @e[tag=sp7] run data get entity @s Pos
+type /execute as @e[tag=sp7] run data get entity @s OnGround
+type /execute if entity @e[type=minecraft:wolf,tag=sp7,distance=..4.5]
+wait 1.5
+type /execute as @e[tag=sp7] run data get entity @s Pos
+type /execute at @e[tag=sp7b] run setblock ~ ~ ~ minecraft:air strict
+type /kill @e[tag=sp7]
+type /kill @e[tag=sp7b]
+wait 3
+# 7. Sight: V in the room 3 blocks in from the front door, facing heading 300, the husk 7 ahead in the corridor, the
+# room's wall between them, and its way around through the door 9 steps long. For 4 s it shouldn't come (unless a
+# stroll brings V into its view); once V steps into the doorway, in its view, it should reach the player.
+at -1384.5 123.06 -1271.5
+look 120 0
+wait 2
+type /effect give @s minecraft:resistance 300 4 true
+type /execute rotated ~ 0 positioned ^ ^ ^7 run summon minecraft:husk ~ ~0.5 ~ {Tags:["sp7"],PersistenceRequired:1b,DeathLootTable:"minecraft:empty"}
+wait 4
+type /execute if entity @e[type=minecraft:husk,tag=sp7,distance=..3]
+type /execute as @e[tag=sp7] run data get entity @s Pos
+at -1388.5 123.3 -1271.5
+wait 8
+type /execute if entity @e[type=minecraft:husk,tag=sp7,distance=..2]
+type /execute as @e[tag=sp7] run data get entity @s Pos
+# The clear: everything tagged, the Resistance, slots 8 and 9 as "Your slots" fills them, the game mode as it was.
+# A killed mob's puffs last up to 5 s: the last scene, 7 s on, should say nothing is left.
+type /execute at @e[tag=sp7b] run setblock ~ ~ ~ minecraft:air strict
+type /kill @e[tag=sp7]
+type /kill @e[tag=sp7b]
+type /effect clear @s minecraft:resistance
+type /item replace entity @s hotbar.7 with minecraft:tnt 64
+type /item replace entity @s hotbar.8 with minecraft:flint_and_steel
+type /execute if score #creative sp9mode matches 1 run gamemode creative
+type /execute if score #adventure sp9mode matches 1 run gamemode adventure
+type /scoreboard objectives remove sp9mode
+wait 7
+scene
+status
+quit
