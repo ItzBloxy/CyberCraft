@@ -4,12 +4,13 @@ states.
     python run_plan_s9.py replay|execute <plan.md> <repo> [first task] [last task] [first step]
 
 - File steps (Write, Edit, Delete, Copy) are applied exactly as the plan has them (planlib).
-- "Build CyberCraft Tweaks", "Run CyberCraft Tweaks' unit tests", "Check the mixins" and "Check that mclink parses":
-  the step's bash block runs, its /d/Cyberpunk-Minecraft made the repo's path, and every `text` of its Expected
-  paragraph must be in what it printed. A replay first copies the real repo's mclink into the clone: this plan changes
-  nothing of BlockRender, so the clone has none built.
-- "Check that the game isn't running", "Ask the user", "In Minecraft", "Install" and "Record" steps are done by hand:
-  the run stops at the first.
+- "Build CyberCraft Tweaks", "Run CyberCraft Tweaks' unit tests", "Check the mixins" and "Check that mclink parses",
+  and Part 2's "Check the overlay's syntax", "Run the overlay offline" and "Check that the script types the overlay's
+  commands": the step's bash block runs, its /d/Cyberpunk-Minecraft made the repo's path, and every `text` of its
+  Expected paragraph must be in what it printed. A replay first copies the real repo's mclink into the clone: this plan
+  changes nothing of BlockRender, so the clone has none built.
+- "Check that the game isn't running", "Ask the user", "In Minecraft", "Install", "Record", and Part 2's "Deploy" and
+  "In the game" steps are done by hand: the run stops at the first.
 - Commits use the plan's messages. Executing ticks the task's boxes, up to the commit, first.
 """
 import re
@@ -30,7 +31,7 @@ repo = Path(sys.argv[3]).resolve()
 first = int(sys.argv[4]) if len(sys.argv) > 4 else 1
 last = int(sys.argv[5]) if len(sys.argv) > 5 else 7
 first_step = int(sys.argv[6]) if len(sys.argv) > 6 else 1
-log = open(HERE / f"{mode}_s9p1.log", "a", encoding="utf-8")
+log = open(HERE / f"{mode}_s9.log", "a", encoding="utf-8")
 
 
 def say(text):
@@ -51,8 +52,10 @@ def fail(step, why):
     raise SystemExit(f"Task {step.task} step {step.number} ({step.title}): {why}")
 
 
-BASH_STEPS = ("Build CyberCraft Tweaks", "Run CyberCraft Tweaks' unit tests", "Check the mixins", "Check that mclink parses")
-BY_HAND = ("Check that the game isn't running", "Ask the user", "In Minecraft", "Install", "Record")
+BASH_STEPS = ("Build CyberCraft Tweaks", "Run CyberCraft Tweaks' unit tests", "Check the mixins", "Check that mclink parses",
+              "Check the overlay's syntax", "Run the overlay offline", "Check that the script types the overlay's commands")
+BY_HAND = ("Check that the game isn't running", "Ask the user", "In Minecraft", "Install", "Record", "Deploy",
+           "In the game")
 
 for step in planlib.read_plan(plan_path):
     if step.task < first or step.task > last or (step.task == first and step.number < first_step):

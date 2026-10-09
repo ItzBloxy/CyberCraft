@@ -4,9 +4,19 @@
 --                                                  each frame it reads blockrender.request and deletes it, printing it
 --   lua fun_check.lua <init.lua> hold <label>...   clicks them, then runs 5 frames with nobody reading the file, prints
 --                                                  the file and the waiting line, then reads one a frame as above
+-- With FUN_V="<x> <y> <z> <forward x> <forward y>" set, V stands there in the game's world coordinates (z up), facing
+-- that way; without it there's no V, as at the game's main menu.
 local handlers = {}
 function registerForEvent(name, fn) handlers[name] = fn end
-Game = { GetPlayer = function() return nil end }
+local standIn = nil
+if os.getenv("FUN_V") then
+    local x, y, z, fx, fy = os.getenv("FUN_V"):match("^(%S+) (%S+) (%S+) (%S+) (%S+)$")
+    standIn = {
+        GetWorldPosition = function() return { x = tonumber(x), y = tonumber(y), z = tonumber(z) } end,
+        GetWorldForward = function() return { x = tonumber(fx), y = tonumber(fy), z = 0 } end,
+    }
+end
+Game = { GetPlayer = function() return standIn end }
 ImGuiCond = { FirstUseEver = 0 }
 ImGuiWindowFlags = { AlwaysAutoResize = 0 }
 local click = nil

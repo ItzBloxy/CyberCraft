@@ -134,3 +134,19 @@ folder for the parts that need Codeware.
   estimates a stroll's odds (it needs `uv run --no-project --with pillow --with numpy`); `fences.py` does the same with
   1.7.1's fences. The others probe one question each: sight rays (`sight.py`), pets' landings (`teleport.py`), the
   road and its hollows (`road.py`, `hollow_s9.py`, `gaps_s9.py`, `probe_s9r3.py`, `probe_s9r4.py`).
+
+**Spike 9's Part 2** (the overlay's Paths rows and run F) changed `fun_check.lua` and `run_plan_s9.py`, and added
+`mutate_s9_overlay.py` and more of `paths-sim/`. Planning used the session's scratchpad: the scratch clone `verify/`
+(tags `s9-t15` to `s9-t17`), `plans/skel_s9p2.md` and `plans/found_s9p2.md`, and `sim/` (the dumps voxelized).
+- **`fun_check.lua`** takes `FUN_V="<x> <y> <z> <forward x> <forward y>"`: V stands there, in the game's world
+  coordinates, so `show` prints the lines that need her, run F's spots among them. Without it there's no V, as before.
+- **`run_plan_s9.py`** also runs "Check the overlay's syntax", "Run the overlay offline" and "Check that the script
+  types the overlay's commands" as bash steps, and stops at "Deploy" and "In the game".
+- **`mutate_s9_overlay.py`** breaks Part 2's checks once each, 17 mutations, in a clone at Task 17's commit with these
+  tools and `mclink.exe`: `mutate_s9_overlay.py <plan> <clone>`.
+- **`paths-sim/`** gained `simlib.py`, the walk rules with 1.7.1's cells as a library, and the scripts on it, each
+  run on `voxdump`'s cells of a dump placed where the game puts it (V's own feet in Minecraft's axes, (x, z, -y) of
+  the world): level maps (`areamap.py`, `ascii.py`, `ascii2.py`, `voxmap.py`, `voxmap2.py`), the areas a level
+  splits into (`components.py`) and an area's odds (`areas.py`), where the Paths rows' summons land (`summons.py`),
+  the husk's hiding places (`raylib.py`, `hidden.py`, `hidden7.py`, `robust.py`), and pets' jump targets (`jumps.py`,
+  on V's apartment's dump), each reading its arguments from `sys.argv` near its top.
