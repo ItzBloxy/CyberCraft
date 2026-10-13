@@ -179,6 +179,20 @@ TEST(ShadersDrawPart5sLayersAndPatches)
 	}
 }
 
+TEST(ShadersBlendTranslucentBlocksBeforeDlss)
+{
+	std::string error;
+	const auto  shaders = cpmc::CompileBlockShaders(ShaderSource(), error);
+	CHECK(shaders.has_value());
+	if (shaders)
+	{
+		CHECK_EQ(ConstantBufferSize(shaders->blendedBlock, "Frame"), UINT(sizeof(cpmc::FrameConstants)));
+		CHECK_EQ(Outputs(shaders->blendedBlock), 1u);  // the scene's colour
+		// The vertex shader reads where a section's part starts from the Section constants.
+		CHECK_EQ(ConstantBufferSize(shaders->vertex, "Section"), UINT(sizeof(cpmc::SectionConstants)));
+	}
+}
+
 TEST(ShadersReportCompileErrors)
 {
 	std::string error;

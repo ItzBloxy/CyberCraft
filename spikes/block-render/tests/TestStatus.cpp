@@ -51,6 +51,19 @@ bool Has(const std::string& aStatus, const std::string& aLine)
 }
 }
 
+TEST(StatusCountsThePlantsAndTranslucentBlocks)
+{
+	cpmc::StatusReport report;
+	report.minecraftBlocks = true;
+	report.sections = 6;
+	report.vertices = 15'900;
+	report.plantVertices = 1'200;
+	report.translucentVertices = 300;
+	CHECK(Has(cpmc::FormatStatus(report), "blocks=Minecraft's in 6 sections, 15900 vertices: 1200 plants' (as the game's plants), 300 translucent"));
+	report.plantFoliage = false;
+	CHECK(Has(cpmc::FormatStatus(report), "blocks=Minecraft's in 6 sections, 15900 vertices: 1200 plants' (as the blocks), 300 translucent"));
+}
+
 TEST(StatusWritesTheLinksLines)
 {
 	cpmc::StatusReport report;

@@ -54,7 +54,7 @@ struct LinkSettings
 	double   teleportStep = 0.1;        // metres the camera moves before Minecraft's player follows
 	double   teleportRate = 10.0;       // teleports a second, at most
 	uint64_t ringBudget = 16ull << 20;  // ring bytes of atlases and sections taken each frame, checked between messages
-	bool     keepTranslucent = false;   // draw translucent triangles as cut-outs instead of dropping them
+	bool     keepTranslucent = true;    // pass translucent triangles on to the renderer (the polish pass), or drop them
 	uint32_t viewportWidth = 0;         // the HUD image's size to ask for; 0 leaves Minecraft's window alone
 	uint32_t viewportHeight = 0;
 	Ground   ground = Ground::Floor;    // switching sends a clear with a new epoch, then the other ground

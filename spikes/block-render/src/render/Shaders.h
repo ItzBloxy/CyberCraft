@@ -35,6 +35,7 @@ struct BlockShaders
 	std::vector<uint8_t> blended;        // BlendedPS (Part 5)
 	std::vector<uint8_t> additive;       // AdditivePS
 	std::vector<uint8_t> patch;          // PatchCS, a compute shader
+	std::vector<uint8_t> blendedBlock;   // BlendedBlockPS (the polish pass)
 };
 
 // Every entry point of shaders/blocks.hlsl, from its text. Nothing, with the messages in aError, if any fails.

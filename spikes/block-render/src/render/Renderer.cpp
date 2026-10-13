@@ -256,6 +256,7 @@ bool Renderer::ReloadShaders(std::string& aError)
 	hintPipeline_.Reset();
 	blendedPipeline_.Reset();
 	additivePipeline_.Reset();
+	blendedBlockPipeline_.Reset();
 	forwardPipelinesFailed_ = false;
 	patchPipeline_.Reset();
 	patchFailed_ = false;
@@ -472,6 +473,36 @@ bool Renderer::Set(std::string_view aName, double aValue, std::string& aError)
 			return false;
 		}
 		animate_ = aValue == 1.0;
+		return true;
+	}
+	if (aName == "plants")
+	{
+		if (aValue != 0.0 && aValue != 1.0)
+		{
+			aError = "plants is 1 to draw Minecraft's plants as the game's own small plants, or 0 to draw them as the blocks";
+			return false;
+		}
+		plantFoliage_ = aValue == 1.0;
+		return true;
+	}
+	if (aName == "plantstencil")
+	{
+		if (aValue < 0.0 || aValue > 255.0 || aValue != std::floor(aValue))
+		{
+			aError = "plantstencil is a whole number from 0 to 255: the stencil class plants are drawn with";
+			return false;
+		}
+		plantStencil_ = uint8_t(aValue);
+		return true;
+	}
+	if (aName == "plantb")
+	{
+		if (aValue < 0.0 || aValue > 1.0)
+		{
+			aError = "plantb is from 0 to 1: the material B plants are drawn with";
+			return false;
+		}
+		plantB_ = float(aValue);
 		return true;
 	}
 	aError = std::format("there's no setting called \"{}\"", aName);
@@ -1015,7 +1046,7 @@ bool Renderer::EnsureForwardObjects()
 
 bool Renderer::EnsureForwardPipelines(bool aReversed)
 {
-	if (translucentPipeline_ && forwardReversed_ == aReversed)
+	if (translucentPipeline_ && forwardReversed_ == aReversed && forwardCull_ == cull_)
 	{
 		return true;
 	}
@@ -1067,20 +1098,30 @@ bool Renderer::EnsureForwardPipelines(bool aReversed)
 	added.PS = { shaders_->additive.data(), shaders_->additive.size() };
 	added.BlendState.RenderTarget[0].SrcBlend = D3D12_BLEND_ONE;
 	added.BlendState.RenderTarget[0].DestBlend = D3D12_BLEND_ONE;
+	// The polish pass's translucent blocks: blended as the particles, but with the blocks' vertex shader, culling and
+	// depth test, and their depth written, as Minecraft's translucent_terrain writes it.
+	D3D12_GRAPHICS_PIPELINE_STATE_DESC blocks = particles;
+	blocks.VS = { shaders_->vertex.data(), shaders_->vertex.size() };
+	blocks.PS = { shaders_->blendedBlock.data(), shaders_->blendedBlock.size() };
+	blocks.RasterizerState = BlockRasterizer(cull_);
+	blocks.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL;
+	blocks.DepthStencilState.DepthFunc = aReversed ? D3D12_COMPARISON_FUNC_GREATER : D3D12_COMPARISON_FUNC_LESS;
 	gpu::ComPtr<ID3D12PipelineState> particlePipeline;
 	gpu::ComPtr<ID3D12PipelineState> outlinePipeline;
 	gpu::ComPtr<ID3D12PipelineState> hintPipeline;
 	gpu::ComPtr<ID3D12PipelineState> blendedPipeline;
 	gpu::ComPtr<ID3D12PipelineState> additivePipeline;
+	gpu::ComPtr<ID3D12PipelineState> blendedBlockPipeline;
 	if (FAILED(device_->CreateGraphicsPipelineState(&particles, IID_PPV_ARGS(&particlePipeline))) ||
 	    FAILED(device_->CreateGraphicsPipelineState(&outline, IID_PPV_ARGS(&outlinePipeline))) ||
 	    FAILED(device_->CreateGraphicsPipelineState(&hint, IID_PPV_ARGS(&hintPipeline))) ||
 	    FAILED(device_->CreateGraphicsPipelineState(&layers, IID_PPV_ARGS(&blendedPipeline))) ||
-	    FAILED(device_->CreateGraphicsPipelineState(&added, IID_PPV_ARGS(&additivePipeline))))
+	    FAILED(device_->CreateGraphicsPipelineState(&added, IID_PPV_ARGS(&additivePipeline))) ||
+	    FAILED(device_->CreateGraphicsPipelineState(&blocks, IID_PPV_ARGS(&blendedBlockPipeline))))
 	{
 		forwardPipelinesFailed_ = true;
-		log_.Push("renderer: couldn't create the forward list's pipelines, so Minecraft's translucent particles, its blended layers and "
-		          "the outline aren't drawn; everything else still is");
+		log_.Push("renderer: couldn't create the forward list's pipelines, so Minecraft's translucent blocks and particles, its blended "
+		          "layers, the outline and the plants' depth aren't drawn; everything else still is");
 		return false;
 	}
 	particlePipeline->SetName(L"BlockRender translucent particles pipeline");
@@ -1088,12 +1129,15 @@ bool Renderer::EnsureForwardPipelines(bool aReversed)
 	hintPipeline->SetName(L"BlockRender bias hint pipeline");
 	blendedPipeline->SetName(L"BlockRender blended layers pipeline");
 	additivePipeline->SetName(L"BlockRender additive layers pipeline");
+	blendedBlockPipeline->SetName(L"BlockRender translucent blocks pipeline");
 	translucentPipeline_ = particlePipeline;
 	outlinePipeline_ = outlinePipeline;
 	hintPipeline_ = hintPipeline;
 	blendedPipeline_ = blendedPipeline;
 	additivePipeline_ = additivePipeline;
+	blendedBlockPipeline_ = blendedBlockPipeline;
 	forwardReversed_ = aReversed;
+	forwardCull_ = cull_;
 	return true;
 }
 
@@ -1152,11 +1196,11 @@ void Renderer::ForwardSkip(const std::string& aWhy)
 
 void Renderer::DropForward()
 {
-	if (forward_)
+	if (forward_ && forward_->snapshot)
 	{
-		snapshotRing_.Abandon(forward_->snapshot);
-		forward_.reset();
+		snapshotRing_.Abandon(*forward_->snapshot);
 	}
+	forward_.reset();
 	forwardList_ = nullptr;
 }
 
@@ -1320,11 +1364,12 @@ void Renderer::Upload()
 			watch_->ready = ready;
 			watched = true;
 		}
+		SectionGpu gpuSection;
+		gpuSection.parts = SplitSection(vertices, atlas_ ? &*atlas_ : nullptr);  // the polish pass's parts
 		if (vertices.empty())
 		{
 			continue;
 		}
-		SectionGpu gpuSection;
 		gpuSection.buffer = upload(vertices.data(), vertices.size() * sizeof(Vertex));
 		gpuSection.vertices = uint32_t(vertices.size());
 		gpuSection.ready = ready;
@@ -1648,7 +1693,10 @@ Renderer::Stats Renderer::TakeStats()
 	for (const auto& [section, gpuSection] : sections_)
 	{
 		stats.vertices += gpuSection.vertices;
+		stats.plantVertices += gpuSection.parts.plants;
+		stats.translucentVertices += gpuSection.parts.translucent;
 	}
+	stats.plantFoliage = plantFoliage_;
 	stats.entitiesOn = entitiesOn_;
 	stats.entityTextures = textures_.Count();
 	stats.entityTextureMb = double(textures_.Used()) * 4.0 / 1048576.0;
@@ -1691,6 +1739,7 @@ FrameConstants Renderer::BaseConstants(const CameraFrame& aCamera) const
 	constants.material[0] = metalness_;
 	constants.material[1] = roughness_;
 	constants.material[2] = materialB_;
+	constants.material[3] = plantFoliage_ ? plantB_ : materialB_;  // the polish pass's plants
 	constants.entity[0] = glow_;
 	constants.entity[1] = float(glowLight_);
 	return constants;
@@ -1714,7 +1763,37 @@ FrameConstants Renderer::JitteredConstants(const CameraFrame& aCamera, const SlC
 	return constants;
 }
 
-void Renderer::DrawSections(ID3D12GraphicsCommandList* aList, const CameraFrame& aCamera, uint64_t aCompleted)
+namespace
+{
+// A section's minimum corner, camera-relative, in world axes.
+Vec3d SectionOffset(const SectionPos& aSection, const CameraFrame& aCamera)
+{
+	const Vec3d corner = WorldFromMc({ aSection.x * 16.0, aSection.y * 16.0, aSection.z * 16.0 });
+	return { corner.x - aCamera.origin.x, corner.y - aCamera.origin.y, corner.z - aCamera.origin.z };
+}
+
+// Whether any of a section is in view, from its camera-relative corner. The section fills world x..x+16, y-16..y and
+// z..z+16 from that corner, since Minecraft z runs along world -y.
+bool SectionVisible(const CameraFrame& aCamera, const Vec3d& aOffset)
+{
+	return Visible(aCamera.cameraToClip, { aOffset.x, aOffset.y - 16.0, aOffset.z }, { aOffset.x + 16.0, aOffset.y, aOffset.z + 16.0 });
+}
+
+void DrawPart(ID3D12GraphicsCommandList* aList, ID3D12Resource* aBuffer, const Vec3d& aOffset, uint32_t aFirst, uint32_t aCount)
+{
+	SectionConstants constants{};
+	constants.offset[0] = float(aOffset.x);
+	constants.offset[1] = float(aOffset.y);
+	constants.offset[2] = float(aOffset.z);
+	constants.first = aFirst;
+	aList->SetGraphicsRoot32BitConstants(1, 4, &constants, 0);
+	aList->SetGraphicsRootShaderResourceView(2, aBuffer->GetGPUVirtualAddress());
+	d3d::Original().drawInstanced(aList, aCount, 1, 0, 0);
+}
+}
+
+void Renderer::DrawSections(ID3D12GraphicsCommandList* aList, const CameraFrame& aCamera, uint64_t aCompleted, SectionPart aFrom,
+                            SectionPart aTo)
 {
 	for (const auto& [section, gpuSection] : sections_)
 	{
@@ -1722,10 +1801,10 @@ void Renderer::DrawSections(ID3D12GraphicsCommandList* aList, const CameraFrame&
 		{
 			continue;  // still uploading
 		}
-		const Vec3d corner = WorldFromMc({ section.x * 16.0, section.y * 16.0, section.z * 16.0 });
-		const Vec3d offset{ corner.x - aCamera.origin.x, corner.y - aCamera.origin.y, corner.z - aCamera.origin.z };
-		// The section fills world x..x+16, y-16..y and z..z+16 from that corner, since Minecraft z runs along world -y.
-		if (!Visible(aCamera.cameraToClip, { offset.x, offset.y - 16.0, offset.z }, { offset.x + 16.0, offset.y, offset.z + 16.0 }))
+		const uint32_t first = gpuSection.parts.First(aFrom);
+		const uint32_t count = gpuSection.parts.First(aTo) + gpuSection.parts.Count(aTo) - first;
+		const Vec3d    offset = SectionOffset(section, aCamera);
+		if (count == 0 || !SectionVisible(aCamera, offset))
 		{
 			continue;
 		}
@@ -1734,11 +1813,44 @@ void Renderer::DrawSections(ID3D12GraphicsCommandList* aList, const CameraFrame&
 			watch_->drawn = SteadySeconds();  // the first list that draws the timed upload
 			watch_->drawnFrame = presents_.load();
 		}
-		const float sectionConstants[4] = { float(offset.x), float(offset.y), float(offset.z), 0.0f };
-		aList->SetGraphicsRoot32BitConstants(1, 4, sectionConstants, 0);
-		aList->SetGraphicsRootShaderResourceView(2, gpuSection.buffer->GetGPUVirtualAddress());
-		d3d::Original().drawInstanced(aList, gpuSection.vertices, 1, 0, 0);
+		DrawPart(aList, gpuSection.buffer.Get(), offset, first, count);
 	}
+}
+
+void Renderer::DrawTranslucentSections(ID3D12GraphicsCommandList* aList, const CameraFrame& aCamera, uint64_t aCompleted)
+{
+	struct InView
+	{
+		double            distance = 0.0;  // squared, from the camera to the section's centre
+		const SectionGpu* section = nullptr;
+		Vec3d             offset;
+	};
+	std::vector<InView> inView;
+	for (const auto& [section, gpuSection] : sections_)
+	{
+		if (gpuSection.ready > aCompleted || gpuSection.parts.translucent == 0)
+		{
+			continue;
+		}
+		const Vec3d offset = SectionOffset(section, aCamera);
+		if (!SectionVisible(aCamera, offset))
+		{
+			continue;
+		}
+		const Vec3d centre{ offset.x + 8.0, offset.y - 8.0, offset.z + 8.0 };
+		inView.push_back({ centre.x * centre.x + centre.y * centre.y + centre.z * centre.z, &gpuSection, offset });
+	}
+	std::sort(inView.begin(), inView.end(), [](const InView& aA, const InView& aB) { return aA.distance > aB.distance; });
+	for (const InView& section : inView)
+	{
+		const SectionParts& parts = section.section->parts;
+		DrawPart(aList, section.section->buffer.Get(), section.offset, parts.First(SectionPart::Translucent), parts.translucent);
+	}
+}
+
+bool Renderer::ForwardSections() const
+{
+	return std::any_of(sections_.begin(), sections_.end(), [](const auto& aEntry) { return aEntry.second.parts.translucent > 0; });
 }
 
 void Renderer::DrawEntities(ID3D12GraphicsCommandList* aList, const CameraFrame& aCamera, uint64_t aCompleted, const SnapshotGpu& aSnapshot,
@@ -2178,7 +2290,7 @@ ID3D12CommandList* Renderer::RecordPredlss(ID3D12CommandQueue* aQueue, ID3D12Gra
 	list->SetGraphicsRootShaderResourceView(3, atlasBuffer_->GetGPUVirtualAddress());
 	list->SetGraphicsRootShaderResourceView(4, atlasBuffer_->GetGPUVirtualAddress());  // t2: only step 2's shader reads it
 	list->SetGraphicsRootShaderResourceView(5, atlasBuffer_->GetGPUVirtualAddress());  // t3: only the entities' read it
-	DrawSections(list, *camera, completed);
+	DrawSections(list, *camera, completed, SectionPart::Solid, SectionPart::Plant);  // translucent blocks: gbuffer's alone
 	const std::vector<D3D12_RESOURCE_BARRIER> back = Barriers(MovesBack(into));
 	if (!back.empty())
 	{
@@ -2342,7 +2454,12 @@ ID3D12CommandList* Renderer::RecordGbuffer(ID3D12CommandQueue* aQueue)
 	list->SetGraphicsRootShaderResourceView(3, atlasBuffer_->GetGPUVirtualAddress());
 	list->SetGraphicsRootShaderResourceView(4, atlasBuffer_->GetGPUVirtualAddress());  // t2: only step 2's shader reads it
 	list->SetGraphicsRootShaderResourceView(5, atlasBuffer_->GetGPUVirtualAddress());  // t3: until the entities' own
-	DrawSections(list, *camera, completed);
+	DrawSections(list, *camera, completed, SectionPart::Solid, SectionPart::Solid);  // translucent blocks: the forward list's
+	// The polish pass: plants with the game's class for its own small plants (set plants 1), whose lighting doesn't
+	// shadow them dark as the blocks' class does a field of grass; their material B comes from the constants.
+	list->OMSetStencilRef(plantFoliage_ ? plantStencil_ : stencil_);
+	DrawSections(list, *camera, completed, SectionPart::Plant, SectionPart::Plant);
+	list->OMSetStencilRef(stencil_);
 	// Spike 7: Minecraft's entities after the blocks, from the newest snapshot, if it has any: its models, then their
 	// cracks over the base colour alone. The snapshot is held until the fence after this list.
 	const std::optional<uint32_t> newest = snapshotRing_.Newest();
@@ -2371,7 +2488,8 @@ ID3D12CommandList* Renderer::RecordGbuffer(ID3D12CommandQueue* aQueue)
 		original.createDsv(device_, taggedDepth, &taggedView, taggedDsv);
 		list->SetPipelineState(depthPipeline_.Get());
 		original.omSetRenderTargets(list, 0, nullptr, FALSE, &taggedDsv);
-		DrawSections(list, *camera, completed);
+		// Plants too: the game lights each pixel where this depth puts it, so one missing from it is lit as what's behind.
+		DrawSections(list, *camera, completed, SectionPart::Solid, SectionPart::Plant);
 		if (snapshot)
 		{
 			list->SetPipelineState(entityDepthPipeline_.Get());
@@ -2403,11 +2521,13 @@ ID3D12CommandList* Renderer::RecordGbuffer(ID3D12CommandQueue* aQueue)
 	slotEntityTimed_[slot] = snapshot.has_value();
 	stats_.entityFrames += snapshot ? 1 : 0;
 	// Step B: the frame's forward list, before its DLSS list, if the snapshot has anything for it, with the snapshot held
-	// for it. A claim an earlier frame left, whose forward list never came, is let go.
+	// for it, or if the sections have (the polish pass). A claim an earlier frame left, whose forward list never came, is
+	// let go.
 	DropForward();
-	if (snapshot && entities::ForwardDraws(snapshots_[*snapshot].draws, outline_) && snapshotRing_.Take(*snapshot))
+	const bool forwardSnapshot = snapshot && entities::ForwardDraws(snapshots_[*snapshot].draws, outline_) && snapshotRing_.Take(*snapshot);
+	if (forwardSnapshot || ForwardSections())
 	{
-		forward_ = Forward{ latest_.list, latest_, *camera, constants, extent, *snapshot };
+		forward_ = Forward{ latest_.list, latest_, *camera, constants, extent, forwardSnapshot ? snapshot : std::nullopt };
 		forwardList_ = latest_.list;
 	}
 	t_insertedSlot = slot;
@@ -2417,18 +2537,24 @@ ID3D12CommandList* Renderer::RecordGbuffer(ID3D12CommandQueue* aQueue)
 
 ID3D12CommandList* Renderer::RecordForward(ID3D12CommandQueue* aQueue, ID3D12GraphicsCommandList* aDlssList)
 {
-	// The frame's hold on its snapshot moves to our list, or is let go if the list can't be drawn.
+	// The frame's hold on its snapshot, if it has one, moves to our list, or is let go if the list can't be drawn.
 	const Forward forward = *std::exchange(forward_, std::nullopt);
 	forwardList_ = nullptr;
+	const auto letGo = [&] {
+		if (forward.snapshot)
+		{
+			snapshotRing_.Abandon(*forward.snapshot);
+		}
+	};
 	const auto skip = [&](const std::string& aWhy) -> ID3D12CommandList* {
-		snapshotRing_.Abandon(forward.snapshot);
+		letGo();
 		ForwardSkip(aWhy);
 		return nullptr;
 	};
 	const uint64_t completed = fence_->GetCompletedValue();
 	if (completed == UINT64_MAX)
 	{
-		snapshotRing_.Abandon(forward.snapshot);
+		letGo();
 		Fail(std::format("the device was removed (0x{:08x})", uint32_t(device_->GetDeviceRemovedReason())));
 		return nullptr;
 	}
@@ -2470,6 +2596,7 @@ ID3D12CommandList* Renderer::RecordForward(ID3D12CommandQueue* aQueue, ID3D12Gra
 	{
 		return skip("the forward list's pipelines couldn't be made");
 	}
+	const bool     sections = ForwardSections();  // the polish pass's translucent blocks, which write the depth
 	const uint32_t slot = uint32_t(forwardRecordings_ % kSlots);
 	if (completed < forwardSlotFence_[slot])
 	{
@@ -2486,13 +2613,13 @@ ID3D12CommandList* Renderer::RecordForward(ID3D12CommandQueue* aQueue, ID3D12Gra
 	ID3D12GraphicsCommandList* list = forwardLists_[slot].Get();
 	if (FAILED(forwardAllocators_[slot]->Reset()) || FAILED(original.reset(list, forwardAllocators_[slot].Get(), translucentPipeline_.Get())))
 	{
-		snapshotRing_.Abandon(forward.snapshot);
+		letGo();
 		Fail("couldn't reset a command list");
 		return nullptr;
 	}
 	list->EndQuery(forwardQueries_.Get(), D3D12_QUERY_TYPE_TIMESTAMP, slot * 2);
 	std::vector<Move> wanted = { { colour, *colourState, D3D12_RESOURCE_STATE_RENDER_TARGET },
-		                         { depth, *depthState, D3D12_RESOURCE_STATE_DEPTH_READ } };
+		                         { depth, *depthState, uint32_t(sections ? D3D12_RESOURCE_STATE_DEPTH_WRITE : D3D12_RESOURCE_STATE_DEPTH_READ) } };
 	if (hintState)
 	{
 		wanted.push_back({ hint, *hintState, D3D12_RESOURCE_STATE_RENDER_TARGET });
@@ -2519,7 +2646,8 @@ ID3D12CommandList* Renderer::RecordForward(ID3D12CommandQueue* aQueue, ID3D12Gra
 	D3D12_DEPTH_STENCIL_VIEW_DESC depthView{};
 	depthView.Format = DepthViewFormat(depth->GetDesc().Format);
 	depthView.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
-	depthView.Flags = D3D12_DSV_FLAG_READ_ONLY_DEPTH;  // tested, never written
+	// Tested, and written only by the translucent blocks; the particles' and the layers' pipelines never write it.
+	depthView.Flags = sections ? D3D12_DSV_FLAG_NONE : D3D12_DSV_FLAG_READ_ONLY_DEPTH;
 	original.createDsv(device_, depth, &depthView, dsv);
 	const sl::Extent&    extent = forward.extent;
 	const D3D12_VIEWPORT viewport{ float(extent.left), float(extent.top), float(extent.width), float(extent.height), 0.0f, 1.0f };
@@ -2531,25 +2659,36 @@ ID3D12CommandList* Renderer::RecordForward(ID3D12CommandQueue* aQueue, ID3D12Gra
 	list->SetGraphicsRootConstantBufferView(0, forwardConstants_->GetGPUVirtualAddress() + slot * kConstantsStride);
 	list->SetGraphicsRootShaderResourceView(3, atlasBuffer_->GetGPUVirtualAddress());
 	list->SetGraphicsRootShaderResourceView(4, atlasBuffer_->GetGPUVirtualAddress());  // t2: only step 2's shader reads it
+	list->SetGraphicsRootShaderResourceView(5, atlasBuffer_->GetGPUVirtualAddress());  // t3: until the entities' own
+	if (sections)
+	{
+		// The polish pass: the translucent blocks, the farthest section first, before the particles, as Minecraft draws them.
+		list->SetPipelineState(blendedBlockPipeline_.Get());
+		original.omSetRenderTargets(list, 1, &colourRtv, FALSE, &dsv);
+		DrawTranslucentSections(list, forward.camera, completed);
+	}
 	// The translucent particles and Part 5's blended and additive layers, in the scene's order, each kind with its pipeline;
 	// then the outline, blended into the colour; then the bias hint under the particles and the layers.
-	using Kind = entities::EntityDraw::Kind;
-	const SnapshotGpu& shot = snapshots_[forward.snapshot];
-	original.omSetRenderTargets(list, 1, &colourRtv, FALSE, &dsv);
-	const KindPipeline layers[] = { { Kind::Translucent, translucentPipeline_.Get() }, { Kind::Blended, blendedPipeline_.Get() },
-		                            { Kind::Additive, additivePipeline_.Get() } };
-	DrawEntities(list, forward.camera, completed, shot, layers, true);
-	if (outline_)
+	if (forward.snapshot)
 	{
-		list->SetPipelineState(outlinePipeline_.Get());
-		DrawEntities(list, forward.camera, completed, shot, Kind::Outline, false);
-	}
-	if (hintState)
-	{
-		list->SetPipelineState(hintPipeline_.Get());
-		original.omSetRenderTargets(list, 1, &hintRtv, FALSE, &dsv);
-		const KindPipeline hinted[] = { { Kind::Translucent, nullptr }, { Kind::Blended, nullptr }, { Kind::Additive, nullptr } };
-		DrawEntities(list, forward.camera, completed, shot, hinted, false);
+		using Kind = entities::EntityDraw::Kind;
+		const SnapshotGpu& shot = snapshots_[*forward.snapshot];
+		original.omSetRenderTargets(list, 1, &colourRtv, FALSE, &dsv);
+		const KindPipeline layers[] = { { Kind::Translucent, translucentPipeline_.Get() }, { Kind::Blended, blendedPipeline_.Get() },
+			                            { Kind::Additive, additivePipeline_.Get() } };
+		DrawEntities(list, forward.camera, completed, shot, layers, true);
+		if (outline_)
+		{
+			list->SetPipelineState(outlinePipeline_.Get());
+			DrawEntities(list, forward.camera, completed, shot, Kind::Outline, false);
+		}
+		if (hintState)
+		{
+			list->SetPipelineState(hintPipeline_.Get());
+			original.omSetRenderTargets(list, 1, &hintRtv, FALSE, &dsv);
+			const KindPipeline hinted[] = { { Kind::Translucent, nullptr }, { Kind::Blended, nullptr }, { Kind::Additive, nullptr } };
+			DrawEntities(list, forward.camera, completed, shot, hinted, false);
+		}
 	}
 	const std::vector<D3D12_RESOURCE_BARRIER> back = Barriers(MovesBack(into));
 	if (!back.empty())
@@ -2560,7 +2699,7 @@ ID3D12CommandList* Renderer::RecordForward(ID3D12CommandQueue* aQueue, ID3D12Gra
 	list->ResolveQueryData(forwardQueries_.Get(), D3D12_QUERY_TYPE_TIMESTAMP, slot * 2, 2, forwardTimings_.Get(), slot * 2 * sizeof(uint64_t));
 	if (FAILED(original.close(list)))
 	{
-		snapshotRing_.Abandon(forward.snapshot);
+		letGo();
 		Fail("couldn't close a command list");
 		return nullptr;
 	}
@@ -2740,7 +2879,7 @@ void Renderer::PresentBlocks(IDXGISwapChain* aSwapChain)
 	// Without a depth copy the shader never reads t2, but the root argument still needs a valid buffer.
 	list->SetGraphicsRootShaderResourceView(4, (submitted_.depth ? depthCopy_ : atlasBuffer_)->GetGPUVirtualAddress());
 	list->SetGraphicsRootShaderResourceView(5, atlasBuffer_->GetGPUVirtualAddress());  // t3: only the entities' read it
-	DrawSections(list, *camera, completed);
+	DrawSections(list, *camera, completed, SectionPart::Solid, SectionPart::Plant);  // translucent blocks: gbuffer's alone
 	const D3D12_RESOURCE_BARRIER toPresent = Transition(backBuffer.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT);
 	original.resourceBarrier(list, 1, &toPresent);
 	list->EndQuery(queries_.Get(), D3D12_QUERY_TYPE_TIMESTAMP, slot * 2 + 1);
@@ -3084,6 +3223,7 @@ void Renderer::Shutdown()
 	translucentPipeline_.Reset();
 	outlinePipeline_.Reset();
 	hintPipeline_.Reset();
+	blendedBlockPipeline_.Reset();
 	pendingEntities_.reset();
 	pendingTextures_.clear();
 	textureReady_.clear();

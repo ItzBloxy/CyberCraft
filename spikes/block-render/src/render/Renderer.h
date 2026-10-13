@@ -13,6 +13,7 @@
 #include "render/Hud.h"
 #include "render/PendingSections.h"
 #include "render/Retired.h"
+#include "render/SectionParts.h"
 #include "render/Shaders.h"
 #include "render/Snapshots.h"
 #include "world/BlockWorld.h"
@@ -49,7 +50,9 @@ namespace cpmc
 //   Its step B puts a second list of ours, the forward list, just before that frame's DLSS list, with the same
 //   snapshot, camera and jitter: the translucent particles, Part 5's blended and additive entity layers and the outline,
 //   blended into the tagged colour, then DLSS's bias hint under the particles and the layers, each tested against the
-//   tagged depth.
+//   tagged depth. The polish pass splits each section into parts (SectionParts): plants go into the G-buffer with the
+//   game's own class for small plants, whose lighting doesn't shadow them dark; and translucent blocks are blended in
+//   the forward list, sections farthest first, before the particles.
 class Renderer : public HookEvents
 {
 public:
@@ -65,7 +68,7 @@ public:
 	bool         ReloadShaders(std::string& aError);
 	// brightness, tolerance, cull, origin.x/y/z; for predlss, exposure, jittersign and mvsign; for gbuffer, stencil,
 	// metalness, roughness, materialb, gbmotion and gbdepth; spike 7's entities, glow and glowlight, step B's dlsshint
-	// and outline, and Part 5's blend and animate
+	// and outline, Part 5's blend and animate, and the polish pass's plants, plantstencil and plantb
 	bool         Set(std::string_view aName, double aValue, std::string& aError);
 	void         UploadSection(const SectionPos& aSection, std::vector<Vertex> aVertices);  // no vertices: remove it
 	void         ClearSections();  // every section, and every upload waiting
@@ -124,6 +127,9 @@ public:
 		double      frameMsWorst = -1.0;
 		size_t      sections = 0;
 		size_t      vertices = 0;
+		size_t      plantVertices = 0;        // the polish pass: of those, the plants'
+		size_t      translucentVertices = 0;  // and the translucent blocks'
+		bool        plantFoliage = true;      // set plants
 		double      updateMsAverage = -1.0;  // Update's CPU time
 		double      updateMsWorst = -1.0;
 		size_t      pending = 0;  // uploads waiting
@@ -195,6 +201,7 @@ private:
 	{
 		gpu::ComPtr<ID3D12Resource> buffer;
 		uint32_t                    vertices = 0;
+		SectionParts                parts;      // the polish pass: where each part lies in the buffer
 		uint64_t                    ready = 0;  // the fence value its upload signals
 	};
 
@@ -263,7 +270,12 @@ private:
 	FrameConstants     BaseConstants(const CameraFrame& aCamera) const;  // the camera, the atlas and the tuning values
 	// BaseConstants, plus the image's size, the jitter and the motion: predlss and gbuffer draw at the render size
 	FrameConstants     JitteredConstants(const CameraFrame& aCamera, const SlConstants& aGame, const sl::Extent& aExtent) const;
-	void               DrawSections(ID3D12GraphicsCommandList* aList, const CameraFrame& aCamera, uint64_t aCompleted);
+	// The sections' parts aFrom to aTo, which lie one after another in each section's buffer.
+	void DrawSections(ID3D12GraphicsCommandList* aList, const CameraFrame& aCamera, uint64_t aCompleted, SectionPart aFrom, SectionPart aTo);
+	// The polish pass: the sections' translucent parts, the farthest section first, as Minecraft orders them.
+	void DrawTranslucentSections(ID3D12GraphicsCommandList* aList, const CameraFrame& aCamera, uint64_t aCompleted);
+	// Whether the forward list has translucent blocks to draw. Sections still uploading count, as they'll be ready soon.
+	bool ForwardSections() const;
 	// Spike 7: a snapshot's draws of aKind; those whose texture isn't on the GPU are skipped, and counted if aCount.
 	struct SnapshotGpu;
 	void DrawEntities(ID3D12GraphicsCommandList* aList, const CameraFrame& aCamera, uint64_t aCompleted, const SnapshotGpu& aSnapshot,
@@ -318,6 +330,9 @@ private:
 	float   materialB_ = 0.33f;
 	bool    gbufferMotion_ = true;  // gbuffer: write the motion vectors, as the game wrote them before our list
 	bool    gbufferDepth_ = true;   // gbuffer: write the tagged depth, which the game copied before our list
+	bool    plantFoliage_ = true;   // gbuffer: plants drawn with the game's class for its own small plants (set plants)
+	uint8_t plantStencil_ = 0xA0;   // that class: step 1's dump found it on the game's small plants
+	float   plantB_ = 0.75f;        // and their material B, from 0.63 to 0.86 on the game's plants
 
 	ID3D12Device*                                              device_ = nullptr;  // the game's
 	ID3D12CommandQueue*                                        queue_ = nullptr;   // the game's main queue
@@ -470,17 +485,17 @@ private:
 	double                                      entityGpuMsSum_ = 0.0;
 	uint64_t                                    entityGpuSamples_ = 0;
 
-	// Step B's forward list. A G-buffer list that drew a snapshot with something for it leaves its frame's DLSS list, its
-	// tags, camera and constants, and the snapshot, held for the forward list (Snapshots::Take) until that's recorded,
-	// skipped or dropped.
+	// Step B's forward list. A G-buffer list that drew a snapshot with something for it, or whose sections have (the
+	// polish pass), leaves its frame's DLSS list, its tags, camera and constants, and any such snapshot, held for the
+	// forward list (Snapshots::Take) until that's recorded, skipped or dropped.
 	struct Forward
 	{
-		const void*    list = nullptr;  // the frame's DLSS list; compared, never used
-		Evaluate       evaluate;
-		CameraFrame    camera;
-		FrameConstants constants{};
-		sl::Extent     extent{};
-		uint32_t       snapshot = 0;
+		const void*             list = nullptr;  // the frame's DLSS list; compared, never used
+		Evaluate                evaluate;
+		CameraFrame             camera;
+		FrameConstants          constants{};
+		sl::Extent              extent{};
+		std::optional<uint32_t> snapshot;  // none: only the sections' parts
 	};
 	bool                                                       outline_ = true;  // set outline: the outline in build mode
 	int                                                        dlssHint_ = 1;    // set dlsshint: 1 under the particles, 0 nowhere
@@ -492,6 +507,8 @@ private:
 	gpu::ComPtr<ID3D12PipelineState>                           hintPipeline_;
 	gpu::ComPtr<ID3D12PipelineState>                           blendedPipeline_;   // Part 5
 	gpu::ComPtr<ID3D12PipelineState>                           additivePipeline_;
+	gpu::ComPtr<ID3D12PipelineState>                           blendedBlockPipeline_;  // the polish pass's translucent blocks
+	int                                                        forwardCull_ = -1;      // as the blocks: set cull
 	bool                                                       forwardReversed_ = false;
 	bool                                                       forwardPipelinesFailed_ = false;  // until the shaders are reloaded
 	std::array<gpu::ComPtr<ID3D12CommandAllocator>, kSlots>    forwardAllocators_;

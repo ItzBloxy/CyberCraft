@@ -17,7 +17,7 @@ struct FrameConstants
 	float    tuning[4];           // brightness; depth tolerance; exposure; the motion vectors' sign
 	float    clipToPrevClip[16];  // Streamline's, for row vectors: a clip position to where it was a frame before
 	float    jitter[4];           // the jitter as an offset per unit of clip w (ClipJitter): x, y; 0; 0
-	float    material[4];         // the G-buffer's material values: metalness, roughness, B; 0
+	float    material[4];         // the G-buffer's material values: metalness, roughness, B; plants' B (the polish pass)
 	float    entity[4];           // spike 7: a glowing triangle's emission (set glow); the block light it glows from (set
 	                              // glowlight); the outline's width in render pixels (step B, OutlinePixels); 0
 };
@@ -25,8 +25,8 @@ static_assert(sizeof(FrameConstants) == 288);
 
 struct SectionConstants
 {
-	float offset[3];  // the section's minimum corner: camera-relative, world axes
-	float unused;
+	float    offset[3];  // the section's minimum corner: camera-relative, world axes
+	uint32_t first;      // the draw's first vertex in the section's buffer: where its part starts (the polish pass)
 };
 static_assert(sizeof(SectionConstants) == 16);
 

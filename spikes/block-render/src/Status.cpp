@@ -393,9 +393,13 @@ std::string FormatStatus(const StatusReport& aReport)
 	                   aReport.framesPartial == 0 ? "" : std::format(" ({} without the tagged depth)", aReport.framesPartial),
 	                   aReport.framesSkipped, aReport.lastSkip.empty() ? "" : " (" + OneLine(aReport.lastSkip) + ")",
 	                   aReport.lateCamera);
-	out += std::format("blocks={} in {} sections, {} vertices\n",
+	const bool parts = aReport.plantVertices > 0 || aReport.translucentVertices > 0;
+	out += std::format("blocks={} in {} sections, {} vertices{}\n",
 	                   aReport.minecraftBlocks ? std::string("Minecraft's") : std::to_string(aReport.blocks), aReport.sections,
-	                   aReport.vertices);
+	                   aReport.vertices,
+	                   parts ? std::format(": {} plants' ({}), {} translucent", aReport.plantVertices,
+	                                       aReport.plantFoliage ? "as the game's plants" : "as the blocks", aReport.translucentVertices)
+	                         : "");
 	out += std::format("gpu={}\n", Ms(aReport.gpuMsAverage, aReport.gpuMsWorst));
 	out += std::format("frame={}\n", Ms(aReport.frameMsAverage, aReport.frameMsWorst));
 	out += std::format("streamline={} frames in the last second\n", aReport.streamlineFrames);

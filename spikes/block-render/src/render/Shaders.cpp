@@ -119,10 +119,15 @@ std::optional<BlockShaders> CompileBlockShaders(std::string_view aSource, std::s
 	{
 		return std::nullopt;
 	}
+	auto blendedBlock = CompileShader(aSource, "blocks.hlsl", "BlendedBlockPS", "ps_5_1", aError);
+	if (!blendedBlock)
+	{
+		return std::nullopt;
+	}
 	return BlockShaders{ std::move(*vertex), std::move(*present), std::move(*predlss), std::move(*gbuffer),
 		                 std::move(*depth), std::move(*hudVertex), std::move(*hud), std::move(*entityVertex),
 		                 std::move(*entity), std::move(*crack), std::move(*entityDepth), std::move(*translucent),
 		                 std::move(*hint), std::move(*outlineVertex), std::move(*outline), std::move(*blended),
-		                 std::move(*additive), std::move(*patch) };
+		                 std::move(*additive), std::move(*patch), std::move(*blendedBlock) };
 }
 }

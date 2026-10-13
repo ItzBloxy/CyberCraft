@@ -184,7 +184,7 @@ new folder in `ReportQueue` does.
 ### Building and testing
 
 - **BlockRender** (`spikes/block-render/`): Visual Studio 2022 with C++, CMake 3.25+. `cmake --preset default`,
-  `cmake --build --preset release`, `ctest --preset release` (556 tests, no game needed). `-DCP2077_DIR=<game>` copies
+  `cmake --build --preset release`, `ctest --preset release` (563 tests, no game needed). `-DCP2077_DIR=<game>` copies
   each build into the game. Build with the game closed.
 - **CyberCraft Tweaks** (`minecraft/cybercraft-tweaks/`): `bash build.sh`, `bash test.sh`, `bash mixins.sh`. Plain
   `javac` against the jars of a Modrinth App instance named `CyberCraft` (see `build.sh`), with no Gradle.
@@ -212,6 +212,12 @@ new folder in `ReportQueue` does.
 - **Script callbacks run on many threads** (`NPCPuppet.OnGameAttached` on 16 of them). Don't mutate script arrays from
   them; pass data to BlockRender's natives, which take a lock.
 - **The city is in PhysX scene 0 only after a fresh game start.** Loading another save in the same session moves it.
+- **The game lights by the tagged depth** (the copy DLSS gets), not the G-buffer's own: a surface left out of it is
+  lit, shadowed and occluded as whatever lies behind it, so the ground's shadows land on it. Its ambient occlusion and
+  contact shadows read it too.
+- **The G-buffer's stencil class picks how the game lights a surface.** Minecraft's grass with the buildings' class
+  (0) shadowed itself almost black; with the game's own class for small plants (0xA0, and material B 0.75) it's lit
+  evenly, as the game's plants are. BlockRender gives Minecraft's plants that class (`set plants`).
 - **Raw Input:** the game registers keyboard and mouse without `RIDEV_INPUTSINK` and reads them in one
   `GetRawInputData` call site. BlockRender patches that import to route input in build mode.
 

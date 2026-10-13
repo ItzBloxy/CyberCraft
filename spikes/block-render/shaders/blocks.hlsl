@@ -22,7 +22,7 @@ cbuffer Frame : register(b0)
     float4 tuning;                    // brightness; depth tolerance; exposure; the motion vectors' sign
     row_major float4x4 clipToPrevClip;  // Streamline's: a clip position to where it was a frame before
     float4 jitter;                    // the jitter as an offset per unit of clip w: x, y
-    float4 material;                  // the G-buffer's material values: metalness, roughness, B; 0
+    float4 material;                  // the G-buffer's material values: metalness, roughness, B; plants' B (the polish pass)
     float4 entityTuning;              // spike 7: a glowing triangle's emission; the block light it glows from; the outline's
                                       // width in render pixels (step B); 0
 };
@@ -30,7 +30,7 @@ cbuffer Frame : register(b0)
 cbuffer Section : register(b1)
 {
     float3 sectionOffset;  // the section's minimum corner: camera-relative, world axes
-    float  sectionUnused;
+    uint   sectionFirst;   // the draw's first vertex in the section's buffer: where its part starts (the polish pass)
 };
 
 StructuredBuffer<Vertex> vertices : register(t0);
@@ -45,11 +45,12 @@ struct VSOut
     nointerpolation uint face : TEXCOORD1;
     float4 clip     : TEXCOORD2;  // without jitter
     float4 prevClip : TEXCOORD3;  // where it was a frame before
+    float2 light    : TEXCOORD4;  // block and sky light, 0 to 15
 };
 
 VSOut BlocksVS(uint id : SV_VertexID)
 {
-    const Vertex v = vertices[id];
+    const Vertex v = vertices[sectionFirst + id];
     VSOut o;
     // Minecraft (x, y, z) is world (x, -z, y).
     const float3 world = sectionOffset + float3(v.position.x, -v.position.z, v.position.y);
@@ -60,6 +61,7 @@ VSOut BlocksVS(uint id : SV_VertexID)
     o.uv = v.uv;
     o.colour = float4(v.colour & 0xFF, (v.colour >> 8) & 0xFF, (v.colour >> 16) & 0xFF, v.colour >> 24) / 255.0;
     o.face = (v.flags >> 4) & 15;
+    o.light = float2(v.light & 0xFF, (v.light >> 8) & 0xFF);
     return o;
 }
 
@@ -160,7 +162,7 @@ struct GbufferOut
 
 // Step 4: into the G-buffer, which the game then lights, shadows and fogs as its own. The colour is Minecraft's
 // without its face brightness: the game's light does that, from the normal. Alphas are 0, as on the game's ordinary
-// surfaces.
+// surfaces. A plant (no direction of its own) takes the plants' material B, as the game's own plants have a higher one.
 GbufferOut GbufferPS(VSOut i)
 {
     const float4 texel = SampleAtlas(i.uv);
@@ -171,7 +173,7 @@ GbufferOut GbufferPS(VSOut i)
     GbufferOut o;
     o.base = float4(saturate(texel.rgb * i.colour.rgb * tuning.x), 0.0);
     o.normal = float4(kFaceNormal[min(i.face, 6)] * 0.5 + 0.5, 0.0);
-    o.material = float4(material.xyz, 0.0);
+    o.material = float4(material.xy, i.face == 0 ? material.w : material.z, 0.0);
     o.motion = MotionVector(i);
     return o;
 }
@@ -183,6 +185,23 @@ void DepthPS(VSOut i)
     {
         discard;
     }
+}
+
+// The polish pass: a translucent block (water, stained glass, ice, slime, honey), blended into the scene's colour just
+// before DLSS as Minecraft's translucent_terrain blends it, its depth written as that writes it, and cut out under 0.1
+// of alpha as its ALPHA_CUTOUT cuts. Lit as step B's particles are, by Minecraft's light curve of the brighter of its
+// block and sky light, times exposure, and shaded per face as PredlssPS shades a block.
+float4 BlendedBlockPS(VSOut i) : SV_Target0
+{
+    const float4 texel = SampleAtlas(i.uv);
+    const float  alpha = texel.a * i.colour.a;
+    if (alpha < 0.1)
+    {
+        discard;
+    }
+    const float level = min(max(i.light.x, i.light.y), 15.0) / 15.0;
+    const float light = level / (4.0 - 3.0 * level);
+    return float4(Linear(texel.rgb * i.colour.rgb) * kFaceShade[min(i.face, 6)] * light * tuning.z, alpha);
 }
 
 // Spike 7: Minecraft's entities, block entities, particles and world entities (the spec's "Step A: into the G-buffer"),

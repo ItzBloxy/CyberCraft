@@ -78,7 +78,7 @@ namespace
 using Clock = std::chrono::steady_clock;
 using namespace std::chrono_literals;
 
-constexpr const char* kVersion = "0.24.0";
+constexpr const char* kVersion = "0.25.1";
 
 // A number of a version "major.minor.patch", aIndex 0 being the major, so that Query reports kVersion, as the log does.
 constexpr uint32_t VersionNumber(std::string_view aVersion, size_t aIndex)
@@ -1304,7 +1304,7 @@ bool SetLinkSetting(const cpmc::Request& aRequest)
 	{
 		if (value != 0.0 && value != 1.0)
 		{
-			Report("set translucent: 0 drops translucent triangles, and 1 draws them as cut-outs");
+			Report("set translucent: 1 draws Minecraft's translucent blocks (water, stained glass, ice, slime, honey), and 0 drops them");
 			return true;
 		}
 		g_linkSettings.keepTranslucent = value == 1.0;
@@ -2203,6 +2203,9 @@ void WriteStatus(double aNow)
 	report.blocks = g_world.BlockCount();
 	report.minecraftBlocks = g_minecraftAtlas;
 	report.vertices = stats.vertices;
+	report.plantVertices = stats.plantVertices;
+	report.translucentVertices = stats.translucentVertices;
+	report.plantFoliage = stats.plantFoliage;
 	report.gpuMsAverage = stats.gpuMsAverage;
 	report.gpuMsWorst = stats.gpuMsWorst;
 	report.frameMsAverage = stats.frameMsAverage;

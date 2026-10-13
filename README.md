@@ -52,7 +52,7 @@ see. The two talk over shared memory, using SkyCraft's own Minecraft mod, unchan
 
 | | |
 |---|---|
-| 🧱 **Blocks in Night City** | Minecraft's blocks are drawn into the game's own frame: lit by its sun, street lights, ray-traced reflections and ambient occlusion, and upscaled by DLSS with the rest of the city. A block appears a frame or two after Minecraft places it. A 125-TNT blast doesn't drop a frame. |
+| 🧱 **Blocks in Night City** | Minecraft's blocks are drawn into the game's own frame: lit by its sun, street lights, ray-traced reflections and ambient occlusion, and upscaled by DLSS with the rest of the city. Glass, water, slime, honey, stained glass and ice are see-through, and grass and flowers are lit as the game's own plants. A block appears a frame or two after Minecraft places it. A 125-TNT blast doesn't drop a frame. |
 | 🏃 **Build mode (F8)** | You move as Minecraft's player does: walk, sprint, jump, sneak and fly, at Minecraft's own speeds, with V's camera riding Minecraft's eye. Place and break blocks, scroll the hotbar and use any item. |
 | 🧭 **Collision, both ways** | Minecraft gets Night City's shape, read from the game's physics, so its player stands on the streets, stairs and rooftops. Outside build mode, Minecraft's blocks stop V, cars and bullets, and NPCs walk around them. |
 | ⚔️ **NPCs and combat** | Night City's people, drones and animals are in Minecraft's world, so they press pressure plates and take sword hits. Minecraft's hits go through the game's own damage pipeline, scaled by V's stats. The city's hits on V hurt Minecraft's player, and dying in Minecraft kills V. TNT knocks gangers flat. |
@@ -278,6 +278,8 @@ heal, and mobs, particles and TNT to spawn in front of you. **More controls** an
   isn't settled. To help find it, put `dred = 1` in `red4ext\plugins\BlockRender\settings.txt`; BlockRender then logs
   what the GPU was doing if it happens.
 - **Not drawn yet:** signs' and name tags' text, and the scrolling of a breeze's wind and a charged creeper's swirl.
+- **See-through blocks** (water, stained glass, slime, honey, ice) are lit by Minecraft's light rather than the
+  game's, so they may look too bright at night, and the city's haze doesn't fall on them.
 - **Single player:** only Minecraft's world can be shared, through SkyCraft's own multiplayer, and that's untested
   here.
 
@@ -320,7 +322,7 @@ python release/package.py spikes/block-render/build/RelWithDebInfo minecraft/cyb
 
 | Path | What's there |
 |---|---|
-| [`spikes/block-render/`](spikes/block-render) | **BlockRender**: the RED4ext plugin, its redscript, shader, CET overlay, `mclink` and 551 unit tests |
+| [`spikes/block-render/`](spikes/block-render) | **BlockRender**: the RED4ext plugin, its redscript, shader, CET overlay, `mclink` and 563 unit tests |
 | [`minecraft/cybercraft-tweaks/`](minecraft/cybercraft-tweaks) | **CyberCraft Tweaks**: the Fabric mod, with [its own README](minecraft/cybercraft-tweaks/README.md) |
 | [`spikes/physx-probe/`](spikes/physx-probe) | Spike 1's probe: can the game's PhysX be read through NVIDIA's public headers? |
 | [`docs/superpowers/specs/`](docs/superpowers/specs) | The design of each spike |

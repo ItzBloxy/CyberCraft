@@ -270,6 +270,9 @@ struct StatusReport
 	size_t                 blocks = 0;
 	bool                   minecraftBlocks = false;  // the sections are Minecraft's, whose blocks aren't counted
 	size_t                 vertices = 0;
+	size_t                 plantVertices = 0;        // the polish pass: of those, the plants'
+	size_t                 translucentVertices = 0;  // and the translucent blocks'
+	bool                   plantFoliage = true;      // set plants: drawn as the game's own small plants
 	double                 gpuMsAverage = -1.0;  // below 0: not measured
 	double                 gpuMsWorst = -1.0;
 	double                 frameMsAverage = -1.0;

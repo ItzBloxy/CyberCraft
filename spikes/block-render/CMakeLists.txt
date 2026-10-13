@@ -84,6 +84,7 @@ add_library(render_core STATIC
 	src/render/Hud.cpp
 	src/render/EntityTextures.cpp
 	src/render/Snapshots.cpp
+	src/render/SectionParts.cpp
 	src/Measurements.cpp
 	src/ProcessUsage.cpp
 	src/input/Scancodes.cpp
@@ -231,6 +232,7 @@ add_executable(render_tests
 	tests/TestEntities.cpp
 	tests/TestEntityTextures.cpp
 	tests/TestSnapshots.cpp
+	tests/TestSectionParts.cpp
 	tests/TestHudBox.cpp
 	tests/TestPopulationGate.cpp
 	tools/mclink/DumpObj.cpp
