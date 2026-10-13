@@ -210,6 +210,22 @@ std::string FormatNpcs(const LinkReport& aLink)
 	return out + "\n";
 }
 
+// The population system's teleport notice: whether build mode's teleports are kept from stopping NPC spawning.
+std::string FormatPopulation(const LinkReport& aLink)
+{
+	if (aLink.populationGated)
+	{
+		return std::format("population=the teleport notice gated: {} muted after build mode's teleports, {} passed on to the game, "
+		                   "since it went in\n",
+		                   aLink.noticesMuted, aLink.noticesPassed);
+	}
+	if (aLink.populationWhy.empty())
+	{
+		return "population=the teleport notice not gated yet: build mode gates it when it first places V\n";
+	}
+	return "population=the teleport notice NOT gated, so build mode stops NPC spawning near V: " + OneLine(aLink.populationWhy) + "\n";
+}
+
 std::string FormatCombat(const LinkReport& aLink)
 {
 	if (!aLink.combatOn)
@@ -330,6 +346,7 @@ std::string FormatLink(const LinkReport& aLink)
 	out += std::format("solids=Minecraft's solid blocks: {} in {} sections\n", aLink.solidBlocks, aLink.solidSections);
 	out += FormatBodies(aLink);
 	out += FormatNpcs(aLink);
+	out += FormatPopulation(aLink);
 	out += FormatCombat(aLink);
 	out += FormatBlasts(aLink);
 	out += FormatEntities(aLink);

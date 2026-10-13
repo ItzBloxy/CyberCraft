@@ -12,7 +12,8 @@
 // hidden, and with combat on V's unarmed weapon is drawn, so that hits carry it, and Minecraft's player takes V's health
 // share as build mode starts. Minecraft's blasts run the game's knockdown grenade's attack over what they reach, knock its
 // living NPCs down with the game's forced reaction and tell the crowd, their own hits land as explosions, and their push
-// throws the bodies, cars and loose things.
+// throws the bodies, cars and loose things. Build mode's teleports are kept from stopping the game's NPC spawning
+// (PopulationGate.h).
 // Commands come through blockrender.request, in its folder or the overlay's, and status.txt in the overlay's folder says
 // what it's doing. See docs/superpowers/specs/2026-10-01-block-render-design.md, 2026-10-02-minecraft-link-design.md,
 // 2026-10-03-collision-and-movement-design.md and 2026-10-05-npcs-and-combat-design.md.
@@ -23,6 +24,7 @@
 #include "Measurements.h"
 #include "Natives.h"
 #include "PlayerLocator.h"
+#include "PopulationGate.h"
 #include "ProcessUsage.h"
 #include "Puppet.h"
 #include "Requests.h"
@@ -76,7 +78,7 @@ namespace
 using Clock = std::chrono::steady_clock;
 using namespace std::chrono_literals;
 
-constexpr const char* kVersion = "0.23.0";
+constexpr const char* kVersion = "0.24.0";
 
 // A number of a version "major.minor.patch", aIndex 0 being the major, so that Query reports kVersion, as the log does.
 constexpr uint32_t VersionNumber(std::string_view aVersion, size_t aIndex)
@@ -485,6 +487,54 @@ int64_t QpcPerSecond()
 	return perSecond;
 }
 
+// The game's population system, as V's teleport reaches it: by its interface type, gameIPopulationSystem.
+void* PopulationSystem()
+{
+	auto*            rtti = RED4ext::CRTTISystem::Get();
+	auto*            engine = RED4ext::CGameEngine::Get();
+	RED4ext::CClass* type = rtti ? rtti->GetClass(RED4ext::CName("gameIPopulationSystem")) : nullptr;
+	if (!type || !engine || !engine->framework || !engine->framework->gameInstance)
+	{
+		return nullptr;
+	}
+	return engine->framework->gameInstance->GetSystem(type);
+}
+
+// The game executable's image, as its own headers size it.
+cpmc::population::Image GameImage()
+{
+	const auto  base = reinterpret_cast<uintptr_t>(GetModuleHandleW(nullptr));
+	const auto* dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(base);
+	const auto* headers = reinterpret_cast<const IMAGE_NT_HEADERS*>(base + dos->e_lfanew);
+	return { base, base + headers->OptionalHeader.SizeOfImage };
+}
+
+// Build mode's teleports, kept from stopping NPC spawning (PopulationGate.h). The gate goes in when build mode first
+// places V and stays in until the plugin unloads, since the vtable it changes is the game's, not a session's. After a
+// failure it's tried again a second later, and a new reason is logged.
+std::string g_populationWhy;
+double      g_populationTried = -1.0e9;
+
+void GatePopulation()
+{
+	const double now = cpmc::SteadySeconds();
+	if (cpmc::population::Read().installed || now - g_populationTried < 1.0)
+	{
+		return;
+	}
+	g_populationTried = now;
+	const std::string why = cpmc::population::Install(PopulationSystem(), GameImage());
+	if (why.empty())
+	{
+		Log("population: the teleport notice gated: build mode's teleports no longer stop NPC spawning near V");
+	}
+	else if (why != g_populationWhy)
+	{
+		Log("population: the teleport notice can't be gated, so build mode stops NPC spawning near V: {}", why);
+	}
+	g_populationWhy = why;
+}
+
 // What placing V did this frame, for the status and the drive log.
 struct Placed
 {
@@ -514,6 +564,8 @@ Placed PlaceV(const cpmc::link::Link::Status& aState, const std::optional<double
 		return placed;
 	}
 	placed.turn = g_turn ? g_turnRatio.Turn(aMouseX) : 0.0;
+	GatePopulation();
+	cpmc::population::NoteTeleport();
 	std::string  error;
 	const double start = cpmc::SteadySeconds();
 	const bool   moved = g_puppet.Teleport(*aState.placeV, *aYaw + placed.turn, error);
@@ -1989,6 +2041,11 @@ cpmc::LinkReport LinkLines(const cpmc::Renderer::Stats& aStats, double aNow)
 		report.nearestNpc = DistanceFromV(*nearest);
 		report.nearestNpcName = nearest->name;
 	}
+	const cpmc::population::Counts notices = cpmc::population::Read();
+	report.populationGated = notices.installed;
+	report.populationWhy = g_populationWhy;
+	report.noticesMuted = notices.muted;
+	report.noticesPassed = notices.passed;
 	report.capsulesFound = g_npcSizes.FoundCount();
 	report.capsulesLookedFor = g_npcSizes.LookedForCount();
 	report.npcIdsGiven = g_actorIds.Given();
@@ -2376,6 +2433,7 @@ RED4EXT_C_EXPORT bool RED4EXT_CALL Main(RED4ext::v1::PluginHandle aHandle, RED4e
 		cpmc::d3d::RemovePatches();
 		cpmc::slhooks::Remove();
 		cpmc::px::RemoveSceneHooks();
+		cpmc::population::Restore();  // the gate's code goes with the plugin
 		delete g_link;  // main thread only, as everything of the link's
 		g_link = nullptr;
 		g_mapping.Close();  // Minecraft sees the heartbeat stop

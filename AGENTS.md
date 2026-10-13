@@ -184,7 +184,7 @@ new folder in `ReportQueue` does.
 ### Building and testing
 
 - **BlockRender** (`spikes/block-render/`): Visual Studio 2022 with C++, CMake 3.25+. `cmake --preset default`,
-  `cmake --build --preset release`, `ctest --preset release` (551 tests, no game needed). `-DCP2077_DIR=<game>` copies
+  `cmake --build --preset release`, `ctest --preset release` (556 tests, no game needed). `-DCP2077_DIR=<game>` copies
   each build into the game. Build with the game closed.
 - **CyberCraft Tweaks** (`minecraft/cybercraft-tweaks/`): `bash build.sh`, `bash test.sh`, `bash mixins.sh`. Plain
   `javac` against the jars of a Modrinth App instance named `CyberCraft` (see `build.sh`), with no Gradle.

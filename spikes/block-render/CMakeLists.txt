@@ -94,6 +94,7 @@ add_library(render_core STATIC
 	src/input/Text.cpp
 	src/NpcRegistry.cpp
 	src/CombatInbox.cpp
+	src/PopulationGate.cpp
 )
 target_link_libraries(render_core PUBLIC render_settings d3dcompiler dxguid advapi32)
 
@@ -231,6 +232,7 @@ add_executable(render_tests
 	tests/TestEntityTextures.cpp
 	tests/TestSnapshots.cpp
 	tests/TestHudBox.cpp
+	tests/TestPopulationGate.cpp
 	tools/mclink/DumpObj.cpp
 	tools/mclink/HudBox.cpp
 	tools/mclink/McLinkScript.cpp

@@ -141,6 +141,11 @@ struct LinkReport
 	double                moduleMsAverage = -1.0;  // the module's time a frame, in the last second; below 0: not called
 	double                moduleMsWorst = -1.0;
 	uint64_t              npcHits = 0;  // Minecraft's hits on them, logged
+	// The population system's teleport notice, gated so build mode's teleports don't stop NPC spawning (PopulationGate.h)
+	bool                  populationGated = false;
+	std::string           populationWhy;      // why it isn't gated, once the gate has been tried
+	uint64_t              noticesMuted = 0;   // since the gate went in
+	uint64_t              noticesPassed = 0;  // passed on to the game's function since then
 	// Combat both ways (spike 6's "Part 2"): the counts are since the start
 	bool                  combatOn = false;  // set combat 1
 	double                punch = 0.0;       // V's punch, as last read
@@ -278,7 +283,7 @@ struct StatusReport
 };
 
 // Lines of "key=value": mode, frames, blocks, gpu, frame, streamline, hooks, request; with a link, its lines (link, build,
-// drive, v, positions, ground, solids, bodies, npcs, combat, blasts, entities, ring, atlas, hud, latency, burst and
+// drive, v, positions, ground, solids, bodies, npcs, population, combat, blasts, entities, ring, atlas, hud, latency, burst and
 // processes); then one structure line per structure:
 // "structure=<name> <min x> <min y> <min z> <max x> <max y> <max z>".
 std::string FormatStatus(const StatusReport& aReport);

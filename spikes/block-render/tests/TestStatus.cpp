@@ -402,6 +402,26 @@ TEST(StatusWritesTheNpcs)
 	CHECK(Has(cpmc::FormatStatus(report), "npcs=off"));
 }
 
+TEST(StatusWritesThePopulationGate)
+{
+	cpmc::StatusReport report;
+	cpmc::LinkReport   link;
+	report.link = link;
+	const std::string status = cpmc::FormatStatus(report);
+	CHECK(Has(status, "population=the teleport notice not gated yet: build mode gates it when it first places V"));
+	CHECK(status.find("npcs=") < status.find("population=") && status.find("population=") < status.find("combat="));
+	link.populationWhy = "the teleport notice (vtable entry 97) isn't the code the gate knows";
+	report.link = link;
+	CHECK(Has(cpmc::FormatStatus(report), "population=the teleport notice NOT gated, so build mode stops NPC spawning near V: the "
+	                                      "teleport notice (vtable entry 97) isn't the code the gate knows"));
+	link.populationGated = true;
+	link.noticesMuted = 1234;
+	link.noticesPassed = 5;
+	report.link = link;
+	CHECK(Has(cpmc::FormatStatus(report), "population=the teleport notice gated: 1234 muted after build mode's teleports, 5 passed on "
+	                                      "to the game, since it went in"));
+}
+
 TEST(StatusWritesCombat)
 {
 	cpmc::StatusReport report;
