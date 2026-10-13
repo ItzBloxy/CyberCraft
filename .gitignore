@@ -7,3 +7,6 @@ __pycache__/
 
 # Renderer smoke-test output
 spikes/physx-probe/smoke/
+
+# Release packages (release/package.py)
+release/out/

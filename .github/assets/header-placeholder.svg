@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640">
+  <!-- A stand-in for the header GIF: replace it with .github/assets/header.gif (see the README's header). -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0b0b14"/>
+      <stop offset="1" stop-color="#1a0b22"/>
+    </linearGradient>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M40 0H0V40" fill="none" stroke="#00f0ff" stroke-opacity="0.07" stroke-width="1"/>
+    </pattern>
+  </defs>
+  <rect width="1280" height="640" fill="url(#bg)"/>
+  <rect width="1280" height="640" fill="url(#grid)"/>
+  <rect x="24" y="24" width="1232" height="592" fill="none" stroke="#fcee0a" stroke-opacity="0.55" stroke-width="2" stroke-dasharray="14 10"/>
+  <g fill="none" stroke="#00f0ff" stroke-width="6">
+    <path d="M24 96V24H96"/>
+    <path d="M1184 24H1256V96"/>
+    <path d="M24 544V616H96"/>
+    <path d="M1184 616H1256V544"/>
+  </g>
+  <!-- a grass block, Minecraft's way -->
+  <g transform="translate(592 168)">
+    <rect width="96" height="96" fill="#79553a"/>
+    <rect width="96" height="28" fill="#5d9a3c"/>
+    <rect x="0" y="28" width="16" height="12" fill="#5d9a3c"/>
+    <rect x="40" y="28" width="16" height="16" fill="#5d9a3c"/>
+    <rect x="72" y="28" width="12" height="10" fill="#5d9a3c"/>
+    <rect x="16" y="60" width="12" height="12" fill="#5e3f2a"/>
+    <rect x="60" y="72" width="12" height="12" fill="#5e3f2a"/>
+    <rect width="96" height="96" fill="none" stroke="#fcee0a" stroke-width="3"/>
+  </g>
+  <text x="640" y="350" text-anchor="middle" font-family="Consolas, 'Courier New', monospace" font-size="64" font-weight="700" letter-spacing="10" fill="#fcee0a">CYBERCRAFT</text>
+  <text x="640" y="402" text-anchor="middle" font-family="Consolas, 'Courier New', monospace" font-size="24" letter-spacing="4" fill="#00f0ff">MINECRAFT × NIGHT CITY</text>
+  <text x="640" y="482" text-anchor="middle" font-family="Consolas, 'Courier New', monospace" font-size="22" fill="#e6e6f0" fill-opacity="0.7">[ gameplay GIF coming soon ]</text>
+</svg>
