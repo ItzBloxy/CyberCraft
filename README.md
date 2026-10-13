@@ -1,7 +1,6 @@
 <div align="center">
 
-<!-- Header GIF: replace header-placeholder.svg with the GIF (e.g. .github/assets/header.gif) when it's ready. -->
-<img src=".github/assets/header-placeholder.svg" alt="CyberCraft: Minecraft played in Cyberpunk 2077's Night City" width="100%">
+<img src=".github/assets/house-tour.avif" alt="CyberCraft: a tour of a Minecraft house built beside a Badlands road in Cyberpunk 2077" width="100%">
 
 # CyberCraft
 
@@ -42,24 +41,78 @@ see. The two talk over shared memory, using SkyCraft's own Minecraft mod, unchan
 
 <div align="center">
 
-<!-- Showcase video: drag the .mp4 into this README while editing it on github.com, which uploads it and puts its link
-     here, or link a YouTube video's thumbnail. Then delete the placeholder image below. -->
-<img src=".github/assets/video-placeholder.svg" alt="Showcase video coming soon" width="80%">
+<img src=".github/assets/showcase.avif" alt="CyberCraft in Night City: Minecraft's inventory, a Wither among police cars, a netherite sword against MaxTac, and chains of TNT in the street" width="100%">
 
 </div>
 
 ## What works
 
-| | |
-|---|---|
-| 🧱 **Blocks in Night City** | Minecraft's blocks are drawn into the game's own frame: lit by its sun, street lights, ray-traced reflections and ambient occlusion, and upscaled by DLSS with the rest of the city. Glass, water, slime, honey, stained glass and ice are see-through, and grass and flowers are lit as the game's own plants. A block appears a frame or two after Minecraft places it. A 125-TNT blast doesn't drop a frame. |
-| 🏃 **Build mode (F8)** | You move as Minecraft's player does: walk, sprint, jump, sneak and fly, at Minecraft's own speeds, with V's camera riding Minecraft's eye. Place and break blocks, scroll the hotbar and use any item. |
-| 🧭 **Collision, both ways** | Minecraft gets Night City's shape, read from the game's physics, so its player stands on the streets, stairs and rooftops. Outside build mode, Minecraft's blocks stop V, cars and bullets, and NPCs walk around them. |
-| ⚔️ **NPCs and combat** | Night City's people, drones and animals are in Minecraft's world, so they press pressure plates and take sword hits. Minecraft's hits go through the game's own damage pipeline, scaled by V's stats. The city's hits on V hurt Minecraft's player, and dying in Minecraft kills V. TNT knocks gangers flat. |
-| 🐺 **Minecraft's mobs and entities** | Mobs, block entities (chests, beds, banners, heads), particles, dropped items, arrows and tridents are drawn where Minecraft has them, posed and animated. Spider eyes glow at night, and slimes and allays are see-through. |
-| 🗺️ **Mobs that find their way** | Mobs wander the city's pavements and rooms, chase you, and follow wheat and dandelions. Pets keep up with V, even down stairwells. Walls block their line of sight, and railings count as fences. |
-| 🎒 **Minecraft's screens** | The inventory, chests, crafting, chat, commands, the pause menu and F3+F4, worked with a cursor drawn over Night City. Typing works with any keyboard layout, AltGr and dead keys included. |
-| 🏙️ **The city stays intact** | Night City's ground can't be dug, so Minecraft's copy of it can't either: blasts don't leave blocks floating in mid-air. |
+<table>
+<tr>
+<td width="50%" valign="top">
+<img src=".github/assets/features/blocks.webp" alt="A Minecraft house beside a Badlands road, V's car on the tarmac in front of it" width="100%">
+<h3>Blocks in Night City</h3>
+<p><b>Minecraft's blocks, drawn by Cyberpunk's own renderer.</b></p>
+<p>Every block goes into the game's G-buffer, so Night City's sun, street lights, ray-traced reflections and ambient occlusion fall on it, and DLSS upscales it with the rest of the frame. Glass, water, slime, honey, stained glass and ice are see-through, and grass and flowers are lit like the city's own plants.</p>
+<p><sub>A placed block shows up a frame or two later. A 125-TNT blast doesn't drop a frame.</sub></p>
+</td>
+<td width="50%" valign="top">
+<img src=".github/assets/features/build-mode.webp" alt="First person in build mode: Minecraft's hotbar and hearts over a fenced farm with pigs, wheat and grass" width="100%">
+<h3>Build mode</h3>
+<p><b>Press F8, and V moves as Minecraft's player.</b></p>
+<p>Walk, sprint, jump, sneak and fly at Minecraft's own speeds, with V's camera riding Minecraft's eye. Place and break blocks, scroll the hotbar, and use any item, with Minecraft's hearts, hunger and hotbar laid over Night City.</p>
+<p><sub>F8 again hands V back to Cyberpunk's own controls.</sub></p>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<img src=".github/assets/features/collision.webp" alt="High above a Night City street, a firework rocket in hand" width="100%">
+<h3>Collision, both ways</h3>
+<p><b>Each game knows the other's shape.</b></p>
+<p>Night City's streets, stairs and rooftops are read from the game's own physics and handed to Minecraft, so its player and its mobs stand and walk on them. Outside build mode, Minecraft's blocks stop V, cars and bullets, and the city's NPCs walk around them.</p>
+<p><sub>The city's shape streams in around the player as it moves.</sub></p>
+</td>
+<td width="50%" valign="top">
+<img src=".github/assets/features/combat.webp" alt="A netherite sword raised against MaxTac operators on a Night City street" width="100%">
+<h3>NPCs and combat</h3>
+<p><b>Night City's gangs, in Minecraft's world.</b></p>
+<p>The city's people, drones and animals have bodies in Minecraft, so they press pressure plates and take sword hits. Minecraft's hits go through the game's own damage pipeline, scaled by V's stats. The city's hits on V hurt Minecraft's player, and dying in Minecraft kills V.</p>
+<p><sub>TNT knocks gangers flat.</sub></p>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<img src=".github/assets/features/mobs.webp" alt="A Wither rising over a Night City crossing among police cars" width="100%">
+<h3>Minecraft's mobs and entities</h3>
+<p><b>From your pet wolf to the Wither.</b></p>
+<p>Mobs, block entities (chests, beds, banners, heads), particles, dropped items, arrows and tridents are drawn where Minecraft has them, posed and animated, and lit by the city around them.</p>
+<p><sub>Spider eyes glow at night, and slimes and allays are see-through.</sub></p>
+</td>
+<td width="50%" valign="top">
+<img src=".github/assets/features/pathfinding.webp" alt="A tame wolf at home in a Minecraft house, beside a bed, bookshelves and furnaces" width="100%">
+<h3>Mobs that find their way</h3>
+<p><b>Your wolf follows you down the stairs.</b></p>
+<p>Mobs wander the city's pavements and rooms, chase you, and follow wheat and dandelions. Pets keep up with V, even down the stairwells of Megabuilding H10.</p>
+<p><sub>Walls block their line of sight, and the city's railings count as fences.</sub></p>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<img src=".github/assets/features/screens.webp" alt="Minecraft's creative inventory open over a dusk street in Night City" width="100%">
+<h3>Minecraft's screens</h3>
+<p><b>The whole inventory, over Night City.</b></p>
+<p>The inventory, chests, crafting, chat, commands, the pause menu and F3+F4, worked with a cursor drawn over the city.</p>
+<p><sub>Typing works with any keyboard layout, AltGr and dead keys included.</sub></p>
+</td>
+<td width="50%" valign="top">
+<img src=".github/assets/features/intact-city.webp" alt="A row of TNT blocks set down in the middle of a Night City street" width="100%">
+<h3>The city stays intact</h3>
+<p><b>Blow up the street, and the street stays.</b></p>
+<p>Night City's ground can't be dug, so Minecraft's copy of it can't either. Blasts break your blocks, never the city.</p>
+<p><sub>Nothing is left floating in mid-air after a blast.</sub></p>
+</td>
+</tr>
+</table>
 
 ## How it works
 
